@@ -6,6 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
+import TourMap from '../components/TourMap';
+import useGhostVoice from '../hooks/useGhostVoice';
 import { base44 } from '@/api/base44Client';
 
 const suggestionIcons = {
@@ -23,7 +25,7 @@ export default function StopDetail() {
   const [stop, setStop] = useState(null);
   const [allStops, setAllStops] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isNarrating, setIsNarrating] = useState(false);
+  const { isSpeaking, narrate } = useGhostVoice();
 
   useEffect(() => {
     loadStop();
@@ -39,25 +41,6 @@ export default function StopDetail() {
       setAllStops(siblings.sort((a, b) => a.stop_number - b.stop_number));
     }
     setLoading(false);
-  };
-
-  const narrate = (text) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 0.85;
-    utter.pitch = 0.7;
-    const voices = window.speechSynthesis.getVoices();
-    const maleVoice = voices.find(v => v.name.includes('Male') || v.name.includes('Daniel') || v.name.includes('David'));
-    if (maleVoice) utter.voice = maleVoice;
-    utter.onend = () => setIsNarrating(false);
-    setIsNarrating(true);
-    window.speechSynthesis.speak(utter);
-  };
-
-  const stopNarration = () => {
-    window.speechSynthesis?.cancel();
-    setIsNarrating(false);
   };
 
   const currentIndex = allStops.findIndex(s => s.id === stopId);
@@ -88,8 +71,8 @@ export default function StopDetail() {
         subtitle={stop.name}
         showBack
         rightAction={
-          <button onClick={() => isNarrating ? stopNarration() : narrate(stop.narration_text || stop.paranormal_info)} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
-            {isNarrating ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          <button onClick={() => narrate(stop.narration_text || stop.paranormal_info)} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
+            {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
         }
       />
@@ -107,6 +90,10 @@ export default function StopDetail() {
             <Navigation className="w-3.5 h-3.5" /> Navigate to This Stop
           </button>
         </div>
+
+        {stop.latitude && stop.longitude && (
+          <TourMap stops={[stop]} highlightedStopId={stop.id} height="h-52" />
+        )}
 
         {stop.narration_text && (
           <div className="p-3 rounded-lg border border-primary/20 bg-primary/5">

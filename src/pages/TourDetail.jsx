@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
+import TourMap from '../components/TourMap';
+import useGhostVoice from '../hooks/useGhostVoice';
 import { base44 } from '@/api/base44Client';
 
 export default function TourDetail() {
@@ -15,7 +17,7 @@ export default function TourDetail() {
   const [generatingStops, setGeneratingStops] = useState(false);
   const [stopsError, setStopsError] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
-  const [isNarrating, setIsNarrating] = useState(false);
+  const { isSpeaking, narrate } = useGhostVoice();
 
   useEffect(() => {
     loadTour();
@@ -82,8 +84,7 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
             }
           }
         },
-        model: "gemini_3_flash",
-        add_context_from_internet: true
+        model: "automatic"
       });
 
       const created = [];
@@ -108,25 +109,6 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
       await base44.entities.Favorite.create({ tour_id: tourId, tour_title: tour.title, state: tour.state, city: tour.city });
       setIsFavorite(true);
     }
-  };
-
-  const narrate = (text) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 0.85;
-    utter.pitch = 0.7;
-    const voices = window.speechSynthesis.getVoices();
-    const maleVoice = voices.find(v => v.name.includes('Male') || v.name.includes('Daniel') || v.name.includes('James') || v.name.includes('David'));
-    if (maleVoice) utter.voice = maleVoice;
-    utter.onend = () => setIsNarrating(false);
-    setIsNarrating(true);
-    window.speechSynthesis.speak(utter);
-  };
-
-  const stopNarration = () => {
-    window.speechSynthesis?.cancel();
-    setIsNarrating(false);
   };
 
   if (loading) {
@@ -188,8 +170,8 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
           <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-primary">Introduction</h3>
-              <button onClick={() => isNarrating ? stopNarration() : narrate(tour.introduction)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                {isNarrating ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
+              <button onClick={() => narrate(tour.introduction)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                {isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
             <p className="text-xs text-foreground/70 leading-relaxed">{tour.introduction}</p>
@@ -211,9 +193,11 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
           </div>
         </div>
 
+        {stops.length > 0 && <TourMap stops={stops} tour={tour} height="h-72" />}
+
         <div>
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
-            <Ghost className="w-4 h-4 text-primary" /> {stops.length} Investigation Stops
+            <Map className="w-4 h-4 text-primary" /> {stops.length} Investigation Stops
           </h3>
           {stopsError ? (
             <div className="flex flex-col items-center py-8 gap-3">
@@ -256,8 +240,8 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
           <div className="p-4 rounded-xl border border-dim-purple/20 bg-dim-purple/5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-dim-purple">Conclusion</h3>
-              <button onClick={() => isNarrating ? stopNarration() : narrate(tour.conclusion)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
-                {isNarrating ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
+              <button onClick={() => narrate(tour.conclusion)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
+                {isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
             <p className="text-xs text-foreground/70 leading-relaxed">{tour.conclusion}</p>
