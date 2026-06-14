@@ -50,6 +50,10 @@ export default function Evidence() {
   const [otherDeviceText, setOtherDeviceText] = useState('');
   const fileInputRef = useRef(null);
 
+  const [initialDate] = useState(cameFromStop ? getTodayDate() : '');
+  const [initialTime] = useState(cameFromStop ? getNowTime() : '');
+  const [initialLocation] = useState(locationName ? decodeURIComponent(locationName) : '');
+
   const [form, setForm] = useState({
     title: '',
     type: 'note',
@@ -68,9 +72,6 @@ export default function Evidence() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [initialDate] = useState(cameFromStop ? getTodayDate() : '');
-  const [initialTime] = useState(cameFromStop ? getNowTime() : '');
-  const [initialLocation] = useState(locationName ? decodeURIComponent(locationName) : '');
 
   useEffect(() => { loadEvidence(); }, []);
 
