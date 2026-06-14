@@ -46,6 +46,16 @@
     },
     "narration_text": {
       "type": "string"
+    },
+    "travel_method": {
+      "type": "string",
+      "enum": [
+        "walking",
+        "driving"
+      ]
+    },
+    "hours_of_operation": {
+      "type": "string"
     }
   },
   "required": [

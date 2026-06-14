@@ -60,7 +60,7 @@ export default function useGhostVoice() {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       ctxRef.current = ctx;
       const masterGain = ctx.createGain();
-      masterGain.gain.value = 0.12;
+      masterGain.gain.value = 0.20;
       masterGain.connect(ctx.destination);
       gainRef.current = masterGain;
 

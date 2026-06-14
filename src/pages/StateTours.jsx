@@ -45,7 +45,7 @@ export default function StateTours() {
 - conclusion: closing paragraph ending with "Thank you for exploring with A.G.E.S., Affordable Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
 - difficulty ("easy"/"moderate"/"challenging"), estimated_duration (e.g. "2-3 hours"), total_distance (e.g. "1.5 miles"), start_location_name, start_latitude, start_longitude (real coordinates)
 - tags: array (["Civil War", "Haunted Hotel", etc.]), safety_info, best_time ("Dusk to midnight")
-IMPORTANT: All locations must be publicly accessible after dark. Do NOT use locations that close at dusk or have restricted nighttime access (e.g. national battlefields, state parks that close at sunset, gated cemeteries). Verify each location allows nighttime public access. Use real locations with documented paranormal history only.`,
+IMPORTANT: All locations must be publicly accessible after dark. Do NOT use locations that close at dusk or have restricted nighttime access (e.g. national battlefields, state parks that close at sunset, gated cemeteries). Verify each location allows nighttime public access. If any stop location has restricted hours, note those hours. For walking tours, stops must be within 0.33 miles of each other — if a location is farther, make it a driving tour or mixed tour. Use real locations with documented paranormal history only.`,
         response_json_schema: {
           type: "object",
           properties: {

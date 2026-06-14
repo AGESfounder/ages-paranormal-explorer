@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation } from 'lucide-react';
+import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
@@ -84,7 +84,14 @@ export default function StopDetail() {
             {stop.address && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {stop.address}</span>}
             <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {stop.estimated_investigation_time}</span>
             {stop.construction_date && <span className="flex items-center gap-1">Est. {stop.construction_date}</span>}
+            {stop.travel_method === 'driving' && <span className="flex items-center gap-1 text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded"><Car className="w-3 h-3" /> Driving Stop</span>}
           </div>
+          {stop.hours_of_operation && (
+            <div className="mt-2 p-2 rounded-lg bg-amber-500/5 border border-amber-500/15">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-amber-400 mb-0.5">Hours</p>
+              <p className="text-xs text-foreground/70">{stop.hours_of_operation}</p>
+            </div>
+          )}
           {stop.famous_people && <p className="text-xs text-primary/80 mt-2">Notable: {stop.famous_people}</p>}
           <button onClick={openInMaps} className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors w-full justify-center">
             <Navigation className="w-3.5 h-3.5" /> Navigate to This Stop

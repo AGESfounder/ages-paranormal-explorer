@@ -9,6 +9,41 @@ import TourMap from '../components/TourMap';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { base44 } from '@/api/base44Client';
 
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function enforceWalkingDistance(stops, tourType) {
+  if (tourType === 'driving') {
+    return stops.map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
+  }
+  const WALKING_LIMIT = 0.33;
+  const sorted = [...stops].sort((a, b) => a.stop_number - b.stop_number);
+
+  // Find the first driving-required gap
+  let firstDrivingIndex = sorted.length;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const dist = haversineDistance(sorted[i].latitude, sorted[i].longitude, sorted[i + 1].latitude, sorted[i + 1].longitude);
+    if (dist > WALKING_LIMIT) {
+      firstDrivingIndex = i + 1;
+      break;
+    }
+  }
+
+  const walking = sorted.slice(0, firstDrivingIndex);
+  const driving = sorted.slice(firstDrivingIndex);
+
+  const result = [
+    ...walking.map((s, i) => ({ ...s, travel_method: 'walking', stop_number: i + 1 })),
+    ...driving.map((s, i) => ({ ...s, travel_method: 'driving', stop_number: walking.length + i + 1 })),
+  ];
+  return result;
+}
+
 export default function TourDetail() {
   const { tourId } = useParams();
   const [tour, setTour] = useState(null);
@@ -57,10 +92,12 @@ Each stop:
 - estimated_investigation_time: "5 minutes" / "10 minutes" / "15 minutes"
 - construction_date, famous_people
 - narration_text: 3-4 sentence dramatic narration in mysterious storytelling style
+- hours_of_operation: if the location has restricted public hours, note them (e.g. "Open to public daily 9am-5pm", "Grounds open dawn to dusk, building closed after 4pm"). Leave empty if publicly accessible 24/7.
 
 CRITICAL RULES:
 - ALL locations must be publicly accessible at night. Do NOT use locations that close at dusk, have gates that lock, or prohibit after-dark access (e.g. Gettysburg battlefield, national parks that close at sunset, cemeteries with locked gates). Only use locations where the public can legally be present after dark.
-${tourData.tour_type === 'mixed' ? '- MIXED TOUR: Walking stops (1-7) come first, clustered near the start. Driving stops (8-10) come last, further out. Walking stops must be within 0.5 miles of each other.' : ''}
+${tourData.tour_type !== 'driving' ? '- WALKING DISTANCE: Consecutive stops must be within 0.33 miles of each other. If a location is farther, place it at the end of the route.' : ''}
+${tourData.tour_type === 'mixed' ? '- MIXED TOUR: Walking stops (first ~7) come first and must be clustered within 0.33 miles of each other. Driving stops (last ~3) come last, further out.' : ''}
 Order stops to minimize backtracking, create a loop, starting and ending near ${tourData.start_location_name}. Use real locations with paranormal history.`,
         response_json_schema: {
           type: "object",
@@ -81,7 +118,8 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
                   estimated_investigation_time: { type: "string" },
                   construction_date: { type: "string" },
                   famous_people: { type: "string" },
-                  narration_text: { type: "string" }
+                  narration_text: { type: "string" },
+                  hours_of_operation: { type: "string" }
                 }
               }
             }
@@ -90,8 +128,9 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
         model: "automatic"
       });
 
+      const processed = enforceWalkingDistance(result.stops || [], tourData.tour_type);
       const created = [];
-      for (const stop of result.stops || []) {
+      for (const stop of processed) {
         const saved = await base44.entities.TourStop.create({ ...stop, tour_id: tourId });
         created.push(saved);
       }
@@ -223,11 +262,12 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
               {stops.map((stop, i) => (
                 <motion.div key={stop.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}>
                   <Link to={`/stop/${stop.id}`} className="flex items-center gap-3 p-3 rounded-lg border border-border/30 bg-card/30 hover:border-primary/30 hover:bg-card/50 transition-all group">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-heading text-sm font-bold shrink-0">{stop.stop_number}</div>
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full font-heading text-sm font-bold shrink-0 ${stop.travel_method === 'driving' ? 'bg-amber-500/10 text-amber-400' : 'bg-primary/10 text-primary'}`}>{stop.stop_number}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{stop.name}</p>
                       <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
                         <Clock className="w-2.5 h-2.5" /> {stop.estimated_investigation_time}
+                        {stop.travel_method === 'driving' && <span className="flex items-center gap-0.5 text-amber-400"><Car className="w-2.5 h-2.5" /> Drive</span>}
                         {stop.address && <><MapPin className="w-2.5 h-2.5" /> <span className="truncate">{stop.address}</span></>}
                       </p>
                     </div>
