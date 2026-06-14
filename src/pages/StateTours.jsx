@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Loader2, Ghost } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Loader2, Ghost, AlertTriangle, RefreshCw } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -13,6 +13,7 @@ export default function StateTours() {
   const [tours, setTours] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
 
   const stateName = US_STATES.find(s => s.abbr === stateAbbr)?.name || stateAbbr;
 
@@ -22,6 +23,7 @@ export default function StateTours() {
 
   const loadTours = async () => {
     setLoading(true);
+    setError('');
     const results = await base44.entities.Tour.filter({ state: stateName });
     if (results.length === 0) {
       await generateTours();
@@ -34,70 +36,91 @@ export default function StateTours() {
   const generateTours = async () => {
     setGenerating(true);
     setLoading(true);
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `Generate exactly 5 paranormal tours for ${stateName}, USA. Each at a real haunted location. Mix walking and driving tours. Include:
+    setError('');
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Generate exactly 5 paranormal tours for ${stateName}, USA. Each at a real haunted location. Mix walking and driving tours. Include:
 - title, city, tour_type ("walking" or "driving"), description (2-3 sentences)
 - introduction: historical overview + paranormal overview + safety info. Mention "A.G.E.S. (Affordable Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
 - conclusion: closing paragraph ending with "Thank you for exploring with A.G.E.S., Affordable Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
 - difficulty ("easy"/"moderate"/"challenging"), estimated_duration (e.g. "2-3 hours"), total_distance (e.g. "1.5 miles"), start_location_name, start_latitude, start_longitude (real coordinates)
 - tags: array (["Civil War", "Haunted Hotel", etc.]), safety_info, best_time ("Dusk to midnight")
 Use real locations with documented paranormal history. Publicly accessible only.`,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          tours: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                title: { type: "string" },
-                city: { type: "string" },
-                tour_type: { type: "string" },
-                description: { type: "string" },
-                introduction: { type: "string" },
-                conclusion: { type: "string" },
-                difficulty: { type: "string" },
-                estimated_duration: { type: "string" },
-                total_distance: { type: "string" },
-                start_location_name: { type: "string" },
-                start_latitude: { type: "number" },
-                start_longitude: { type: "number" },
-                tags: { type: "array", items: { type: "string" } },
-                safety_info: { type: "string" },
-                best_time: { type: "string" }
+        response_json_schema: {
+          type: "object",
+          properties: {
+            tours: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  city: { type: "string" },
+                  tour_type: { type: "string" },
+                  description: { type: "string" },
+                  introduction: { type: "string" },
+                  conclusion: { type: "string" },
+                  difficulty: { type: "string" },
+                  estimated_duration: { type: "string" },
+                  total_distance: { type: "string" },
+                  start_location_name: { type: "string" },
+                  start_latitude: { type: "number" },
+                  start_longitude: { type: "number" },
+                  tags: { type: "array", items: { type: "string" } },
+                  safety_info: { type: "string" },
+                  best_time: { type: "string" }
+                }
               }
             }
           }
-        }
-      },
-      model: "claude_sonnet_4_6"
-    });
+        },
+        model: "gemini_3_flash",
+        add_context_from_internet: true
+      });
 
-    const created = [];
-    for (const tour of result.tours || []) {
-      const saved = await base44.entities.Tour.create({ ...tour, state: stateName });
-      created.push(saved);
+      const created = [];
+      for (const tour of result.tours || []) {
+        const saved = await base44.entities.Tour.create({ ...tour, state: stateName });
+        created.push(saved);
+      }
+      setTours(created);
+      setGenerating(false);
+      setLoading(false);
+    } catch (err) {
+      setError(err.message || 'Failed to generate tours. Please try again.');
+      setGenerating(false);
+      setLoading(false);
     }
-    setTours(created);
-    setGenerating(false);
-    setLoading(false);
   };
 
   if (loading) {
     return (
       <PageContainer>
         <SectionHeader title={stateName} subtitle="Paranormal Tours" showBack />
-        <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-          <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
-            {generating ? <Ghost className="w-12 h-12 text-primary" /> : <Loader2 className="w-8 h-8 text-primary" />}
-          </motion.div>
-          <p className="text-sm text-muted-foreground font-heading tracking-wide">
-            {generating ? 'Channeling spirits of ' + stateName + '...' : 'Loading tours...'}
-          </p>
-          {generating && (
-            <p className="text-xs text-muted-foreground/60 text-center px-8">
-              Researching haunted locations and generating tours. This may take a moment.
-            </p>
+        <div className="flex flex-col items-center justify-center h-[60vh] gap-4 px-4">
+          {error ? (
+            <>
+              <AlertTriangle className="w-12 h-12 text-yellow-500" />
+              <p className="text-sm text-yellow-400 font-heading tracking-wide text-center">Generation Failed</p>
+              <p className="text-xs text-muted-foreground text-center max-w-xs">{error}</p>
+              <button onClick={() => generateTours()} className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground font-heading text-sm uppercase tracking-wider transition-colors">
+                <RefreshCw className="w-4 h-4" /> Retry
+              </button>
+            </>
+          ) : (
+            <>
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
+                {generating ? <Ghost className="w-12 h-12 text-primary" /> : <Loader2 className="w-8 h-8 text-primary" />}
+              </motion.div>
+              <p className="text-sm text-muted-foreground font-heading tracking-wide">
+                {generating ? 'Channeling spirits of ' + stateName + '...' : 'Loading tours...'}
+              </p>
+              {generating && (
+                <p className="text-xs text-muted-foreground/60 text-center px-8">
+                  Researching haunted locations and generating tours. This may take a moment.
+                </p>
+              )}
+            </>
           )}
         </div>
         <NavBar />

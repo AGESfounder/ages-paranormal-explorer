@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -13,6 +13,7 @@ export default function TourDetail() {
   const [stops, setStops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generatingStops, setGeneratingStops] = useState(false);
+  const [stopsError, setStopsError] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
   const [isNarrating, setIsNarrating] = useState(false);
 
@@ -40,8 +41,10 @@ export default function TourDetail() {
 
   const generateStops = async (tourData) => {
     setGeneratingStops(true);
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `Generate exactly 10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
+    setStopsError('');
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Generate exactly 10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
 
 Each stop:
 - stop_number: 1-10 in logical route order
@@ -54,41 +57,46 @@ Each stop:
 - narration_text: 3-4 sentence dramatic narration in mysterious storytelling style
 
 Order stops to minimize backtracking, create a loop, starting and ending near ${tourData.start_location_name}. Use real locations with paranormal history.`,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          stops: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                stop_number: { type: "number" },
-                name: { type: "string" },
-                latitude: { type: "number" },
-                longitude: { type: "number" },
-                address: { type: "string" },
-                historical_info: { type: "string" },
-                paranormal_info: { type: "string" },
-                investigation_suggestions: { type: "array", items: { type: "string" } },
-                estimated_investigation_time: { type: "string" },
-                construction_date: { type: "string" },
-                famous_people: { type: "string" },
-                narration_text: { type: "string" }
+        response_json_schema: {
+          type: "object",
+          properties: {
+            stops: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  stop_number: { type: "number" },
+                  name: { type: "string" },
+                  latitude: { type: "number" },
+                  longitude: { type: "number" },
+                  address: { type: "string" },
+                  historical_info: { type: "string" },
+                  paranormal_info: { type: "string" },
+                  investigation_suggestions: { type: "array", items: { type: "string" } },
+                  estimated_investigation_time: { type: "string" },
+                  construction_date: { type: "string" },
+                  famous_people: { type: "string" },
+                  narration_text: { type: "string" }
+                }
               }
             }
           }
-        }
-      },
-      model: "claude_sonnet_4_6"
-    });
+        },
+        model: "gemini_3_flash",
+        add_context_from_internet: true
+      });
 
-    const created = [];
-    for (const stop of result.stops || []) {
-      const saved = await base44.entities.TourStop.create({ ...stop, tour_id: tourId });
-      created.push(saved);
+      const created = [];
+      for (const stop of result.stops || []) {
+        const saved = await base44.entities.TourStop.create({ ...stop, tour_id: tourId });
+        created.push(saved);
+      }
+      setStops(created.sort((a, b) => a.stop_number - b.stop_number));
+      setGeneratingStops(false);
+    } catch (err) {
+      setStopsError(err.message || 'Failed to generate stops. Please try again.');
+      setGeneratingStops(false);
     }
-    setStops(created.sort((a, b) => a.stop_number - b.stop_number));
-    setGeneratingStops(false);
   };
 
   const toggleFavorite = async () => {
@@ -207,7 +215,16 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
             <Ghost className="w-4 h-4 text-primary" /> {stops.length} Investigation Stops
           </h3>
-          {generatingStops ? (
+          {stopsError ? (
+            <div className="flex flex-col items-center py-8 gap-3">
+              <AlertTriangle className="w-10 h-10 text-yellow-500" />
+              <p className="text-xs text-yellow-400 font-heading uppercase tracking-wider">Generation Failed</p>
+              <p className="text-xs text-muted-foreground text-center">{stopsError}</p>
+              <button onClick={() => tour && generateStops(tour)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground font-heading text-xs uppercase tracking-wider transition-colors">
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </button>
+            </div>
+          ) : generatingStops ? (
             <div className="flex flex-col items-center py-8 gap-3">
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
                 <Ghost className="w-10 h-10 text-primary" />
