@@ -97,9 +97,14 @@ export default function StopDetail() {
 
         {stop.narration_text && (
           <div className="p-3 rounded-lg border border-primary/20 bg-primary/5">
-            <div className="flex items-center gap-2 mb-2">
-              <Ghost className="w-4 h-4 text-primary" />
-              <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Ghost Story</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Ghost className="w-4 h-4 text-primary" />
+                <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Ghost Story</span>
+              </div>
+              <button onClick={() => narrate(stop.narration_text)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
+              </button>
             </div>
             <p className="text-xs text-foreground/70 leading-relaxed italic">"{stop.narration_text}"</p>
           </div>
@@ -113,17 +118,34 @@ export default function StopDetail() {
           </TabsList>
           <TabsContent value="paranormal" className="mt-3">
             <div className="p-4 rounded-xl border border-border/40 bg-card/30">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Paranormal Findings</span>
+                <button onClick={() => narrate(stop.paranormal_info)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                  {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
+                </button>
+              </div>
               <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{stop.paranormal_info}</p>
             </div>
           </TabsContent>
           <TabsContent value="history" className="mt-3">
             <div className="p-4 rounded-xl border border-border/40 bg-card/30">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Historical Background</span>
+                <button onClick={() => narrate(stop.historical_info)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                  {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
+                </button>
+              </div>
               <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{stop.historical_info}</p>
             </div>
           </TabsContent>
           <TabsContent value="investigate" className="mt-3">
             <div className="p-4 rounded-xl border border-border/40 bg-card/30 space-y-3">
-              <h4 className="text-xs font-heading uppercase tracking-wider text-primary mb-2">Investigation Suggestions</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-heading uppercase tracking-wider text-primary">Investigation Suggestions</h4>
+                <button onClick={() => narrate(stop.investigation_suggestions?.join('. ') + '. Estimated investigation time: ' + stop.estimated_investigation_time + '.')} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                  {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
+                </button>
+              </div>
               {stop.investigation_suggestions?.map((suggestion, i) => {
                 const IconComp = suggestionIcons[suggestion] || Zap;
                 return (
