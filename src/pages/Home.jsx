@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList } from 'lucide-react';
+import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
+import CustomTourModal from '../components/CustomTourModal';
 import { base44 } from '@/api/base44Client';
 
 const menuItems = [
@@ -21,6 +22,7 @@ const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Vid
 export default function Home() {
   const [user, setUser] = useState(null);
   const [evidences, setEvidences] = useState([]);
+  const [showCustomTour, setShowCustomTour] = useState(false);
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
@@ -105,6 +107,27 @@ export default function Home() {
           </div>
         </motion.div>
 
+        <motion.div
+          className="w-full max-w-sm px-6 mb-4"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65, duration: 0.4 }}
+        >
+          <button
+            onClick={() => setShowCustomTour(true)}
+            className="w-full flex items-center justify-center gap-3 p-4 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 hover:shadow-[0_0_24px_hsl(199,89%,48%,0.12)] transition-all duration-300 group"
+          >
+            <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <Building2 className="w-5 h-5 text-primary" />
+            </div>
+            <div className="text-left">
+              <p className="font-heading text-sm font-semibold tracking-wide uppercase text-foreground">Custom Tour</p>
+              <p className="text-[10px] text-muted-foreground">Haunted Destinations</p>
+            </div>
+            <Sparkles className="w-4 h-4 text-cyan-glow ml-auto" />
+          </button>
+        </motion.div>
+
         <div className="w-full max-w-sm px-6 grid grid-cols-2 gap-3">
           {menuItems.map((item, i) => (
             <motion.div
@@ -178,6 +201,7 @@ export default function Home() {
           Every legend has a story • Every location has a history
         </motion.p>
       </div>
+      <CustomTourModal isOpen={showCustomTour} onClose={() => setShowCustomTour(false)} />
       <NavBar />
     </PageContainer>
   );
