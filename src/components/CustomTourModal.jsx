@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Loader2, Ghost, MapPin, Building2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
+import { US_STATES } from '../lib/statesData';
 
 export default function CustomTourModal({ isOpen, onClose }) {
   const [destination, setDestination] = useState('');
@@ -11,13 +12,24 @@ export default function CustomTourModal({ isOpen, onClose }) {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  const normalizeState = (input) => {
+    const clean = input.trim();
+    const upper = clean.toUpperCase();
+    const byAbbr = US_STATES.find(s => s.abbr.toUpperCase() === upper);
+    if (byAbbr) return byAbbr.name;
+    const byName = US_STATES.find(s => s.name.toUpperCase() === upper);
+    if (byName) return byName.name;
+    return clean; // fallback: use as-is
+  };
+
   const handleGenerate = async () => {
     const dest = destination.trim();
-    const st = state.trim();
-    if (!dest || !st) {
+    const rawState = state.trim();
+    if (!dest || !rawState) {
       setError('Please fill in both fields.');
       return;
     }
+    const st = normalizeState(rawState);
     setError('');
     setLoading(true);
 
@@ -133,7 +145,7 @@ Use real locations and real paranormal history for "${dest}". Verify hours, pric
       // Create the tour
       const tourData = {
         title: result.title,
-        state: result.state,
+        state: st,
         city: result.city,
         tour_type: result.tour_type,
         description: result.description,
