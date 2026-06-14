@@ -29,6 +29,18 @@
     "location_name": {
       "type": "string"
     },
+    "date": {
+      "type": "string"
+    },
+    "time": {
+      "type": "string"
+    },
+    "equipment": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "activity_level": {
       "type": "number"
     },

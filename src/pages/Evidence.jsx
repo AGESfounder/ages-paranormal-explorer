@@ -1,40 +1,82 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, FileAudio, Image, Video, FileText, Star, Loader2, Archive } from 'lucide-react';
+import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
-import RatingStars from '../components/RatingStars';
 import { base44 } from '@/api/base44Client';
 
 const typeIcons = { evp: FileAudio, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'EVP Recording', photo: 'Photograph', video: 'Video', note: 'Note' };
 
+const equipmentOptions = [
+  'REM Device',
+  'IMS Device',
+  'EVP Device',
+  'Trigger Object',
+  'Other Device',
+];
+
+function getTodayDate() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function getNowTime() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
 export default function Evidence() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const tourId = searchParams.get('tourId');
+  const stopId = searchParams.get('stopId');
+  const locationName = searchParams.get('location');
+  const cameFromStop = tourId != null;
+
   const [evidences, setEvidences] = useState([]);
+  const [stopEvidences, setStopEvidences] = useState([]);
   const [loading, setLoading] = useState(true);
-  const cameFromStop = searchParams.get('tourId') != null;
   const [showForm, setShowForm] = useState(
     cameFromStop || window.location.pathname === '/evidence/new'
   );
+  const [equipmentOpen, setEquipmentOpen] = useState(false);
+  const [otherDeviceText, setOtherDeviceText] = useState('');
+  const fileInputRef = useRef(null);
+
   const [form, setForm] = useState({
-    title: '', type: 'note', description: '', tour_id: searchParams.get('tourId') || '',
-    stop_id: searchParams.get('stopId') || '', location_name: searchParams.get('location') || '',
-    activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0
+    title: '',
+    type: 'note',
+    description: '',
+    tour_id: tourId || '',
+    stop_id: stopId || '',
+    location_name: locationName ? decodeURIComponent(locationName) : '',
+    date: cameFromStop ? getTodayDate() : '',
+    time: cameFromStop ? getNowTime() : '',
+    equipment: [],
+    file_url: '',
+    activity_level: 0,
+    emf_activity: 0,
+    evp_quality: 0,
+    personal_experience: 0,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => { loadEvidence(); }, []);
 
   const loadEvidence = async () => {
     const data = await base44.entities.Evidence.list('-created_date');
     setEvidences(data);
+    if (stopId) {
+      const stopData = await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
+      setStopEvidences(stopData);
+    }
     setLoading(false);
   };
 
@@ -46,15 +88,70 @@ export default function Evidence() {
     }
   };
 
+  const toggleEquipment = (item) => {
+    setForm(prev => {
+      const eq = [...(prev.equipment || [])];
+      const idx = eq.indexOf(item);
+      if (idx >= 0) {
+        eq.splice(idx, 1);
+        if (item === 'Other Device') setOtherDeviceText('');
+      } else {
+        eq.push(item);
+      }
+      return { ...prev, equipment: eq };
+    });
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await base44.integrations.Core.UploadFile({ file });
+      setForm(prev => ({ ...prev, file_url: result.file_url }));
+    } catch (err) {
+      console.error('Upload failed', err);
+    }
+    setUploading(false);
+  };
+
+  const resetStopForm = () => {
+    setForm({
+      title: '',
+      type: 'note',
+      description: '',
+      tour_id: tourId || '',
+      stop_id: stopId || '',
+      location_name: locationName ? decodeURIComponent(locationName) : '',
+      date: getTodayDate(),
+      time: getNowTime(),
+      equipment: [],
+      file_url: '',
+      activity_level: 0,
+      emf_activity: 0,
+      evp_quality: 0,
+      personal_experience: 0,
+    });
+    setOtherDeviceText('');
+    setEquipmentOpen(false);
+  };
+
   const handleSubmit = async () => {
     if (!form.title.trim()) return;
     setSubmitting(true);
-    await base44.entities.Evidence.create(form);
+    const payload = { ...form };
+    if (payload.equipment.includes('Other Device') && otherDeviceText.trim()) {
+      payload.equipment = payload.equipment.map(e => e === 'Other Device' ? 'Other Device: ' + otherDeviceText.trim() : e);
+    }
+    await base44.entities.Evidence.create(payload);
     setSubmitting(false);
-    setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0 });
+
     if (cameFromStop) {
-      navigate(-1);
+      resetStopForm();
+      const stopData = await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
+      setStopEvidences(stopData);
     } else {
+      setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0 });
       setShowForm(false);
       loadEvidence();
     }
@@ -62,14 +159,231 @@ export default function Evidence() {
 
   const handleDelete = async (id) => {
     await base44.entities.Evidence.delete(id);
-    loadEvidence();
+    if (cameFromStop) {
+      const stopData = await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
+      setStopEvidences(stopData);
+    } else {
+      loadEvidence();
+    }
   };
 
+  // ── Stop-based evidence view (form + numbered entries) ──
+  if (cameFromStop) {
+    return (
+      <PageContainer>
+        <SectionHeader title="Log Evidence" subtitle={form.location_name || "Evidence Entry"} showBack onBack={handleGoBack} />
+        <div className="px-4 pb-28 space-y-4 pt-3">
+
+          {/* Date + Time (auto-filled) */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Date</label>
+              <Input value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="bg-card/50 border-border/50" />
+            </div>
+            <div>
+              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Time</label>
+              <Input value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="bg-card/50 border-border/50" />
+            </div>
+          </div>
+
+          {/* Location (auto-filled) */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Location</label>
+            <Input value={form.location_name} disabled className="bg-card/30 border-border/30 text-muted-foreground" />
+          </div>
+
+          {/* Evidence Type */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-2">Evidence Type</label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {['note', 'photo', 'video', 'evp'].map(type => {
+                const Icon = typeIcons[type];
+                return (
+                  <button key={type} onClick={() => setForm({...form, type})} className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border transition-all ${form.type === type ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border/40 bg-card/30 text-muted-foreground'}`}>
+                    <Icon className="w-5 h-5" />
+                    <span className="text-[9px] font-heading uppercase">{typeLabel[type]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Equipment Dropdown */}
+          <div className="relative">
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Equipment Used</label>
+            <button
+              onClick={() => setEquipmentOpen(!equipmentOpen)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-sm text-foreground hover:border-primary/40 transition-colors"
+            >
+              <span className={form.equipment.length === 0 ? 'text-muted-foreground' : ''}>
+                {form.equipment.length === 0 ? 'Select equipment...' : form.equipment.join(', ')}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${equipmentOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {equipmentOpen && (
+              <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border/60 bg-card shadow-xl overflow-hidden">
+                {equipmentOptions.map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => toggleEquipment(opt)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-left hover:bg-primary/10 transition-colors"
+                  >
+                    <span className="text-foreground">{opt}</span>
+                    {form.equipment.includes(opt) && <Check className="w-4 h-4 text-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
+            {form.equipment.includes('Other Device') && (
+              <Input
+                placeholder="Specify other device..."
+                value={otherDeviceText}
+                onChange={e => setOtherDeviceText(e.target.value)}
+                className="mt-2 bg-card/50 border-border/50"
+              />
+            )}
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Evidence Notes</label>
+            <Textarea
+              placeholder="Record your observations, readings, and experiences..."
+              value={form.description}
+              onChange={e => setForm({...form, description: e.target.value})}
+              className="bg-card/50 border-border/50 min-h-[100px]"
+            />
+          </div>
+
+          {/* File Upload */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Upload Evidence File</label>
+            <input ref={fileInputRef} type="file" onChange={handleFileUpload} accept="image/*,video/*,audio/*" className="hidden" />
+            {form.file_url ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <Check className="w-4 h-4 text-primary" />
+                <span className="text-xs text-primary flex-1 truncate">File uploaded</span>
+                <button onClick={() => setForm({...form, file_url: ''})} className="p-1 text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/60 bg-card/30 text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                <span className="text-xs font-heading uppercase tracking-wider">
+                  {uploading ? 'Uploading...' : 'Upload Photo, Video, or Recording'}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Rating Stars */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { key: 'activity_level', label: 'Activity Level' },
+              { key: 'emf_activity', label: 'EMF Activity' },
+              { key: 'evp_quality', label: 'EVP Quality' },
+              { key: 'personal_experience', label: 'Experience' },
+            ].map(({ key, label }) => (
+              <div key={key}>
+                <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">{label}</label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      onClick={() => setForm({...form, [key]: star})}
+                      className={`text-base transition-colors ${star <= form[key] ? 'text-primary' : 'text-muted-foreground/30'}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Title */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Entry Title</label>
+            <Input placeholder="Name this evidence entry" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="bg-card/50 border-border/50" />
+          </div>
+
+          <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-heading uppercase tracking-wider">
+            {submitting ? 'Saving...' : 'Save Evidence'}
+          </Button>
+
+          {/* ── Saved entries for this stop ── */}
+          {stopEvidences.length > 0 && (
+            <div>
+              <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" /> {stopEvidences.length} Evidence {stopEvidences.length === 1 ? 'Entry' : 'Entries'} at This Stop
+              </h3>
+              <div className="space-y-2">
+                {stopEvidences.map((e, i) => {
+                  const entryNum = stopEvidences.length - i;
+                  const Icon = typeIcons[e.type] || FileText;
+                  return (
+                    <motion.div key={e.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} className="p-4 rounded-xl border border-border/40 bg-card/40 relative">
+                      <span className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-primary text-primary-foreground text-[10px] font-bold font-heading flex items-center justify-center shadow-lg">
+                        {entryNum}
+                      </span>
+                      <div className="flex items-start justify-between ml-3">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-primary/10"><Icon className="w-4 h-4 text-primary" /></div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{e.title}</p>
+                            <p className="text-[10px] text-muted-foreground">{typeLabel[e.type]} {e.date ? `• ${e.date}` : ''} {e.time || ''}</p>
+                            {e.equipment?.length > 0 && (
+                              <p className="text-[10px] text-muted-foreground/70 mt-0.5">Equipment: {Array.isArray(e.equipment) ? e.equipment.join(', ') : e.equipment}</p>
+                            )}
+                          </div>
+                        </div>
+                        <button onClick={() => handleDelete(e.id)} className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                      {e.description && <p className="text-xs text-foreground/60 mt-2 ml-3 leading-relaxed">{e.description}</p>}
+                      {e.file_url && (
+                        <div className="mt-2 ml-3">
+                          {e.type === 'photo' ? (
+                            <img src={e.file_url} alt={e.title} className="w-full max-h-48 object-cover rounded-lg" />
+                          ) : e.type === 'video' ? (
+                            <video src={e.file_url} controls className="w-full max-h-48 rounded-lg" />
+                          ) : e.type === 'evp' ? (
+                            <audio src={e.file_url} controls className="w-full" />
+                          ) : (
+                            <a href={e.file_url} target="_blank" rel="noreferrer" className="text-xs text-primary underline">View Attachment</a>
+                          )}
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+        <NavBar />
+      </PageContainer>
+    );
+  }
+
+  // ── General evidence journal view ──
   if (showForm) {
     return (
       <PageContainer>
-        <SectionHeader title="Log Evidence" subtitle={form.location_name || "New Entry"} showBack onBack={handleGoBack} />
+        <SectionHeader title="Log Evidence" subtitle="New Entry" showBack onBack={handleGoBack} />
         <div className="px-4 pb-28 space-y-4 pt-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Date</label>
+              <Input value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="bg-card/50 border-border/50" />
+            </div>
+            <div>
+              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Time</label>
+              <Input value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="bg-card/50 border-border/50" />
+            </div>
+          </div>
           <Input placeholder="Entry title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="bg-card/50 border-border/50" />
           <div className="grid grid-cols-4 gap-1.5">
             {['note', 'photo', 'video', 'evp'].map(type => {
@@ -84,10 +398,27 @@ export default function Evidence() {
           </div>
           <Textarea placeholder="Description & notes..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="bg-card/50 border-border/50 min-h-[100px]" />
           <div className="grid grid-cols-2 gap-3">
-            <RatingStars label="Activity Level" value={form.activity_level} onChange={v => setForm({...form, activity_level: v})} size="sm" />
-            <RatingStars label="EMF Activity" value={form.emf_activity} onChange={v => setForm({...form, emf_activity: v})} size="sm" />
-            <RatingStars label="EVP Quality" value={form.evp_quality} onChange={v => setForm({...form, evp_quality: v})} size="sm" />
-            <RatingStars label="Experience" value={form.personal_experience} onChange={v => setForm({...form, personal_experience: v})} size="sm" />
+            {[
+              { key: 'activity_level', label: 'Activity Level' },
+              { key: 'emf_activity', label: 'EMF Activity' },
+              { key: 'evp_quality', label: 'EVP Quality' },
+              { key: 'personal_experience', label: 'Experience' },
+            ].map(({ key, label }) => (
+              <div key={key}>
+                <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">{label}</label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      onClick={() => setForm({...form, [key]: star})}
+                      className={`text-base transition-colors ${star <= form[key] ? 'text-primary' : 'text-muted-foreground/30'}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
           <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-heading uppercase tracking-wider">
             {submitting ? 'Saving...' : 'Save Evidence'}
@@ -123,18 +454,18 @@ export default function Evidence() {
                     <div className="p-2 rounded-lg bg-primary/10"><Icon className="w-4 h-4 text-primary" /></div>
                     <div>
                       <p className="text-sm font-medium text-foreground">{e.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{typeLabel[e.type]} {e.location_name ? `• ${e.location_name}` : ''}</p>
+                      <p className="text-[10px] text-muted-foreground">{typeLabel[e.type]} {e.location_name ? `• ${e.location_name}` : ''} {e.date ? `• ${e.date}` : ''}</p>
+                      {e.equipment?.length > 0 && (
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">Equipment: {Array.isArray(e.equipment) ? e.equipment.join(', ') : e.equipment}</p>
+                      )}
                     </div>
                   </div>
                   <button onClick={() => handleDelete(e.id)} className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
                 {e.description && <p className="text-xs text-foreground/60 mt-2 leading-relaxed">{e.description}</p>}
-                {(e.activity_level > 0 || e.personal_experience > 0) && (
-                  <div className="flex gap-3 mt-2">
-                    {e.activity_level > 0 && <RatingStars value={e.activity_level} size="sm" label="Activity" />}
-                    {e.personal_experience > 0 && <RatingStars value={e.personal_experience} size="sm" label="Experience" />}
-                  </div>
-                )}
+                {e.file_url && e.type === 'photo' && <img src={e.file_url} alt={e.title} className="mt-2 w-full max-h-48 object-cover rounded-lg" />}
+                {e.file_url && e.type === 'video' && <video src={e.file_url} controls className="mt-2 w-full max-h-48 rounded-lg" />}
+                {e.file_url && e.type === 'evp' && <audio src={e.file_url} controls className="mt-2 w-full" />}
               </motion.div>
             );
           })
