@@ -12,24 +12,13 @@ export default function CustomTourModal({ isOpen, onClose }) {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const normalizeState = (input) => {
-    const clean = input.trim();
-    const upper = clean.toUpperCase();
-    const byAbbr = US_STATES.find(s => s.abbr.toUpperCase() === upper);
-    if (byAbbr) return byAbbr.name;
-    const byName = US_STATES.find(s => s.name.toUpperCase() === upper);
-    if (byName) return byName.name;
-    return clean; // fallback: use as-is
-  };
-
   const handleGenerate = async () => {
     const dest = destination.trim();
-    const rawState = state.trim();
-    if (!dest || !rawState) {
+    if (!dest || !state) {
       setError('Please fill in both fields.');
       return;
     }
-    const st = normalizeState(rawState);
+    const st = state;
     setError('');
     setLoading(true);
 
@@ -257,14 +246,17 @@ Use real locations and real paranormal history for "${dest}". Verify hours, pric
                   State
                 </label>
                 <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="e.g. PA"
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
+                  <select
                     value={state}
                     onChange={e => setState(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-                  />
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors appearance-none cursor-pointer"
+                  >
+                    <option value="" disabled className="bg-card text-muted-foreground">Select a state...</option>
+                    {US_STATES.map(s => (
+                      <option key={s.abbr} value={s.name} className="bg-card text-foreground">{s.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
