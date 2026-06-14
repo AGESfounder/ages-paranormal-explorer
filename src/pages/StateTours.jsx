@@ -46,7 +46,19 @@ export default function StateTours() {
 - conclusion: closing paragraph ending with "Thank you for exploring with A.G.E.S. — Affordable Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
 - difficulty ("easy"/"moderate"/"challenging"), estimated_duration (e.g. "2-3 hours"), total_distance (e.g. "1.5 miles"), start_location_name, start_latitude, start_longitude (real coordinates)
 - tags: array (["Civil War", "Haunted Hotel", etc.]), safety_info, best_time ("Dusk to midnight")
-IMPORTANT: All locations must be publicly accessible after dark. Do NOT use locations that close at dusk or have restricted nighttime access (e.g. national battlefields, state parks that close at sunset, gated cemeteries). Verify each location allows nighttime public access. If any stop location has restricted hours, note those hours. For walking tours, stops must be within 0.33 miles of each other — if a location is farther, make it a driving tour or mixed tour. Use real locations with documented paranormal history only.`,
+ROUTING & ACCESS RULES — FOLLOW EXACTLY:
+
+1. WALKING TOURS: Walking tours form a logical loop — stops start and end near the same point with no crisscrossing. Every consecutive stop must be ≤0.33 miles from the previous. Route proceeds in an efficient circle so investigators return to their starting point.
+
+2. DRIVING-ONLY TOURS: Stops follow a logical linear progression — each stop advances in a single direction with no doubling back.
+
+3. MIXED TOURS: Walking stops come first (logical loop ≤0.33 miles between stops, returning to the start point so investigators get back to their car). Driving stops follow in a linear progression.
+
+4. PUBLIC ACCESS & NIGHTTIME: ALL locations must be publicly accessible after dark (ghost hunts occur primarily after sunset). Do NOT use locations that close at dusk, have locked gates, or prohibit nighttime access (e.g. national battlefields, state parks closing at sunset, gated cemeteries). Verify nighttime access for every location.
+
+5. POPULAR STOPS: Include the most popular, well-known paranormal hotspots in each area. Prioritize locations with documented paranormal history.
+
+Use real locations with documented paranormal history only.`,
         response_json_schema: {
           type: "object",
           properties: {

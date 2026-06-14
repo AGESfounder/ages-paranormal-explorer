@@ -92,6 +92,18 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
 - tags: array of relevant tags
 - safety_info: important safety notes
 - best_time: "Dusk to midnight"
+ROUTING & ACCESS RULES — FOLLOW EXACTLY:
+
+1. WALKING TOURS: Walking tours form a logical loop — stops start and end near the same point with no crisscrossing. Every consecutive stop must be ≤0.33 miles from the previous. Route proceeds in an efficient circle so investigators return to their starting point.
+
+2. DRIVING-ONLY TOURS: Stops follow a logical linear progression — each stop advances in a single direction with no doubling back.
+
+3. MIXED TOURS: Walking stops come first (logical loop ≤0.33 miles between stops, returning to the start point so investigators get back to their car). Driving stops follow in a linear progression.
+
+4. PUBLIC ACCESS & NIGHTTIME: ALL locations must be publicly accessible after dark (ghost hunts occur primarily after sunset). Do NOT use locations that close at dusk, have locked gates, or prohibit nighttime access. Verify nighttime access for every location.
+
+5. POPULAR STOPS: Include the most popular, well-known paranormal hotspots in each area. Prioritize locations with documented paranormal history.
+
 Critically verify pricing, hours of operation, and public accessibility after dark for all locations. Use real locations with documented paranormal history only.`,
         response_json_schema: {
           type: "object",

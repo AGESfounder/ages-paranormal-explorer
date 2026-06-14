@@ -120,11 +120,19 @@ Each stop must have RICH, DETAILED content suitable for 3-5 minutes of spoken na
 - hours_of_operation: if the location has restricted public hours, note them (e.g. "Open to public daily 9am-5pm", "Grounds open dawn to dusk, building closed after 4pm"). Leave empty if publicly accessible 24/7.
 - entry_fee: if there is an admission charge, note the cost (e.g. "$10 adults, $5 children", "Free, donations welcome"). Leave empty if completely free.
 
-CRITICAL RULES:
-- ALL locations must be publicly accessible at night. Do NOT use locations that close at dusk, have gates that lock, or prohibit after-dark access (e.g. Gettysburg battlefield, national parks that close at sunset, cemeteries with locked gates). Only use locations where the public can legally be present after dark.
-${tourData.tour_type !== 'driving' ? '- WALKING DISTANCE: Consecutive stops must be within 0.33 miles of each other. If a location is farther, place it at the end of the route.' : ''}
-${tourData.tour_type === 'mixed' ? '- MIXED TOUR: Walking stops (first ~7) come first and must be clustered within 0.33 miles of each other. Driving stops (last ~3) come last, further out.' : ''}
-Order stops to minimize backtracking, create a loop, starting and ending near ${tourData.start_location_name}. Use real locations with paranormal history.`,
+ROUTING & ACCESS RULES — FOLLOW EXACTLY:
+
+1. WALKING TOURS: Stops must form a logical loop — start and end near the same point (${tourData.start_location_name}). Route must be efficient with NO crisscrossing. Every consecutive stop MUST be ≤0.33 miles from the previous. Stops should proceed in a circle so investigators return to their starting point naturally.
+
+2. DRIVING-ONLY TOURS: Stops must follow a logical linear progression — each stop advances in a single direction with no doubling back. Route should flow efficiently from first to last stop.
+
+3. MIXED TOURS: Walking stops come FIRST — these form a logical loop starting and ending near the parking/start location (so investigators walk the loop and return to their car). Then driving stops follow in a linear progression to locations beyond walking distance. Walking stops must cluster within ≤0.33 miles of each other.
+
+4. PUBLIC ACCESS & NIGHTTIME: ALL locations must be publicly accessible after dark. Ghost hunts occur primarily after sunset. Do NOT use locations that close at dusk, have locked gates, or prohibit nighttime access (e.g. national battlefields, state parks that close at sunset, gated cemeteries). If a location has restricted hours, note them in hours_of_operation. Do NOT use any location that is fully inaccessible after dark.
+
+5. POPULAR STOPS: Include the most popular, well-known paranormal hotspots near ${tourData.city}, ${tourData.state}. Prioritize locations with documented paranormal history and active investigations.
+
+Use real locations with documented paranormal history only.`,
         response_json_schema: {
           type: "object",
           properties: {
