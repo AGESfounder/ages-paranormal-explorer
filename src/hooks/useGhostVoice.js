@@ -92,12 +92,16 @@ export default function useGhostVoice() {
     }
   };
 
+  const sanitizeText = (text) => {
+    return text.replace(/A\.G\.E\.S\.?/gi, 'Ages');
+  };
+
   const speak = useCallback(async (text) => {
     if (isSpeaking || isGenerating) return;
     setIsGenerating(true);
     try {
       const result = await base44.integrations.Core.GenerateSpeech({
-        text,
+        text: sanitizeText(text),
         voice: 'storm',
       });
 

@@ -55,6 +55,16 @@ export default function Home() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+            className="mt-1"
+          >
+            <p className="font-heading text-[10px] tracking-[0.2em] uppercase text-primary/60 text-center">
+              Pronounced "Ages"
+            </p>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.6 }}
             className="mt-2"
           >

@@ -19,7 +19,9 @@ export default function Evidence() {
   const [searchParams] = useSearchParams();
   const [evidences, setEvidences] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(searchParams.get('tourId') != null);
+  const [showForm, setShowForm] = useState(
+    searchParams.get('tourId') != null || window.location.pathname === '/evidence/new'
+  );
   const [form, setForm] = useState({
     title: '', type: 'note', description: '', tour_id: searchParams.get('tourId') || '',
     stop_id: searchParams.get('stopId') || '', location_name: searchParams.get('location') || '',
@@ -86,7 +88,7 @@ export default function Evidence() {
   return (
     <PageContainer>
       <SectionHeader title="Evidence Journal" subtitle="Your Findings" rightAction={
-        <button onClick={() => navigate('/evidence/new')} className="p-2"><Plus className="w-5 h-5 text-primary" /></button>
+        <button onClick={() => setShowForm(true)} className="p-2"><Plus className="w-5 h-5 text-primary" /></button>
       } />
       <div className="px-4 pb-28 space-y-3 pt-3">
         {loading ? (
@@ -96,6 +98,7 @@ export default function Evidence() {
             <Archive className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
             <p className="text-muted-foreground font-heading text-sm">No evidence logged yet</p>
             <p className="text-xs text-muted-foreground/60 mt-1">Tap + to record your first finding</p>
+            <button onClick={() => setShowForm(true)} className="mt-4 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">Add New Entry</button>
           </div>
         ) : (
           evidences.map((e, i) => {

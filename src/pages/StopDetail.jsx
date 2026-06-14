@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car } from 'lucide-react';
+import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car, Info, DollarSign, ChevronDown } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
@@ -25,6 +25,7 @@ export default function StopDetail() {
   const [stop, setStop] = useState(null);
   const [allStops, setAllStops] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAccessInfo, setShowAccessInfo] = useState(false);
   const { isSpeaking, isGenerating, narrate } = useGhostVoice();
 
   useEffect(() => {
@@ -86,10 +87,31 @@ export default function StopDetail() {
             {stop.construction_date && <span className="flex items-center gap-1">Est. {stop.construction_date}</span>}
             {stop.travel_method === 'driving' && <span className="flex items-center gap-1 text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded"><Car className="w-3 h-3" /> Driving Stop</span>}
           </div>
-          {stop.hours_of_operation && (
-            <div className="mt-2 p-2 rounded-lg bg-amber-500/5 border border-amber-500/15">
-              <p className="text-[10px] font-heading uppercase tracking-wider text-amber-400 mb-0.5">Hours</p>
-              <p className="text-xs text-foreground/70">{stop.hours_of_operation}</p>
+          {(stop.hours_of_operation || stop.entry_fee) && (
+            <div className="mt-2">
+              <button onClick={() => setShowAccessInfo(!showAccessInfo)} className="w-full flex items-center justify-between p-2 rounded-lg bg-amber-500/5 border border-amber-500/15 hover:border-amber-500/30 transition-colors">
+                <div className="flex items-center gap-2">
+                  {stop.entry_fee ? <DollarSign className="w-3.5 h-3.5 text-green-400" /> : <Info className="w-3.5 h-3.5 text-amber-400" />}
+                  <span className="text-[10px] font-heading uppercase tracking-wider text-amber-400">Access Info</span>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 text-amber-400 transition-transform ${showAccessInfo ? 'rotate-180' : ''}`} />
+              </button>
+              {showAccessInfo && (
+                <div className="mt-1 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 space-y-2">
+                  {stop.hours_of_operation && (
+                    <div>
+                      <p className="text-[10px] font-heading uppercase tracking-wider text-amber-400 mb-0.5">Hours of Operation</p>
+                      <p className="text-xs text-foreground/70">{stop.hours_of_operation}</p>
+                    </div>
+                  )}
+                  {stop.entry_fee && (
+                    <div>
+                      <p className="text-[10px] font-heading uppercase tracking-wider text-green-400 mb-0.5">Entry Fee</p>
+                      <p className="text-xs text-foreground/70">{stop.entry_fee}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {stop.famous_people && <p className="text-xs text-primary/80 mt-2">Notable: {stop.famous_people}</p>}

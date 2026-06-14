@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -83,16 +83,17 @@ export default function TourDetail() {
       const result = await base44.integrations.Core.InvokeLLM({
         prompt: `Generate exactly 10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
 
-Each stop:
+Each stop must have RICH, DETAILED content suitable for 3-5 minutes of spoken narration per stop (~400-600 words across the fields below):
 - stop_number: 1-10 in logical route order
 - name, latitude, longitude (real GPS), address
-- historical_info: 2-3 paragraphs (construction dates, events, famous people, significance)
-- paranormal_info: 2-3 paragraphs (hauntings, ghost sightings, EVP reports, apparitions, shadow figures, folklore)
-- investigation_suggestions: 3-5 items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring"
-- estimated_investigation_time: "5 minutes" / "10 minutes" / "15 minutes"
+- historical_info: 4-5 detailed paragraphs covering construction dates and architecture, major historical events that occurred there, notable figures who lived/visited/died there, scandals/murders/tragedies, and the building's significance to the community over time. Go deep into specific dates, names, and documented events.
+- paranormal_info: 4-5 detailed paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, location within the building), shadow figures, cold spots, poltergeist activity, residual hauntings vs intelligent hauntings, and local folklore/urban legends. Include investigator testimonies and well-known paranormal events tied to the location.
+- investigation_suggestions: 3-5 items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
+- estimated_investigation_time: "10 minutes" / "15 minutes" / "20 minutes"
 - construction_date, famous_people
-- narration_text: 3-4 sentence dramatic narration in mysterious storytelling style
+- narration_text: 8-12 sentences of dramatic, immersive storytelling narration written in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking directly to fellow investigators about what awaits them. Include vivid sensory details (sounds, smells, temperature, lighting), specific ghost stories, and build anticipation for the investigation. This should feel like a professional ghost tour guide speaking.
 - hours_of_operation: if the location has restricted public hours, note them (e.g. "Open to public daily 9am-5pm", "Grounds open dawn to dusk, building closed after 4pm"). Leave empty if publicly accessible 24/7.
+- entry_fee: if there is an admission charge, note the cost (e.g. "$10 adults, $5 children", "Free, donations welcome"). Leave empty if completely free.
 
 CRITICAL RULES:
 - ALL locations must be publicly accessible at night. Do NOT use locations that close at dusk, have gates that lock, or prohibit after-dark access (e.g. Gettysburg battlefield, national parks that close at sunset, cemeteries with locked gates). Only use locations where the public can legally be present after dark.
@@ -119,7 +120,8 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
                   construction_date: { type: "string" },
                   famous_people: { type: "string" },
                   narration_text: { type: "string" },
-                  hours_of_operation: { type: "string" }
+                  hours_of_operation: { type: "string" },
+                  entry_fee: { type: "string" }
                 }
               }
             }
@@ -271,6 +273,12 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
                         {stop.address && <><MapPin className="w-2.5 h-2.5" /> <span className="truncate">{stop.address}</span></>}
                       </p>
                     </div>
+                    {(stop.hours_of_operation || stop.entry_fee) && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {stop.entry_fee && <DollarSign className="w-3 h-3 text-green-400" />}
+                        {stop.hours_of_operation && <Info className="w-3 h-3 text-amber-400" />}
+                      </div>
+                    )}
                     <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); narrate(stop.narration_text || stop.paranormal_info); }} className={`p-1.5 rounded-md shrink-0 transition-colors ${isSpeaking || isGenerating ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}>
                       {isSpeaking || isGenerating ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
                     </button>

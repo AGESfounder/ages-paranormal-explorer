@@ -56,6 +56,9 @@
     },
     "hours_of_operation": {
       "type": "string"
+    },
+    "entry_fee": {
+      "type": "string"
     }
   },
   "required": [
