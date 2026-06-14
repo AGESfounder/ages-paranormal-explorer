@@ -152,7 +152,7 @@ Critically verify pricing, hours of operation, and public accessibility after da
         <button
           onClick={handleFavorite}
           disabled={!!actionLoading}
-          className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-red-500 text-white disabled:opacity-40"
+          className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-red-500/30 text-white/60 disabled:opacity-30"
         >
           {actionLoading === 'favorite' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Heart className={`w-5 h-5 ${isFavorite ? 'fill-white' : ''}`} />}
           <span className="text-[8px] font-heading uppercase tracking-wider">Fav</span>
@@ -160,7 +160,7 @@ Critically verify pricing, hours of operation, and public accessibility after da
         <button
           onClick={handleRefresh}
           disabled={!!actionLoading}
-          className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-amber-500 text-white disabled:opacity-40"
+          className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-amber-500/30 text-white/60 disabled:opacity-30"
         >
           {actionLoading === 'refresh' ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
           <span className="text-[8px] font-heading uppercase tracking-wider">Refresh</span>
@@ -168,7 +168,7 @@ Critically verify pricing, hours of operation, and public accessibility after da
         <button
           onClick={handleDelete}
           disabled={!!actionLoading}
-          className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-destructive text-white disabled:opacity-40"
+          className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-destructive/30 text-white/60 disabled:opacity-30"
         >
           {actionLoading === 'delete' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
           <span className="text-[8px] font-heading uppercase tracking-wider">Delete</span>

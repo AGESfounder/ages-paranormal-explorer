@@ -315,7 +315,7 @@ IMPORTANT: All locations must be publicly accessible after dark. Do NOT use loca
                   <Navigation className="w-5 h-5 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{tour.title}</p>
+                  <p className="text-sm font-bold text-foreground truncate group-hover:text-primary transition-colors">{tour.title}</p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
                     <MapPin className="w-2.5 h-2.5" /> {tour.city}, {tour.state}
                   </p>

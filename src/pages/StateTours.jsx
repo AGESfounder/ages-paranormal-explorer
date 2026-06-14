@@ -156,7 +156,7 @@ IMPORTANT: All locations must be publicly accessible after dark. Do NOT use loca
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-heading text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                  <h3 className="font-heading text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
                     {tour.title}
                   </h3>
                   <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
