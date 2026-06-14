@@ -40,11 +40,21 @@ export default function Toolkit() {
   const noiseNodeRef = useRef(null);
   const filterNodeRef = useRef(null);
   const gainNodeRef = useRef(null);
+  const wordIntervalRef = useRef(null);
+
+  const paranormalWords = [
+    'hello', 'help', 'leave', 'mine', 'cold', 'dark', 'death', 'run', 'stay', 'who',
+    'why', 'pain', 'lost', 'trapped', 'behind', 'listen', 'come', 'wait', 'door', 'alone',
+    'fear', 'child', 'mother', 'fire', 'home', 'never', 'again', 'stop', 'name', 'grave',
+    'blood', 'watch', 'shadow', 'whisper', 'breathe', 'silence', 'remember', 'forgotten',
+    'night', 'light', 'bury', 'down', 'below', 'inside', 'walls', 'floor', 'upstairs', 'basement',
+  ];
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
+      if (wordIntervalRef.current) clearInterval(wordIntervalRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
@@ -71,17 +81,42 @@ export default function Toolkit() {
     gainNodeRef.current = null;
   };
 
-  const startRadioSweep = () => {
+  const startRadioSweep = async () => {
     stopRadioAudio();
     setRadioActive(true);
     setSavedWords([]);
     setHeardWord('');
 
+    // Auto-start recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setRecordedBlob(blob);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorder.start();
+      setRecording(true);
+      setRecordDuration(0);
+      setRecordedBlob(null);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        setRecordDuration(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Microphone access denied', err);
+    }
+
     // Build audio graph: white noise → bandpass filter → gain → speakers
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     audioCtxRef.current = ctx;
 
-    // Create buffer of white noise
     const bufferSize = ctx.sampleRate * 2;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -109,7 +144,7 @@ export default function Toolkit() {
     filterNodeRef.current = filter;
     gainNodeRef.current = gain;
 
-    // Sweep frequency loop — slower at 200ms intervals
+    // Sweep frequency loop
     const amMin = 530, amMax = 1700, fmMin = 88.1, fmMax = 107.9;
     let freq = radioBand === 'AM' ? amMin : fmMin;
     let dir = 1;
@@ -122,20 +157,28 @@ export default function Toolkit() {
       if (freq >= max) { freq = max; dir = -1; }
       if (freq <= min) { freq = min; dir = 1; }
       setRadioFrequency(Math.round(freq * 10) / 10);
-      // Map frequency to audio filter center
       if (filterNodeRef.current) {
         const centerFreq = radioBand === 'AM'
-          ? freq * 1000  // kHz → Hz
-          : freq * 1000000; // MHz → Hz
+          ? freq * 1000
+          : freq * 1000000;
         filterNodeRef.current.frequency.setValueAtTime(centerFreq, ctx.currentTime);
       }
     }, 200);
+
+    // Word generation — pick random paranormal words at random intervals
+    wordIntervalRef.current = setInterval(() => {
+      const word = paranormalWords[Math.floor(Math.random() * paranormalWords.length)];
+      setSavedWords(prev => [...prev, word]);
+    }, 3000 + Math.random() * 4000);
   };
 
   const stopRadioSweep = () => {
     if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
     radioIntervalRef.current = null;
+    if (wordIntervalRef.current) clearInterval(wordIntervalRef.current);
+    wordIntervalRef.current = null;
     stopRadioAudio();
+    stopRecording();
     setRadioActive(false);
   };
 
@@ -335,10 +378,10 @@ export default function Toolkit() {
         return (
           <div className="space-y-4">
             <div className="flex gap-1.5">
-              <button onClick={() => { stopRadioSweep(); setRadioBand('AM'); setRadioFrequency(530); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${!radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
+              <button onClick={() => { stopRadioSweep(); setRecordedBlob(null); setRecordDuration(0); setSavedWords([]); setRadioBand('AM'); setRadioFrequency(530); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${!radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
                 AM 530–1700 kHz
               </button>
-              <button onClick={() => { stopRadioSweep(); setRadioBand('FM'); setRadioFrequency(88.1); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${!radioActive && radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : radioActive && radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
+              <button onClick={() => { stopRadioSweep(); setRecordedBlob(null); setRecordDuration(0); setSavedWords([]); setRadioBand('FM'); setRadioFrequency(88.1); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${!radioActive && radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : radioActive && radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
                 FM 88.1–107.9 MHz
               </button>
             </div>
@@ -348,45 +391,48 @@ export default function Toolkit() {
                 {radioBand === 'AM' ? radioFrequency.toFixed(0) : radioFrequency.toFixed(1)}
               </p>
               <p className="text-[10px] text-muted-foreground font-mono">
-                {radioBand === 'AM' ? 'kHz' : 'MHz'} {radioActive ? '● Sweeping' : '— Standby'}
+                {radioBand === 'AM' ? 'kHz' : 'MHz'} {radioActive ? '● Sweeping — Recording ' + formatDuration(recordDuration) : '— Standby'}
               </p>
             </div>
+
+            {/* Words appearing during sweep */}
+            {savedWords.length > 0 && (
+              <div className="p-3 rounded-lg bg-black/30 border border-primary/10 min-h-[60px]">
+                <p className="text-[9px] font-heading uppercase tracking-wider text-muted-foreground/60 mb-2">Detected Words</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {savedWords.map((w, i) => (
+                    <motion.span
+                      key={i}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="px-2 py-1 rounded text-[10px] bg-primary/10 border border-primary/20 text-primary font-mono"
+                    >
+                      {w}
+                    </motion.span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {radioActive ? (
               <button onClick={stopRadioSweep} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-heading text-xs uppercase tracking-wider hover:bg-red-500/20 transition-colors">
                 <Pause className="w-3.5 h-3.5" /> Stop Sweep
               </button>
+            ) : recordedBlob ? (
+              <div className="space-y-2">
+                <button onClick={saveRecording} disabled={savingRec} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
+                  <Save className="w-3.5 h-3.5" /> {savingRec ? 'Saving...' : 'Save Session to Evidence Journal'}
+                </button>
+                <p className="text-[10px] text-muted-foreground/60 text-center">{formatDuration(recordDuration)} captured</p>
+                <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); setSavedWords([]); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
+                  <X className="w-3.5 h-3.5" /> Discard Recording
+                </button>
+              </div>
             ) : (
               <button onClick={startRadioSweep} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
                 <Play className="w-3.5 h-3.5" /> Start Sweep
               </button>
             )}
-
-            <div className="space-y-2">
-              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Words Heard</p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Type what you hear..."
-                  value={heardWord}
-                  onChange={e => setHeardWord(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && addHeardWord()}
-                  className="flex-1 px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-                />
-                <button onClick={addHeardWord} className="px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                  Add
-                </button>
-              </div>
-              {savedWords.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {savedWords.map((w, i) => (
-                    <span key={i} className="px-2 py-1 rounded text-[10px] bg-primary/10 border border-primary/20 text-primary font-mono">
-                      {w}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         );
 
@@ -871,8 +917,13 @@ Best Practices
                 stopRadioAudio();
                 setActiveTool(null);
                 if (recording) stopRecording();
-                if (radioActive) { setRadioActive(false); if (radioIntervalRef.current) clearInterval(radioIntervalRef.current); }
+                if (radioActive) {
+                  setRadioActive(false);
+                  if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
+                  if (wordIntervalRef.current) clearInterval(wordIntervalRef.current);
+                }
                 setRecordedBlob(null);
+                setSavedWords([]);
                 setGuideDetail(null);
               }} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-4 h-4" />
