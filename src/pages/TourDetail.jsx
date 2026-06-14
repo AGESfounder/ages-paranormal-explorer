@@ -35,30 +35,34 @@ function orderStopsByProximity(stops) {
 }
 
 function enforceWalkingDistance(stops, tourType) {
+  if (!stops.length) return stops;
+  const WALKING_LIMIT = 0.33;
+
   if (tourType === 'driving') {
     return orderStopsByProximity(stops).map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
   }
-  const WALKING_LIMIT = 0.33;
-  const sorted = [...stops].sort((a, b) => a.stop_number - b.stop_number);
 
-  // Separate stops into walking-capable and driving-required by checking proximity gaps
-  let firstDrivingIndex = sorted.length;
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const dist = haversineDistance(sorted[i].latitude, sorted[i].longitude, sorted[i + 1].latitude, sorted[i + 1].longitude);
-    if (dist > WALKING_LIMIT) {
-      firstDrivingIndex = i + 1;
-      break;
-    }
+  if (tourType === 'walking') {
+    return orderStopsByProximity(stops).map((s, i) => ({ ...s, travel_method: 'walking', stop_number: i + 1 }));
   }
 
-  const walking = orderStopsByProximity(sorted.slice(0, firstDrivingIndex));
-  const driving = orderStopsByProximity(sorted.slice(firstDrivingIndex));
+  // MIXED TOURS: keep original stop order from LLM, label travel_method by proximity
+  // Stops within 0.33 miles of their neighbor in the sequence are walking, others driving
+  const sorted = [...stops].sort((a, b) => a.stop_number - b.stop_number);
+  const labeled = sorted.map((s, i) => {
+    if (i === sorted.length - 1) {
+      // Last stop: same method as previous if close, otherwise driving
+      const prev = i > 0 ? sorted[i - 1] : null;
+      if (prev && haversineDistance(prev.latitude, prev.longitude, s.latitude, s.longitude) <= WALKING_LIMIT) {
+        return { ...s, travel_method: 'walking' };
+      }
+      return { ...s, travel_method: 'driving' };
+    }
+    const nextDist = haversineDistance(s.latitude, s.longitude, sorted[i + 1].latitude, sorted[i + 1].longitude);
+    return { ...s, travel_method: nextDist <= WALKING_LIMIT ? 'walking' : 'driving' };
+  });
 
-  const result = [
-    ...walking.map((s, i) => ({ ...s, travel_method: 'walking', stop_number: i + 1 })),
-    ...driving.map((s, i) => ({ ...s, travel_method: 'driving', stop_number: walking.length + i + 1 })),
-  ];
-  return result;
+  return labeled.map((s, i) => ({ ...s, stop_number: i + 1 }));
 }
 
 export default function TourDetail() {
@@ -128,7 +132,7 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
 3. DRIVING-ONLY TOURS: Stops must follow a logical linear progression — each stop advances in a single direction with no doubling back. Minimize total driving distance.
 
-4. MIXED TOURS: Walking stops come FIRST — these form a logical loop starting and ending near the parking/start location (so investigators walk the loop and return to their car). Driving stops follow in a linear progression. Walking stops must cluster within ≤0.33 miles of each other. Minimize both walking and driving distances.
+4. MIXED TOURS: The tour can start by driving to a parking area near a walking cluster, then walking stops form a logical loop (≤0.33 miles between stops, returning to that parking area). Remaining driving stops continue in a linear progression. Use this pattern when it makes the most logical sense — drive to where the walking cluster is, walk the loop, then drive to remaining stops. Walking stops must cluster within ≤0.33 miles of each other. Minimize both walking and driving distances.
 
 5. PUBLIC ACCESS AFTER 7 PM: ALL locations must be publicly accessible after 7 PM. Ghost hunts occur primarily at night. Do NOT use locations that close before 7 PM, have locked gates, or prohibit nighttime access (e.g. national battlefields, state parks closing at sunset, gated cemeteries, museums closing at 5 PM). At minimum, investigators must be able to be outside the building after 7 PM. If a location has restricted hours, note them in hours_of_operation. Do NOT use any location fully inaccessible after 7 PM.
 
