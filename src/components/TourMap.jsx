@@ -2,36 +2,23 @@ import React from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 
-// Ghost-themed marker icon
-const ghostIcon = new L.DivIcon({
-  className: 'ghost-marker',
-  html: `<div style="
-    width: 28px; height: 28px;
-    background: hsl(199,89%,48%);
-    border-radius: 50% 50% 50% 0;
-    transform: rotate(-45deg);
-    box-shadow: 0 0 12px hsl(199,89%,48%,0.6), 0 0 24px hsl(199,89%,48%,0.3);
-    border: 2px solid hsl(199,89%,48%);
-  "></div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 28],
-  popupAnchor: [0, -30],
-});
-
-const startIcon = new L.DivIcon({
-  className: 'start-marker',
-  html: `<div style="
-    width: 24px; height: 24px;
-    background: hsl(270,40%,45%);
-    border-radius: 50%;
-    box-shadow: 0 0 10px hsl(270,40%,45%,0.6), 0 0 20px hsl(270,40%,45%,0.3);
-    border: 2px solid hsl(270,40%,60%);
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-size: 12px; font-weight: bold;
-  ">S</div>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-});
+function makeStopIcon(stopNumber) {
+  return new L.DivIcon({
+    className: 'stop-marker',
+    html: `<div style="
+      width: 28px; height: 28px;
+      background: hsl(199,89%,48%);
+      border-radius: 50%;
+      box-shadow: 0 0 12px hsl(199,89%,48%,0.6), 0 0 24px hsl(199,89%,48%,0.3);
+      border: 2px solid hsl(199,89%,48%);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 12px; font-weight: bold; font-family: 'Cinzel', serif;
+    ">${stopNumber}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  });
+}
 
 export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64' }) {
   if (!stops || stops.length === 0) return null;
@@ -73,7 +60,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           <Marker
             key={stop.id}
             position={[stop.latitude, stop.longitude]}
-            icon={highlightedStopId === stop.id ? startIcon : ghostIcon}
+            icon={makeStopIcon(stop.stop_number)}
           >
             <Popup>
               <div className="text-xs font-heading">
