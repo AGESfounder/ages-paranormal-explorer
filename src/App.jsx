@@ -23,6 +23,7 @@ import Favorites from '@/pages/Favorites';
 import Profile from '@/pages/Profile';
 import Toolkit from '@/pages/Toolkit';
 import Nearby from '@/pages/Nearby';
+import AbroadTours from '@/pages/AbroadTours';
 import Settings from '@/pages/Settings';
 
 const AuthenticatedApp = () => {
@@ -68,6 +69,7 @@ const AuthenticatedApp = () => {
         <Route path="/profile" element={<Profile />} />
         <Route path="/toolkit" element={<Toolkit />} />
         <Route path="/nearby" element={<Nearby />} />
+        <Route path="/abroad" element={<AbroadTours />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

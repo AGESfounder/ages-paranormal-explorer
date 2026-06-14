@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles } from 'lucide-react';
+import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
 import { base44 } from '@/api/base44Client';
 
 const menuItems = [
-  { label: 'Explore States', icon: Map, path: '/states', desc: 'All 50 U.S. States' },
-  { label: 'Nearby Tours', icon: Navigation, path: '/nearby', desc: 'Tours Near You' },
   { label: 'Favorites', icon: Heart, path: '/favorites', desc: 'Saved Tours' },
   { label: 'Evidence Journal', icon: BookOpen, path: '/evidence', desc: 'Your Findings' },
   { label: 'Investigation Toolkit', icon: Wrench, path: '/toolkit', desc: 'Ghost Hunting Tools' },
@@ -108,24 +106,67 @@ export default function Home() {
         </motion.div>
 
         <motion.div
-          className="w-full max-w-sm px-6 mb-4"
+          className="w-full max-w-sm px-6 grid grid-cols-2 gap-3 mb-4"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.65, duration: 0.4 }}
         >
+          <Link
+            to="/states"
+            className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border/50 bg-card/40 backdrop-blur-sm hover:border-primary/40 hover:bg-card/60 hover:shadow-[0_0_20px_hsl(199,89%,48%,0.08)] transition-all duration-300 group"
+          >
+            <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <Map className="w-6 h-6 text-primary group-hover:drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)] transition-all" />
+            </div>
+            <div className="text-center">
+              <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Explore States</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">All 50 U.S. States</p>
+            </div>
+          </Link>
+          <Link
+            to="/nearby"
+            className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border/50 bg-card/40 backdrop-blur-sm hover:border-primary/40 hover:bg-card/60 hover:shadow-[0_0_20px_hsl(199,89%,48%,0.08)] transition-all duration-300 group"
+          >
+            <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <Navigation className="w-6 h-6 text-primary group-hover:drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)] transition-all" />
+            </div>
+            <div className="text-center">
+              <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Nearby Tours</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Tours Near You</p>
+            </div>
+          </Link>
+        </motion.div>
+
+        <motion.div
+          className="w-full max-w-sm px-6 grid grid-cols-2 gap-3 mb-4"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, duration: 0.4 }}
+        >
           <button
             onClick={() => setShowCustomTour(true)}
-            className="w-full flex items-center justify-center gap-3 p-4 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 hover:shadow-[0_0_24px_hsl(199,89%,48%,0.12)] transition-all duration-300 group"
+            className="flex flex-col items-center gap-2 p-4 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 hover:shadow-[0_0_24px_hsl(199,89%,48%,0.12)] transition-all duration-300 group"
           >
-            <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-              <Building2 className="w-5 h-5 text-primary" />
+            <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <Building2 className="w-6 h-6 text-primary" />
             </div>
-            <div className="text-left">
-              <p className="font-heading text-sm font-semibold tracking-wide uppercase text-foreground">Custom Tour</p>
-              <p className="text-[10px] text-muted-foreground">Haunted Destinations</p>
+            <div className="text-center">
+              <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Custom Tour</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Haunted Destinations</p>
             </div>
-            <Sparkles className="w-4 h-4 text-cyan-glow ml-auto" />
           </button>
+          <Link
+            to="/abroad"
+            className="flex flex-col items-center gap-2 p-4 rounded-xl border border-accent/30 bg-accent/5 hover:bg-accent/10 hover:border-accent/50 hover:shadow-[0_0_24px_hsl(270,40%,42%,0.12)] transition-all duration-300 group"
+          >
+            <div className="p-2.5 rounded-lg bg-accent/10 group-hover:bg-accent/20 transition-colors">
+              <Globe className="w-6 h-6 text-cyan-glow" />
+            </div>
+            <div className="text-center">
+              <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Tours Abroad</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">International Hauntings</p>
+            </div>
+          </Link>
         </motion.div>
 
         <div className="w-full max-w-sm px-6 grid grid-cols-2 gap-3">
