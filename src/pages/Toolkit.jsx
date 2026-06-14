@@ -42,6 +42,7 @@ export default function Toolkit() {
   const filterNodeRef = useRef(null);
   const gainNodeRef = useRef(null);
   const [radioVolume, setRadioVolume] = useState(0.35);
+  const [narrating, setNarrating] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -184,6 +185,25 @@ export default function Toolkit() {
     if (!heardWord.trim()) return;
     setSavedWords(prev => [...prev, heardWord.trim()]);
     setHeardWord('');
+  };
+
+  const toggleNarration = () => {
+    if (narrating) {
+      window.speechSynthesis.cancel();
+      setNarrating(false);
+      return;
+    }
+    const text = guideDetail
+      .replace(/• /g, '. ')
+      .replace(/\n+/g, '. ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9;
+    utterance.onend = () => setNarrating(false);
+    utterance.onerror = () => setNarrating(false);
+    setNarrating(true);
+    window.speechSynthesis.speak(utterance);
   };
 
   const formatDuration = (sec) => {
@@ -527,9 +547,15 @@ export default function Toolkit() {
         if (guideDetail) {
           return (
             <div className="space-y-3">
-              <button onClick={() => setGuideDetail(null)} className="flex items-center gap-1.5 text-xs text-primary font-heading uppercase tracking-wider hover:text-primary/80 transition-colors">
-                <ArrowLeft className="w-3.5 h-3.5" /> Back to Equipment List
-              </button>
+              <div className="flex items-center justify-between">
+                <button onClick={() => { window.speechSynthesis.cancel(); setNarrating(false); setGuideDetail(null); }} className="flex items-center gap-1.5 text-xs text-primary font-heading uppercase tracking-wider hover:text-primary/80 transition-colors">
+                  <ArrowLeft className="w-3.5 h-3.5" /> Back to Equipment List
+                </button>
+                <button onClick={toggleNarration} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-heading uppercase tracking-wider transition-colors ${narrating ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/50 border border-border/50 text-muted-foreground hover:text-primary hover:border-primary/30'}`}>
+                  <Volume2 className={`w-3 h-3 ${narrating ? 'animate-pulse' : ''}`} />
+                  {narrating ? 'Stop' : 'Narrate'}
+                </button>
+              </div>
               <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-xs text-foreground/80 leading-relaxed space-y-3 whitespace-pre-line">
                 {guideDetail}
               </div>
@@ -940,6 +966,8 @@ Best Practices
                 setRecordedBlob(null);
                 setSavedWords([]);
                 setGuideDetail(null);
+                window.speechSynthesis.cancel();
+                setNarrating(false);
               }} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-4 h-4" />
               </button>
