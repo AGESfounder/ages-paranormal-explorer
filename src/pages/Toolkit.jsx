@@ -36,6 +36,10 @@ export default function Toolkit() {
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const noiseNodeRef = useRef(null);
+  const filterNodeRef = useRef(null);
+  const gainNodeRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -44,6 +48,7 @@ export default function Toolkit() {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
+      stopRadioAudio();
     };
   }, []);
 
@@ -53,13 +58,62 @@ export default function Toolkit() {
     }
   }, [activeTool]);
 
+  const stopRadioAudio = () => {
+    if (noiseNodeRef.current) {
+      try { noiseNodeRef.current.stop(); } catch (e) { /* already stopped */ }
+      noiseNodeRef.current = null;
+    }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close();
+      audioCtxRef.current = null;
+    }
+    filterNodeRef.current = null;
+    gainNodeRef.current = null;
+  };
+
   const startRadioSweep = () => {
+    stopRadioAudio();
     setRadioActive(true);
     setSavedWords([]);
     setHeardWord('');
+
+    // Build audio graph: white noise → bandpass filter → gain → speakers
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtxRef.current = ctx;
+
+    // Create buffer of white noise
+    const bufferSize = ctx.sampleRate * 2;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * 0.3;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    noise.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = radioBand === 'AM' ? 8 : 2.5;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.35;
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+
+    noiseNodeRef.current = noise;
+    filterNodeRef.current = filter;
+    gainNodeRef.current = gain;
+
+    // Sweep frequency loop — slower at 200ms intervals
     const amMin = 530, amMax = 1700, fmMin = 88.1, fmMax = 107.9;
     let freq = radioBand === 'AM' ? amMin : fmMin;
     let dir = 1;
+
     radioIntervalRef.current = setInterval(() => {
       const min = radioBand === 'AM' ? amMin : fmMin;
       const max = radioBand === 'AM' ? amMax : fmMax;
@@ -68,11 +122,20 @@ export default function Toolkit() {
       if (freq >= max) { freq = max; dir = -1; }
       if (freq <= min) { freq = min; dir = 1; }
       setRadioFrequency(Math.round(freq * 10) / 10);
-    }, 80);
+      // Map frequency to audio filter center
+      if (filterNodeRef.current) {
+        const centerFreq = radioBand === 'AM'
+          ? freq * 1000  // kHz → Hz
+          : freq * 1000000; // MHz → Hz
+        filterNodeRef.current.frequency.setValueAtTime(centerFreq, ctx.currentTime);
+      }
+    }, 200);
   };
 
   const stopRadioSweep = () => {
     if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
+    radioIntervalRef.current = null;
+    stopRadioAudio();
     setRadioActive(false);
   };
 
@@ -272,10 +335,10 @@ export default function Toolkit() {
         return (
           <div className="space-y-4">
             <div className="flex gap-1.5">
-              <button onClick={() => { stopRadioSweep(); setRadioBand('AM'); setRadioFrequency(530); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
+              <button onClick={() => { stopRadioSweep(); setRadioBand('AM'); setRadioFrequency(530); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${!radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
                 AM 530–1700 kHz
               </button>
-              <button onClick={() => { stopRadioSweep(); setRadioBand('FM'); setRadioFrequency(88.1); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
+              <button onClick={() => { stopRadioSweep(); setRadioBand('FM'); setRadioFrequency(88.1); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${!radioActive && radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : radioActive && radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
                 FM 88.1–107.9 MHz
               </button>
             </div>
@@ -805,9 +868,10 @@ Best Practices
                 </div>
               </div>
               <button onClick={() => {
+                stopRadioAudio();
                 setActiveTool(null);
                 if (recording) stopRecording();
-                if (radioActive) stopRadioSweep();
+                if (radioActive) { setRadioActive(false); if (radioIntervalRef.current) clearInterval(radioIntervalRef.current); }
                 setRecordedBlob(null);
                 setGuideDetail(null);
               }} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
