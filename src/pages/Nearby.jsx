@@ -5,6 +5,7 @@ import { Navigation, MapPin, Loader2, Ghost, Compass } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
+import SwipeableTourCard from '../components/SwipeableTourCard';
 import { base44 } from '@/api/base44Client';
 
 export default function Nearby() {
@@ -205,6 +206,16 @@ IMPORTANT: All locations must be publicly accessible after dark. Do NOT use loca
     setLoading(false);
   };
 
+  const handleRefreshTour = async (tourId) => {
+    const results = await base44.entities.Tour.filter({ id: tourId });
+    if (results.length > 0) setTours(prev => prev.map(t => t.id === tourId ? results[0] : t));
+    if (coords) loadNearby();
+  };
+
+  const handleDeleteTour = (tourId) => {
+    setTours(prev => prev.filter(t => t.id !== tourId));
+  };
+
   const getDistance = (lat1, lon1, lat2, lon2) => {
     const R = 3959;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -298,6 +309,7 @@ IMPORTANT: All locations must be publicly accessible after dark. Do NOT use loca
         ) : (
           tours.map((tour, i) => (
             <motion.div key={tour.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+              <SwipeableTourCard tour={tour} onRefresh={handleRefreshTour} onDelete={handleDeleteTour}>
               <Link to={`/tour/${tour.id}`} className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card/40 hover:border-primary/40 hover:bg-card/50 transition-all group">
                 <div className="p-2.5 rounded-lg bg-primary/10">
                   <Navigation className="w-5 h-5 text-primary" />
@@ -312,6 +324,7 @@ IMPORTANT: All locations must be publicly accessible after dark. Do NOT use loca
                   <span className="text-xs text-primary font-heading tracking-wide">{Math.round(tour.distance)} mi</span>
                 )}
               </Link>
+            </SwipeableTourCard>
             </motion.div>
           ))
         )}

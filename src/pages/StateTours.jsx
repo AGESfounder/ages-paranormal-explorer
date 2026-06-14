@@ -5,6 +5,7 @@ import { MapPin, Clock, Footprints, Car, Loader2, Ghost, AlertTriangle, RefreshC
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
+import SwipeableTourCard from '../components/SwipeableTourCard';
 import { US_STATES } from '../lib/statesData';
 import { base44 } from '@/api/base44Client';
 
@@ -93,6 +94,15 @@ IMPORTANT: All locations must be publicly accessible after dark. Do NOT use loca
     }
   };
 
+  const handleRefreshTour = async (tourId) => {
+    const results = await base44.entities.Tour.filter({ id: tourId });
+    if (results.length > 0) setTours(prev => prev.map(t => t.id === tourId ? results[0] : t));
+  };
+
+  const handleDeleteTour = (tourId) => {
+    setTours(prev => prev.filter(t => t.id !== tourId));
+  };
+
   if (loading) {
     return (
       <PageContainer>
@@ -139,6 +149,7 @@ IMPORTANT: All locations must be publicly accessible after dark. Do NOT use loca
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.1 }}
           >
+            <SwipeableTourCard tour={tour} onRefresh={handleRefreshTour} onDelete={handleDeleteTour}>
             <Link
               to={`/tour/${tour.id}`}
               className="block p-4 rounded-xl border border-border/40 bg-card/40 backdrop-blur-sm hover:border-primary/40 hover:bg-card/60 transition-all duration-300 group"
@@ -180,6 +191,7 @@ IMPORTANT: All locations must be publicly accessible after dark. Do NOT use loca
                 </div>
               )}
             </Link>
+            </SwipeableTourCard>
           </motion.div>
         ))}
       </div>
