@@ -1,23 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Moon, Sun, Volume2, Music, Download, Shield, Info, Navigation } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
+import { base44 } from '@/api/base44Client';
+
+const defaultSettings = {
+  backgroundMusic: false,
+  musicVolume: 50,
+  narrationVolume: 80,
+  darkMode: true,
+  offlineDownloads: false,
+  locationTracking: true,
+  safetyAlerts: true
+};
 
 export default function Settings() {
-  const [settings, setSettings] = useState({
-    backgroundMusic: false,
-    musicVolume: 50,
-    narrationVolume: 80,
-    darkMode: true,
-    offlineDownloads: false,
-    locationTracking: true,
-    safetyAlerts: true
-  });
+  const [settings, setSettings] = useState(defaultSettings);
+  const [loaded, setLoaded] = useState(false);
 
-  const toggle = (key) => setSettings(s => ({...s, [key]: !s[key]}));
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const user = await base44.auth.me();
+      if (user?.settings) {
+        const saved = typeof user.settings === 'string' ? JSON.parse(user.settings) : user.settings;
+        setSettings({ ...defaultSettings, ...saved });
+      }
+    } catch (e) { /* use defaults */ }
+    setLoaded(true);
+  };
+
+  const updateSetting = async (key, value) => {
+    const updated = { ...settings, [key]: value };
+    setSettings(updated);
+    try {
+      await base44.auth.updateMe({ settings: JSON.stringify(updated) });
+    } catch (e) { /* silently fail */ }
+  };
+
+  const toggle = (key) => updateSetting(key, !settings[key]);
+
+  if (!loaded) {
+    return (
+      <PageContainer>
+        <SectionHeader title="Settings" subtitle="App Preferences" showBack />
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+        <NavBar />
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer>
@@ -37,11 +76,11 @@ export default function Settings() {
           </div>
           <div className="px-3 pb-3">
             <p className="text-[10px] text-muted-foreground mb-1">Narration Volume</p>
-            <input type="range" min="0" max="100" value={settings.narrationVolume} onChange={e => setSettings(s => ({...s, narrationVolume: Number(e.target.value)}))} className="w-full accent-primary" />
+            <input type="range" min="0" max="100" value={settings.narrationVolume} onChange={e => updateSetting('narrationVolume', Number(e.target.value))} className="w-full accent-primary" />
           </div>
           <div className="px-3 pb-3">
             <p className="text-[10px] text-muted-foreground mb-1">Music Volume</p>
-            <input type="range" min="0" max="100" value={settings.musicVolume} onChange={e => setSettings(s => ({...s, musicVolume: Number(e.target.value)}))} className="w-full accent-primary" />
+            <input type="range" min="0" max="100" value={settings.musicVolume} onChange={e => updateSetting('musicVolume', Number(e.target.value))} className="w-full accent-primary" />
           </div>
         </div>
 

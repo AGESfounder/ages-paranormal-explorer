@@ -17,14 +17,31 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function orderStopsByProximity(stops) {
+  if (stops.length <= 1) return stops;
+  const ordered = [stops[0]];
+  const remaining = stops.slice(1);
+  while (remaining.length > 0) {
+    const last = ordered[ordered.length - 1];
+    let nearestIdx = 0;
+    let nearestDist = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const d = haversineDistance(last.latitude, last.longitude, remaining[i].latitude, remaining[i].longitude);
+      if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+    }
+    ordered.push(remaining.splice(nearestIdx, 1)[0]);
+  }
+  return ordered;
+}
+
 function enforceWalkingDistance(stops, tourType) {
   if (tourType === 'driving') {
-    return stops.map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
+    return orderStopsByProximity(stops).map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
   }
   const WALKING_LIMIT = 0.33;
   const sorted = [...stops].sort((a, b) => a.stop_number - b.stop_number);
 
-  // Find the first driving-required gap
+  // Separate stops into walking-capable and driving-required by checking proximity gaps
   let firstDrivingIndex = sorted.length;
   for (let i = 0; i < sorted.length - 1; i++) {
     const dist = haversineDistance(sorted[i].latitude, sorted[i].longitude, sorted[i + 1].latitude, sorted[i + 1].longitude);
@@ -34,8 +51,8 @@ function enforceWalkingDistance(stops, tourType) {
     }
   }
 
-  const walking = sorted.slice(0, firstDrivingIndex);
-  const driving = sorted.slice(firstDrivingIndex);
+  const walking = orderStopsByProximity(sorted.slice(0, firstDrivingIndex));
+  const driving = orderStopsByProximity(sorted.slice(firstDrivingIndex));
 
   const result = [
     ...walking.map((s, i) => ({ ...s, travel_method: 'walking', stop_number: i + 1 })),
@@ -70,7 +87,15 @@ export default function TourDetail() {
       if (tourStops.length === 0) {
         await generateStops(tourData[0]);
       } else {
-        setStops(tourStops.sort((a, b) => a.stop_number - b.stop_number));
+        const reordered = enforceWalkingDistance(tourStops, tourData[0].tour_type);
+        // Update stop_numbers in the database if they changed
+        for (const s of reordered) {
+          const existing = tourStops.find(ts => ts.id === s.id);
+          if (existing && existing.stop_number !== s.stop_number) {
+            await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
+          }
+        }
+        setStops(reordered);
       }
     }
     setLoading(false);
