@@ -104,30 +104,35 @@ export default function Toolkit() {
       console.error('Microphone access denied', err);
     }
 
-    // Build audio graph: white noise → bandpass filter → gain → speakers
+    // Build audio graph: white noise → lowpass filter → gain → speakers
+    // The filter sweeps through the AUDIBLE range (200–6000 Hz) to create
+    // the sound of tuning through static, while the display shows radio frequency
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     audioCtxRef.current = ctx;
 
-    // Resume if suspended (browsers require user gesture before audio plays)
     if (ctx.state === 'suspended') {
       await ctx.resume();
     }
 
+    // White noise — the radio static
     const bufferSize = ctx.sampleRate * 2;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.3;
+      data[i] = (Math.random() * 2 - 1);
     }
 
     const noise = ctx.createBufferSource();
     noise.buffer = buffer;
     noise.loop = true;
 
+    // Lowpass filter — sweeps the audible range to change static character
     const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.Q.value = radioBand === 'AM' ? 8 : 2.5;
+    filter.type = 'lowpass';
+    filter.Q.value = 0.7;
+    filter.frequency.value = 300;
 
+    // Master gain
     const gain = ctx.createGain();
     gain.gain.value = radioVolume;
 
@@ -140,8 +145,9 @@ export default function Toolkit() {
     filterNodeRef.current = filter;
     gainNodeRef.current = gain;
 
-    // Sweep frequency loop
+    // Sweep the radio display AND map to audible filter range (200–6000 Hz)
     const amMin = 530, amMax = 1700, fmMin = 88.1, fmMax = 107.9;
+    const filterMin = 200, filterMax = 6000;
     let freq = radioBand === 'AM' ? amMin : fmMin;
     let dir = 1;
 
@@ -152,12 +158,15 @@ export default function Toolkit() {
       freq += step * dir;
       if (freq >= max) { freq = max; dir = -1; }
       if (freq <= min) { freq = min; dir = 1; }
+
+      // Display: radio frequency
       setRadioFrequency(Math.round(freq * 10) / 10);
+
+      // Audio: map radio freq range → audible filter range
+      const ratio = (freq - min) / (max - min);
+      const audibleFreq = filterMin + ratio * (filterMax - filterMin);
       if (filterNodeRef.current) {
-        const centerFreq = radioBand === 'AM'
-          ? freq * 1000
-          : freq * 1000000;
-        filterNodeRef.current.frequency.setValueAtTime(centerFreq, ctx.currentTime);
+        filterNodeRef.current.frequency.setValueAtTime(audibleFreq, ctx.currentTime);
       }
     }, 200);
   };
