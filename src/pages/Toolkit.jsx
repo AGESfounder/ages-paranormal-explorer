@@ -6,6 +6,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import ResearchDatabase from '../components/ResearchDatabase';
+import useGhostVoice from '../hooks/useGhostVoice';
 
 const tools = [
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
@@ -42,7 +43,7 @@ export default function Toolkit() {
   const filterNodeRef = useRef(null);
   const gainNodeRef = useRef(null);
   const [radioVolume, setRadioVolume] = useState(0.35);
-  const [narrating, setNarrating] = useState(false);
+  const { isSpeaking: narrating, isGenerating, narrate, stop: stopNarration } = useGhostVoice();
 
   useEffect(() => {
     return () => {
@@ -187,23 +188,8 @@ export default function Toolkit() {
     setHeardWord('');
   };
 
-  const toggleNarration = () => {
-    if (narrating) {
-      window.speechSynthesis.cancel();
-      setNarrating(false);
-      return;
-    }
-    const text = guideDetail
-      .replace(/• /g, '. ')
-      .replace(/\n+/g, '. ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
-    utterance.onend = () => setNarrating(false);
-    utterance.onerror = () => setNarrating(false);
-    setNarrating(true);
-    window.speechSynthesis.speak(utterance);
+  const handleGuideNarration = () => {
+    narrate(guideDetail);
   };
 
   const formatDuration = (sec) => {
@@ -548,12 +534,12 @@ export default function Toolkit() {
           return (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <button onClick={() => { window.speechSynthesis.cancel(); setNarrating(false); setGuideDetail(null); }} className="flex items-center gap-1.5 text-xs text-primary font-heading uppercase tracking-wider hover:text-primary/80 transition-colors">
+                <button onClick={() => { stopNarration(); setGuideDetail(null); }} className="flex items-center gap-1.5 text-xs text-primary font-heading uppercase tracking-wider hover:text-primary/80 transition-colors">
                   <ArrowLeft className="w-3.5 h-3.5" /> Back to Equipment List
                 </button>
-                <button onClick={toggleNarration} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-heading uppercase tracking-wider transition-colors ${narrating ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/50 border border-border/50 text-muted-foreground hover:text-primary hover:border-primary/30'}`}>
-                  <Volume2 className={`w-3 h-3 ${narrating ? 'animate-pulse' : ''}`} />
-                  {narrating ? 'Stop' : 'Narrate'}
+                <button onClick={handleGuideNarration} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-heading uppercase tracking-wider transition-colors ${narrating ? 'bg-primary/20 border border-primary/40 text-primary' : isGenerating ? 'bg-card/50 border border-border/50 text-muted-foreground' : 'bg-card/50 border border-border/50 text-muted-foreground hover:text-primary hover:border-primary/30'}`}>
+                  <Volume2 className={`w-3 h-3 ${narrating || isGenerating ? 'animate-pulse' : ''}`} />
+                  {isGenerating ? 'Loading...' : narrating ? 'Stop' : 'Narrate'}
                 </button>
               </div>
               <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-xs text-foreground/80 leading-relaxed space-y-3 whitespace-pre-line">
@@ -966,8 +952,7 @@ Best Practices
                 setRecordedBlob(null);
                 setSavedWords([]);
                 setGuideDetail(null);
-                window.speechSynthesis.cancel();
-                setNarrating(false);
+                stopNarration();
               }} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-4 h-4" />
               </button>
