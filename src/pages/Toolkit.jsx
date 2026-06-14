@@ -5,13 +5,14 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import ResearchDatabase from '../components/ResearchDatabase';
 
 const tools = [
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
   { name: 'Moon Phase', icon: Moon, desc: 'Current moon phase & illumination', type: 'moon' },
   { name: 'Radio Sweeper', icon: Volume2, desc: 'AM/FM frequency sweep for EVP', type: 'audio' },
   { name: 'Weather Monitor', icon: Cloud, desc: 'Real-time local weather conditions', type: 'weather' },
-  { name: 'Research Database', icon: Search, desc: 'Paranormal & historical records', type: 'research' },
+  { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
   { name: 'Evidence Analyzer', icon: Wrench, desc: 'Review & rate your evidence', type: 'analyzer' },
@@ -520,19 +521,7 @@ export default function Toolkit() {
         );
 
       case 'research':
-        return (
-          <div className="space-y-3">
-            <input type="text" placeholder="Search locations, events, ghosts..." className="w-full px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50" />
-            <div className="space-y-2">
-              {['Residual Hauntings Explained', 'EVP Classification Guide', 'Historic Haunted Hotels of America', 'Shadow Figures: Theories & Research'].map((item, i) => (
-                <div key={i} className="p-2.5 rounded-lg bg-card/30 border border-border/30 hover:border-primary/30 transition-colors cursor-pointer">
-                  <p className="text-xs text-foreground">{item}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Research Article</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
+        return <ResearchDatabase />;
 
       case 'guide':
         if (guideDetail) {
