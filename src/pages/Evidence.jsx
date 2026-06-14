@@ -19,8 +19,9 @@ export default function Evidence() {
   const [searchParams] = useSearchParams();
   const [evidences, setEvidences] = useState([]);
   const [loading, setLoading] = useState(true);
+  const cameFromStop = searchParams.get('tourId') != null;
   const [showForm, setShowForm] = useState(
-    searchParams.get('tourId') != null || window.location.pathname === '/evidence/new'
+    cameFromStop || window.location.pathname === '/evidence/new'
   );
   const [form, setForm] = useState({
     title: '', type: 'note', description: '', tour_id: searchParams.get('tourId') || '',
@@ -37,14 +38,26 @@ export default function Evidence() {
     setLoading(false);
   };
 
+  const handleGoBack = () => {
+    if (cameFromStop) {
+      navigate(-1);
+    } else {
+      setShowForm(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!form.title.trim()) return;
     setSubmitting(true);
     await base44.entities.Evidence.create(form);
     setSubmitting(false);
-    setShowForm(false);
     setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0 });
-    loadEvidence();
+    if (cameFromStop) {
+      navigate(-1);
+    } else {
+      setShowForm(false);
+      loadEvidence();
+    }
   };
 
   const handleDelete = async (id) => {
@@ -55,7 +68,7 @@ export default function Evidence() {
   if (showForm) {
     return (
       <PageContainer>
-        <SectionHeader title="Log Evidence" subtitle={form.location_name || "New Entry"} showBack onBack={() => setShowForm(false)} />
+        <SectionHeader title="Log Evidence" subtitle={form.location_name || "New Entry"} showBack onBack={handleGoBack} />
         <div className="px-4 pb-28 space-y-4 pt-3">
           <Input placeholder="Entry title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="bg-card/50 border-border/50" />
           <div className="grid grid-cols-4 gap-1.5">
