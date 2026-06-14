@@ -139,11 +139,8 @@ Critically verify pricing, hours of operation, and public accessibility after da
     reset();
     setActionLoading('delete');
     try {
-      const stops = await base44.entities.TourStop.filter({ tour_id: tour.id });
-      for (const s of stops) await base44.entities.TourStop.delete(s.id);
       const favs = await base44.entities.Favorite.filter({ tour_id: tour.id });
       for (const f of favs) await base44.entities.Favorite.delete(f.id);
-      await base44.entities.Tour.delete(tour.id);
       if (onDelete) onDelete(tour.id);
     } catch (e) { /* ignore */ }
     setActionLoading(null);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ChevronDown, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,13 +10,14 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 
-const typeIcons = { evp: FileAudio, photo: Image, video: Video, note: FileText };
-const typeLabel = { evp: 'EVP Recording', photo: 'Photograph', video: 'Video', note: 'Note' };
+const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
+const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
 
 const equipmentOptions = [
   'REM Device',
   'IMS Device',
   'EVP Device',
+  'EMF Device',
   'Trigger Object',
   'Other Device',
 ];
@@ -55,9 +56,9 @@ export default function Evidence() {
     description: '',
     tour_id: tourId || '',
     stop_id: stopId || '',
-    location_name: locationName ? decodeURIComponent(locationName) : '',
-    date: cameFromStop ? getTodayDate() : '',
-    time: cameFromStop ? getNowTime() : '',
+    location_name: initialLocation,
+    date: initialDate,
+    time: initialTime,
     equipment: [],
     file_url: '',
     activity_level: 0,
@@ -67,6 +68,9 @@ export default function Evidence() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [initialDate] = useState(cameFromStop ? getTodayDate() : '');
+  const [initialTime] = useState(cameFromStop ? getNowTime() : '');
+  const [initialLocation] = useState(locationName ? decodeURIComponent(locationName) : '');
 
   useEffect(() => { loadEvidence(); }, []);
 
@@ -122,9 +126,9 @@ export default function Evidence() {
       description: '',
       tour_id: tourId || '',
       stop_id: stopId || '',
-      location_name: locationName ? decodeURIComponent(locationName) : '',
-      date: getTodayDate(),
-      time: getNowTime(),
+      location_name: initialLocation,
+      date: initialDate,
+      time: initialTime,
       equipment: [],
       file_url: '',
       activity_level: 0,
@@ -282,9 +286,7 @@ export default function Evidence() {
           {/* Rating Stars */}
           <div className="grid grid-cols-2 gap-3">
             {[
-              { key: 'activity_level', label: 'Activity Level' },
-              { key: 'emf_activity', label: 'EMF Activity' },
-              { key: 'evp_quality', label: 'EVP Quality' },
+              { key: 'activity_level', label: 'Evidence' },
               { key: 'personal_experience', label: 'Experience' },
             ].map(({ key, label }) => (
               <div key={key}>
@@ -399,9 +401,7 @@ export default function Evidence() {
           <Textarea placeholder="Description & notes..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="bg-card/50 border-border/50 min-h-[100px]" />
           <div className="grid grid-cols-2 gap-3">
             {[
-              { key: 'activity_level', label: 'Activity Level' },
-              { key: 'emf_activity', label: 'EMF Activity' },
-              { key: 'evp_quality', label: 'EVP Quality' },
+              { key: 'activity_level', label: 'Evidence' },
               { key: 'personal_experience', label: 'Experience' },
             ].map(({ key, label }) => (
               <div key={key}>
