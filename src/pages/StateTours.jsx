@@ -29,7 +29,7 @@ export default function StateTours() {
     if (results.length === 0) {
       await generateTours();
     } else {
-      setTours(results);
+      setTours(results.sort((a, b) => a.title.localeCompare(b.title)));
       setLoading(false);
     }
   };
@@ -98,6 +98,7 @@ Use real locations with documented paranormal history only.`,
         const saved = await base44.entities.Tour.create({ ...tour, state: stateName });
         created.push(saved);
       }
+      created.sort((a, b) => a.title.localeCompare(b.title));
       setTours(created);
       setGenerating(false);
       setLoading(false);

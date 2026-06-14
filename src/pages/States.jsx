@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, MapPin } from 'lucide-react';
@@ -7,9 +7,32 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { US_STATES } from '../lib/statesData';
+import { base44 } from '@/api/base44Client';
 
 export default function States() {
   const [search, setSearch] = useState('');
+  const [tourCounts, setTourCounts] = useState({});
+
+  useEffect(() => {
+    base44.entities.Tour.list().then(tours => {
+      const counts = {};
+      tours.forEach(t => {
+        if (t.state) counts[t.state] = (counts[t.state] || 0) + 1;
+      });
+      setTourCounts(counts);
+    }).catch(() => {});
+
+    const unsubscribe = base44.entities.Tour.subscribe(() => {
+      base44.entities.Tour.list().then(tours => {
+        const counts = {};
+        tours.forEach(t => {
+          if (t.state) counts[t.state] = (counts[t.state] || 0) + 1;
+        });
+        setTourCounts(counts);
+      }).catch(() => {});
+    });
+    return unsubscribe;
+  }, []);
 
   const filtered = US_STATES.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -50,7 +73,7 @@ export default function States() {
               <div className="min-w-0">
                 <p className="font-heading text-sm font-medium text-foreground truncate">{state.name}</p>
                 <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <MapPin className="w-2.5 h-2.5" /> 5 Tours
+                  <MapPin className="w-2.5 h-2.5" /> {tourCounts[state.name] || 0} Tours
                 </p>
               </div>
             </Link>
