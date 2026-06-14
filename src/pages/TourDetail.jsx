@@ -17,11 +17,11 @@ export default function TourDetail() {
   const [generatingStops, setGeneratingStops] = useState(false);
   const [stopsError, setStopsError] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
-  const { isSpeaking, narrate } = useGhostVoice();
+  const { isSpeaking, isGenerating, narrate } = useGhostVoice();
 
   useEffect(() => {
     loadTour();
-    return () => { window.speechSynthesis?.cancel(); };
+    return () => { /* hook handles its own cleanup */ };
   }, [tourId]);
 
   const loadTour = async () => {
@@ -171,7 +171,7 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-primary">Introduction</h3>
               <button onClick={() => narrate(tour.introduction)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                {isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> Loading</> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
             <p className="text-xs text-foreground/70 leading-relaxed">{tour.introduction}</p>
@@ -228,6 +228,9 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
                         {stop.address && <><MapPin className="w-2.5 h-2.5" /> <span className="truncate">{stop.address}</span></>}
                       </p>
                     </div>
+                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); narrate(stop.narration_text || stop.paranormal_info); }} className={`p-1.5 rounded-md shrink-0 transition-colors ${isSpeaking || isGenerating ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}>
+                      {isSpeaking || isGenerating ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                    </button>
                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                   </Link>
                 </motion.div>
@@ -241,7 +244,7 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-dim-purple">Conclusion</h3>
               <button onClick={() => narrate(tour.conclusion)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
-                {isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> Loading</> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
             <p className="text-xs text-foreground/70 leading-relaxed">{tour.conclusion}</p>

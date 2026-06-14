@@ -1,55 +1,144 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
 
 export default function useGhostVoice() {
-  const [voice, setVoice] = useState(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-
   useEffect(() => {
-    const loadVoice = () => {
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length === 0) return;
-
-      // Priority order: deep male voices best for ghostly narration
-      const ghostVoice =
-        voices.find(v => v.name.includes('Google UK English Male') || v.name.includes('Daniel') || v.name.includes('Gordon')) ||
-        voices.find(v => v.name.includes('English (United Kingdom)') && v.name.includes('Male')) ||
-        voices.find(v => v.name.toLowerCase().includes('british') && v.name.toLowerCase().includes('male')) ||
-        voices.find(v => v.name.includes('Male') && !v.name.includes('Female')) ||
-        voices.find(v => v.name.includes('James') || v.name.includes('David') || v.name.includes('Oliver')) ||
-        voices.find(v => v.name.includes('English') && v.name.includes('Male')) ||
-        voices[0];
-
-      setVoice(ghostVoice);
+    return () => {
+      // cleanup on unmount
+      oscillatorsRef.current.forEach(({ osc, lfo }) => {
+        try { osc.stop(); lfo.stop(); } catch (e) {}
+      });
+      oscillatorsRef.current = [];
+      if (gainRef.current) {
+        try { gainRef.current.disconnect(); } catch (e) {}
+        gainRef.current = null;
+      }
+      if (ctxRef.current) {
+        ctxRef.current.close().catch(() => {});
+        ctxRef.current = null;
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
     };
-
-    loadVoice();
-    window.speechSynthesis.onvoiceschanged = loadVoice;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
   }, []);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const audioRef = useRef(null);
+  const ctxRef = useRef(null);
+  const oscillatorsRef = useRef([]);
+  const gainRef = useRef(null);
 
-  const speak = useCallback((text) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 0.82;
-    utter.pitch = 0.5;
-    utter.volume = 1;
-    if (voice) utter.voice = voice;
-    utter.onend = () => setIsSpeaking(false);
-    utter.onerror = () => setIsSpeaking(false);
-    setIsSpeaking(true);
-    window.speechSynthesis.speak(utter);
-  }, [voice]);
+  const startEerieBackground = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      ctxRef.current = ctx;
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = 0.06;
+      masterGain.connect(ctx.destination);
+      gainRef.current = masterGain;
+
+      // Haunting music-box drone: detuned sine waves with slow LFO wobble
+      const frequencies = [196, 233, 277, 311, 370];
+      const oscs = [];
+      frequencies.forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const oscGain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+        oscGain.gain.value = 0.10;
+
+        // Slow detuning LFO for eerie wobble
+        const lfo = ctx.createOscillator();
+        const lfoGain = ctx.createGain();
+        lfo.type = 'sine';
+        lfo.frequency.value = 0.25 + Math.random() * 0.3;
+        lfoGain.gain.value = 2.5;
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.frequency);
+        lfo.start();
+
+        osc.connect(oscGain);
+        oscGain.connect(masterGain);
+        osc.start();
+        oscs.push({ osc, lfo });
+      });
+      oscillatorsRef.current = oscs;
+    } catch (e) {
+      // AudioContext unavailable — skip background
+    }
+  };
+
+  const stopEerieBackground = () => {
+    oscillatorsRef.current.forEach(({ osc, lfo }) => {
+      try { osc.stop(); lfo.stop(); } catch (e) {}
+    });
+    oscillatorsRef.current = [];
+    if (gainRef.current) {
+      try { gainRef.current.disconnect(); } catch (e) {}
+      gainRef.current = null;
+    }
+    if (ctxRef.current) {
+      ctxRef.current.close().catch(() => {});
+      ctxRef.current = null;
+    }
+  };
+
+  const speak = useCallback(async (text) => {
+    if (isSpeaking || isGenerating) return;
+    setIsGenerating(true);
+    try {
+      const result = await base44.integrations.Core.GenerateSpeech({
+        text,
+        voice: 'storm',
+      });
+
+      startEerieBackground();
+
+      const audio = new Audio(result.url);
+      audioRef.current = audio;
+      audio.volume = 1;
+      setIsGenerating(false);
+      setIsSpeaking(true);
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        stopEerieBackground();
+        audioRef.current = null;
+      };
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        stopEerieBackground();
+        audioRef.current = null;
+      };
+
+      await audio.play();
+    } catch (err) {
+      setIsGenerating(false);
+      setIsSpeaking(false);
+      stopEerieBackground();
+    }
+  }, [isSpeaking, isGenerating]);
 
   const stop = useCallback(() => {
-    window.speechSynthesis?.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    stopEerieBackground();
     setIsSpeaking(false);
+    setIsGenerating(false);
   }, []);
 
   const narrate = useCallback((text) => {
-    if (isSpeaking) stop();
-    else speak(text);
-  }, [isSpeaking, speak, stop]);
+    if (isSpeaking || isGenerating) {
+      stop();
+    } else {
+      speak(text);
+    }
+  }, [isSpeaking, isGenerating, speak, stop]);
 
-  return { isSpeaking, narrate, stop };
+  return { isSpeaking, isGenerating, narrate, stop };
 }

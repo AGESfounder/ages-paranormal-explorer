@@ -25,11 +25,11 @@ export default function StopDetail() {
   const [stop, setStop] = useState(null);
   const [allStops, setAllStops] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { isSpeaking, narrate } = useGhostVoice();
+  const { isSpeaking, isGenerating, narrate } = useGhostVoice();
 
   useEffect(() => {
     loadStop();
-    return () => { window.speechSynthesis?.cancel(); };
+    return () => { /* hook handles its own cleanup */ };
   }, [stopId]);
 
   const loadStop = async () => {
@@ -49,7 +49,7 @@ export default function StopDetail() {
 
   const openInMaps = () => {
     if (!stop?.latitude || !stop?.longitude) return;
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`, '_blank');
+    window.location.href = `https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`;
   };
 
   if (loading || !stop) {
@@ -72,7 +72,7 @@ export default function StopDetail() {
         showBack
         rightAction={
           <button onClick={() => narrate(stop.narration_text || stop.paranormal_info)} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
-            {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
         }
       />
