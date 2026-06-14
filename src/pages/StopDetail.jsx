@@ -49,7 +49,7 @@ export default function StopDetail() {
 
   const openInMaps = () => {
     if (!stop?.latitude || !stop?.longitude) return;
-    window.location.href = `https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`;
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`, '_blank');
   };
 
   if (loading || !stop) {

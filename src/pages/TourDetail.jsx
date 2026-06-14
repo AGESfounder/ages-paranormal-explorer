@@ -58,6 +58,9 @@ Each stop:
 - construction_date, famous_people
 - narration_text: 3-4 sentence dramatic narration in mysterious storytelling style
 
+CRITICAL RULES:
+- ALL locations must be publicly accessible at night. Do NOT use locations that close at dusk, have gates that lock, or prohibit after-dark access (e.g. Gettysburg battlefield, national parks that close at sunset, cemeteries with locked gates). Only use locations where the public can legally be present after dark.
+${tourData.tour_type === 'mixed' ? '- MIXED TOUR: Walking stops (1-7) come first, clustered near the start. Driving stops (8-10) come last, further out. Walking stops must be within 0.5 miles of each other.' : ''}
 Order stops to minimize backtracking, create a loop, starting and ending near ${tourData.start_location_name}. Use real locations with paranormal history.`,
         response_json_schema: {
           type: "object",
@@ -157,8 +160,8 @@ Order stops to minimize backtracking, create a loop, starting and ending near ${
         <div className="p-4 rounded-xl border border-border/40 bg-card/40 space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : <Car className="w-3.5 h-3.5" />}
-              {tour.tour_type}
+              {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3.5 h-3.5" /><Car className="w-3 h-3" /></> : <Car className="w-3.5 h-3.5" />}
+              {tour.tour_type === 'mixed' ? 'Walking + Driving' : tour.tour_type}
             </span>
             <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {tour.estimated_duration}</span>
           </div>

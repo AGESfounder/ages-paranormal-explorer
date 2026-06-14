@@ -15,7 +15,8 @@
       "type": "string",
       "enum": [
         "walking",
-        "driving"
+        "driving",
+        "mixed"
       ]
     },
     "description": {

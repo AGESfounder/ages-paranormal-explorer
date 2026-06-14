@@ -39,13 +39,13 @@ export default function StateTours() {
     setError('');
     try {
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Generate exactly 5 paranormal tours for ${stateName}, USA. Each at a real haunted location. Mix walking and driving tours. Include:
-- title, city, tour_type ("walking" or "driving"), description (2-3 sentences)
+        prompt: `Generate exactly 5 paranormal tours for ${stateName}, USA. Each at a real haunted location. Mix walking, driving, and "mixed" (walking + driving) tours. For mixed tours, walking stops come first in the route, driving stops last. Include:
+- title, city, tour_type ("walking", "driving", or "mixed"), description (2-3 sentences)
 - introduction: historical overview + paranormal overview + safety info. Mention "A.G.E.S. (Affordable Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
 - conclusion: closing paragraph ending with "Thank you for exploring with A.G.E.S., Affordable Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
 - difficulty ("easy"/"moderate"/"challenging"), estimated_duration (e.g. "2-3 hours"), total_distance (e.g. "1.5 miles"), start_location_name, start_latitude, start_longitude (real coordinates)
 - tags: array (["Civil War", "Haunted Hotel", etc.]), safety_info, best_time ("Dusk to midnight")
-Use real locations with documented paranormal history. Publicly accessible only.`,
+IMPORTANT: All locations must be publicly accessible after dark. Do NOT use locations that close at dusk or have restricted nighttime access (e.g. national battlefields, state parks that close at sunset, gated cemeteries). Verify each location allows nighttime public access. Use real locations with documented paranormal history only.`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -155,10 +155,12 @@ Use real locations with documented paranormal history. Publicly accessible only.
                 <div className={`px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider ${
                   tour.tour_type === 'walking' 
                     ? 'bg-primary/10 text-primary border border-primary/20' 
+                    : tour.tour_type === 'mixed'
+                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                     : 'bg-accent/10 text-accent-foreground border border-accent/20'
                 }`}>
-                  {tour.tour_type === 'walking' ? <Footprints className="w-3 h-3 inline mr-1" /> : <Car className="w-3 h-3 inline mr-1" />}
-                  {tour.tour_type}
+                  {tour.tour_type === 'walking' ? <Footprints className="w-3 h-3 inline mr-1" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3 h-3 inline mr-0.5" /><Car className="w-2.5 h-2.5 inline mr-1" /></> : <Car className="w-3 h-3 inline mr-1" />}
+                  {tour.tour_type === 'mixed' ? 'Walk + Drive' : tour.tour_type}
                 </div>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3">{tour.description}</p>

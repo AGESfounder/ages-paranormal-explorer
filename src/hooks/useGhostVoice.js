@@ -2,79 +2,86 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 
 export default function useGhostVoice() {
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const audioRef = useRef(null);
+  const ctxRef = useRef(null);
+  const chimeIntervalRef = useRef(null);
+  const gainRef = useRef(null);
+
   useEffect(() => {
     return () => {
-      // cleanup on unmount
-      oscillatorsRef.current.forEach(({ osc, lfo }) => {
-        try { osc.stop(); lfo.stop(); } catch (e) {}
-      });
-      oscillatorsRef.current = [];
-      if (gainRef.current) {
-        try { gainRef.current.disconnect(); } catch (e) {}
-        gainRef.current = null;
-      }
-      if (ctxRef.current) {
-        ctxRef.current.close().catch(() => {});
-        ctxRef.current = null;
-      }
+      stopEerieBackground();
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
     };
   }, []);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const audioRef = useRef(null);
-  const ctxRef = useRef(null);
-  const oscillatorsRef = useRef([]);
-  const gainRef = useRef(null);
+
+  const playChime = (ctx, masterGain) => {
+    try {
+      // Pentatonic bell frequencies for haunting chimes
+      const notes = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25];
+      const freq = notes[Math.floor(Math.random() * notes.length)];
+
+      // Main chime tone
+      const osc = ctx.createOscillator();
+      const oscGain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      oscGain.gain.setValueAtTime(0, ctx.currentTime);
+      oscGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.05);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
+      osc.connect(oscGain);
+      oscGain.connect(masterGain);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 1.5);
+
+      // Subtle overtone for richness
+      const osc2 = ctx.createOscillator();
+      const osc2Gain = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.value = freq * 1.01; // slight detune
+      osc2Gain.gain.setValueAtTime(0, ctx.currentTime);
+      osc2Gain.gain.linearRampToValueAtTime(0.03, ctx.currentTime + 0.03);
+      osc2Gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+      osc2.connect(osc2Gain);
+      osc2Gain.connect(masterGain);
+      osc2.start(ctx.currentTime);
+      osc2.stop(ctx.currentTime + 1.2);
+    } catch (e) {
+      // ignore individual chime errors
+    }
+  };
 
   const startEerieBackground = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       ctxRef.current = ctx;
       const masterGain = ctx.createGain();
-      masterGain.gain.value = 0.06;
+      masterGain.gain.value = 0.12;
       masterGain.connect(ctx.destination);
       gainRef.current = masterGain;
 
-      // Haunting music-box drone: detuned sine waves with slow LFO wobble
-      const frequencies = [196, 233, 277, 311, 370];
-      const oscs = [];
-      frequencies.forEach((freq) => {
-        const osc = ctx.createOscillator();
-        const oscGain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.value = freq;
-        oscGain.gain.value = 0.10;
-
-        // Slow detuning LFO for eerie wobble
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain();
-        lfo.type = 'sine';
-        lfo.frequency.value = 0.25 + Math.random() * 0.3;
-        lfoGain.gain.value = 2.5;
-        lfo.connect(lfoGain);
-        lfoGain.connect(osc.frequency);
-        lfo.start();
-
-        osc.connect(oscGain);
-        oscGain.connect(masterGain);
-        osc.start();
-        oscs.push({ osc, lfo });
-      });
-      oscillatorsRef.current = oscs;
+      // Play chimes at random intervals
+      const scheduleChime = () => {
+        playChime(ctx, masterGain);
+        const delay = 1200 + Math.random() * 2500;
+        chimeIntervalRef.current = setTimeout(scheduleChime, delay);
+      };
+      // First chime after a short delay
+      chimeIntervalRef.current = setTimeout(scheduleChime, 300);
     } catch (e) {
-      // AudioContext unavailable — skip background
+      // AudioContext unavailable
     }
   };
 
   const stopEerieBackground = () => {
-    oscillatorsRef.current.forEach(({ osc, lfo }) => {
-      try { osc.stop(); lfo.stop(); } catch (e) {}
-    });
-    oscillatorsRef.current = [];
+    if (chimeIntervalRef.current) {
+      clearTimeout(chimeIntervalRef.current);
+      chimeIntervalRef.current = null;
+    }
     if (gainRef.current) {
       try { gainRef.current.disconnect(); } catch (e) {}
       gainRef.current = null;
