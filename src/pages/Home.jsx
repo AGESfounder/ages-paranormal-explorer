@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost } from 'lucide-react';
+import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import { base44 } from '@/api/base44Client';
@@ -15,11 +15,16 @@ const menuItems = [
   { label: 'Settings', icon: Settings, path: '/settings', desc: 'App Preferences' },
 ];
 
+const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
+const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
+
 export default function Home() {
   const [user, setUser] = useState(null);
+  const [evidences, setEvidences] = useState([]);
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
+    base44.entities.Evidence.list('-created_date', 5).then(setEvidences).catch(() => {});
   }, []);
 
   return (
@@ -123,6 +128,46 @@ export default function Home() {
             </motion.div>
           ))}
         </div>
+
+        {evidences.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+            className="w-full max-w-sm px-6 mt-6"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-primary" /> Recent Evidence
+              </h3>
+              <Link to="/evidence" className="text-[10px] text-primary font-heading uppercase tracking-wider hover:text-primary/80 transition-colors">
+                View All →
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {evidences.map((e, i) => {
+                const Icon = typeIcons[e.type] || FileText;
+                return (
+                  <motion.div key={e.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.85 + i * 0.04 }} className="p-3 rounded-xl border border-border/40 bg-card/40 relative">
+                    <span className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold font-heading flex items-center justify-center shadow-lg">
+                      {evidences.length - i}
+                    </span>
+                    <div className="ml-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-md bg-primary/10"><Icon className="w-3.5 h-3.5 text-primary" /></div>
+                        <div>
+                          <p className="text-xs font-medium text-foreground">{e.title}</p>
+                          <p className="text-[9px] text-muted-foreground">{typeLabel[e.type]} {e.location_name ? `• ${e.location_name}` : ''} {e.date ? `• ${e.date}` : ''}</p>
+                        </div>
+                      </div>
+                      {e.description && <p className="text-[10px] text-foreground/60 mt-1.5 leading-relaxed">{e.description}</p>}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         <motion.p
           initial={{ opacity: 0 }}

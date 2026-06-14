@@ -15,9 +15,12 @@ const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Vid
 
 const equipmentOptions = [
   'REM Device',
-  'IMS Device',
+  'PIR Device',
   'EVP Device',
   'EMF Device',
+  'Thermal Device',
+  'SLS Camera',
+  'XLS Camera',
   'Trigger Object',
   'Other Device',
 ];
@@ -157,6 +160,8 @@ export default function Evidence() {
       setStopEvidences(stopData);
     } else {
       setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0 });
+      setOtherDeviceText('');
+      setEquipmentOpen(false);
       setShowForm(false);
       loadEvidence();
     }
@@ -377,6 +382,8 @@ export default function Evidence() {
       <PageContainer>
         <SectionHeader title="Log Evidence" subtitle="New Entry" showBack onBack={handleGoBack} />
         <div className="px-4 pb-28 space-y-4 pt-3">
+
+          {/* Date + Time */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Date</label>
@@ -387,19 +394,101 @@ export default function Evidence() {
               <Input value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="bg-card/50 border-border/50" />
             </div>
           </div>
-          <Input placeholder="Entry title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="bg-card/50 border-border/50" />
-          <div className="grid grid-cols-4 gap-1.5">
-            {['note', 'photo', 'video', 'evp'].map(type => {
-              const Icon = typeIcons[type];
-              return (
-                <button key={type} onClick={() => setForm({...form, type})} className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border transition-all ${form.type === type ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border/40 bg-card/30 text-muted-foreground'}`}>
-                  <Icon className="w-5 h-5" />
-                  <span className="text-[9px] font-heading uppercase">{typeLabel[type]}</span>
-                </button>
-              );
-            })}
+
+          {/* Location */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Location</label>
+            <Input value={form.location_name} onChange={e => setForm({...form, location_name: e.target.value})} placeholder="Where did this evidence come from?" className="bg-card/50 border-border/50" />
           </div>
-          <Textarea placeholder="Description & notes..." value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="bg-card/50 border-border/50 min-h-[100px]" />
+
+          {/* Evidence Type */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-2">Evidence Type</label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {['note', 'photo', 'video', 'evp'].map(type => {
+                const Icon = typeIcons[type];
+                return (
+                  <button key={type} onClick={() => setForm({...form, type})} className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border transition-all ${form.type === type ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border/40 bg-card/30 text-muted-foreground'}`}>
+                    <Icon className="w-5 h-5" />
+                    <span className="text-[9px] font-heading uppercase">{typeLabel[type]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Equipment Dropdown */}
+          <div className="relative">
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Equipment Used</label>
+            <button
+              onClick={() => setEquipmentOpen(!equipmentOpen)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-sm text-foreground hover:border-primary/40 transition-colors"
+            >
+              <span className={form.equipment.length === 0 ? 'text-muted-foreground' : ''}>
+                {form.equipment.length === 0 ? 'Select equipment...' : form.equipment.join(', ')}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${equipmentOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {equipmentOpen && (
+              <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border/60 bg-card shadow-xl overflow-hidden">
+                {equipmentOptions.map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => toggleEquipment(opt)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-left hover:bg-primary/10 transition-colors"
+                  >
+                    <span className="text-foreground">{opt}</span>
+                    {form.equipment.includes(opt) && <Check className="w-4 h-4 text-primary" />}
+                  </button>
+                ))}
+              </div>
+            )}
+            {form.equipment.includes('Other Device') && (
+              <Input
+                placeholder="Specify other device..."
+                value={otherDeviceText}
+                onChange={e => setOtherDeviceText(e.target.value)}
+                className="mt-2 bg-card/50 border-border/50"
+              />
+            )}
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Evidence Notes</label>
+            <Textarea
+              placeholder="Record your observations, readings, and experiences..."
+              value={form.description}
+              onChange={e => setForm({...form, description: e.target.value})}
+              className="bg-card/50 border-border/50 min-h-[100px]"
+            />
+          </div>
+
+          {/* File Upload */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Upload Evidence File</label>
+            <input ref={fileInputRef} type="file" onChange={handleFileUpload} accept="image/*,video/*,audio/*" className="hidden" />
+            {form.file_url ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <Check className="w-4 h-4 text-primary" />
+                <span className="text-xs text-primary flex-1 truncate">File uploaded</span>
+                <button onClick={() => setForm({...form, file_url: ''})} className="p-1 text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/60 bg-card/30 text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                <span className="text-xs font-heading uppercase tracking-wider">
+                  {uploading ? 'Uploading...' : 'Upload Photo, Video, or Recording'}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Rating Stars */}
           <div className="grid grid-cols-2 gap-3">
             {[
               { key: 'activity_level', label: 'Evidence' },
@@ -421,6 +510,13 @@ export default function Evidence() {
               </div>
             ))}
           </div>
+
+          {/* Title */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Entry Title</label>
+            <Input placeholder="Name this evidence entry" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="bg-card/50 border-border/50" />
+          </div>
+
           <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-heading uppercase tracking-wider">
             {submitting ? 'Saving...' : 'Save Evidence'}
           </Button>

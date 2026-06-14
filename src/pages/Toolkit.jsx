@@ -9,7 +9,7 @@ import { base44 } from '@/api/base44Client';
 const tools = [
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
   { name: 'Moon Phase', icon: Moon, desc: 'Current moon phase & illumination', type: 'moon' },
-  { name: 'Audio Controls', icon: Volume2, desc: 'Narration & background volume', type: 'audio' },
+  { name: 'Radio Sweeper', icon: Volume2, desc: 'AM/FM frequency sweep for EVP', type: 'audio' },
   { name: 'Weather Monitor', icon: Cloud, desc: 'Real-time local weather conditions', type: 'weather' },
   { name: 'Research Database', icon: Search, desc: 'Paranormal & historical records', type: 'research' },
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
@@ -23,12 +23,16 @@ export default function Toolkit() {
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordDuration, setRecordDuration] = useState(0);
   const [savingRec, setSavingRec] = useState(false);
-  const [narrationVolume, setNarrationVolume] = useState(80);
-  const [chimeVolume, setChimeVolume] = useState(20);
   const [weatherData, setWeatherData] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherLocation, setWeatherLocation] = useState('');
   const [guideDetail, setGuideDetail] = useState(null);
+  const [radioActive, setRadioActive] = useState(false);
+  const [radioFrequency, setRadioFrequency] = useState(530);
+  const [radioBand, setRadioBand] = useState('AM');
+  const [heardWord, setHeardWord] = useState('');
+  const [savedWords, setSavedWords] = useState([]);
+  const radioIntervalRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
@@ -36,11 +40,47 @@ export default function Toolkit() {
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTool?.type === 'weather') {
+      autoFetchWeather();
+    }
+  }, [activeTool]);
+
+  const startRadioSweep = () => {
+    setRadioActive(true);
+    setSavedWords([]);
+    setHeardWord('');
+    const amMin = 530, amMax = 1700, fmMin = 88.1, fmMax = 107.9;
+    let freq = radioBand === 'AM' ? amMin : fmMin;
+    let dir = 1;
+    radioIntervalRef.current = setInterval(() => {
+      const min = radioBand === 'AM' ? amMin : fmMin;
+      const max = radioBand === 'AM' ? amMax : fmMax;
+      const step = radioBand === 'AM' ? 10 : 0.2;
+      freq += step * dir;
+      if (freq >= max) { freq = max; dir = -1; }
+      if (freq <= min) { freq = min; dir = 1; }
+      setRadioFrequency(Math.round(freq * 10) / 10);
+    }, 80);
+  };
+
+  const stopRadioSweep = () => {
+    if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
+    setRadioActive(false);
+  };
+
+  const addHeardWord = () => {
+    if (!heardWord.trim()) return;
+    setSavedWords(prev => [...prev, heardWord.trim()]);
+    setHeardWord('');
+  };
 
   const formatDuration = (sec) => {
     const m = Math.floor(sec / 60);
@@ -110,7 +150,32 @@ export default function Toolkit() {
     setSavingRec(false);
   };
 
-  const fetchWeather = async () => {
+  const fetchWeatherByCoords = async (lat, lon) => {
+    setWeatherLoading(true);
+    try {
+      const res = await base44.integrations.Core.InvokeLLM({
+        prompt: `Get the current weather conditions for the location at latitude ${lat}, longitude ${lon}. Return temperature in Fahrenheit, humidity %, wind speed and direction, general conditions (e.g. Clear, Cloudy, Rain), and the nearest city/town name. Use current real-time data.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            temperature: { type: "number" },
+            humidity: { type: "number" },
+            wind: { type: "string" },
+            conditions: { type: "string" },
+            location: { type: "string" },
+          }
+        },
+        model: "gemini_3_flash",
+        add_context_from_internet: true,
+      });
+      setWeatherData(res);
+    } catch (err) {
+      console.error('Weather fetch failed', err);
+    }
+    setWeatherLoading(false);
+  };
+
+  const fetchWeatherByLocation = async () => {
     const loc = weatherLocation.trim();
     if (!loc) return;
     setWeatherLoading(true);
@@ -135,6 +200,16 @@ export default function Toolkit() {
       console.error('Weather fetch failed', err);
     }
     setWeatherLoading(false);
+  };
+
+  const autoFetchWeather = () => {
+    if (weatherData) return;
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude),
+        () => { /* fallback to manual */ }
+      );
+    }
   };
 
   const renderToolContent = () => {
@@ -172,38 +247,82 @@ export default function Toolkit() {
           </div>
         );
 
-      case 'moon':
+      case 'moon': {
         const now = new Date();
-        const moonDays = (now.getDate() + (now.getMonth() + 1) * 2) % 29.5;
+        const lp = 2551443;
+        const newMoon = new Date(2000, 0, 6, 18, 14).getTime() / 1000;
+        const phase = ((now.getTime() / 1000 - newMoon) % lp) / lp;
         const phaseNames = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
-        const phaseIdx = Math.floor(moonDays / 3.7) % 8;
+        const phaseIdx = Math.round(phase * 8) % 8;
+        const illumination = Math.round((1 - Math.cos(phase * 2 * Math.PI)) * 50);
+        const moonEmojis = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
         return (
           <div className="space-y-4 text-center">
-            <div className="w-20 h-20 mx-auto rounded-full bg-moonlight shadow-[0_0_30px_hsl(210,30%,90%,0.3)]" />
+            <div className="text-6xl">{moonEmojis[phaseIdx]}</div>
             <div>
               <p className="font-display text-2xl text-moonlight">{phaseNames[phaseIdx]}</p>
               <p className="text-xs text-muted-foreground mt-1">Best ghost hunting: Full Moon & New Moon nights</p>
-              <p className="text-[10px] text-muted-foreground/60 mt-2">Lunar illumination: {Math.round(50 + Math.sin(moonDays / 4.7) * 45)}%</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-2">Lunar illumination: {illumination}%</p>
             </div>
           </div>
         );
+      }
 
       case 'audio':
         return (
           <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-heading uppercase tracking-wider text-foreground">Narration Volume</span>
-                <span className="text-xs text-muted-foreground">{narrationVolume}%</span>
-              </div>
-              <input type="range" min="0" max="100" value={narrationVolume} onChange={e => setNarrationVolume(Number(e.target.value))} className="w-full h-2 rounded-full bg-secondary appearance-none cursor-pointer accent-primary" />
+            <div className="flex gap-1.5">
+              <button onClick={() => { stopRadioSweep(); setRadioBand('AM'); setRadioFrequency(530); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
+                AM 530–1700 kHz
+              </button>
+              <button onClick={() => { stopRadioSweep(); setRadioBand('FM'); setRadioFrequency(88.1); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
+                FM 88.1–107.9 MHz
+              </button>
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-heading uppercase tracking-wider text-foreground">Background Chimes</span>
-                <span className="text-xs text-muted-foreground">{chimeVolume}%</span>
+
+            <div className="p-4 rounded-lg bg-black/40 border border-primary/20 text-center">
+              <p className="font-mono text-3xl text-primary mb-1">
+                {radioBand === 'AM' ? radioFrequency.toFixed(0) : radioFrequency.toFixed(1)}
+              </p>
+              <p className="text-[10px] text-muted-foreground font-mono">
+                {radioBand === 'AM' ? 'kHz' : 'MHz'} {radioActive ? '● Sweeping' : '— Standby'}
+              </p>
+            </div>
+
+            {radioActive ? (
+              <button onClick={stopRadioSweep} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-heading text-xs uppercase tracking-wider hover:bg-red-500/20 transition-colors">
+                <Pause className="w-3.5 h-3.5" /> Stop Sweep
+              </button>
+            ) : (
+              <button onClick={startRadioSweep} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                <Play className="w-3.5 h-3.5" /> Start Sweep
+              </button>
+            )}
+
+            <div className="space-y-2">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Words Heard</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Type what you hear..."
+                  value={heardWord}
+                  onChange={e => setHeardWord(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addHeardWord()}
+                  className="flex-1 px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                />
+                <button onClick={addHeardWord} className="px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                  Add
+                </button>
               </div>
-              <input type="range" min="0" max="100" value={chimeVolume} onChange={e => setChimeVolume(Number(e.target.value))} className="w-full h-2 rounded-full bg-secondary appearance-none cursor-pointer accent-primary" />
+              {savedWords.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {savedWords.map((w, i) => (
+                    <span key={i} className="px-2 py-1 rounded text-[10px] bg-primary/10 border border-primary/20 text-primary font-mono">
+                      {w}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         );
@@ -211,21 +330,12 @@ export default function Toolkit() {
       case 'weather':
         return (
           <div className="space-y-3">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Enter city or location..."
-                value={weatherLocation}
-                onChange={e => setWeatherLocation(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && fetchWeather()}
-                className="flex-1 px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-              />
-              <button onClick={fetchWeather} disabled={weatherLoading} className="px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-50 flex items-center gap-1.5">
-                {weatherLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                {weatherLoading ? '...' : 'Fetch'}
-              </button>
-            </div>
-            {weatherData ? (
+            {weatherLoading && !weatherData ? (
+              <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-center">
+                <RefreshCw className="w-8 h-8 text-primary animate-spin mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Fetching your local weather...</p>
+              </div>
+            ) : weatherData ? (
               <>
                 <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
                   <MapPin className="w-3 h-3" /> {weatherData.location}
@@ -252,9 +362,23 @@ export default function Toolkit() {
             ) : (
               <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-center">
                 <Cloud className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">Enter a location to fetch real-time weather</p>
+                <p className="text-xs text-muted-foreground">Allow location access for automatic weather</p>
               </div>
             )}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Or search by city..."
+                value={weatherLocation}
+                onChange={e => setWeatherLocation(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && fetchWeatherByLocation()}
+                className="flex-1 px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+              />
+              <button onClick={fetchWeatherByLocation} disabled={weatherLoading} className="px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                {weatherLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                {weatherLoading ? '...' : 'Fetch'}
+              </button>
+            </div>
             <p className="text-[10px] text-muted-foreground/60 text-center">Powered by live weather data</p>
           </div>
         );
@@ -392,35 +516,154 @@ Best Practices for Ghost Hunting
 • Avoid placing sensors near vents, heaters, or windows.`
               },
               {
-                name: 'EVP Device',
-                short: 'Electronic Voice Phenomena Recorder',
-                detail: `EVP Devices (Electronic Voice Phenomena) in Ghost Hunting
+                name: 'Thermal Device',
+                short: 'Thermal Imaging Camera — Heat Detection',
+                detail: `Thermal Imaging Cameras in Ghost Hunting
 
-What Is an EVP Device?
+What Is a Thermal Imaging Camera?
 
-An EVP (Electronic Voice Phenomena) device is audio recording equipment used to capture voices and sounds that are not audible to the human ear at the time of recording. These devices range from simple digital voice recorders to specialized paranormal audio equipment with enhanced sensitivity and filtering capabilities.
+A thermal imaging camera (also called an infrared camera or thermographic camera) detects infrared radiation (heat) and creates an image based on temperature differences. In ghost hunting, thermal cameras are used to detect cold spots, heat signatures, and temperature anomalies that may indicate paranormal activity.
 
 Scientific Theory
 
-Digital audio recorders capture sound waves through a microphone and convert them to digital data:
-1. Sound waves vibrate the microphone diaphragm.
-2. The analog signal is converted to digital via an ADC (Analog-to-Digital Converter).
-3. The digital file preserves frequencies across the audible spectrum (20 Hz – 20 kHz).
-4. Some devices can also capture infrasound and ultrasound beyond human hearing range.
+Thermal cameras work by detecting infrared radiation in the long-wave infrared spectrum (8–14 μm):
+1. All objects above absolute zero emit infrared radiation.
+2. The camera's microbolometer sensor absorbs IR radiation and converts it to an electrical signal.
+3. Each pixel represents a temperature measurement, rendered as a color on the display.
+4. Cooler objects appear blue/purple; warmer objects appear red/yellow/white.
 
 Paranormal Theory
 
-Investigators theorize that spirits may:
-• Produce sounds at frequencies outside normal human hearing.
-• Manipulate electronic devices to imprint voices.
-• Communicate through white noise or background static.
+Some investigators theorize that spirit manifestations may:
+• Draw thermal energy from the environment, creating cold spots.
+• Generate heat as a byproduct of manifestation.
+• Appear as human-shaped thermal signatures.
+• Create localized temperature anomalies.
 
 Best Practices
-• Always use fresh batteries and ample storage.
-• Clearly announce the start of each session with location and time.
-• Ask clear questions and leave pauses for responses.
-• Review recordings with headphones in a quiet environment.
-• Classify EVPs by clarity: Class A (clear), Class B (unclear), Class C (unintelligible).`
+• Establish baseline room temperatures before investigating.
+• Scan slowly — thermal cameras need time to adjust.
+• Note HVAC vents, windows, and other heat sources.
+• Document any anomalies with timestamps.
+• Correlate cold spots with EMF readings and other equipment.
+• A cold spot alone is not proof — look for patterns.`
+              },
+              {
+                name: 'SLS Camera',
+                short: 'Structured Light Sensor — Stick Figure Mapping',
+                detail: `SLS Cameras (Structured Light Sensor) in Ghost Hunting
+
+What Is an SLS Camera?
+
+An SLS (Structured Light Sensor) camera is a modified device that projects an infrared grid pattern onto a scene and uses a depth sensor (similar to a Microsoft Kinect) to detect and map humanoid shapes. In ghost hunting, SLS cameras are used to detect stick-figure representations of potential apparitions that are invisible to the naked eye.
+
+Scientific Theory
+
+SLS technology works through structured light projection:
+1. An infrared projector emits a grid of dots onto the environment.
+2. An IR camera reads the distortion of the dot pattern.
+3. A processor calculates depth information from the distortion.
+4. The software identifies humanoid shapes and renders them as stick figures.
+
+The system is designed to detect humans for gaming and motion tracking — it maps joints, limbs, and body positioning in real time.
+
+Paranormal Theory
+
+Paranormal investigators theorize that spirits may:
+• Have a physical form or energy field that the IR grid can detect.
+• Distort the structured light pattern in humanoid shapes.
+• Appear as stick figures on the SLS display when no living person is present.
+• Map to the sensor at unexpected heights, positions, or through solid objects.
+
+Common Observations
+• Stick figures appearing in empty rooms.
+• Figures mapped at unusual heights (floating or partial).
+• Figures appearing through walls or in impossible positions.
+• Stick figures that twist or contort unnaturally.
+
+Limitations and False Positives
+• The sensor can misinterpret furniture, curtains, or reflections as humanoid shapes.
+• Shadows and light patterns can confuse the depth sensor.
+• Multiple investigators in range can create overlapping readings.
+• The Kinect sensor has a limited range (typically 1.5–4.5 meters).
+
+Best Practices
+• Ensure the area is clear of people before scanning.
+• Note all furniture, reflective surfaces, and light sources.
+• Use in conjunction with other equipment for corroboration.
+• Document stick figure readings with screenshots or video.
+• A stick figure alone is not proof — cross-reference with EMF, temperature, and audio.`
+              },
+              {
+                name: 'XLS Camera',
+                short: 'Extended Light Spectrum — Multi-Spectral Imaging',
+                detail: `XLS Cameras (Extended Light Spectrum) in Ghost Hunting
+
+What Is an XLS Camera?
+
+An XLS (Extended Light Spectrum) camera is an advanced imaging device that captures a broader range of the electromagnetic spectrum than standard cameras, combining ultraviolet (UV), visible, and infrared (IR) light capture simultaneously. XLS cameras go beyond full-spectrum modifications by using multiple sensors or filter arrays to capture different spectral bands at once.
+
+Scientific Theory
+
+XLS cameras extend the range of detectable light:
+1. Multiple sensors or rotating filter wheels capture UV, visible, and IR bands.
+2. Software overlays or composites the different spectral images.
+3. The result reveals details invisible to any single spectrum.
+4. Some XLS systems capture from 300nm (UV) through 1000nm (near-IR).
+
+Unlike simple full-spectrum conversions, XLS cameras can separate and recombine spectral bands, allowing investigators to isolate phenomena in specific wavelengths.
+
+Paranormal Theory
+
+Investigators believe XLS cameras may capture:
+• Spirit energy that manifests in specific spectral bands.
+• Apparitions visible only in UV or deep IR.
+• Energy fields around haunted locations.
+• Multi-spectral anomalies that confirm each other across bands.
+
+Best Practices
+• Calibrate the camera in known conditions before investigation.
+• Capture the same scene in multiple spectral bands.
+• Note all light sources — UV can reveal fluorescent materials, IR reveals heat.
+• Use a tripod for multi-spectral captures that require multiple exposures.
+• Compare spectral bands side-by-side for anomalies.
+• Environmental factors (humidity, dust, smoke) affect all spectral bands differently.`
+              },
+              {
+                name: 'EMF Device',
+                short: 'Electromagnetic Field Meter — Energy Detection',
+                detail: `EMF Devices (Electromagnetic Field Meters) in Ghost Hunting
+
+What Is an EMF Meter?
+
+An EMF (Electromagnetic Field) meter is a handheld device that measures electromagnetic radiation in the environment. In ghost hunting, EMF meters are one of the most commonly used tools — investigators use them to detect unusual electromagnetic fluctuations that may indicate paranormal activity.
+
+Scientific Theory
+
+EMF meters measure electromagnetic fields produced by:
+1. Electrical wiring and appliances (AC fields at 50/60 Hz).
+2. Radio waves and wireless communications.
+3. Natural sources like the Earth's magnetic field.
+4. Static electricity and atmospheric conditions.
+
+Most ghost-hunting EMF meters measure in milligauss (mG) and can detect both AC and DC fields. Standard meters have a single axis; professional meters use tri-axis sensors for directional readings.
+
+Paranormal Theory
+
+The EMF-paranormal connection is one of the most researched areas in ghost hunting:
+• Some researchers theorize that spirit manifestations generate measurable electromagnetic fields.
+• EMF spikes of 2–7 mG with no identifiable source are considered potentially paranormal.
+• High EMF fields may also cause hallucinations, feelings of being watched, and dizziness — potentially explaining some paranormal experiences as environmental effects.
+• Correlating EMF spikes with other readings (temperature drops, EVPs) strengthens evidence.
+
+Best Practices
+• Establish baseline EMF readings throughout the location before investigating.
+• Identify and document ALL electrical sources — wiring, appliances, circuit breakers, cell towers.
+• Move slowly — EMF meters need time to register changes.
+• Use a tri-axis meter for directional information about the field source.
+• Document spikes with exact readings, timestamps, and location.
+• High EMF can be caused by faulty wiring — note this for safety as well as evidence.
+• A single EMF spike alone is not paranormal evidence — look for patterns and correlations.`
               },
               {
                 name: 'Full-Spectrum Camera',
@@ -564,6 +807,7 @@ Best Practices
               <button onClick={() => {
                 setActiveTool(null);
                 if (recording) stopRecording();
+                if (radioActive) stopRadioSweep();
                 setRecordedBlob(null);
                 setGuideDetail(null);
               }} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
