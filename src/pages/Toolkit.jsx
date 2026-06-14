@@ -1,147 +1,174 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Zap, Thermometer, Radio, Waves, Moon, Volume2, Eye, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw } from 'lucide-react';
+import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
+import { base44 } from '@/api/base44Client';
 
 const tools = [
-  { name: 'EMF Meter', icon: Zap, desc: 'Detect electromagnetic field fluctuations', type: 'emf' },
-  { name: 'Thermometer', icon: Thermometer, desc: 'Monitor ambient temperature for cold spots', type: 'thermometer' },
-  { name: 'Spirit Box', icon: Radio, desc: 'Simulated radio frequency sweep', type: 'spiritbox' },
-  { name: 'Audio Recorder', icon: Waves, desc: 'Simulated EVP session recorder', type: 'recorder' },
+  { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
   { name: 'Moon Phase', icon: Moon, desc: 'Current moon phase & illumination', type: 'moon' },
   { name: 'Audio Controls', icon: Volume2, desc: 'Narration & background volume', type: 'audio' },
-  { name: 'Night Vision', icon: Eye, desc: 'Red filter overlay for low-light', type: 'nightvision' },
-  { name: 'Weather Monitor', icon: Cloud, desc: 'Local weather conditions', type: 'weather' },
+  { name: 'Weather Monitor', icon: Cloud, desc: 'Real-time local weather conditions', type: 'weather' },
   { name: 'Research Database', icon: Search, desc: 'Paranormal & historical records', type: 'research' },
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
   { name: 'Evidence Analyzer', icon: Wrench, desc: 'Review & rate your evidence', type: 'analyzer' },
 ];
 
-const spiritBoxPhrases = [
-  '...cold...here...', '...get out...', '...help me...', '...watching...',
-  '...behind you...', '...murder...', '...alone...', '...darkness...',
-  '...listen...', '...afraid...', '...buried...', '...never left...',
-  'static...', '...who goes there...', '...pain...', '...lost...',
-];
-
 export default function Toolkit() {
   const [activeTool, setActiveTool] = useState(null);
-  const [emfReading, setEmfReading] = useState(2.3);
-  const [temperature, setTemperature] = useState(67);
-  const [spiritBoxActive, setSpiritBoxActive] = useState(false);
-  const [spiritPhrase, setSpiritPhrase] = useState('');
   const [recording, setRecording] = useState(false);
-  const [nightVisionOn, setNightVisionOn] = useState(false);
+  const [recordedBlob, setRecordedBlob] = useState(null);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const [savingRec, setSavingRec] = useState(false);
   const [narrationVolume, setNarrationVolume] = useState(80);
   const [chimeVolume, setChimeVolume] = useState(20);
-  const spiritInterval = useRef(null);
+  const [weatherData, setWeatherData] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherLocation, setWeatherLocation] = useState('');
+  const [guideDetail, setGuideDetail] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     return () => {
-      if (spiritInterval.current) clearInterval(spiritInterval.current);
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
     };
   }, []);
 
-  const toggleSpiritBox = () => {
-    if (spiritBoxActive) {
-      clearInterval(spiritInterval.current);
-      setSpiritBoxActive(false);
-      setSpiritPhrase('');
-    } else {
-      setSpiritBoxActive(true);
-      setSpiritPhrase(spiritBoxPhrases[Math.floor(Math.random() * spiritBoxPhrases.length)]);
-      spiritInterval.current = setInterval(() => {
-        const r = Math.random();
-        if (r < 0.3) {
-          setSpiritPhrase('...static...');
-        } else {
-          setSpiritPhrase(spiritBoxPhrases[Math.floor(Math.random() * spiritBoxPhrases.length)]);
-        }
-      }, 800 + Math.random() * 1200);
+  const formatDuration = (sec) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setRecordedBlob(blob);
+        stream.getTracks().forEach(t => t.stop());
+      };
+
+      mediaRecorder.start();
+      setRecording(true);
+      setRecordDuration(0);
+      setRecordedBlob(null);
+      timerRef.current = setInterval(() => {
+        setRecordDuration(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Microphone access denied', err);
     }
   };
 
-  const refreshEmf = () => setEmfReading(Math.round((Math.random() * 8 + 0.2) * 10) / 10);
-  const refreshTemp = () => setTemperature(Math.round(Math.random() * 20 + 55));
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    setRecording(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+  };
+
+  const saveRecording = async () => {
+    if (!recordedBlob) return;
+    setSavingRec(true);
+    try {
+      const file = new File([recordedBlob], 'evp_session.webm', { type: 'audio/webm' });
+      const uploadRes = await base44.integrations.Core.UploadFile({ file });
+      const now = new Date();
+      const date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      await base44.entities.Evidence.create({
+        title: 'EVP Session ' + date,
+        type: 'evp',
+        description: 'Recorded EVP session — ' + formatDuration(recordDuration),
+        file_url: uploadRes.file_url,
+        date,
+        time,
+      });
+      setRecordedBlob(null);
+      setRecordDuration(0);
+    } catch (err) {
+      console.error('Save failed', err);
+    }
+    setSavingRec(false);
+  };
+
+  const fetchWeather = async () => {
+    const loc = weatherLocation.trim();
+    if (!loc) return;
+    setWeatherLoading(true);
+    try {
+      const res = await base44.integrations.Core.InvokeLLM({
+        prompt: `Get the current weather conditions for "${loc}". Return temperature in Fahrenheit, humidity %, wind speed and direction, and general conditions (e.g. Clear, Cloudy, Rain). Use current real-time data.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            temperature: { type: "number" },
+            humidity: { type: "number" },
+            wind: { type: "string" },
+            conditions: { type: "string" },
+            location: { type: "string" },
+          }
+        },
+        model: "gemini_3_flash",
+        add_context_from_internet: true,
+      });
+      setWeatherData(res);
+    } catch (err) {
+      console.error('Weather fetch failed', err);
+    }
+    setWeatherLoading(false);
+  };
 
   const renderToolContent = () => {
     if (!activeTool) return null;
 
     switch (activeTool.type) {
-      case 'emf':
-        return (
-          <div className="space-y-4">
-            <div className="text-center">
-              <p className={`font-display text-5xl mb-1 ${emfReading > 5 ? 'text-red-500 animate-pulse' : emfReading > 3 ? 'text-yellow-400' : 'text-green-400'}`}>{emfReading} mG</p>
-              <p className="text-xs text-muted-foreground">
-                {emfReading > 5 ? '⚠ HIGH EMF — Possible paranormal activity' : emfReading > 3 ? 'Elevated — worth investigating' : 'Ambient — normal range'}
-              </p>
-            </div>
-            <div className="h-2 rounded-full bg-secondary overflow-hidden">
-              <motion.div className="h-full rounded-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500" animate={{ width: `${Math.min(emfReading * 10, 100)}%` }} transition={{ duration: 0.3 }} />
-            </div>
-            <button onClick={refreshEmf} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh Reading
-            </button>
-          </div>
-        );
-
-      case 'thermometer':
-        return (
-          <div className="space-y-4">
-            <div className="text-center">
-              <p className={`font-display text-5xl mb-1 ${temperature < 55 ? 'text-cyan-400 animate-pulse' : temperature < 65 ? 'text-yellow-400' : 'text-foreground'}`}>{temperature}°F</p>
-              <p className="text-xs text-muted-foreground">
-                {temperature < 55 ? 'Cold spot detected — paranormal indicator' : temperature < 65 ? 'Cool — potential cold spot' : 'Normal ambient temperature'}
-              </p>
-            </div>
-            <div className="h-2 rounded-full bg-secondary overflow-hidden">
-              <motion.div className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-red-500" animate={{ width: `${Math.min(temperature * 1.2, 100)}%` }} transition={{ duration: 0.3 }} />
-            </div>
-            <button onClick={refreshTemp} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh Reading
-            </button>
-          </div>
-        );
-
-      case 'spiritbox':
-        return (
-          <div className="space-y-4">
-            <div className="p-4 rounded-lg bg-black/40 border border-primary/20 min-h-[80px] flex items-center justify-center">
-              {spiritBoxActive ? (
-                <motion.p
-                  key={spiritPhrase}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className={`font-mono text-sm text-center ${spiritPhrase.includes('static') ? 'text-muted-foreground' : 'text-primary'}`}
-                >
-                  {spiritPhrase}
-                </motion.p>
-              ) : (
-                <p className="text-xs text-muted-foreground font-mono">Press Start to begin sweep</p>
-              )}
-            </div>
-            <button onClick={toggleSpiritBox} className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg font-heading text-xs uppercase tracking-wider transition-colors ${spiritBoxActive ? 'bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20' : 'bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20'}`}>
-              {spiritBoxActive ? <><Pause className="w-3.5 h-3.5" /> Stop Sweep</> : <><Play className="w-3.5 h-3.5" /> Start Sweep</>}
-            </button>
-          </div>
-        );
-
       case 'recorder':
         return (
           <div className="space-y-4">
             <div className="p-4 rounded-lg bg-black/40 border border-primary/20 min-h-[80px] flex flex-col items-center justify-center gap-2">
-              <Mic className={`w-8 h-8 ${recording ? 'text-red-500 animate-pulse' : 'text-muted-foreground'}`} />
+              <Mic className={`w-8 h-8 ${recording ? 'text-red-500 animate-pulse' : recordedBlob ? 'text-green-400' : 'text-muted-foreground'}`} />
               <p className="text-xs font-mono text-muted-foreground">
-                {recording ? '● Recording... 00:42' : 'Ready to record'}
+                {recording ? '● Recording... ' + formatDuration(recordDuration) : recordedBlob ? 'Recording complete — ' + formatDuration(recordDuration) : 'Ready to record'}
               </p>
             </div>
-            <button onClick={() => setRecording(!recording)} className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg font-heading text-xs uppercase tracking-wider transition-colors ${recording ? 'bg-red-500/10 border border-red-500/30 text-red-400' : 'bg-primary/10 border border-primary/30 text-primary'}`}>
-              {recording ? <><Pause className="w-3.5 h-3.5" /> Stop Recording</> : <><Play className="w-3.5 h-3.5" /> Start Recording</>}
-            </button>
+            {recording ? (
+              <button onClick={stopRecording} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-heading text-xs uppercase tracking-wider hover:bg-red-500/20 transition-colors">
+                <Pause className="w-3.5 h-3.5" /> Stop Recording
+              </button>
+            ) : !recordedBlob ? (
+              <button onClick={startRecording} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                <Play className="w-3.5 h-3.5" /> Start Recording
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <button onClick={saveRecording} disabled={savingRec} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
+                  <Save className="w-3.5 h-3.5" /> {savingRec ? 'Saving...' : 'Save to Evidence Journal'}
+                </button>
+                <p className="text-[10px] text-muted-foreground/60 text-center">Saves automatically with date & time</p>
+                <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
+                  <X className="w-3.5 h-3.5" /> Discard
+                </button>
+              </div>
+            )}
           </div>
         );
 
@@ -181,40 +208,54 @@ export default function Toolkit() {
           </div>
         );
 
-      case 'nightvision':
-        return (
-          <div className="space-y-4">
-            <div className={`p-4 rounded-lg min-h-[100px] flex items-center justify-center transition-all ${nightVisionOn ? 'bg-red-950/60 border border-red-500/30' : 'bg-black/40 border border-border/30'}`}>
-              <Eye className={`w-10 h-10 ${nightVisionOn ? 'text-red-500 animate-pulse' : 'text-muted-foreground'}`} />
-            </div>
-            <button onClick={() => setNightVisionOn(!nightVisionOn)} className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg font-heading text-xs uppercase tracking-wider transition-colors ${nightVisionOn ? 'bg-red-500/10 border border-red-500/30 text-red-400' : 'bg-primary/10 border border-primary/30 text-primary'}`}>
-              {nightVisionOn ? 'Disable Night Vision' : 'Enable Night Vision'}
-            </button>
-          </div>
-        );
-
       case 'weather':
         return (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 text-center">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Temperature</p>
-                <p className="text-sm font-medium text-foreground">62°F</p>
-              </div>
-              <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 text-center">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Humidity</p>
-                <p className="text-sm font-medium text-foreground">74%</p>
-              </div>
-              <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 text-center">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Wind</p>
-                <p className="text-sm font-medium text-foreground">8 mph NW</p>
-              </div>
-              <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 text-center">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Conditions</p>
-                <p className="text-sm font-medium text-foreground">Mostly Clear</p>
-              </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter city or location..."
+                value={weatherLocation}
+                onChange={e => setWeatherLocation(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && fetchWeather()}
+                className="flex-1 px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+              />
+              <button onClick={fetchWeather} disabled={weatherLoading} className="px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                {weatherLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                {weatherLoading ? '...' : 'Fetch'}
+              </button>
             </div>
-            <p className="text-[10px] text-muted-foreground/60 text-center">Ideal investigation conditions: cool, dry, low wind</p>
+            {weatherData ? (
+              <>
+                <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
+                  <MapPin className="w-3 h-3" /> {weatherData.location}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 text-center">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Temperature</p>
+                    <p className="text-sm font-medium text-foreground">{weatherData.temperature}°F</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 text-center">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Humidity</p>
+                    <p className="text-sm font-medium text-foreground">{weatherData.humidity}%</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 text-center">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Wind</p>
+                    <p className="text-sm font-medium text-foreground">{weatherData.wind}</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 text-center">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Conditions</p>
+                    <p className="text-sm font-medium text-foreground">{weatherData.conditions}</p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-center">
+                <Cloud className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Enter a location to fetch real-time weather</p>
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground/60 text-center">Powered by live weather data</p>
           </div>
         );
 
@@ -234,18 +275,220 @@ export default function Toolkit() {
         );
 
       case 'guide':
+        if (guideDetail) {
+          return (
+            <div className="space-y-3">
+              <button onClick={() => setGuideDetail(null)} className="flex items-center gap-1.5 text-xs text-primary font-heading uppercase tracking-wider hover:text-primary/80 transition-colors">
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Equipment List
+              </button>
+              <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-xs text-foreground/80 leading-relaxed space-y-3 whitespace-pre-line">
+                {guideDetail}
+              </div>
+            </div>
+          );
+        }
         return (
           <div className="space-y-2">
             {[
-              { name: 'EMF Meter', desc: 'Measures electromagnetic fields. Baseline a room first, then watch for spikes of 3+ mG.' },
-              { name: 'Digital Thermometer', desc: 'Rapid temperature drops of 10°F+ indicate cold spots — possible spirit manifestation.' },
-              { name: 'Spirit Box', desc: 'Sweeps AM/FM frequencies. Spirits manipulate the white noise to form words.' },
-              { name: 'Full-Spectrum Camera', desc: 'Captures UV and IR light invisible to the naked eye. Reveals orbs and apparitions.' },
-              { name: 'Digital Voice Recorder', desc: 'Record sessions and play back for EVPs (Electronic Voice Phenomena).' },
+              {
+                name: 'REM Device',
+                short: 'Radiating Electromagneticity Meters',
+                detail: `REM Devices: Radiating Electromagneticity Meters in Ghost Hunting
+
+What Is a REM Device?
+
+A REM (Radiating Electromagneticity Meter) device is a specialized piece of paranormal investigation equipment that measures and detects fluctuations in electromagnetic fields (EMF). Unlike standard EMF meters that simply read ambient electromagnetic levels, REM devices are designed to detect and respond to rapid, radiating bursts of electromagnetic energy — the kind some researchers believe may accompany spirit manifestations.
+
+REM devices often feature multi-axis antenna arrays, audible alarms, and visual displays that react to sudden electromagnetic spikes. Many are purpose-built for paranormal research and tuned to be more sensitive than standard industrial EMF meters.
+
+Scientific Theory
+
+REM devices operate on the principle of electromagnetic induction:
+1. An antenna or coil detects changes in the surrounding magnetic field.
+2. The device measures both the strength and rate of change of the field.
+3. Rapid changes (radiating pulses) trigger visual and audible alerts.
+4. The directional antenna can help locate the source of the disturbance.
+
+Unlike passive meters, REM devices actively monitor for spike patterns rather than just ambient levels, making them more responsive to transient electromagnetic events.
+
+Paranormal Theory
+
+Some paranormal researchers theorize that:
+• Spirit manifestations may generate brief, localized electromagnetic disturbances.
+• The "radiating" nature of REM detection aligns with theories of spirits as energy-based phenomena.
+• Correlating REM spikes with other equipment readings (EVP, temperature drops) strengthens evidence.
+
+Best Practices
+• Establish baseline readings before investigating.
+• Note all nearby electrical sources (wiring, appliances, cell towers).
+• Document spikes with timestamps and correlate with other observations.
+• Move slowly through spaces to allow the device time to respond.
+• A spike on its own is not proof — look for patterns and correlations.`
+              },
+              {
+                name: 'PIR Device',
+                short: 'Infrared Motion Sensors',
+                detail: `Infrared (IR) Motion Sensors in Ghost Hunting
+
+What Is an Infrared Motion Sensor?
+
+An infrared (IR) motion sensor is a device that detects movement by sensing changes in infrared energy (heat) within its field of view. In ghost hunting, IR motion sensors are often used to alert investigators when something moves through a monitored area, especially in dark environments where visual observation is difficult.
+
+Many paranormal investigators use modified security sensors, driveway alarms, or purpose-built paranormal devices that trigger lights, sounds, or recordings when motion is detected.
+
+Scientific Theory
+
+Most ghost-hunting motion detectors use a Passive Infrared (PIR) Sensor.
+
+A PIR sensor works by:
+1. Detecting infrared radiation naturally emitted by warm objects.
+2. Monitoring the environment for changes in heat patterns.
+3. Triggering an alarm when a heat source moves across different sensing zones.
+
+For example:
+• A person walking through a hallway emits body heat.
+• The sensor detects the changing heat signature.
+• The device activates a light, buzzer, or other alert.
+
+The sensor is "passive" because it does not emit energy; it only receives infrared radiation from its surroundings.
+
+Paranormal Theory
+
+Within paranormal investigation, some researchers theorize that spirits may:
+• Manifest as energy fields capable of triggering motion sensors.
+• Create localized temperature fluctuations.
+• Disturb the infrared field monitored by the sensor.
+• Move through a protected detection zone and activate the device.
+
+Some investigators place motion sensors in reportedly active locations such as:
+• Hallways
+• Staircases
+• Doorways
+• Historic bedrooms
+• Near trigger objects
+
+If the sensor activates without an obvious cause, investigators may attempt communication or correlate the event with other equipment readings.
+
+Limitations and False Triggers
+
+Infrared motion sensors can be triggered by many normal causes, including:
+• Investigators moving nearby
+• Pets or wildlife
+• Insects close to the sensor
+• HVAC systems
+• Warm air drafts
+• Sunlight through windows
+• Reflections from heat sources
+• Rapid temperature changes
+
+Because of these factors, a motion sensor activation alone is generally not considered strong evidence of paranormal activity.
+
+Best Practices for Ghost Hunting
+• Document all people present and their locations.
+• Eliminate sources of heat and airflow when possible.
+• Use multiple devices to corroborate events.
+• Record video of the sensor during investigations.
+• Note environmental conditions when activations occur.
+• Avoid placing sensors near vents, heaters, or windows.`
+              },
+              {
+                name: 'EVP Device',
+                short: 'Electronic Voice Phenomena Recorder',
+                detail: `EVP Devices (Electronic Voice Phenomena) in Ghost Hunting
+
+What Is an EVP Device?
+
+An EVP (Electronic Voice Phenomena) device is audio recording equipment used to capture voices and sounds that are not audible to the human ear at the time of recording. These devices range from simple digital voice recorders to specialized paranormal audio equipment with enhanced sensitivity and filtering capabilities.
+
+Scientific Theory
+
+Digital audio recorders capture sound waves through a microphone and convert them to digital data:
+1. Sound waves vibrate the microphone diaphragm.
+2. The analog signal is converted to digital via an ADC (Analog-to-Digital Converter).
+3. The digital file preserves frequencies across the audible spectrum (20 Hz – 20 kHz).
+4. Some devices can also capture infrasound and ultrasound beyond human hearing range.
+
+Paranormal Theory
+
+Investigators theorize that spirits may:
+• Produce sounds at frequencies outside normal human hearing.
+• Manipulate electronic devices to imprint voices.
+• Communicate through white noise or background static.
+
+Best Practices
+• Always use fresh batteries and ample storage.
+• Clearly announce the start of each session with location and time.
+• Ask clear questions and leave pauses for responses.
+• Review recordings with headphones in a quiet environment.
+• Classify EVPs by clarity: Class A (clear), Class B (unclear), Class C (unintelligible).`
+              },
+              {
+                name: 'Full-Spectrum Camera',
+                short: 'UV & IR Light Photography',
+                detail: `Full-Spectrum Cameras in Ghost Hunting
+
+What Is a Full-Spectrum Camera?
+
+A full-spectrum camera is a modified digital camera with its internal IR-blocking filter removed, allowing it to capture ultraviolet (UV), visible, and infrared (IR) light simultaneously. In ghost hunting, these cameras are used to document phenomena invisible to the naked eye.
+
+Scientific Theory
+
+Standard digital camera sensors are naturally sensitive to UV, visible, and IR light. Manufacturers install an IR-cut filter to produce normal-looking photos. Removing this filter allows the sensor to capture the full electromagnetic spectrum, revealing:
+• Infrared heat signatures from warm objects.
+• UV reflections from surfaces and materials.
+• Light anomalies that may not be visible to human eyes.
+
+Paranormal Theory
+
+Some investigators believe full-spectrum cameras can capture:
+• Orbs and light anomalies associated with spirit energy.
+• Apparitions that reflect or emit UV/IR light.
+• Energy fields around haunted locations.
+
+Best Practices
+• Take baseline photos in normal conditions for comparison.
+• Use a tripod for long exposures in dark locations.
+• Note all light sources, dust, and reflective surfaces.
+• Avoid photographing toward light sources to reduce lens flare.
+• Review photos on a large screen for detailed analysis.`
+              },
+              {
+                name: 'Digital Voice Recorder',
+                short: 'Audio Capture for EVP Analysis',
+                detail: `Digital Voice Recorders in Ghost Hunting
+
+What Is a Digital Voice Recorder?
+
+A portable device that captures high-quality audio recordings for later analysis. Unlike smartphones, dedicated recorders offer better microphone sensitivity, longer battery life, and higher-quality uncompressed audio formats essential for EVP work.
+
+Scientific Theory
+
+Digital recorders sample sound waves at high rates (44.1 kHz or higher) and store them as digital files. Higher bit depths and sample rates capture more detail, making subtle sounds easier to detect during playback analysis.
+
+Paranormal Theory
+
+Investigators use voice recorders to:
+• Conduct EVP sessions — asking questions and leaving silence for responses.
+• Document environmental sounds during investigations.
+• Create a timestamped audio log of events and readings.
+
+Best Practices
+• Use an external microphone for better sensitivity.
+• Record in WAV or other lossless format when possible.
+• Verbally note any normal sounds (cars, footsteps, wind).
+• Play back at increased volume with noise-reduction software.
+• Never use voice activation — it can cut off beginnings of EVPs.`
+              },
             ].map((item, i) => (
               <div key={i} className="p-2.5 rounded-lg bg-card/30 border border-border/30">
                 <p className="text-xs font-medium text-foreground">{item.name}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{item.short}</p>
+                <button
+                  onClick={() => setGuideDetail(item.detail)}
+                  className="mt-2 text-[10px] text-primary font-heading uppercase tracking-wider hover:text-primary/80 transition-colors"
+                >
+                  View Details →
+                </button>
               </div>
             ))}
           </div>
@@ -320,9 +563,9 @@ export default function Toolkit() {
               </div>
               <button onClick={() => {
                 setActiveTool(null);
-                if (spiritBoxActive) { clearInterval(spiritInterval.current); setSpiritBoxActive(false); }
-                setNightVisionOn(false);
-                setRecording(false);
+                if (recording) stopRecording();
+                setRecordedBlob(null);
+                setGuideDetail(null);
               }} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-4 h-4" />
               </button>
