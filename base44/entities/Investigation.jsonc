@@ -1,0 +1,51 @@
+{
+  "name": "Investigation",
+  "type": "object",
+  "properties": {
+    "tour_id": {
+      "type": "string"
+    },
+    "location_name": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "time": {
+      "type": "string"
+    },
+    "weather": {
+      "type": "string"
+    },
+    "moon_phase": {
+      "type": "string"
+    },
+    "equipment_used": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string"
+    },
+    "personal_rating": {
+      "type": "number"
+    },
+    "state": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "is_completed": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "location_name",
+    "date"
+  ]
+}

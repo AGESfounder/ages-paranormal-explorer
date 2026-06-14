@@ -1,0 +1,79 @@
+{
+  "name": "Tour",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "tour_type": {
+      "type": "string",
+      "enum": [
+        "walking",
+        "driving"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "introduction": {
+      "type": "string"
+    },
+    "conclusion": {
+      "type": "string"
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": [
+        "easy",
+        "moderate",
+        "challenging"
+      ]
+    },
+    "estimated_duration": {
+      "type": "string"
+    },
+    "total_distance": {
+      "type": "string"
+    },
+    "start_location_name": {
+      "type": "string"
+    },
+    "start_latitude": {
+      "type": "number"
+    },
+    "start_longitude": {
+      "type": "number"
+    },
+    "image_url": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "safety_info": {
+      "type": "string"
+    },
+    "best_time": {
+      "type": "string"
+    },
+    "is_featured": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "title",
+    "state",
+    "city",
+    "tour_type"
+  ]
+}

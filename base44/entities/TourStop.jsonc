@@ -1,0 +1,56 @@
+{
+  "name": "TourStop",
+  "type": "object",
+  "properties": {
+    "tour_id": {
+      "type": "string"
+    },
+    "stop_number": {
+      "type": "number"
+    },
+    "name": {
+      "type": "string"
+    },
+    "latitude": {
+      "type": "number"
+    },
+    "longitude": {
+      "type": "number"
+    },
+    "address": {
+      "type": "string"
+    },
+    "historical_info": {
+      "type": "string"
+    },
+    "paranormal_info": {
+      "type": "string"
+    },
+    "investigation_suggestions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "estimated_investigation_time": {
+      "type": "string"
+    },
+    "construction_date": {
+      "type": "string"
+    },
+    "famous_people": {
+      "type": "string"
+    },
+    "image_url": {
+      "type": "string"
+    },
+    "narration_text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tour_id",
+    "stop_number",
+    "name"
+  ]
+}

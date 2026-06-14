@@ -6,7 +6,24 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
+import Login from '@/pages/Login';
+import Register from '@/pages/Register';
+import ForgotPassword from '@/pages/ForgotPassword';
+import ResetPassword from '@/pages/ResetPassword';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import { Navigate } from 'react-router-dom';
 // Add page imports here
+import Home from '@/pages/Home';
+import States from '@/pages/States';
+import StateTours from '@/pages/StateTours';
+import TourDetail from '@/pages/TourDetail';
+import StopDetail from '@/pages/StopDetail';
+import Evidence from '@/pages/Evidence';
+import Favorites from '@/pages/Favorites';
+import Profile from '@/pages/Profile';
+import Toolkit from '@/pages/Toolkit';
+import Nearby from '@/pages/Nearby';
+import Settings from '@/pages/Settings';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -34,7 +51,25 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
-      {/* Add your page Route elements here */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
+        {/* Add your page Route elements here */}
+        <Route path="/" element={<Home />} />
+        <Route path="/states" element={<States />} />
+        <Route path="/states/:stateAbbr" element={<StateTours />} />
+        <Route path="/tour/:tourId" element={<TourDetail />} />
+        <Route path="/stop/:stopId" element={<StopDetail />} />
+        <Route path="/evidence" element={<Evidence />} />
+        <Route path="/evidence/new" element={<Evidence />} />
+        <Route path="/favorites" element={<Favorites />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/toolkit" element={<Toolkit />} />
+        <Route path="/nearby" element={<Nearby />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

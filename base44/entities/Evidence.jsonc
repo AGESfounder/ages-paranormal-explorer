@@ -1,0 +1,49 @@
+{
+  "name": "Evidence",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "evp",
+        "photo",
+        "video",
+        "note"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "file_url": {
+      "type": "string"
+    },
+    "tour_id": {
+      "type": "string"
+    },
+    "stop_id": {
+      "type": "string"
+    },
+    "location_name": {
+      "type": "string"
+    },
+    "activity_level": {
+      "type": "number"
+    },
+    "emf_activity": {
+      "type": "number"
+    },
+    "evp_quality": {
+      "type": "number"
+    },
+    "personal_experience": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "title",
+    "type"
+  ]
+}
