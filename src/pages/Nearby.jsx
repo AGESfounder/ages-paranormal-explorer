@@ -1,18 +1,95 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Navigation, MapPin, Loader2 } from 'lucide-react';
+import { Navigation, MapPin, Loader2, Ghost, Compass } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 
 export default function Nearby() {
+  const navigate = useNavigate();
   const [tours, setTours] = useState([]);
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(true);
   const [coords, setCoords] = useState(null);
   const [error, setError] = useState('');
+  const [generatingRange, setGeneratingRange] = useState(null);
+
+  const distanceRanges = [
+    { label: '1-15 Miles', min: 1, max: 15, icon: Compass },
+    { label: '16-30 Miles', min: 16, max: 30, icon: MapPin },
+    { label: '31-45 Miles', min: 31, max: 45, icon: Navigation },
+    { label: '46-60 Miles', min: 46, max: 60, icon: Ghost },
+  ];
+
+  const generateTourForRange = async (range) => {
+    if (!coords || generatingRange) return;
+    setGeneratingRange(range.label);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Generate exactly 1 paranormal tour with a start location ${range.min}-${range.max} miles from these coordinates: (${coords.lat}, ${coords.lng}). The tour's start_latitude and start_longitude MUST place it ${range.min}-${range.max} miles away — pick a real town or city in that distance band.
+
+Include:
+- title: a creative, spooky tour name
+- city: the town/city where the tour starts
+- state: full state name
+- tour_type: "walking", "driving", or "mixed"
+- description: 2-3 compelling sentences about the tour's haunted locations
+- introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "Ages (A.G.E.S. - Affordable Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
+- conclusion: closing paragraph ending with "Thank you for exploring with Ages — A.G.E.S., Affordable Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
+- difficulty: "easy", "moderate", or "challenging"
+- estimated_duration: e.g. "2-3 hours"
+- total_distance: e.g. "1.5 miles"
+- start_location_name, start_latitude, start_longitude (real coordinates at a location ${range.min}-${range.max} miles from (${coords.lat}, ${coords.lng}))
+- tags: array of relevant tags
+- safety_info: important safety notes
+- best_time: "Dusk to midnight"
+
+IMPORTANT: All locations must be publicly accessible after dark. Do NOT use locations that close at dusk or have restricted nighttime access. Use real locations with documented paranormal history only.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            tours: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  city: { type: "string" },
+                  state: { type: "string" },
+                  tour_type: { type: "string" },
+                  description: { type: "string" },
+                  introduction: { type: "string" },
+                  conclusion: { type: "string" },
+                  difficulty: { type: "string" },
+                  estimated_duration: { type: "string" },
+                  total_distance: { type: "string" },
+                  start_location_name: { type: "string" },
+                  start_latitude: { type: "number" },
+                  start_longitude: { type: "number" },
+                  tags: { type: "array", items: { type: "string" } },
+                  safety_info: { type: "string" },
+                  best_time: { type: "string" }
+                }
+              }
+            }
+          }
+        },
+        model: "gemini_3_flash",
+        add_context_from_internet: true
+      });
+
+      const tourData = result.tours?.[0];
+      if (!tourData) throw new Error('No tour generated');
+      const saved = await base44.entities.Tour.create(tourData);
+      setGeneratingRange(null);
+      navigate(`/tour/${saved.id}`);
+    } catch (err) {
+      setGeneratingRange(null);
+      setError(err.message || 'Failed to generate tour. Please try again.');
+    }
+  };
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -68,6 +145,38 @@ export default function Nearby() {
     <PageContainer>
       <SectionHeader title="Nearby Tours" subtitle={coords ? 'Sorted by distance' : 'Recent tours'} showBack />
       <div className="px-4 pb-28 space-y-3 pt-3">
+
+        {coords && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Generate Tour by Distance</p>
+            <div className="grid grid-cols-2 gap-2">
+              {distanceRanges.map((range) => {
+                const Icon = range.icon;
+                const isGenerating = generatingRange === range.label;
+                return (
+                  <button
+                    key={range.label}
+                    onClick={() => generateTourForRange(range)}
+                    disabled={!!generatingRange}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all disabled:opacity-40 ${
+                      isGenerating
+                        ? 'border-primary/50 bg-primary/10 text-primary'
+                        : 'border-border/40 bg-card/40 hover:border-primary/30 hover:bg-card/50 text-foreground'
+                    }`}
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                    ) : (
+                      <Icon className="w-5 h-5 text-primary" />
+                    )}
+                    <span className="font-heading text-xs tracking-wide">{range.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {locating ? (
           <div className="flex flex-col items-center py-16 gap-3">
             <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
