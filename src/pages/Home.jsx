@@ -34,24 +34,27 @@ export default function Home() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="flex flex-col items-center pt-12 pb-6 px-6"
+          className="w-full max-w-sm pt-12 pb-6 px-6"
         >
-          <div className="flex items-start justify-between gap-6 w-full max-w-sm">
+          <div className="grid grid-cols-2 grid-rows-2 gap-4">
+            {/* Top Left: A.G.E.S. */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
-              className="pt-2"
+              className="flex items-center justify-center"
             >
               <h1 className="font-display text-5xl text-primary tracking-wider drop-shadow-[0_0_20px_hsl(199,89%,48%,0.4)] leading-none">
                 A.G.E.S.
               </h1>
             </motion.div>
+
+            {/* Top Right: Ghost + Zap */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
-              className="relative flex flex-col items-center gap-3"
+              className="flex items-center justify-center relative"
             >
               <motion.div
                 animate={{ 
@@ -62,59 +65,78 @@ export default function Home() {
                 <Ghost className="w-20 h-20 text-primary" />
               </motion.div>
               <motion.div
-                className="absolute top-0 -right-1"
+                className="absolute top-0 right-0"
                 animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
                 transition={{ duration: 4, repeat: Infinity }}
               >
                 <Zap className="w-6 h-6 text-cyan-glow" />
               </motion.div>
-              <Link
-                to="/store"
-                className="relative flex flex-col items-center group"
-              >
+            </motion.div>
+
+            {/* Bottom Left: Acrostic Poem */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35, duration: 0.6 }}
+              className="flex items-center justify-center"
+            >
+              <div className="space-y-1">
+                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                  <span className="text-primary font-bold text-base">A</span>ffordable
+                </p>
+                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                  <span className="text-primary font-bold text-base">G</span>host
+                </p>
+                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                  <span className="text-primary font-bold text-base">E</span>xploration
+                </p>
+                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                  <span className="text-primary font-bold text-base">S</span>olutions
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Bottom Right: Crystal Ball STORE Button */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.45, duration: 0.6 }}
+              className="flex items-center justify-center"
+            >
+              <Link to="/store" className="relative flex flex-col items-center group">
                 <motion.div
                   animate={{ 
-                    filter: ['drop-shadow(0 0 10px hsl(199,89%,48%,0.5)) drop-shadow(0 0 20px hsl(270,40%,50%,0.3))', 'drop-shadow(0 0 18px hsl(199,89%,48%,0.8)) drop-shadow(0 0 30px hsl(270,40%,50%,0.5))', 'drop-shadow(0 0 10px hsl(199,89%,48%,0.5)) drop-shadow(0 0 20px hsl(270,40%,50%,0.3))']
+                    filter: ['drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))', 'drop-shadow(0 0 24px hsl(199,89%,48%,0.9)) drop-shadow(0 0 40px hsl(270,40%,50%,0.7))', 'drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))']
                   }}
                   transition={{ duration: 2.5, repeat: Infinity }}
-                  className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 via-primary/5 to-accent/20 border-2 border-primary/50 flex items-center justify-center relative overflow-hidden group-hover:border-primary/80 transition-colors"
+                  className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/25 via-primary/8 to-accent/25 border-2 border-primary/50 flex items-center justify-center relative overflow-hidden group-hover:border-primary group-hover:scale-105 transition-all duration-300"
                 >
-                  <div className="absolute inset-1 rounded-full bg-gradient-to-b from-white/10 via-transparent to-transparent" />
+                  {/* Inner glow */}
+                  <div className="absolute inset-2 rounded-full bg-gradient-to-b from-white/15 via-transparent to-transparent" />
                   <motion.div
-                    animate={{ opacity: [0.3, 0.7, 0.3] }}
+                    animate={{ opacity: [0.3, 0.8, 0.3] }}
                     transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute inset-0 rounded-full bg-primary/10 blur-sm"
+                    className="absolute inset-0 rounded-full bg-primary/15 blur-md"
                   />
-                  <span className="font-display text-xl text-primary relative z-10 tracking-widest">STORE</span>
+                  {/* Glowing STORE text */}
+                  <motion.span
+                    animate={{ 
+                      textShadow: ['0 0 10px hsl(199,89%,48%,0.6)', '0 0 20px hsl(199,89%,48%,1)', '0 0 10px hsl(199,89%,48%,0.6)']
+                    }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="font-display text-2xl text-primary relative z-10 tracking-widest drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)]"
+                  >
+                    STORE
+                  </motion.span>
                 </motion.div>
-                <div className="w-12 h-3 bg-gradient-to-b from-primary/40 to-primary/10 rounded-b-lg -mt-0.5 border-t border-primary/30" />
+                {/* Crystal ball base */}
+                <div className="w-16 h-4 bg-gradient-to-b from-primary/40 to-primary/10 rounded-b-xl -mt-0.5 border-t border-primary/40 shadow-[0_4px_8px_hsl(199,89%,48%,0.15)]" />
+                <div className="w-20 h-1.5 bg-gradient-to-b from-primary/25 to-primary/5 rounded-b-lg -mt-px" />
               </Link>
             </motion.div>
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35, duration: 0.6 }}
-            className="w-full max-w-sm mt-2"
-          >
-            <div className="space-y-1">
-              <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                <span className="text-primary font-bold text-base">A</span>ffordable
-              </p>
-              <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                <span className="text-primary font-bold text-base">G</span>host
-              </p>
-              <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                <span className="text-primary font-bold text-base">E</span>xploration
-              </p>
-              <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                <span className="text-primary font-bold text-base">S</span>olutions
-              </p>
-            </div>
-          </motion.div>
-          
-          <div className="mt-6 w-48 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+          <div className="mt-6 w-48 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent mx-auto" />
         </motion.div>
 
         <motion.div
