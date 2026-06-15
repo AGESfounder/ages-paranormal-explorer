@@ -114,8 +114,15 @@ Use real locations with documented paranormal history only.`,
     if (results.length > 0) setTours(prev => prev.map(t => t.id === tourId ? results[0] : t));
   };
 
-  const handleDeleteTour = (tourId) => {
+  const handleDeleteTour = async (tourId) => {
     setTours(prev => prev.filter(t => t.id !== tourId));
+    try {
+      const stops = await base44.entities.TourStop.filter({ tour_id: tourId });
+      for (const s of stops) await base44.entities.TourStop.delete(s.id);
+      const favs = await base44.entities.Favorite.filter({ tour_id: tourId });
+      for (const f of favs) await base44.entities.Favorite.delete(f.id);
+      await base44.entities.Tour.delete(tourId);
+    } catch (e) { /* silently handled */ }
   };
 
   if (loading) {

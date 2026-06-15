@@ -35,6 +35,10 @@ export default function AbroadTours() {
   const handleDelete = async (tourId) => {
     setTours(prev => prev.filter(t => t.id !== tourId));
     try {
+      const stops = await base44.entities.TourStop.filter({ tour_id: tourId });
+      for (const s of stops) await base44.entities.TourStop.delete(s.id);
+      const favs = await base44.entities.Favorite.filter({ tour_id: tourId });
+      for (const f of favs) await base44.entities.Favorite.delete(f.id);
       await base44.entities.Tour.delete(tourId);
     } catch (e) { fetchTours(); }
   };
