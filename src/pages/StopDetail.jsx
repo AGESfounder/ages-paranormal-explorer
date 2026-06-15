@@ -47,6 +47,7 @@ export default function StopDetail() {
   const currentIndex = allStops.findIndex(s => s.id === stopId);
   const prevStop = currentIndex > 0 ? allStops[currentIndex - 1] : null;
   const nextStop = currentIndex < allStops.length - 1 ? allStops[currentIndex + 1] : null;
+  const isLastStop = currentIndex === allStops.length - 1 && allStops.length > 0;
 
   const openInMaps = () => {
     if (!stop?.latitude || !stop?.longitude) return;
@@ -196,8 +197,11 @@ export default function StopDetail() {
           <button onClick={() => prevStop && navigate(`/stop/${prevStop.id}`)} disabled={!prevStop} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border border-border/40 bg-card/30 text-sm font-heading uppercase tracking-wider disabled:opacity-30 hover:border-primary/30 transition-colors">
             <ChevronLeft className="w-4 h-4" /> Previous
           </button>
-          <button onClick={() => nextStop && navigate(`/stop/${nextStop.id}`)} disabled={!nextStop} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border border-primary/30 bg-primary/10 text-primary text-sm font-heading uppercase tracking-wider disabled:opacity-30 hover:bg-primary/20 transition-colors">
-            Next <ChevronRight className="w-4 h-4" />
+          <button onClick={() => {
+            if (nextStop) navigate(`/stop/${nextStop.id}`);
+            else if (isLastStop) navigate(`/tour/${stop.tour_id}#conclusion`);
+          }} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border border-primary/30 bg-primary/10 text-primary text-sm font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+            {isLastStop ? 'Conclusion' : 'Next'} <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
