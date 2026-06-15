@@ -14,6 +14,9 @@
     "image_url": {
       "type": "string"
     },
+    "video_url": {
+      "type": "string"
+    },
     "category": {
       "type": "string",
       "enum": [

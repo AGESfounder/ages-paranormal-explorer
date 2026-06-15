@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Trash2, Edit3, X, Check, Search, Loader2, Shield, MapPin, Clock, Footprints, Car } from 'lucide-react';
+import { Trash2, Edit3, Check, Search, Loader2, Shield, MapPin, Clock, Footprints, Car, Package, ShoppingBag, Plus, Truck, Mail, Map, X } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -10,22 +10,58 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+const categoryOptions = [
+  { value: 'equipment', label: 'Equipment' },
+  { value: 'apparel', label: 'Apparel' },
+  { value: 'books', label: 'Books' },
+  { value: 'accessories', label: 'Accessories' },
+];
+
+const statusColors = {
+  pending: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  paid: 'bg-green-500/20 text-green-300 border-green-500/30',
+  shipped: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  delivered: 'bg-primary/20 text-primary border-primary/30',
+  cancelled: 'bg-destructive/20 text-destructive border-destructive/30',
+};
 
 export default function Admin() {
   const [user, setUser] = useState(null);
-  const [tours, setTours] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('tours');
+
+  // Tours
+  const [tours, setTours] = useState([]);
+  const [tourSearch, setTourSearch] = useState('');
   const [editingTour, setEditingTour] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
-  const loadTours = useCallback(async () => {
+  // Products
+  const [products, setProducts] = useState([]);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [productForm, setProductForm] = useState({});
+  const [productDeleteConfirm, setProductDeleteConfirm] = useState(null);
+
+  // Orders
+  const [orders, setOrders] = useState([]);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
+
+  const loadAll = useCallback(async () => {
     try {
-      const all = await base44.asServiceRole.entities.Tour.list('-created_date', 500);
-      setTours(all);
+      const [t, p, o] = await Promise.all([
+        base44.asServiceRole.entities.Tour.list('-created_date', 500),
+        base44.asServiceRole.entities.Product.list('-created_date', 200),
+        base44.asServiceRole.entities.Order.list('-created_date', 200),
+      ]);
+      setTours(t);
+      setProducts(p);
+      setOrders(o);
     } catch (e) { /* */ }
     setLoading(false);
   }, []);
@@ -35,34 +71,27 @@ export default function Admin() {
       try {
         const me = await base44.auth.me();
         setUser(me);
-        if (me?.role === 'admin') await loadTours();
+        if (me?.role === 'admin') await loadAll();
         else setLoading(false);
-      } catch (e) {
-        setLoading(false);
-      }
+      } catch (e) { setLoading(false); }
     })();
-  }, [loadTours]);
+  }, [loadAll]);
 
+  // --- Tours ---
   const filteredTours = tours.filter(t =>
-    t.title?.toLowerCase().includes(search.toLowerCase()) ||
-    t.state?.toLowerCase().includes(search.toLowerCase()) ||
-    t.city?.toLowerCase().includes(search.toLowerCase())
+    t.title?.toLowerCase().includes(tourSearch.toLowerCase()) ||
+    t.state?.toLowerCase().includes(tourSearch.toLowerCase()) ||
+    t.city?.toLowerCase().includes(tourSearch.toLowerCase())
   );
 
   const openEdit = (tour) => {
     setEditingTour(tour);
     setEditForm({
-      title: tour.title || '',
-      city: tour.city || '',
-      state: tour.state || '',
-      tour_type: tour.tour_type || 'walking',
-      difficulty: tour.difficulty || 'moderate',
-      estimated_duration: tour.estimated_duration || '',
-      total_distance: tour.total_distance || '',
-      description: tour.description || '',
-      safety_info: tour.safety_info || '',
-      best_time: tour.best_time || '',
-      start_location_name: tour.start_location_name || '',
+      title: tour.title || '', city: tour.city || '', state: tour.state || '',
+      tour_type: tour.tour_type || 'walking', difficulty: tour.difficulty || 'moderate',
+      estimated_duration: tour.estimated_duration || '', total_distance: tour.total_distance || '',
+      description: tour.description || '', safety_info: tour.safety_info || '',
+      best_time: tour.best_time || '', start_location_name: tour.start_location_name || '',
     });
   };
 
@@ -71,8 +100,7 @@ export default function Admin() {
     setSaving(true);
     await base44.asServiceRole.entities.Tour.update(editingTour.id, editForm);
     setTours(prev => prev.map(t => t.id === editingTour.id ? { ...t, ...editForm } : t));
-    setEditingTour(null);
-    setSaving(false);
+    setEditingTour(null); setSaving(false);
   };
 
   const confirmDelete = async () => {
@@ -84,17 +112,63 @@ export default function Admin() {
     for (const f of favs) await base44.asServiceRole.entities.Favorite.delete(f.id);
     await base44.asServiceRole.entities.Tour.delete(deleteConfirm.id);
     setTours(prev => prev.filter(t => t.id !== deleteConfirm.id));
-    setDeletingId(null);
-    setDeleteConfirm(null);
+    setDeletingId(null); setDeleteConfirm(null);
+  };
+
+  // --- Products ---
+  const openAddProduct = () => {
+    setEditingProduct('new');
+    setProductForm({ name: '', description: '', price: '', image_url: '', video_url: '', category: 'equipment', stock: 0 });
+  };
+
+  const openEditProduct = (p) => {
+    setEditingProduct(p.id);
+    setProductForm({
+      name: p.name || '', description: p.description || '', price: p.price || '',
+      image_url: p.image_url || '', video_url: p.video_url || '',
+      category: p.category || 'equipment', stock: p.stock || 0,
+    });
+  };
+
+  const saveProduct = async () => {
+    setSaving(true);
+    const data = { ...productForm, price: parseFloat(productForm.price) || 0, stock: parseInt(productForm.stock) || 0 };
+    if (editingProduct === 'new') {
+      const created = await base44.asServiceRole.entities.Product.create(data);
+      setProducts(prev => [created, ...prev]);
+    } else {
+      await base44.asServiceRole.entities.Product.update(editingProduct, data);
+      setProducts(prev => prev.map(p => p.id === editingProduct ? { ...p, ...data } : p));
+    }
+    setEditingProduct(null); setSaving(false);
+  };
+
+  const deleteProduct = async () => {
+    if (!productDeleteConfirm) return;
+    await base44.asServiceRole.entities.Product.delete(productDeleteConfirm.id);
+    setProducts(prev => prev.filter(p => p.id !== productDeleteConfirm.id));
+    setProductDeleteConfirm(null);
+  };
+
+  // --- Orders ---
+  const filteredOrders = orders.filter(o =>
+    o.shipping_name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+    o.shipping_email?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+    o.shipping_city?.toLowerCase().includes(orderSearch.toLowerCase())
+  );
+
+  const updateOrderStatus = async (orderId, status) => {
+    setUpdatingOrderId(orderId);
+    await base44.asServiceRole.entities.Order.update(orderId, { status });
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    setUpdatingOrderId(null);
   };
 
   if (loading) {
     return (
       <PageContainer>
         <SectionHeader title="Admin Panel" />
-        <div className="flex items-center justify-center h-[60vh]">
-          <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        </div>
+        <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
         <NavBar />
       </PageContainer>
     );
@@ -115,159 +189,229 @@ export default function Admin() {
 
   return (
     <PageContainer>
-      <SectionHeader
-        title="Admin Panel"
-        subtitle={`${tours.length} tours total`}
-        showBack
-      />
+      <SectionHeader title="Admin Panel" showBack />
+      <div className="px-4 pb-28 pt-3">
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="w-full bg-card/50 border border-border/40 mb-4">
+            <TabsTrigger value="tours" className="flex-1 text-xs font-heading">Tours</TabsTrigger>
+            <TabsTrigger value="products" className="flex-1 text-xs font-heading">Products</TabsTrigger>
+            <TabsTrigger value="orders" className="flex-1 text-xs font-heading">Orders</TabsTrigger>
+          </TabsList>
 
-      <div className="px-4 pb-28 space-y-4 pt-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search tours..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9 bg-card/50 border-border/40 font-body text-sm"
-          />
-        </div>
+          {/* === TOURS TAB === */}
+          <TabsContent value="tours" className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search tours..." value={tourSearch} onChange={e => setTourSearch(e.target.value)} className="pl-9 bg-card/50 border-border/40 text-sm" />
+            </div>
+            <div className="space-y-2">
+              {filteredTours.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground py-8">No tours found.</p>
+              ) : (
+                filteredTours.map((tour, i) => (
+                  <motion.div key={tour.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02 }} className="p-3 rounded-lg border border-border/40 bg-card/40 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{tour.title}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />{tour.city}, {tour.state}</span>
+                          <span className="flex items-center gap-1">{tour.tour_type === 'walking' ? <Footprints className="w-2.5 h-2.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-2.5 h-2.5" /><Car className="w-2 h-2" /></> : <Car className="w-2.5 h-2.5" />}{tour.tour_type}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{tour.estimated_duration || '—'}</span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => openEdit(tour)} className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10"><Edit3 className="w-4 h-4" /></button>
+                        <button onClick={() => setDeleteConfirm(tour)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </TabsContent>
 
-        <div className="space-y-2">
-          {filteredTours.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-8">No tours found.</p>
-          ) : (
-            filteredTours.map((tour, i) => (
-              <motion.div
-                key={tour.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.02 }}
-                className="p-3 rounded-lg border border-border/40 bg-card/40 space-y-2"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{tour.title}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />{tour.city}, {tour.state}</span>
-                      <span className="flex items-center gap-1">
-                        {tour.tour_type === 'walking' ? <Footprints className="w-2.5 h-2.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-2.5 h-2.5" /><Car className="w-2 h-2" /></> : <Car className="w-2.5 h-2.5" />}
-                        {tour.tour_type}
-                      </span>
-                      <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{tour.estimated_duration || '—'}</span>
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => openEdit(tour)} className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setDeleteConfirm(tour)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+          {/* === PRODUCTS TAB === */}
+          <TabsContent value="products" className="space-y-4">
+            <Button onClick={openAddProduct} size="sm" className="w-full gap-2">
+              <Plus className="w-4 h-4" /> Add Product
+            </Button>
+            <div className="space-y-2">
+              {products.length === 0 ? (
+                <div className="flex flex-col items-center py-12 gap-3">
+                  <Package className="w-10 h-10 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground font-heading uppercase tracking-wider">No products yet</p>
                 </div>
-              </motion.div>
-            ))
-          )}
-        </div>
+              ) : (
+                products.map((p, i) => (
+                  <motion.div key={p.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02 }} className="p-3 rounded-lg border border-border/40 bg-card/40 space-y-2">
+                    <div className="flex items-start gap-3">
+                      {p.image_url && <img src={p.image_url} alt="" className="w-12 h-12 rounded-md object-cover shrink-0 bg-secondary/30" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{p.description || '—'}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs font-mono text-primary">${p.price?.toFixed(2)}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary/50 text-muted-foreground uppercase">{p.category}</span>
+                          <span className="text-[10px] text-muted-foreground">Stock: {p.stock ?? 0}</span>
+                          {p.video_url && <span className="text-[10px] text-cyan-glow">🎬 Video</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => openEditProduct(p)} className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10"><Edit3 className="w-4 h-4" /></button>
+                        <button onClick={() => setProductDeleteConfirm(p)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          {/* === ORDERS TAB === */}
+          <TabsContent value="orders" className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search orders by name, email, city..." value={orderSearch} onChange={e => setOrderSearch(e.target.value)} className="pl-9 bg-card/50 border-border/40 text-sm" />
+            </div>
+            <div className="space-y-3">
+              {filteredOrders.length === 0 ? (
+                <div className="flex flex-col items-center py-12 gap-3">
+                  <ShoppingBag className="w-10 h-10 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground font-heading uppercase tracking-wider">No orders yet</p>
+                </div>
+              ) : (
+                filteredOrders.map((order, i) => (
+                  <motion.div key={order.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02 }} className="p-3 rounded-lg border border-border/40 bg-card/40 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-heading uppercase tracking-wider ${statusColors[order.status] || statusColors.pending}`}>{order.status}</span>
+                          <span className="font-mono text-xs text-muted-foreground">{order.id?.slice(-8)}</span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-2 flex-wrap text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{order.shipping_email || '—'}</span>
+                        </div>
+                      </div>
+                      <span className="font-mono text-sm text-primary shrink-0">${order.total?.toFixed(2)}</span>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground space-y-0.5 border-t border-border/30 pt-2">
+                      <p className="flex items-center gap-1"><Map className="w-3 h-3" /><strong>{order.shipping_name || 'Customer'}</strong></p>
+                      {order.shipping_address && <p>{order.shipping_address}</p>}
+                      <p>{[order.shipping_city, order.shipping_state, order.shipping_zip].filter(Boolean).join(', ')}</p>
+                    </div>
+
+                    <div className="border-t border-border/30 pt-2 space-y-1">
+                      <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Items</p>
+                      {order.items?.map((item, j) => (
+                        <div key={j} className="flex justify-between text-xs">
+                          <span className="text-foreground">{item.name || item.product_name} ×{item.quantity}</span>
+                          <span className="font-mono text-muted-foreground">${(item.price * (item.quantity || 1)).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {order.status !== 'delivered' && order.status !== 'cancelled' && (
+                      <div className="flex gap-2 pt-1">
+                        {order.status === 'paid' && (
+                          <Button size="sm" variant="outline" className="text-[10px] h-7" onClick={() => updateOrderStatus(order.id, 'shipped')} disabled={updatingOrderId === order.id}>
+                            {updatingOrderId === order.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Truck className="w-3 h-3" />}
+                            <span className="ml-1">Mark Shipped</span>
+                          </Button>
+                        )}
+                        {order.status === 'shipped' && (
+                          <Button size="sm" variant="outline" className="text-[10px] h-7" onClick={() => updateOrderStatus(order.id, 'delivered')} disabled={updatingOrderId === order.id}>
+                            {updatingOrderId === order.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                            <span className="ml-1">Mark Delivered</span>
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" className="text-[10px] h-7 text-destructive hover:text-destructive" onClick={() => updateOrderStatus(order.id, 'cancelled')} disabled={updatingOrderId === order.id}>
+                          <X className="w-3 h-3" /><span className="ml-1">Cancel</span>
+                        </Button>
+                      </div>
+                    )}
+
+                    <p className="text-[9px] text-muted-foreground/60">{new Date(order.created_date).toLocaleString()}</p>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
-      {/* Edit Dialog */}
+      {/* Tour Edit Dialog */}
       <Dialog open={!!editingTour} onOpenChange={(open) => !open && setEditingTour(null)}>
         <DialogContent className="bg-card border-border max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-heading uppercase tracking-wider text-sm">Edit Tour</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="font-heading uppercase tracking-wider text-sm">Edit Tour</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div>
-              <Label className="text-xs text-muted-foreground">Title</Label>
-              <Input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" />
+            <div><Label className="text-xs">Title</Label><Input value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs">City</Label><Input value={editForm.city} onChange={e => setEditForm({ ...editForm, city: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+              <div><Label className="text-xs">State</Label><Input value={editForm.state} onChange={e => setEditForm({ ...editForm, state: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-muted-foreground">City</Label>
-                <Input value={editForm.city} onChange={e => setEditForm({ ...editForm, city: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">State</Label>
-                <Input value={editForm.state} onChange={e => setEditForm({ ...editForm, state: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" />
-              </div>
+              <div><Label className="text-xs">Tour Type</Label><Select value={editForm.tour_type} onValueChange={v => setEditForm({ ...editForm, tour_type: v })}><SelectTrigger className="bg-secondary/50 border-border/40 text-sm"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border"><SelectItem value="walking">Walking</SelectItem><SelectItem value="driving">Driving</SelectItem><SelectItem value="mixed">Mixed</SelectItem></SelectContent></Select></div>
+              <div><Label className="text-xs">Difficulty</Label><Select value={editForm.difficulty} onValueChange={v => setEditForm({ ...editForm, difficulty: v })}><SelectTrigger className="bg-secondary/50 border-border/40 text-sm"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border"><SelectItem value="easy">Easy</SelectItem><SelectItem value="moderate">Moderate</SelectItem><SelectItem value="challenging">Challenging</SelectItem></SelectContent></Select></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-muted-foreground">Tour Type</Label>
-                <Select value={editForm.tour_type} onValueChange={v => setEditForm({ ...editForm, tour_type: v })}>
-                  <SelectTrigger className="bg-secondary/50 border-border/40 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    <SelectItem value="walking">Walking</SelectItem>
-                    <SelectItem value="driving">Driving</SelectItem>
-                    <SelectItem value="mixed">Mixed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Difficulty</Label>
-                <Select value={editForm.difficulty} onValueChange={v => setEditForm({ ...editForm, difficulty: v })}>
-                  <SelectTrigger className="bg-secondary/50 border-border/40 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-card border-border">
-                    <SelectItem value="easy">Easy</SelectItem>
-                    <SelectItem value="moderate">Moderate</SelectItem>
-                    <SelectItem value="challenging">Challenging</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <div><Label className="text-xs">Duration</Label><Input value={editForm.estimated_duration} onChange={e => setEditForm({ ...editForm, estimated_duration: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+              <div><Label className="text-xs">Distance</Label><Input value={editForm.total_distance} onChange={e => setEditForm({ ...editForm, total_distance: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-muted-foreground">Duration</Label>
-                <Input value={editForm.estimated_duration} onChange={e => setEditForm({ ...editForm, estimated_duration: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Distance</Label>
-                <Input value={editForm.total_distance} onChange={e => setEditForm({ ...editForm, total_distance: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" />
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Start Location</Label>
-              <Input value={editForm.start_location_name} onChange={e => setEditForm({ ...editForm, start_location_name: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Description</Label>
-              <Input value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Best Time</Label>
-              <Input value={editForm.best_time} onChange={e => setEditForm({ ...editForm, best_time: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Safety Info</Label>
-              <Input value={editForm.safety_info} onChange={e => setEditForm({ ...editForm, safety_info: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" />
-            </div>
+            <div><Label className="text-xs">Start Location</Label><Input value={editForm.start_location_name} onChange={e => setEditForm({ ...editForm, start_location_name: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+            <div><Label className="text-xs">Description</Label><Input value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+            <div><Label className="text-xs">Best Time</Label><Input value={editForm.best_time} onChange={e => setEditForm({ ...editForm, best_time: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+            <div><Label className="text-xs">Safety Info</Label><Input value={editForm.safety_info} onChange={e => setEditForm({ ...editForm, safety_info: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingTour(null)} className="text-xs">Cancel</Button>
-            <Button onClick={saveEdit} disabled={saving} className="text-xs">
-              {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Check className="w-3 h-3 mr-1" />}
-              Save
-            </Button>
+            <Button onClick={saveEdit} disabled={saving} className="text-xs">{saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Check className="w-3 h-3 mr-1" />}Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
+      {/* Tour Delete Dialog */}
       <Dialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
         <DialogContent className="bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="font-heading uppercase tracking-wider text-sm">Delete Tour</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-foreground/80">
-            Permanently delete <strong>{deleteConfirm?.title}</strong> and all its stops and favorites?
-          </p>
+          <DialogHeader><DialogTitle className="font-heading uppercase tracking-wider text-sm">Delete Tour</DialogTitle></DialogHeader>
+          <p className="text-sm text-foreground/80">Permanently delete <strong>{deleteConfirm?.title}</strong> and all its stops and favorites?</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)} className="text-xs">Cancel</Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deletingId} className="text-xs">
-              {deletingId ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Trash2 className="w-3 h-3 mr-1" />}
-              Delete
-            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deletingId} className="text-xs">{deletingId ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Trash2 className="w-3 h-3 mr-1" />}Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Form Dialog */}
+      <Dialog open={!!editingProduct} onOpenChange={(open) => !open && setEditingProduct(null)}>
+        <DialogContent className="bg-card border-border max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-heading uppercase tracking-wider text-sm">{editingProduct === 'new' ? 'Add Product' : 'Edit Product'}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label className="text-xs">Name *</Label><Input value={productForm.name} onChange={e => setProductForm({ ...productForm, name: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+            <div><Label className="text-xs">Description</Label><Input value={productForm.description} onChange={e => setProductForm({ ...productForm, description: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs">Price ($) *</Label><Input type="number" step="0.01" value={productForm.price} onChange={e => setProductForm({ ...productForm, price: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+              <div><Label className="text-xs">Stock</Label><Input type="number" value={productForm.stock} onChange={e => setProductForm({ ...productForm, stock: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+            </div>
+            <div><Label className="text-xs">Category</Label><Select value={productForm.category} onValueChange={v => setProductForm({ ...productForm, category: v })}><SelectTrigger className="bg-secondary/50 border-border/40 text-sm"><SelectValue /></SelectTrigger><SelectContent className="bg-card border-border">{categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label className="text-xs">Image URL</Label><Input value={productForm.image_url} onChange={e => setProductForm({ ...productForm, image_url: e.target.value })} placeholder="https://..." className="bg-secondary/50 border-border/40 text-sm" /></div>
+            <div><Label className="text-xs">Video URL</Label><Input value={productForm.video_url} onChange={e => setProductForm({ ...productForm, video_url: e.target.value })} placeholder="https://youtube.com/..." className="bg-secondary/50 border-border/40 text-sm" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingProduct(null)} className="text-xs">Cancel</Button>
+            <Button onClick={saveProduct} disabled={saving || !productForm.name || !productForm.price} className="text-xs">{saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Check className="w-3 h-3 mr-1" />}Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Delete Dialog */}
+      <Dialog open={!!productDeleteConfirm} onOpenChange={(open) => !open && setProductDeleteConfirm(null)}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader><DialogTitle className="font-heading uppercase tracking-wider text-sm">Delete Product</DialogTitle></DialogHeader>
+          <p className="text-sm text-foreground/80">Permanently delete <strong>{productDeleteConfirm?.name}</strong>?</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProductDeleteConfirm(null)} className="text-xs">Cancel</Button>
+            <Button variant="destructive" onClick={deleteProduct} className="text-xs"><Trash2 className="w-3 h-3 mr-1" />Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
