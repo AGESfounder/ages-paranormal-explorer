@@ -151,11 +151,18 @@ export default function Admin() {
   };
 
   // --- Orders ---
-  const filteredOrders = orders.filter(o =>
-    o.shipping_name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-    o.shipping_email?.toLowerCase().includes(orderSearch.toLowerCase()) ||
-    o.shipping_city?.toLowerCase().includes(orderSearch.toLowerCase())
-  );
+  const [orderFilter, setOrderFilter] = useState('action'); // 'action' | 'all'
+
+  const pendingCount = orders.filter(o => o.status === 'pending' || o.status === 'paid').length;
+  const shippedCount = orders.filter(o => o.status === 'shipped').length;
+
+  const filteredOrders = orders
+    .filter(o => orderFilter === 'action' ? (o.status === 'pending' || o.status === 'paid') : true)
+    .filter(o =>
+      o.shipping_name?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      o.shipping_email?.toLowerCase().includes(orderSearch.toLowerCase()) ||
+      o.shipping_city?.toLowerCase().includes(orderSearch.toLowerCase())
+    );
 
   const updateOrderStatus = async (orderId, status) => {
     setUpdatingOrderId(orderId);
@@ -269,69 +276,95 @@ export default function Admin() {
 
           {/* === ORDERS TAB === */}
           <TabsContent value="orders" className="space-y-4">
+            {/* Dashboard Summary */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-center">
+                <p className="text-2xl font-mono font-bold text-amber-300">{pendingCount}</p>
+                <p className="text-[10px] font-heading uppercase tracking-wider text-amber-300/70 mt-0.5">To Fulfill</p>
+              </div>
+              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-center">
+                <p className="text-2xl font-mono font-bold text-blue-300">{shippedCount}</p>
+                <p className="text-[10px] font-heading uppercase tracking-wider text-blue-300/70 mt-0.5">Shipped</p>
+              </div>
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-center">
+                <p className="text-2xl font-mono font-bold text-primary">${orders.reduce((sum, o) => sum + (o.total || 0), 0).toFixed(2)}</p>
+                <p className="text-[10px] font-heading uppercase tracking-wider text-primary/70 mt-0.5">Revenue</p>
+              </div>
+            </div>
+
+            {/* Filter */}
+            <div className="flex gap-2">
+              <button onClick={() => setOrderFilter('action')} className={`flex-1 py-1.5 rounded-full text-[10px] font-heading uppercase tracking-wider border transition-colors ${orderFilter === 'action' ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'border-border/40 text-muted-foreground hover:text-foreground'}`}>Needs Fulfillment</button>
+              <button onClick={() => setOrderFilter('all')} className={`flex-1 py-1.5 rounded-full text-[10px] font-heading uppercase tracking-wider border transition-colors ${orderFilter === 'all' ? 'bg-primary/15 border-primary/40 text-primary' : 'border-border/40 text-muted-foreground hover:text-foreground'}`}>All Orders</button>
+            </div>
+
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search orders by name, email, city..." value={orderSearch} onChange={e => setOrderSearch(e.target.value)} className="pl-9 bg-card/50 border-border/40 text-sm" />
             </div>
+
             <div className="space-y-3">
               {filteredOrders.length === 0 ? (
                 <div className="flex flex-col items-center py-12 gap-3">
                   <ShoppingBag className="w-10 h-10 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground font-heading uppercase tracking-wider">No orders yet</p>
+                  <p className="text-sm text-muted-foreground font-heading uppercase tracking-wider">{orderFilter === 'action' ? 'No orders to fulfill' : 'No orders yet'}</p>
                 </div>
               ) : (
                 filteredOrders.map((order, i) => (
-                  <motion.div key={order.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02 }} className="p-3 rounded-lg border border-border/40 bg-card/40 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-heading uppercase tracking-wider ${statusColors[order.status] || statusColors.pending}`}>{order.status}</span>
-                          <span className="font-mono text-xs text-muted-foreground">{order.id?.slice(-8)}</span>
-                        </div>
-                        <div className="flex items-center gap-3 mt-2 flex-wrap text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{order.shipping_email || '—'}</span>
-                        </div>
+                  <motion.div key={order.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02 }} className="rounded-lg border border-border/40 bg-card/40 overflow-hidden">
+                    {/* Header */}
+                    <div className="flex items-center justify-between p-3 border-b border-border/30">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-heading uppercase tracking-wider ${statusColors[order.status] || statusColors.pending}`}>{order.status}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">#{order.id?.slice(-8)}</span>
                       </div>
-                      <span className="font-mono text-sm text-primary shrink-0">${order.total?.toFixed(2)}</span>
+                      <span className="font-mono text-sm font-bold text-primary">${order.total?.toFixed(2)}</span>
                     </div>
 
-                    <div className="text-xs text-muted-foreground space-y-0.5 border-t border-border/30 pt-2">
-                      <p className="flex items-center gap-1"><Map className="w-3 h-3" /><strong>{order.shipping_name || 'Customer'}</strong></p>
-                      {order.shipping_address && <p>{order.shipping_address}</p>}
-                      <p>{[order.shipping_city, order.shipping_state, order.shipping_zip].filter(Boolean).join(', ')}</p>
+                    {/* Shipping Address */}
+                    <div className="px-3 py-2 border-b border-border/20 bg-secondary/20">
+                      <p className="text-[9px] font-heading uppercase tracking-wider text-muted-foreground mb-1">Ship To</p>
+                      <p className="text-xs font-medium text-foreground">{order.shipping_name || 'Customer'}</p>
+                      {order.shipping_address && <p className="text-[11px] text-muted-foreground">{order.shipping_address}</p>}
+                      <p className="text-[11px] text-muted-foreground">{[order.shipping_city, order.shipping_state, order.shipping_zip].filter(Boolean).join(', ')}</p>
+                      {order.shipping_email && <p className="text-[10px] text-primary/70 mt-0.5">{order.shipping_email}</p>}
                     </div>
 
-                    <div className="border-t border-border/30 pt-2 space-y-1">
-                      <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Items</p>
+                    {/* Items */}
+                    <div className="px-3 py-2 space-y-1">
                       {order.items?.map((item, j) => (
                         <div key={j} className="flex justify-between text-xs">
-                          <span className="text-foreground">{item.name || item.product_name} ×{item.quantity}</span>
-                          <span className="font-mono text-muted-foreground">${(item.price * (item.quantity || 1)).toFixed(2)}</span>
+                          <span className="text-foreground flex items-center gap-1.5">
+                            <span className="w-3.5 h-3.5 rounded-full bg-secondary/50 flex items-center justify-center text-[8px] font-mono text-muted-foreground">{item.quantity || 1}</span>
+                            {item.name || item.product_name}
+                          </span>
+                          <span className="font-mono text-muted-foreground">${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
 
+                    {/* Actions */}
                     {order.status !== 'delivered' && order.status !== 'cancelled' && (
-                      <div className="flex gap-2 pt-1">
-                        {order.status === 'paid' && (
-                          <Button size="sm" variant="outline" className="text-[10px] h-7" onClick={() => updateOrderStatus(order.id, 'shipped')} disabled={updatingOrderId === order.id}>
+                      <div className="px-3 pb-3 pt-1 flex gap-2">
+                        {(order.status === 'pending' || order.status === 'paid') && (
+                          <Button size="sm" onClick={() => updateOrderStatus(order.id, 'shipped')} disabled={updatingOrderId === order.id} className="text-[10px] h-8 flex-1 gap-1">
                             {updatingOrderId === order.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Truck className="w-3 h-3" />}
-                            <span className="ml-1">Mark Shipped</span>
+                            Mark Fulfilled
                           </Button>
                         )}
                         {order.status === 'shipped' && (
-                          <Button size="sm" variant="outline" className="text-[10px] h-7" onClick={() => updateOrderStatus(order.id, 'delivered')} disabled={updatingOrderId === order.id}>
+                          <Button size="sm" onClick={() => updateOrderStatus(order.id, 'delivered')} disabled={updatingOrderId === order.id} className="text-[10px] h-8 flex-1 gap-1">
                             {updatingOrderId === order.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                            <span className="ml-1">Mark Delivered</span>
+                            Mark Delivered
                           </Button>
                         )}
-                        <Button size="sm" variant="outline" className="text-[10px] h-7 text-destructive hover:text-destructive" onClick={() => updateOrderStatus(order.id, 'cancelled')} disabled={updatingOrderId === order.id}>
-                          <X className="w-3 h-3" /><span className="ml-1">Cancel</span>
+                        <Button size="sm" variant="outline" className="text-[10px] h-8 text-destructive hover:text-destructive px-3" onClick={() => updateOrderStatus(order.id, 'cancelled')} disabled={updatingOrderId === order.id}>
+                          <X className="w-3 h-3" />
                         </Button>
                       </div>
                     )}
 
-                    <p className="text-[9px] text-muted-foreground/60">{new Date(order.created_date).toLocaleString()}</p>
+                    <p className="px-3 pb-2 text-[9px] text-muted-foreground/50">{new Date(order.created_date).toLocaleString()}</p>
                   </motion.div>
                 ))
               )}
