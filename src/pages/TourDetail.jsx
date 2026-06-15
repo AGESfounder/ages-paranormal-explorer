@@ -101,9 +101,17 @@ export default function TourDetail() {
         // Update stop_numbers in the database if they changed
         for (const s of reordered) {
           const existing = tourStops.find(ts => ts.id === s.id);
-          if (existing && existing.stop_number !== s.stop_number) {
+          if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
             await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
           }
+        }
+        // Auto-correct tour type if stops are now a mix of walking + driving
+        const methods = new Set(reordered.map(s => s.travel_method));
+        const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
+          : methods.has('driving') ? 'driving' : 'walking';
+        if (correctedType !== tourData[0].tour_type) {
+          await base44.entities.Tour.update(tourData[0].id, { tour_type: correctedType });
+          tourData[0].tour_type = correctedType;
         }
         setStops(reordered);
       }
@@ -174,6 +182,15 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
       });
 
       const processed = enforceWalkingDistance(result.stops || [], tourData.tour_type);
+      // Auto-correct tour type if stops are a mix of walking + driving
+      const methods = new Set(processed.map(s => s.travel_method));
+      const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
+        : methods.has('driving') ? 'driving' : 'walking';
+      if (correctedType !== tourData.tour_type) {
+        await base44.entities.Tour.update(tourData.id, { tour_type: correctedType });
+        tourData.tour_type = correctedType;
+        setTour({ ...tourData, tour_type: correctedType });
+      }
       const created = [];
       for (const stop of processed) {
         const saved = await base44.entities.TourStop.create({ ...stop, tour_id: tourId });
