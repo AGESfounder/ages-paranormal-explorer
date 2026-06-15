@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
 import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
@@ -73,6 +74,7 @@ function enforceWalkingDistance(stops, tourType) {
 
 export default function TourDetail() {
   const { tourId } = useParams();
+  const navigate = useNavigate();
   const [tour, setTour] = useState(null);
   const [stops, setStops] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -215,6 +217,18 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
     }
   };
 
+  const onDragEnd = async (result) => {
+    if (!result.destination || result.source.index === result.destination.index) return;
+    const reordered = Array.from(stops);
+    const [removed] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, removed);
+    const withNumbers = reordered.map((s, i) => ({ ...s, stop_number: i + 1 }));
+    setStops(withNumbers);
+    for (const s of withNumbers) {
+      await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number });
+    }
+  };
+
   if (loading) {
     return (
       <PageContainer>
@@ -325,33 +339,56 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
               <p className="text-xs text-muted-foreground">Mapping paranormal hotspots...</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {stops.map((stop, i) => (
-                <motion.div key={stop.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}>
-                  <Link to={`/stop/${stop.id}`} className="flex items-center gap-3 p-3 rounded-lg border border-border/30 bg-card/30 hover:border-primary/30 hover:bg-card/50 transition-all group">
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full font-heading text-sm font-bold shrink-0 ${stop.travel_method === 'driving' ? 'bg-amber-500/10 text-amber-400' : 'bg-primary/10 text-primary'}`}>{stop.stop_number}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{stop.name}</p>
-                      <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
-                        <Clock className="w-2.5 h-2.5" /> {stop.estimated_investigation_time}
-                        {stop.travel_method === 'driving' && <span className="flex items-center gap-0.5 text-amber-400"><Car className="w-2.5 h-2.5" /> Drive</span>}
-                        {stop.address && <><MapPin className="w-2.5 h-2.5" /> <span className="truncate">{stop.address}</span></>}
-                      </p>
-                    </div>
-                    {(stop.hours_of_operation || stop.entry_fee) && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        {stop.entry_fee && <DollarSign className="w-3 h-3 text-green-400" />}
-                        {stop.hours_of_operation && <Info className="w-3 h-3 text-amber-400" />}
-                      </div>
-                    )}
-                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); narrate(stop.narration_text || stop.paranormal_info); }} className={`p-1.5 rounded-md shrink-0 transition-colors ${isSpeaking || isGenerating ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}>
-                      {isSpeaking || isGenerating ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                    </button>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                  </Link>
-                </motion.div>
-              ))}
-            </div>
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="stops">
+                {(provided) => (
+                  <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
+                    {stops.map((stop, i) => (
+                      <Draggable key={stop.id} draggableId={stop.id} index={i}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            className={snapshot.isDragging ? 'opacity-80' : ''}
+                          >
+                            <div
+                              onClick={() => navigate(`/stop/${stop.id}`)}
+                              className="flex items-center gap-3 p-3 rounded-lg border border-border/30 bg-card/30 hover:border-primary/30 hover:bg-card/50 transition-all group cursor-pointer"
+                            >
+                              <div
+                                {...provided.dragHandleProps}
+                                className={`flex items-center justify-center w-8 h-8 rounded-full font-heading text-sm font-bold shrink-0 cursor-grab active:cursor-grabbing select-none ${snapshot.isDragging ? 'ring-2 ring-primary shadow-[0_0_16px_hsl(199,89%,48%,0.5)]' : ''} ${stop.travel_method === 'driving' ? 'bg-amber-500/10 text-amber-400' : 'bg-primary/10 text-primary'}`}
+                              >
+                                {stop.stop_number}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{stop.name}</p>
+                                <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                                  <Clock className="w-2.5 h-2.5" /> {stop.estimated_investigation_time}
+                                  {stop.travel_method === 'driving' && <span className="flex items-center gap-0.5 text-amber-400"><Car className="w-2.5 h-2.5" /> Drive</span>}
+                                  {stop.address && <><MapPin className="w-2.5 h-2.5" /> <span className="truncate">{stop.address}</span></>}
+                                </p>
+                              </div>
+                              {(stop.hours_of_operation || stop.entry_fee) && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {stop.entry_fee && <DollarSign className="w-3 h-3 text-green-400" />}
+                                  {stop.hours_of_operation && <Info className="w-3 h-3 text-amber-400" />}
+                                </div>
+                              )}
+                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); narrate(stop.narration_text || stop.paranormal_info); }} className={`p-1.5 rounded-md shrink-0 transition-colors ${isSpeaking || isGenerating ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}>
+                                {isSpeaking || isGenerating ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                              </button>
+                              <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
           )}
         </div>
 
