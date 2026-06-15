@@ -66,7 +66,7 @@ export default function Store() {
     if (cart.length === 0) return;
     setCheckingOut(true);
     try {
-      const res = await base44.functions.invoke('create-stripe-checkout', { items: cart });
+      const res = await base44.functions.invoke('create-checkout', { items: cart });
       if (res.data?.url) window.location.href = res.data.url;
     } catch (e) { /* */ }
     setCheckingOut(false);
