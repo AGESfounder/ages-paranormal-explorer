@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, ShoppingBag } from 'lucide-react';
+import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
@@ -36,11 +36,12 @@ export default function Home() {
           transition={{ duration: 0.8 }}
           className="flex flex-col items-center pt-12 pb-6 px-6"
         >
-          <div className="flex items-center justify-between gap-6 w-full max-w-sm">
+          <div className="flex items-start justify-between gap-6 w-full max-w-sm">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
+              className="pt-2"
             >
               <h1 className="font-display text-5xl text-primary tracking-wider drop-shadow-[0_0_20px_hsl(199,89%,48%,0.4)] leading-none">
                 A.G.E.S.
@@ -50,7 +51,7 @@ export default function Home() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
-              className="relative"
+              className="relative flex flex-col items-center gap-3"
             >
               <motion.div
                 animate={{ 
@@ -61,12 +62,33 @@ export default function Home() {
                 <Ghost className="w-20 h-20 text-primary" />
               </motion.div>
               <motion.div
-                className="absolute -top-2 -right-2"
+                className="absolute top-0 -right-1"
                 animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
                 transition={{ duration: 4, repeat: Infinity }}
               >
                 <Zap className="w-6 h-6 text-cyan-glow" />
               </motion.div>
+              <Link
+                to="/store"
+                className="relative flex flex-col items-center group"
+              >
+                <motion.div
+                  animate={{ 
+                    filter: ['drop-shadow(0 0 10px hsl(199,89%,48%,0.5)) drop-shadow(0 0 20px hsl(270,40%,50%,0.3))', 'drop-shadow(0 0 18px hsl(199,89%,48%,0.8)) drop-shadow(0 0 30px hsl(270,40%,50%,0.5))', 'drop-shadow(0 0 10px hsl(199,89%,48%,0.5)) drop-shadow(0 0 20px hsl(270,40%,50%,0.3))']
+                  }}
+                  transition={{ duration: 2.5, repeat: Infinity }}
+                  className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 via-primary/5 to-accent/20 border-2 border-primary/50 flex items-center justify-center relative overflow-hidden group-hover:border-primary/80 transition-colors"
+                >
+                  <div className="absolute inset-1 rounded-full bg-gradient-to-b from-white/10 via-transparent to-transparent" />
+                  <motion.div
+                    animate={{ opacity: [0.3, 0.7, 0.3] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="absolute inset-0 rounded-full bg-primary/10 blur-sm"
+                  />
+                  <span className="font-display text-xl text-primary relative z-10 tracking-widest">STORE</span>
+                </motion.div>
+                <div className="w-12 h-3 bg-gradient-to-b from-primary/40 to-primary/10 rounded-b-lg -mt-0.5 border-t border-primary/30" />
+              </Link>
             </motion.div>
           </div>
 
@@ -74,7 +96,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35, duration: 0.6 }}
-            className="w-full max-w-sm mt-3"
+            className="w-full max-w-sm mt-2"
           >
             <div className="space-y-1">
               <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
@@ -90,28 +112,6 @@ export default function Home() {
                 <span className="text-primary font-bold text-base">S</span>olutions
               </p>
             </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5, duration: 0.6 }}
-            className="w-full max-w-sm mt-5 flex justify-center"
-          >
-            <Link
-              to="/store"
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary/10 border border-primary/40 hover:bg-primary/20 hover:shadow-[0_0_28px_hsl(199,89%,48%,0.3)] transition-all duration-300 group"
-            >
-              <motion.div
-                animate={{ filter: ['drop-shadow(0 0 6px hsl(199,89%,48%,0.4))', 'drop-shadow(0 0 14px hsl(199,89%,48%,0.7))', 'drop-shadow(0 0 6px hsl(199,89%,48%,0.4))'] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
-                <ShoppingBag className="w-5 h-5 text-primary" />
-              </motion.div>
-              <span className="font-heading text-xs font-bold tracking-[0.2em] uppercase text-primary group-hover:drop-shadow-[0_0_10px_hsl(199,89%,48%,0.5)] transition-all">
-                Store
-              </span>
-            </Link>
           </motion.div>
           
           <div className="mt-6 w-48 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
