@@ -28,9 +28,12 @@ export default function Settings() {
   const loadSettings = async () => {
     try {
       const user = await base44.auth.me();
+      const isAdmin = user?.role === 'admin';
       if (user?.settings) {
         const saved = typeof user.settings === 'string' ? JSON.parse(user.settings) : user.settings;
-        setSettings({ ...defaultSettings, ...saved });
+        setSettings({ ...defaultSettings, ...saved, isAdmin });
+      } else {
+        setSettings(prev => ({ ...prev, isAdmin }));
       }
     } catch (e) { /* use defaults */ }
     setLoaded(true);
@@ -118,6 +121,19 @@ export default function Settings() {
             <Switch checked={settings.offlineDownloads} onCheckedChange={() => toggle('offlineDownloads')} />
           </div>
         </div>
+
+        {/* Admin — only for admins */}
+        {settings.isAdmin && (
+          <a href="/admin" className="block rounded-xl border border-primary/20 bg-primary/5 overflow-hidden hover:border-primary/40 transition-colors">
+            <div className="p-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-foreground flex items-center gap-2"><Shield className="w-3.5 h-3.5 text-primary" /> Admin Panel</p>
+                <p className="text-[10px] text-muted-foreground">Manage tours, products & orders</p>
+              </div>
+              <Shield className="w-4 h-4 text-primary/50" />
+            </div>
+          </a>
+        )}
 
         {/* About */}
         <div className="rounded-xl border border-border/40 bg-card/40 overflow-hidden">
