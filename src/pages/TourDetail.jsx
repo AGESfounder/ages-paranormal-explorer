@@ -43,7 +43,13 @@ function enforceWalkingDistance(stops, tourType) {
   }
 
   if (tourType === 'walking') {
-    return orderStopsByProximity(stops).map((s, i) => ({ ...s, travel_method: 'walking', stop_number: i + 1 }));
+    const ordered = orderStopsByProximity(stops);
+    return ordered.map((s, i) => {
+      if (i === 0) return { ...s, travel_method: 'walking', stop_number: i + 1 };
+      const prev = ordered[i - 1];
+      const dist = haversineDistance(prev.latitude, prev.longitude, s.latitude, s.longitude);
+      return { ...s, travel_method: dist <= WALKING_LIMIT ? 'walking' : 'driving', stop_number: i + 1 };
+    });
   }
 
   // MIXED TOURS: keep original stop order from LLM, label travel_method by proximity
