@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Globe, Ship, MapPin, Clock, Footprints, ArrowRight, Plus } from 'lucide-react';
@@ -6,6 +6,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import ToursAbroadModal from '../components/ToursAbroadModal';
+import SwipeableTourCard from '../components/SwipeableTourCard';
 import { base44 } from '@/api/base44Client';
 
 export default function AbroadTours() {
@@ -13,19 +14,30 @@ export default function AbroadTours() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
-  useEffect(() => {
-    base44.entities.Tour.filter({}, 'state').then(all => {
-      const abroad = all.filter(t => t.tags?.includes('abroad'));
-      abroad.sort((a, b) => {
-        const locA = (a.state || '').toLowerCase();
-        const locB = (b.state || '').toLowerCase();
-        if (locA !== locB) return locA.localeCompare(locB);
-        return (a.title || '').toLowerCase().localeCompare((b.title || '').toLowerCase());
-      });
-      setTours(abroad);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+  const fetchTours = useCallback(async () => {
+    setLoading(true);
+    const all = await base44.entities.Tour.filter({}, 'state');
+    const abroad = all.filter(t => t.tags?.includes('abroad'));
+    abroad.sort((a, b) => {
+      const locA = (a.state || '').toLowerCase();
+      const locB = (b.state || '').toLowerCase();
+      if (locA !== locB) return locA.localeCompare(locB);
+      return (a.title || '').toLowerCase().localeCompare((b.title || '').toLowerCase());
+    });
+    setTours(abroad);
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    fetchTours();
+  }, [fetchTours]);
+
+  const handleDelete = async (tourId) => {
+    setTours(prev => prev.filter(t => t.id !== tourId));
+    try {
+      await base44.entities.Tour.delete(tourId);
+    } catch (e) { fetchTours(); }
+  };
 
   const grouped = tours.reduce((acc, tour) => {
     const loc = tour.state || 'Unknown';
@@ -79,20 +91,22 @@ export default function AbroadTours() {
                 </div>
                 <div className="space-y-2">
                   {locationTours.map(tour => (
-                    <Link key={tour.id} to={`/tour/${tour.id}`} className="block p-4 rounded-xl border border-border/50 bg-card/40 hover:border-primary/30 hover:bg-card/60 transition-all duration-300">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="font-heading text-sm font-semibold text-foreground truncate">{tour.title}</h3>
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tour.description}</p>
+                    <SwipeableTourCard key={tour.id} tour={tour} onRefresh={fetchTours} onDelete={handleDelete}>
+                      <Link to={`/tour/${tour.id}`} className="block p-4 rounded-xl border border-border/50 bg-card/40 hover:border-primary/30 hover:bg-card/60 transition-all duration-300">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h3 className="font-heading text-sm font-semibold text-foreground truncate">{tour.title}</h3>
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tour.description}</p>
+                          </div>
+                          <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
                         </div>
-                        <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
-                      </div>
-                      <div className="flex items-center gap-4 mt-3">
-                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><MapPin className="w-3 h-3" />{tour.city}</span>
-                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="w-3 h-3" />{tour.estimated_duration}</span>
-                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Footprints className="w-3 h-3" />{tour.difficulty}</span>
-                      </div>
-                    </Link>
+                        <div className="flex items-center gap-4 mt-3">
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><MapPin className="w-3 h-3" />{tour.city}</span>
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="w-3 h-3" />{tour.estimated_duration}</span>
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Footprints className="w-3 h-3" />{tour.difficulty}</span>
+                        </div>
+                      </Link>
+                    </SwipeableTourCard>
                   ))}
                 </div>
               </motion.div>
@@ -100,7 +114,7 @@ export default function AbroadTours() {
           </div>
         )}
       </div>
-      <ToursAbroadModal isOpen={showModal} onClose={() => { setShowModal(false); }} />
+      <ToursAbroadModal isOpen={showModal} onClose={() => { setShowModal(false); fetchTours(); }} />
       <NavBar />
     </PageContainer>
   );

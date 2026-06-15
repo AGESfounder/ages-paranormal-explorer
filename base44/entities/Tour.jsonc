@@ -19,6 +19,9 @@
         "mixed"
       ]
     },
+    "location_type": {
+      "type": "string"
+    },
     "description": {
       "type": "string"
     },
