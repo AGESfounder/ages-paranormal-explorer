@@ -36,70 +36,83 @@ export default function Home() {
           transition={{ duration: 0.8 }}
           className="flex flex-col items-center pt-12 pb-6 px-6"
         >
-          <div className="relative mb-4">
-            <motion.div
-              animate={{ 
-                filter: ['drop-shadow(0 0 12px hsl(199,89%,48%,0.3))', 'drop-shadow(0 0 24px hsl(199,89%,48%,0.6))', 'drop-shadow(0 0 12px hsl(199,89%,48%,0.3))']
-              }}
-              transition={{ duration: 3, repeat: Infinity }}
-            >
-              <Ghost className="w-20 h-20 text-primary" />
-            </motion.div>
-            <motion.div
-              className="absolute -top-2 -right-2"
-              animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
-              transition={{ duration: 4, repeat: Infinity }}
-            >
-              <Zap className="w-6 h-6 text-cyan-glow" />
-            </motion.div>
-          </div>
-
-          <div className="flex items-start justify-between gap-6 w-full max-w-sm">
+          <div className="flex items-center justify-between gap-6 w-full max-w-sm">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3, duration: 0.6 }}
-              className="flex flex-col gap-0.5"
+              transition={{ delay: 0.2, duration: 0.6 }}
             >
-              <h1 className="font-display text-4xl text-primary tracking-wider drop-shadow-[0_0_20px_hsl(199,89%,48%,0.4)] leading-none">
+              <h1 className="font-display text-5xl text-primary tracking-wider drop-shadow-[0_0_20px_hsl(199,89%,48%,0.4)] leading-none">
                 A.G.E.S.
               </h1>
-              <div className="space-y-0.5 mt-1">
-                <p className="text-[10px] font-heading tracking-[0.15em] uppercase text-primary/70">
-                  <span className="text-primary font-bold">A</span>ffordable
-                </p>
-                <p className="text-[10px] font-heading tracking-[0.15em] uppercase text-primary/70">
-                  <span className="text-primary font-bold">G</span>host
-                </p>
-                <p className="text-[10px] font-heading tracking-[0.15em] uppercase text-primary/70">
-                  <span className="text-primary font-bold">E</span>xploration
-                </p>
-                <p className="text-[10px] font-heading tracking-[0.15em] uppercase text-primary/70">
-                  <span className="text-primary font-bold">S</span>olutions
-                </p>
-              </div>
             </motion.div>
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4, duration: 0.6 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="relative"
             >
-              <Link
-                to="/store"
-                className="flex flex-col items-center gap-1.5 px-5 py-3 rounded-xl bg-primary/10 border border-primary/40 hover:bg-primary/20 hover:shadow-[0_0_28px_hsl(199,89%,48%,0.3)] transition-all duration-300 group"
+              <motion.div
+                animate={{ 
+                  filter: ['drop-shadow(0 0 12px hsl(199,89%,48%,0.3))', 'drop-shadow(0 0 24px hsl(199,89%,48%,0.6))', 'drop-shadow(0 0 12px hsl(199,89%,48%,0.3))']
+                }}
+                transition={{ duration: 3, repeat: Infinity }}
               >
-                <motion.div
-                  animate={{ filter: ['drop-shadow(0 0 6px hsl(199,89%,48%,0.4))', 'drop-shadow(0 0 14px hsl(199,89%,48%,0.7))', 'drop-shadow(0 0 6px hsl(199,89%,48%,0.4))'] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  <ShoppingBag className="w-7 h-7 text-primary" />
-                </motion.div>
-                <span className="font-heading text-xs font-bold tracking-[0.2em] uppercase text-primary group-hover:drop-shadow-[0_0_10px_hsl(199,89%,48%,0.5)] transition-all">
-                  Store
-                </span>
-              </Link>
+                <Ghost className="w-20 h-20 text-primary" />
+              </motion.div>
+              <motion.div
+                className="absolute -top-2 -right-2"
+                animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
+                transition={{ duration: 4, repeat: Infinity }}
+              >
+                <Zap className="w-6 h-6 text-cyan-glow" />
+              </motion.div>
             </motion.div>
           </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, duration: 0.6 }}
+            className="w-full max-w-sm mt-3"
+          >
+            <div className="space-y-1">
+              <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                <span className="text-primary font-bold text-base">A</span>ffordable
+              </p>
+              <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                <span className="text-primary font-bold text-base">G</span>host
+              </p>
+              <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                <span className="text-primary font-bold text-base">E</span>xploration
+              </p>
+              <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                <span className="text-primary font-bold text-base">S</span>olutions
+              </p>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.6 }}
+            className="w-full max-w-sm mt-5 flex justify-center"
+          >
+            <Link
+              to="/store"
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary/10 border border-primary/40 hover:bg-primary/20 hover:shadow-[0_0_28px_hsl(199,89%,48%,0.3)] transition-all duration-300 group"
+            >
+              <motion.div
+                animate={{ filter: ['drop-shadow(0 0 6px hsl(199,89%,48%,0.4))', 'drop-shadow(0 0 14px hsl(199,89%,48%,0.7))', 'drop-shadow(0 0 6px hsl(199,89%,48%,0.4))'] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <ShoppingBag className="w-5 h-5 text-primary" />
+              </motion.div>
+              <span className="font-heading text-xs font-bold tracking-[0.2em] uppercase text-primary group-hover:drop-shadow-[0_0_10px_hsl(199,89%,48%,0.5)] transition-all">
+                Store
+              </span>
+            </Link>
+          </motion.div>
           
           <div className="mt-6 w-48 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
         </motion.div>
