@@ -25,6 +25,7 @@ import Toolkit from '@/pages/Toolkit';
 import Nearby from '@/pages/Nearby';
 import AbroadTours from '@/pages/AbroadTours';
 import Settings from '@/pages/Settings';
+import Admin from '@/pages/Admin';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -71,6 +72,7 @@ const AuthenticatedApp = () => {
         <Route path="/nearby" element={<Nearby />} />
         <Route path="/abroad" element={<AbroadTours />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/admin" element={<Admin />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
