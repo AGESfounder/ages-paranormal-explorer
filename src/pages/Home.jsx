@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe } from 'lucide-react';
+import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, ShoppingBag } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
@@ -54,29 +54,52 @@ export default function Home() {
             </motion.div>
           </div>
 
-          <h1 className="font-display text-5xl text-primary tracking-wider drop-shadow-[0_0_20px_hsl(199,89%,48%,0.4)]">
-            A.G.E.S.
-          </h1>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3, duration: 0.6 }}
-            className="mt-1"
-          >
-            <p className="font-heading text-[10px] tracking-[0.2em] uppercase text-primary/60 text-center">
-              Pronounced "Ages"
-            </p>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4, duration: 0.6 }}
-            className="mt-2"
-          >
-            <p className="font-heading text-xs tracking-[0.3em] uppercase text-muted-foreground text-center">
-              Affordable Ghost Exploration Solutions
-            </p>
-          </motion.div>
+          <div className="flex items-start justify-between gap-6 w-full max-w-sm">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3, duration: 0.6 }}
+              className="flex flex-col gap-0.5"
+            >
+              <h1 className="font-display text-4xl text-primary tracking-wider drop-shadow-[0_0_20px_hsl(199,89%,48%,0.4)] leading-none">
+                A.G.E.S.
+              </h1>
+              <div className="space-y-0.5 mt-1">
+                <p className="text-[10px] font-heading tracking-[0.15em] uppercase text-primary/70">
+                  <span className="text-primary font-bold">A</span>ffordable
+                </p>
+                <p className="text-[10px] font-heading tracking-[0.15em] uppercase text-primary/70">
+                  <span className="text-primary font-bold">G</span>host
+                </p>
+                <p className="text-[10px] font-heading tracking-[0.15em] uppercase text-primary/70">
+                  <span className="text-primary font-bold">E</span>xploration
+                </p>
+                <p className="text-[10px] font-heading tracking-[0.15em] uppercase text-primary/70">
+                  <span className="text-primary font-bold">S</span>olutions
+                </p>
+              </div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4, duration: 0.6 }}
+            >
+              <Link
+                to="/store"
+                className="flex flex-col items-center gap-1.5 px-5 py-3 rounded-xl bg-primary/10 border border-primary/40 hover:bg-primary/20 hover:shadow-[0_0_28px_hsl(199,89%,48%,0.3)] transition-all duration-300 group"
+              >
+                <motion.div
+                  animate={{ filter: ['drop-shadow(0 0 6px hsl(199,89%,48%,0.4))', 'drop-shadow(0 0 14px hsl(199,89%,48%,0.7))', 'drop-shadow(0 0 6px hsl(199,89%,48%,0.4))'] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  <ShoppingBag className="w-7 h-7 text-primary" />
+                </motion.div>
+                <span className="font-heading text-xs font-bold tracking-[0.2em] uppercase text-primary group-hover:drop-shadow-[0_0_10px_hsl(199,89%,48%,0.5)] transition-all">
+                  Store
+                </span>
+              </Link>
+            </motion.div>
+          </div>
           
           <div className="mt-6 w-48 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
         </motion.div>
