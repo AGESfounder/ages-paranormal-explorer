@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign, CheckCircle2, PartyPopper } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -81,6 +81,9 @@ export default function TourDetail() {
   const [generatingStops, setGeneratingStops] = useState(false);
   const [stopsError, setStopsError] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
+  const [conclusionRead, setConclusionRead] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [completingTour, setCompletingTour] = useState(false);
   const { isSpeaking, isGenerating, narrate } = useGhostVoice();
 
   useEffect(() => {
@@ -93,8 +96,12 @@ export default function TourDetail() {
     const tourData = await base44.entities.Tour.filter({ id: tourId });
     if (tourData.length > 0) {
       setTour(tourData[0]);
-      const favs = await base44.entities.Favorite.filter({ tour_id: tourId });
+      const [favs, completions] = await Promise.all([
+        base44.entities.Favorite.filter({ tour_id: tourId }),
+        base44.entities.Investigation.filter({ tour_id: tourId, is_completed: true }),
+      ]);
       setIsFavorite(favs.length > 0);
+      if (completions.length > 0) { setIsCompleted(true); setConclusionRead(true); }
       const tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
       if (tourStops.length === 0) {
         await generateStops(tourData[0]);
@@ -227,6 +234,23 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
     for (const s of withNumbers) {
       await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number });
     }
+  };
+
+  const markComplete = async () => {
+    setCompletingTour(true);
+    try {
+      await base44.entities.Investigation.create({
+        tour_id: tourId,
+        location_name: tour.title,
+        date: new Date().toISOString().slice(0, 10),
+        state: tour.state,
+        city: tour.city,
+        is_completed: true,
+        notes: `Completed tour: ${tour.title}`,
+      });
+      setIsCompleted(true);
+    } catch (e) {}
+    setCompletingTour(false);
   };
 
   if (loading) {
@@ -396,12 +420,49 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
           <div id="conclusion" className="p-4 rounded-xl border border-dim-purple/20 bg-dim-purple/5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-dim-purple">Conclusion</h3>
-              <button onClick={() => narrate(tour.conclusion)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
+              <button onClick={() => { narrate(tour.conclusion); setConclusionRead(true); }} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
                 {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> Loading</> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
-            <p className="text-xs text-foreground/70 leading-relaxed">{tour.conclusion}</p>
+            <p className="text-xs text-foreground/70 leading-relaxed" onScroll={() => setConclusionRead(true)}>{tour.conclusion}</p>
+            <button onClick={() => setConclusionRead(true)} className="text-[10px] text-dim-purple/60 underline underline-offset-2 hover:text-dim-purple transition-colors">
+              I've read the conclusion
+            </button>
           </div>
+        )}
+
+        {conclusionRead && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`p-4 rounded-xl border text-center space-y-3 ${isCompleted ? 'border-green-500/30 bg-green-500/5' : 'border-primary/30 bg-primary/5'}`}
+          >
+            {isCompleted ? (
+              <>
+                <div className="flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-6 h-6 text-green-400" />
+                  <p className="font-heading text-sm font-bold text-green-400 uppercase tracking-wider">Tour Completed!</p>
+                </div>
+                <p className="text-xs text-muted-foreground">This tour has been logged to your profile and the leaderboard.</p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-center gap-2">
+                  <PartyPopper className="w-5 h-5 text-primary" />
+                  <p className="font-heading text-sm font-bold text-foreground uppercase tracking-wider">You've Reached the End!</p>
+                </div>
+                <p className="text-xs text-muted-foreground">Mark this tour as complete to log it to your profile and the leaderboard.</p>
+                <button
+                  onClick={markComplete}
+                  disabled={completingTour}
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground font-heading text-sm uppercase tracking-wider transition-colors disabled:opacity-60"
+                >
+                  {completingTour ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  {completingTour ? 'Saving...' : 'Mark Tour Complete'}
+                </button>
+              </>
+            )}
+          </motion.div>
         )}
       </div>
 
