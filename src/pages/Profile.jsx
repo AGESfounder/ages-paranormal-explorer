@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Award, MapPin, Ghost, Loader2, Trophy, Star, Shield } from 'lucide-react';
+import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -18,6 +18,10 @@ export default function Profile() {
   const [investigations, setInvestigations] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -27,16 +31,38 @@ export default function Profile() {
     try {
       const userData = await base44.auth.me();
       setUser(userData);
+      setEditName(userData.full_name || '');
       const [inv, favs] = await Promise.all([
         base44.entities.Investigation.list('-created_date'),
         base44.entities.Favorite.list('-created_date')
       ]);
       setInvestigations(inv);
       setFavorites(favs);
-    } catch (e) {
-      // user not logged in
-    }
+    } catch (e) {}
     setLoading(false);
+  };
+
+  const saveName = async () => {
+    if (!editName.trim()) return;
+    setSaving(true);
+    try {
+      const updated = await base44.auth.updateMe({ full_name: editName.trim() });
+      setUser(updated);
+      setEditing(false);
+    } catch (e) {}
+    setSaving(false);
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const updated = await base44.auth.updateMe({ profile_image_url: file_url });
+      setUser(updated);
+    } catch (e) {}
+    setUploadingPhoto(false);
   };
 
   const uniqueStates = [...new Set(investigations.map(i => i.state).filter(Boolean))];
@@ -66,10 +92,38 @@ export default function Profile() {
       <div className="px-4 pb-28 space-y-5 pt-3">
         {/* User Card */}
         <div className="p-5 rounded-xl border border-border/40 bg-card/40 text-center">
-          <div className="w-16 h-16 rounded-full bg-primary/10 border-2 border-primary/30 mx-auto mb-3 flex items-center justify-center">
-            <User className="w-8 h-8 text-primary" />
+          <div className="relative w-16 h-16 mx-auto mb-3">
+            <div className="w-16 h-16 rounded-full bg-primary/10 border-2 border-primary/30 overflow-hidden flex items-center justify-center">
+              {user?.profile_image_url
+                ? <img src={user.profile_image_url} alt="Profile" className="w-full h-full object-cover" />
+                : <User className="w-8 h-8 text-primary" />}
+            </div>
+            <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center cursor-pointer hover:bg-primary/80 transition-colors">
+              {uploadingPhoto ? <Loader2 className="w-3 h-3 text-primary-foreground animate-spin" /> : <Camera className="w-3 h-3 text-primary-foreground" />}
+              <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={uploadingPhoto} />
+            </label>
           </div>
-          <h2 className="font-heading text-lg font-bold text-foreground">{user?.full_name || 'Paranormal Explorer'}</h2>
+
+          {editing ? (
+            <div className="flex items-center justify-center gap-2 mt-1">
+              <input
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                className="bg-input border border-border rounded-md px-2 py-1 text-sm text-foreground text-center font-heading w-40 focus:outline-none focus:ring-1 focus:ring-primary"
+                autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditing(false); }}
+              />
+              <button onClick={saveName} disabled={saving} className="p-1 text-green-400 hover:text-green-300">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              </button>
+              <button onClick={() => setEditing(false)} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+          ) : (
+            <button onClick={() => setEditing(true)} className="group">
+              <h2 className="font-heading text-lg font-bold text-foreground group-hover:text-primary transition-colors">{user?.full_name || 'Paranormal Explorer'}</h2>
+              <p className="text-[10px] text-muted-foreground font-heading uppercase tracking-wider">tap to edit name</p>
+            </button>
+          )}
           <p className="text-xs text-muted-foreground mt-1">{user?.email}</p>
         </div>
 
