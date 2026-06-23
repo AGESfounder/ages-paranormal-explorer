@@ -27,6 +27,7 @@ import AbroadTours from '@/pages/AbroadTours';
 import Settings from '@/pages/Settings';
 import Admin from '@/pages/Admin';
 import Store from '@/pages/Store';
+import Leaderboard from '@/pages/Leaderboard';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -75,6 +76,7 @@ const AuthenticatedApp = () => {
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/store" element={<Store />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

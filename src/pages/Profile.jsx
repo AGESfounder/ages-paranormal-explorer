@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X } from 'lucide-react';
+import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X, Medal } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -176,6 +177,21 @@ export default function Profile() {
             })}
           </div>
         </div>
+
+        {/* Leaderboard link */}
+        <Link
+          to="/leaderboard"
+          className="flex items-center justify-between w-full p-3 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors group"
+        >
+          <div className="flex items-center gap-3">
+            <Trophy className="w-5 h-5 text-primary" />
+            <div>
+              <p className="text-sm font-heading uppercase tracking-wider text-foreground">Leaderboard</p>
+              <p className="text-[10px] text-muted-foreground">See who's explored the most</p>
+            </div>
+          </div>
+          <Medal className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+        </Link>
 
         {/* Logout */}
         <button
