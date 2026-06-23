@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X, Medal } from 'lucide-react';
+import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X, Medal, Globe, CalendarDays, Flame, Map } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
@@ -8,16 +8,20 @@ import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 
 const achievements = [
-  { id: 'first', name: 'First Investigation', desc: 'Complete your first investigation', icon: Ghost, unlocked: false },
-  { id: '10_inv', name: 'Seasoned Explorer', desc: 'Complete 10 investigations', icon: Shield, unlocked: false },
-  { id: '50_inv', name: 'Master Investigator', desc: 'Complete 50 investigations', icon: Trophy, unlocked: false },
-  { id: 'all50', name: 'All 50 States', desc: 'Explore every U.S. state', icon: Award, unlocked: false },
+  { id: 'first',    name: 'First Investigation', desc: 'Complete your first investigation',           icon: Ghost       },
+  { id: '10_inv',   name: 'Seasoned Explorer',   desc: 'Complete 10 investigations',                  icon: Shield      },
+  { id: '50_inv',   name: 'Master Investigator', desc: 'Complete 50 investigations',                  icon: Trophy      },
+  { id: 'all50',    name: 'All 50 States',        desc: 'Investigate in every U.S. state',             icon: Map         },
+  { id: 'abroad',   name: 'Toured Abroad',        desc: 'Complete an international ghost tour',        icon: Globe       },
+  { id: '12for12',  name: '12 for 12',            desc: 'Complete at least 1 tour every month for a year', icon: CalendarDays },
+  { id: 'streak5',  name: 'On Fire',              desc: 'Investigate 5 locations in a single month',  icon: Flame       },
 ];
 
 export default function Profile() {
   const [user, setUser] = useState(null);
   const [investigations, setInvestigations] = useState([]);
   const [favorites, setFavorites] = useState([]);
+  const [abroadTourIds, setAbroadTourIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
@@ -33,12 +37,14 @@ export default function Profile() {
       const userData = await base44.auth.me();
       setUser(userData);
       setEditName(userData.full_name || '');
-      const [inv, favs] = await Promise.all([
+      const [inv, favs, abroadTours] = await Promise.all([
         base44.entities.Investigation.list('-created_date'),
-        base44.entities.Favorite.list('-created_date')
+        base44.entities.Favorite.list('-created_date'),
+        base44.entities.Tour.filter({ tags: 'abroad' }),
       ]);
       setInvestigations(inv);
       setFavorites(favs);
+      setAbroadTourIds(new Set(abroadTours.map(t => t.id)));
     } catch (e) {}
     setLoading(false);
   };
@@ -69,11 +75,47 @@ export default function Profile() {
   const uniqueStates = [...new Set(investigations.map(i => i.state).filter(Boolean))];
   const unlockedCount = investigations.length;
 
+  // 12 for 12: at least 1 investigation in each of 12 consecutive calendar months
+  const has12for12 = (() => {
+    const monthSet = new Set(
+      investigations
+        .map(i => i.date ? i.date.slice(0, 7) : null)
+        .filter(Boolean)
+    );
+    if (monthSet.size < 12) return false;
+    const months = [...monthSet].sort();
+    // Check any 12 consecutive months in the sorted list
+    for (let i = 0; i <= months.length - 12; i++) {
+      const start = new Date(months[i] + '-01');
+      const end = new Date(months[i + 11] + '-01');
+      const diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+      if (diffMonths === 11) return true;
+    }
+    return false;
+  })();
+
+  // On Fire: 5+ investigations in any single calendar month
+  const hasStreak5 = (() => {
+    const counts = {};
+    for (const inv of investigations) {
+      if (!inv.date) continue;
+      const ym = inv.date.slice(0, 7);
+      counts[ym] = (counts[ym] || 0) + 1;
+    }
+    return Object.values(counts).some(c => c >= 5);
+  })();
+
+  // Toured Abroad: any investigation linked to an abroad tour
+  const hasAbroad = investigations.some(i => i.tour_id && abroadTourIds.has(i.tour_id));
+
   const getAchievementStatus = (ach) => {
-    if (ach.id === 'first' && unlockedCount >= 1) return true;
-    if (ach.id === '10_inv' && unlockedCount >= 10) return true;
-    if (ach.id === '50_inv' && unlockedCount >= 50) return true;
-    if (ach.id === 'all50' && uniqueStates.length >= 50) return true;
+    if (ach.id === 'first'   && unlockedCount >= 1) return true;
+    if (ach.id === '10_inv'  && unlockedCount >= 10) return true;
+    if (ach.id === '50_inv'  && unlockedCount >= 50) return true;
+    if (ach.id === 'all50'   && uniqueStates.length >= 50) return true;
+    if (ach.id === 'abroad'  && hasAbroad) return true;
+    if (ach.id === '12for12' && has12for12) return true;
+    if (ach.id === 'streak5' && hasStreak5) return true;
     return false;
   };
 
