@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace } from 'lucide-react';
+import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap } from 'lucide-react';
 import SLSCamera from '../components/SLSCamera';
+import PhoneREMDevice from '../components/PhoneREMDevice';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -19,6 +20,7 @@ const tools = [
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
   { name: 'Evidence Analyzer', icon: Wrench, desc: 'Review & rate your evidence', type: 'analyzer' },
   { name: 'SLS Camera', icon: ScanFace, desc: 'Detect human & ghost figures via IR depth scan', type: 'sls' },
+  { name: 'Phone REM Device', icon: Zap, desc: 'Detect energy disturbances via phone sensors + video record', type: 'rem' },
 ];
 
 export default function Toolkit() {
@@ -914,6 +916,9 @@ Best Practices
 
       case 'sls':
         return <SLSCamera />;
+
+      case 'rem':
+        return <PhoneREMDevice />;
 
       default:
         return null;
