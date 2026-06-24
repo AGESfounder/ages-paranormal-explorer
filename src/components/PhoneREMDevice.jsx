@@ -124,19 +124,19 @@ export default function PhoneREMDevice() {
       beepIntervalRef.current = null;
     }
 
-    if (level < 50) return; // silent below 50
+    if (level < 20) return; // silent in green zone
 
     if (level >= 80) {
-      // Steady tone at red — continuous oscillation managed by interval at ~50ms
-      const freq = 800 + (level - 80) * 10; // 800–1000 Hz
-      beepIntervalRef.current = setInterval(() => playBeep(freq, 0.08), 90);
+      // Red zone: steady high-pitched tone
+      const freq = 900 + (level - 80) * 5; // 900–1000 Hz
+      beepIntervalRef.current = setInterval(() => playBeep(freq, 0.08), 80);
     } else {
-      // Orange zone: slow creepy beeps, speeding up and rising in pitch as level increases
-      // level 50→80: interval 1200ms→300ms, freq 300Hz→700Hz
-      const t = (level - 50) / 30; // 0 at 50, 1 at 80
-      const intervalMs = Math.round(1200 - t * 900); // 1200ms → 300ms
-      const freq = 300 + t * 400; // 300Hz → 700Hz
-      beepIntervalRef.current = setInterval(() => playBeep(freq, 0.12), intervalMs);
+      // level 20→80: slow low beeps → fast high beeps
+      // interval: 1800ms → 180ms, freq: 220Hz → 860Hz
+      const t = (level - 20) / 60; // 0 at level 20, 1 at level 80
+      const intervalMs = Math.round(1800 - t * 1620);
+      const freq = 220 + t * 640;
+      beepIntervalRef.current = setInterval(() => playBeep(freq, 0.14), intervalMs);
     }
   };
 
