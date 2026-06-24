@@ -28,6 +28,7 @@ import Settings from '@/pages/Settings';
 import Admin from '@/pages/Admin';
 import Store from '@/pages/Store';
 import Leaderboard from '@/pages/Leaderboard';
+import CommunityMap from '@/pages/CommunityMap';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -77,6 +78,7 @@ const AuthenticatedApp = () => {
         <Route path="/admin" element={<Admin />} />
         <Route path="/store" element={<Store />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/community-map" element={<CommunityMap />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

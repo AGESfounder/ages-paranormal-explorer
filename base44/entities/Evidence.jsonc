@@ -52,6 +52,16 @@
     },
     "personal_experience": {
       "type": "number"
+    },
+    "latitude": {
+      "type": "number"
+    },
+    "longitude": {
+      "type": "number"
+    },
+    "is_private": {
+      "type": "boolean",
+      "default": false
     }
   },
   "required": [

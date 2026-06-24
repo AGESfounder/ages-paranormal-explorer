@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ChevronDown, ClipboardList } from 'lucide-react';
+import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ChevronDown, ClipboardList, Lock, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -72,6 +72,9 @@ export default function Evidence() {
     emf_activity: 0,
     evp_quality: 0,
     personal_experience: 0,
+    latitude: '',
+    longitude: '',
+    is_private: false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -139,6 +142,9 @@ export default function Evidence() {
       emf_activity: 0,
       evp_quality: 0,
       personal_experience: 0,
+      latitude: '',
+      longitude: '',
+      is_private: false,
     });
     setOtherDeviceText('');
     setEquipmentOpen(false);
@@ -201,6 +207,30 @@ export default function Evidence() {
             <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Location</label>
             <Input value={form.location_name} disabled className="bg-card/30 border-border/30 text-muted-foreground" />
           </div>
+
+          {/* GPS Coordinates */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Latitude</label>
+              <Input type="number" placeholder="e.g. 40.7128" value={form.latitude} onChange={e => setForm({...form, latitude: e.target.value})} className="bg-card/50 border-border/50" />
+            </div>
+            <div>
+              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Longitude</label>
+              <Input type="number" placeholder="e.g. -74.0060" value={form.longitude} onChange={e => setForm({...form, longitude: e.target.value})} className="bg-card/50 border-border/50" />
+            </div>
+          </div>
+
+          {/* Privacy Toggle */}
+          <button
+            onClick={() => setForm(prev => ({ ...prev, is_private: !prev.is_private }))}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${form.is_private ? 'border-amber-500/40 bg-amber-500/10' : 'border-primary/30 bg-primary/5'}`}
+          >
+            {form.is_private ? <Lock className="w-4 h-4 text-amber-400 shrink-0" /> : <Globe className="w-4 h-4 text-primary shrink-0" />}
+            <div className="text-left">
+              <p className={`text-xs font-heading uppercase tracking-wider ${form.is_private ? 'text-amber-400' : 'text-primary'}`}>{form.is_private ? 'Private' : 'Public'}</p>
+              <p className="text-[10px] text-muted-foreground">{form.is_private ? 'Only you can see this entry' : 'Visible on the community map'}</p>
+            </div>
+          </button>
 
           {/* Evidence Type */}
           <div>
@@ -400,6 +430,30 @@ export default function Evidence() {
             <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Location</label>
             <Input value={form.location_name} onChange={e => setForm({...form, location_name: e.target.value})} placeholder="Where did this evidence come from?" className="bg-card/50 border-border/50" />
           </div>
+
+          {/* GPS Coordinates */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Latitude</label>
+              <Input type="number" placeholder="e.g. 40.7128" value={form.latitude} onChange={e => setForm({...form, latitude: e.target.value})} className="bg-card/50 border-border/50" />
+            </div>
+            <div>
+              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Longitude</label>
+              <Input type="number" placeholder="e.g. -74.0060" value={form.longitude} onChange={e => setForm({...form, longitude: e.target.value})} className="bg-card/50 border-border/50" />
+            </div>
+          </div>
+
+          {/* Privacy Toggle */}
+          <button
+            onClick={() => setForm(prev => ({ ...prev, is_private: !prev.is_private }))}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all ${form.is_private ? 'border-amber-500/40 bg-amber-500/10' : 'border-primary/30 bg-primary/5'}`}
+          >
+            {form.is_private ? <Lock className="w-4 h-4 text-amber-400 shrink-0" /> : <Globe className="w-4 h-4 text-primary shrink-0" />}
+            <div className="text-left">
+              <p className={`text-xs font-heading uppercase tracking-wider ${form.is_private ? 'text-amber-400' : 'text-primary'}`}>{form.is_private ? 'Private' : 'Public'}</p>
+              <p className="text-[10px] text-muted-foreground">{form.is_private ? 'Only you can see this entry' : 'Visible on the community map'}</p>
+            </div>
+          </button>
 
           {/* Evidence Type */}
           <div>
