@@ -126,18 +126,10 @@ export default function PhoneREMDevice() {
 
     if (level < 20) return; // silent in green zone
 
-    if (level >= 80) {
-      // Red zone: steady high-pitched tone
-      const freq = 900 + (level - 80) * 5; // 900–1000 Hz
-      beepIntervalRef.current = setInterval(() => playBeep(freq, 0.08), 80);
-    } else {
-      // level 20→80: slow low beeps → fast high beeps
-      // interval: 1800ms → 180ms, freq: 220Hz → 860Hz
-      const t = (level - 20) / 60; // 0 at level 20, 1 at level 80
-      const intervalMs = Math.round(1800 - t * 1620);
-      const freq = 220 + t * 640;
-      beepIntervalRef.current = setInterval(() => playBeep(freq, 0.14), intervalMs);
-    }
+    // level 20→100: pitch rises from 220Hz → 1000Hz, steady beep throughout
+    const t = (level - 20) / 80; // 0 at level 20, 1 at level 100
+    const freq = 220 + t * 780;
+    beepIntervalRef.current = setInterval(() => playBeep(freq, 0.08), 90);
   };
 
   const startAudioEngine = async () => {
