@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft } from 'lucide-react';
+import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace } from 'lucide-react';
+import SLSCamera from '../components/SLSCamera';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -17,6 +18,7 @@ const tools = [
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
   { name: 'Evidence Analyzer', icon: Wrench, desc: 'Review & rate your evidence', type: 'analyzer' },
+  { name: 'SLS Camera', icon: ScanFace, desc: 'Detect human & ghost figures via IR depth scan', type: 'sls' },
 ];
 
 export default function Toolkit() {
@@ -909,6 +911,9 @@ Best Practices
             </div>
           </div>
         );
+
+      case 'sls':
+        return <SLSCamera />;
 
       default:
         return null;
