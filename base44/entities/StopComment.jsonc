@@ -1,0 +1,22 @@
+{
+  "name": "StopComment",
+  "type": "object",
+  "properties": {
+    "stop_id": {
+      "type": "string"
+    },
+    "tour_id": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "author_name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "stop_id",
+    "text"
+  ]
+}

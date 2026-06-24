@@ -8,6 +8,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import TourMap from '../components/TourMap';
 import useGhostVoice from '../hooks/useGhostVoice';
+import StopComments from '../components/StopComments';
 import { base44 } from '@/api/base44Client';
 
 const suggestionIcons = {
@@ -192,6 +193,8 @@ export default function StopDetail() {
             </div>
           </TabsContent>
         </Tabs>
+
+        <StopComments stopId={stopId} tourId={stop.tour_id} />
 
         <div className="flex items-center gap-2">
           <button onClick={() => prevStop && navigate(`/stop/${prevStop.id}`)} disabled={!prevStop} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border border-border/40 bg-card/30 text-sm font-heading uppercase tracking-wider disabled:opacity-30 hover:border-primary/30 transition-colors">
