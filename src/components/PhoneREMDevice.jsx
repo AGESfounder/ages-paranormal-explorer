@@ -308,9 +308,9 @@ export default function PhoneREMDevice() {
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
       await base44.entities.Evidence.create({
-        title: `Phone REM Session ${date}`,
+        title: `Vibration Communicator Session ${date}`,
         type: 'video',
-        description: `Phone REM device session — ${formatDuration(sessionDuration)} — ${events.length} disturbance event(s) detected.`,
+        description: `Vibration Communicator session — ${formatDuration(sessionDuration)} — ${events.length} disturbance event(s) detected.`,
         file_url,
         date,
         time,
@@ -368,7 +368,7 @@ export default function PhoneREMDevice() {
 
         <div className="p-4 rounded-lg bg-black/40 border border-primary/20 space-y-3 text-center">
           <Zap className="w-10 h-10 text-primary mx-auto opacity-60" />
-          <p className="text-xs font-heading uppercase tracking-wider text-primary">Phone REM Device</p>
+          <p className="text-xs font-heading uppercase tracking-wider text-primary">Vibration Communicator</p>
           <p className="text-[10px] text-muted-foreground leading-relaxed">
             Uses your phone's motion, gyroscope & orientation sensors to detect energy disturbances — just like a physical REM device. Camera + audio is recorded for evidence.
           </p>

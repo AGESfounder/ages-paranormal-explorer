@@ -1,92 +1,61 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Camera, CameraOff, Video } from 'lucide-react';
+import { Camera, CameraOff, Video, Save, X } from 'lucide-react';
+import { base44 } from '@/api/base44Client';
 
 const JOINT_CONNECTIONS = [
-  [0, 1], [1, 2], [2, 3], [3, 4],       // spine + head
-  [2, 5], [5, 6], [6, 7],               // left arm
-  [2, 8], [8, 9], [9, 10],              // right arm
-  [3, 11], [11, 12], [12, 13],           // left leg
-  [3, 14], [14, 15], [15, 16],           // right leg
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [2, 5], [5, 6], [6, 7],
+  [2, 8], [8, 9], [9, 10],
+  [3, 11], [11, 12], [12, 13],
+  [3, 14], [14, 15], [15, 16],
 ];
 
-// Normalized skeleton joint positions (0-1 range, relative to bounding box)
-// 0=head, 1=neck, 2=shoulders_mid, 3=hips_mid, 4=ground, 5=l_shoulder, 6=l_elbow, 7=l_wrist,
-// 8=r_shoulder, 9=r_elbow, 10=r_wrist, 11=l_hip, 12=l_knee, 13=l_ankle,
-// 14=r_hip, 15=r_knee, 16=r_ankle
 const BASE_SKELETON = [
-  [0.5, 0.0],   // 0 head
-  [0.5, 0.13],  // 1 neck
-  [0.5, 0.25],  // 2 shoulders mid
-  [0.5, 0.55],  // 3 hips mid
-  [0.5, 1.0],   // 4 ground (unused)
-  [0.35, 0.25], // 5 l_shoulder
-  [0.22, 0.42], // 6 l_elbow
-  [0.12, 0.58], // 7 l_wrist
-  [0.65, 0.25], // 8 r_shoulder
-  [0.78, 0.42], // 9 r_elbow
-  [0.88, 0.58], // 10 r_wrist
-  [0.40, 0.55], // 11 l_hip
-  [0.38, 0.75], // 12 l_knee
-  [0.36, 0.98], // 13 l_ankle
-  [0.60, 0.55], // 14 r_hip
-  [0.62, 0.75], // 15 r_knee
-  [0.64, 0.98], // 16 r_ankle
+  [0.5, 0.0],   [0.5, 0.13],  [0.5, 0.25],  [0.5, 0.55],  [0.5, 1.0],
+  [0.35, 0.25], [0.22, 0.42], [0.12, 0.58],
+  [0.65, 0.25], [0.78, 0.42], [0.88, 0.58],
+  [0.40, 0.55], [0.38, 0.75], [0.36, 0.98],
+  [0.60, 0.55], [0.62, 0.75], [0.64, 0.98],
 ];
 
 function detectFigures(imageData, width, height) {
   const data = imageData.data;
   const regions = [];
   const visited = new Uint8Array(width * height);
-  const SKIN_THRESHOLD = 1800; // minimum cluster pixel count
+  const SKIN_THRESHOLD = 1800;
 
-  // Simple skin/warm-tone detection in the video frame
   for (let y = 0; y < height; y += 4) {
     for (let x = 0; x < width; x += 4) {
       const idx = (y * width + x) * 4;
       const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-      // Detect warm tones (human skin / warm objects) — broad range to catch bodies
-      const isSkin = r > 60 && g > 40 && b > 20 &&
-        r > g && r > b &&
-        (r - g) > 10 &&
-        r < 255 && g < 230;
+      const isSkin = r > 60 && g > 40 && b > 20 && r > g && r > b && (r - g) > 10 && r < 255 && g < 230;
 
       if (isSkin && !visited[y / 4 * Math.floor(width / 4) + x / 4]) {
-        // BFS flood fill to find connected region
         const queue = [[x, y]];
-        let minX = x, maxX = x, minY = y, maxY = y;
-        let pixelCount = 0;
+        let minX = x, maxX = x, minY = y, maxY = y, pixelCount = 0;
         while (queue.length > 0) {
           const [cx, cy] = queue.shift();
           const vi = cy / 4 * Math.floor(width / 4) + cx / 4;
           if (visited[vi]) continue;
           visited[vi] = 1;
           pixelCount++;
-          if (cx < minX) minX = cx;
-          if (cx > maxX) maxX = cx;
-          if (cy < minY) minY = cy;
-          if (cy > maxY) maxY = cy;
-          const neighbors = [[cx - 4, cy], [cx + 4, cy], [cx, cy - 4], [cx, cy + 4]];
-          for (const [nx, ny] of neighbors) {
+          if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+          if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+          for (const [nx, ny] of [[cx - 4, cy], [cx + 4, cy], [cx, cy - 4], [cx, cy + 4]]) {
             if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
             const ni = (ny * width + nx) * 4;
             const nr = data[ni], ng = data[ni + 1], nb = data[ni + 2];
-            const nSkin = nr > 60 && ng > 40 && nb > 20 && nr > ng && nr > nb && (nr - ng) > 10 && nr < 255 && ng < 230;
-            if (nSkin) queue.push([nx, ny]);
+            if (nr > 60 && ng > 40 && nb > 20 && nr > ng && nr > nb && (nr - ng) > 10 && nr < 255 && ng < 230) queue.push([nx, ny]);
           }
         }
         if (pixelCount > SKIN_THRESHOLD) {
-          const bw = maxX - minX;
-          const bh = maxY - minY;
-          // Human body aspect ratio filter: taller than wide, reasonable size
-          if (bh > bw * 0.8 && bh > 40 && bw > 15) {
-            regions.push({ x: minX, y: minY, w: bw, h: bh });
-          }
+          const bw = maxX - minX, bh = maxY - minY;
+          if (bh > bw * 0.8 && bh > 40 && bw > 15) regions.push({ x: minX, y: minY, w: bw, h: bh });
         }
       }
     }
   }
 
-  // Merge overlapping regions
   const merged = [];
   const used = new Set();
   for (let i = 0; i < regions.length; i++) {
@@ -95,17 +64,14 @@ function detectFigures(imageData, width, height) {
     for (let j = i + 1; j < regions.length; j++) {
       if (used.has(j)) continue;
       const a = r, b = regions[j];
-      const overlap = !(a.x + a.w < b.x - 20 || b.x + b.w < a.x - 20 || a.y + a.h < b.y - 20 || b.y + b.h < a.y - 20);
-      if (overlap) {
-        const nx = Math.min(a.x, b.x);
-        const ny = Math.min(a.y, b.y);
+      if (!(a.x + a.w < b.x - 20 || b.x + b.w < a.x - 20 || a.y + a.h < b.y - 20 || b.y + b.h < a.y - 20)) {
+        const nx = Math.min(a.x, b.x), ny = Math.min(a.y, b.y);
         r = { x: nx, y: ny, w: Math.max(a.x + a.w, b.x + b.w) - nx, h: Math.max(a.y + a.h, b.y + b.h) - ny };
         used.add(j);
       }
     }
     merged.push(r);
   }
-
   return merged;
 }
 
@@ -115,17 +81,33 @@ export default function SLSCamera() {
   const overlayCanvasRef = useRef(null);
   const animFrameRef = useRef(null);
   const streamRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+
   const [active, setActive] = useState(false);
   const [error, setError] = useState('');
   const [figureCount, setFigureCount] = useState(0);
   const [anomalyDetected, setAnomalyDetected] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordedBlob, setRecordedBlob] = useState(null);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const [saving, setSaving] = useState(false);
   const anomalyTimerRef = useRef(null);
+
+  const formatDuration = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 
   const stopCamera = useCallback(() => {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    } else if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
     setActive(false);
+    setRecording(false);
     setFigureCount(0);
     setAnomalyDetected(false);
   }, []);
@@ -137,11 +119,37 @@ export default function SLSCamera() {
 
   const startCamera = async () => {
     setError('');
+    setRecordedBlob(null);
+    setRecordDuration(0);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } } });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true,
+      });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
+
+      // Start recording
+      const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+        .find(t => MediaRecorder.isTypeSupported(t)) || '';
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      mediaRecorderRef.current = mr;
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
+        setRecordedBlob(blob);
+        stream.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      };
+      mr.start(1000);
+      setRecording(true);
+
+      // Timer
+      setRecordDuration(0);
+      timerRef.current = setInterval(() => setRecordDuration(prev => prev + 1), 1000);
+
       setActive(true);
       processFrame();
     } catch (e) {
@@ -160,10 +168,8 @@ export default function SLSCamera() {
 
     const w = video.videoWidth || 640;
     const h = video.videoHeight || 480;
-    canvas.width = w;
-    canvas.height = h;
-    overlay.width = w;
-    overlay.height = h;
+    canvas.width = w; canvas.height = h;
+    overlay.width = w; overlay.height = h;
 
     const ctx = canvas.getContext('2d');
     const octx = overlay.getContext('2d');
@@ -172,28 +178,19 @@ export default function SLSCamera() {
     const imageData = ctx.getImageData(0, 0, w, h);
     const figures = detectFigures(imageData, w, h);
 
-    // Render night-vision green tint on main canvas
     const d = imageData.data;
     for (let i = 0; i < d.length; i += 4) {
       const gray = d[i] * 0.2 + d[i + 1] * 0.6 + d[i + 2] * 0.2;
-      d[i] = 0;
-      d[i + 1] = Math.min(255, gray * 1.3);
-      d[i + 2] = 0;
+      d[i] = 0; d[i + 1] = Math.min(255, gray * 1.3); d[i + 2] = 0;
     }
     ctx.putImageData(imageData, 0, 0);
 
-    // Overlay: draw IR scan grid
     octx.clearRect(0, 0, w, h);
     octx.strokeStyle = 'rgba(0, 255, 100, 0.06)';
     octx.lineWidth = 0.5;
-    for (let x = 0; x < w; x += 20) {
-      octx.beginPath(); octx.moveTo(x, 0); octx.lineTo(x, h); octx.stroke();
-    }
-    for (let y = 0; y < h; y += 20) {
-      octx.beginPath(); octx.moveTo(0, y); octx.lineTo(w, y); octx.stroke();
-    }
+    for (let x = 0; x < w; x += 20) { octx.beginPath(); octx.moveTo(x, 0); octx.lineTo(x, h); octx.stroke(); }
+    for (let y = 0; y < h; y += 20) { octx.beginPath(); octx.moveTo(0, y); octx.lineTo(w, y); octx.stroke(); }
 
-    // Draw stick figures over detected regions
     setFigureCount(figures.length);
     if (figures.length > 0 && !anomalyDetected) {
       setAnomalyDetected(true);
@@ -202,46 +199,55 @@ export default function SLSCamera() {
     }
 
     figures.forEach(({ x, y, w: bw, h: bh }) => {
-      // Scale skeleton joints into bounding box
-      const joints = BASE_SKELETON.map(([jx, jy]) => [
-        x + jx * bw,
-        y + jy * bh,
-      ]);
-
-      // Draw bones
+      const joints = BASE_SKELETON.map(([jx, jy]) => [x + jx * bw, y + jy * bh]);
       octx.strokeStyle = 'rgba(0, 255, 200, 0.9)';
       octx.lineWidth = 2;
       JOINT_CONNECTIONS.forEach(([a, b]) => {
-        octx.beginPath();
-        octx.moveTo(joints[a][0], joints[a][1]);
-        octx.lineTo(joints[b][0], joints[b][1]);
-        octx.stroke();
+        octx.beginPath(); octx.moveTo(joints[a][0], joints[a][1]); octx.lineTo(joints[b][0], joints[b][1]); octx.stroke();
       });
-
-      // Draw joints
       joints.forEach(([jx, jy], idx) => {
-        if (idx === 4) return; // skip ground
+        if (idx === 4) return;
         octx.beginPath();
         octx.arc(jx, jy, idx === 0 ? 7 : 4, 0, Math.PI * 2);
         octx.fillStyle = idx === 0 ? 'rgba(0,255,150,1)' : 'rgba(0,220,255,0.9)';
         octx.fill();
       });
-
-      // Label
       octx.fillStyle = 'rgba(0,255,150,0.9)';
       octx.font = 'bold 11px monospace';
       octx.fillText('FIGURE DETECTED', x, y - 8);
     });
 
-    // Corner HUD
     octx.fillStyle = 'rgba(0, 255, 100, 0.7)';
     octx.font = '10px monospace';
-    octx.fillText('SLS CAM · IR DEPTH SCAN', 8, 16);
+    octx.fillText('ANOMALY CAM · IR DEPTH SCAN', 8, 16);
     octx.fillText(`FIGURES: ${figures.length}`, 8, 30);
-    const now = new Date();
-    octx.fillText(now.toLocaleTimeString(), w - 72, 16);
+    octx.fillText(new Date().toLocaleTimeString(), w - 72, 16);
 
     animFrameRef.current = requestAnimationFrame(processFrame);
+  };
+
+  const saveRecording = async () => {
+    if (!recordedBlob) return;
+    setSaving(true);
+    try {
+      const ext = recordedBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([recordedBlob], `anomaly_session.${ext}`, { type: recordedBlob.type });
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const now = new Date();
+      await base44.entities.Evidence.create({
+        title: `Anomaly Camera Session ${now.toISOString().split('T')[0]}`,
+        type: 'video',
+        description: `Anomaly Camera session — ${formatDuration(recordDuration)} recorded.`,
+        file_url,
+        date: now.toISOString().split('T')[0],
+        time: now.toTimeString().slice(0, 5),
+      });
+      setRecordedBlob(null);
+      setRecordDuration(0);
+    } catch (e) {
+      console.error('Save failed', e);
+    }
+    setSaving(false);
   };
 
   return (
@@ -254,7 +260,7 @@ export default function SLSCamera() {
         {!active && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80">
             <Camera className="w-12 h-12 text-green-500/50" />
-            <p className="text-xs text-green-500/70 font-mono">SLS CAMERA OFFLINE</p>
+            <p className="text-xs text-green-500/70 font-mono">ANOMALY CAMERA OFFLINE</p>
             {error && <p className="text-xs text-red-400 text-center px-4">{error}</p>}
           </div>
         )}
@@ -264,16 +270,25 @@ export default function SLSCamera() {
             <p className="text-[10px] font-mono text-white font-bold">⚠ ANOMALY</p>
           </div>
         )}
+
+        {active && recording && (
+          <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span className="text-[9px] text-white font-mono">REC {formatDuration(recordDuration)}</span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${active ? 'bg-green-400 animate-pulse' : 'bg-red-500/50'}`} />
-          <span className="text-[10px] font-mono text-muted-foreground">{active ? `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''} detected` : 'STANDBY'}</span>
+          <span className="text-[10px] font-mono text-muted-foreground">
+            {active ? `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''} detected` : 'STANDBY'}
+          </span>
         </div>
         {active ? (
           <button onClick={stopCamera} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-heading text-[10px] uppercase tracking-wider hover:bg-red-500/20 transition-colors">
-            <CameraOff className="w-3 h-3" /> Power Off
+            <CameraOff className="w-3 h-3" /> Stop & Save
           </button>
         ) : (
           <button onClick={startCamera} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-[10px] uppercase tracking-wider hover:bg-green-500/20 transition-colors">
@@ -282,9 +297,22 @@ export default function SLSCamera() {
         )}
       </div>
 
+      {/* Post-session save controls */}
+      {!active && recordedBlob && (
+        <div className="space-y-2">
+          <video src={URL.createObjectURL(recordedBlob)} controls className="w-full rounded border border-border/30" style={{ maxHeight: 160 }} />
+          <button onClick={saveRecording} disabled={saving} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
+            <Save className="w-3.5 h-3.5" /> {saving ? 'Saving…' : 'Save to Evidence Journal'}
+          </button>
+          <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
+            <X className="w-3.5 h-3.5" /> Discard
+          </button>
+        </div>
+      )}
+
       <div className="p-2.5 rounded-lg bg-card/30 border border-border/30">
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          Structured Light Sensor maps humanoid shapes via IR depth analysis. Stick figures appear over detected figures — including entities invisible to the naked eye. Point at empty spaces for anomalous readings.
+          IR depth analysis maps humanoid shapes invisible to the naked eye. Session is recorded — save to your Evidence Journal when done.
         </p>
       </div>
     </div>
