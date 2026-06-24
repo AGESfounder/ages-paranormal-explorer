@@ -13,12 +13,12 @@ import useGhostVoice from '../hooks/useGhostVoice';
 const tools = [
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
   { name: 'Weather Monitor', icon: Cloud, desc: 'Real-time local weather conditions', type: 'weather' },
-  { name: 'Moon Phase', icon: Moon, desc: 'Current moon phase & illumination', type: 'moon' },
+  { name: 'Vibration Communicator', icon: Zap, desc: 'Detect energy disturbances via phone sensors + video record', type: 'rem' },
   { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
   { name: 'Radio Sweeper', icon: Volume2, desc: 'AM/FM frequency sweep for EVP', type: 'audio' },
   { name: 'Evidence Analyzer', icon: Wrench, desc: 'Review & rate your evidence', type: 'analyzer' },
   { name: 'Anomaly Camera', icon: ScanFace, desc: 'Detect human & ghost figures via IR depth scan', type: 'sls' },
-  { name: 'Vibration Communicator', icon: Zap, desc: 'Detect energy disturbances via phone sensors + video record', type: 'rem' },
+  { name: 'Moon Phase', icon: Moon, desc: 'Current moon phase & illumination', type: 'moon' },
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
 ];
