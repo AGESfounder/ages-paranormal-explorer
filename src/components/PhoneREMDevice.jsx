@@ -39,6 +39,8 @@ export default function PhoneREMDevice() {
 
   const timerRef = useRef(null);
   const alertTimerRef = useRef(null);
+  const beepCtxRef = useRef(null);
+  const beepIntervalRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const videoChunksRef = useRef([]);
   const videoBlobRef = useRef(null);
@@ -85,11 +87,75 @@ export default function PhoneREMDevice() {
     return true;
   };
 
+  // Beep sound engine
+  const playBeep = (frequency, duration) => {
+    if (!beepCtxRef.current) return;
+    const ctx = beepCtxRef.current;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    // Sine wave with a slight detuned overtone for creepy texture
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+
+    osc2.type = 'triangle';
+    osc2.frequency.value = frequency * 1.007; // slight detune = eerie beating effect
+    gain2.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain2.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc2.connect(gain2); gain2.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+    osc2.start(ctx.currentTime);
+    osc2.stop(ctx.currentTime + duration);
+  };
+
+  const updateBeeping = (level) => {
+    // Clear existing interval
+    if (beepIntervalRef.current) {
+      clearInterval(beepIntervalRef.current);
+      beepIntervalRef.current = null;
+    }
+
+    if (level < 50) return; // silent below 50
+
+    if (level >= 80) {
+      // Steady tone at red — continuous oscillation managed by interval at ~50ms
+      const freq = 800 + (level - 80) * 10; // 800–1000 Hz
+      beepIntervalRef.current = setInterval(() => playBeep(freq, 0.08), 90);
+    } else {
+      // Orange zone: slow creepy beeps, speeding up and rising in pitch as level increases
+      // level 50→80: interval 1200ms→300ms, freq 300Hz→700Hz
+      const t = (level - 50) / 30; // 0 at 50, 1 at 80
+      const intervalMs = Math.round(1200 - t * 900); // 1200ms → 300ms
+      const freq = 300 + t * 400; // 300Hz → 700Hz
+      beepIntervalRef.current = setInterval(() => playBeep(freq, 0.12), intervalMs);
+    }
+  };
+
+  const startAudioEngine = async () => {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+    beepCtxRef.current = ctx;
+  };
+
+  const stopAudioEngine = () => {
+    if (beepIntervalRef.current) { clearInterval(beepIntervalRef.current); beepIntervalRef.current = null; }
+    if (beepCtxRef.current) { beepCtxRef.current.close(); beepCtxRef.current = null; }
+  };
+
   const startVideoCapture = async () => {
     try {
-      // Prefer rear camera (environment) for camera-down placement
+      // Use selfie (user-facing) camera
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: true,
       });
       streamRef.current = stream;
@@ -200,6 +266,7 @@ export default function PhoneREMDevice() {
   const beginSession = async () => {
     setPhase('active');
     await startVideoCapture();
+    await startAudioEngine();
 
     let elapsed = 0;
     timerRef.current = setInterval(() => {
@@ -209,6 +276,7 @@ export default function PhoneREMDevice() {
 
       const level = computeAlertLevel();
       setAlertLevel(level);
+      updateBeeping(level);
 
       if (level >= 20) {
         const label = level >= 80 ? '🔴 STRONG DISTURBANCE' : level >= 50 ? '🟠 MODERATE ACTIVITY' : '🟡 MINOR FLUCTUATION';
@@ -220,6 +288,7 @@ export default function PhoneREMDevice() {
 
   const deactivate = () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    stopAudioEngine();
     window.removeEventListener('devicemotion', handleMotion);
     window.removeEventListener('deviceorientationabsolute', handleOrientation);
     window.removeEventListener('deviceorientation', handleOrientation);
@@ -275,6 +344,7 @@ export default function PhoneREMDevice() {
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      stopAudioEngine();
       window.removeEventListener('devicemotion', handleMotion);
       window.removeEventListener('deviceorientationabsolute', handleOrientation);
       window.removeEventListener('deviceorientation', handleOrientation);
