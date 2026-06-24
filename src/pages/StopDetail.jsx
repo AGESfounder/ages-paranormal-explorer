@@ -141,10 +141,10 @@ export default function StopDetail() {
           </div>
         )}
 
-        <Tabs defaultValue="paranormal" className="w-full">
+        <Tabs defaultValue="history" className="w-full">
           <TabsList className="w-full bg-card/50 border border-border/40">
-            <TabsTrigger value="paranormal" className="flex-1 text-xs font-heading uppercase tracking-wider data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Paranormal</TabsTrigger>
             <TabsTrigger value="history" className="flex-1 text-xs font-heading uppercase tracking-wider data-[state=active]:bg-primary/10 data-[state=active]:text-primary">History</TabsTrigger>
+            <TabsTrigger value="paranormal" className="flex-1 text-xs font-heading uppercase tracking-wider data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Paranormal</TabsTrigger>
             <TabsTrigger value="investigate" className="flex-1 text-xs font-heading uppercase tracking-wider data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Investigate</TabsTrigger>
           </TabsList>
           <TabsContent value="paranormal" className="mt-3">
