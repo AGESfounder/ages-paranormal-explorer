@@ -21,6 +21,9 @@ const equipmentOptions = [
   'Thermal Device',
   'SLS Camera',
   'XLS Camera',
+  'Vibration Device',
+  'Radio Sweeper',
+  'Anomaly Camera',
   'Trigger Object',
   'Other Device',
 ];
