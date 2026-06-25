@@ -25,7 +25,7 @@ const equipmentOptions = [
   'Radio Sweeper',
   'Anomaly Camera',
   'Trigger Object',
-  'Other Device',
+  'Other',
 ];
 
 function getTodayDate() {
@@ -108,7 +108,7 @@ export default function Evidence() {
       const idx = eq.indexOf(item);
       if (idx >= 0) {
         eq.splice(idx, 1);
-        if (item === 'Other Device') setOtherDeviceText('');
+        if (item === 'Other') setOtherDeviceText('');
       } else {
         eq.push(item);
       }
@@ -157,8 +157,8 @@ export default function Evidence() {
     if (!form.title.trim()) return;
     setSubmitting(true);
     const payload = { ...form };
-    if (payload.equipment.includes('Other Device') && otherDeviceText.trim()) {
-      payload.equipment = payload.equipment.map(e => e === 'Other Device' ? 'Other Device: ' + otherDeviceText.trim() : e);
+    if (payload.equipment.includes('Other') && otherDeviceText.trim()) {
+      payload.equipment = payload.equipment.map(e => e === 'Other' ? 'Other: ' + otherDeviceText.trim() : e);
     }
     await base44.entities.Evidence.create(payload);
     setSubmitting(false);
@@ -264,7 +264,7 @@ export default function Evidence() {
               <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${equipmentOpen ? 'rotate-180' : ''}`} />
             </button>
             {equipmentOpen && (
-              <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border/60 bg-card shadow-xl overflow-hidden">
+              <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border/60 bg-card shadow-xl overflow-y-auto max-h-48">
                 {equipmentOptions.map(opt => (
                   <button
                     key={opt}
@@ -277,9 +277,9 @@ export default function Evidence() {
                 ))}
               </div>
             )}
-            {form.equipment.includes('Other Device') && (
+            {form.equipment.includes('Other') && (
               <Input
-                placeholder="Specify other device..."
+                placeholder="Specify equipment..."
                 value={otherDeviceText}
                 onChange={e => setOtherDeviceText(e.target.value)}
                 className="mt-2 bg-card/50 border-border/50"
@@ -487,7 +487,7 @@ export default function Evidence() {
               <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${equipmentOpen ? 'rotate-180' : ''}`} />
             </button>
             {equipmentOpen && (
-              <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border/60 bg-card shadow-xl overflow-hidden">
+              <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border/60 bg-card shadow-xl overflow-y-auto max-h-48">
                 {equipmentOptions.map(opt => (
                   <button
                     key={opt}
@@ -500,9 +500,9 @@ export default function Evidence() {
                 ))}
               </div>
             )}
-            {form.equipment.includes('Other Device') && (
+            {form.equipment.includes('Other') && (
               <Input
-                placeholder="Specify other device..."
+                placeholder="Specify equipment..."
                 value={otherDeviceText}
                 onChange={e => setOtherDeviceText(e.target.value)}
                 className="mt-2 bg-card/50 border-border/50"
