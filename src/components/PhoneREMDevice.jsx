@@ -396,7 +396,7 @@ export default function PhoneREMDevice() {
           onClick={activate}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors"
         >
-          <Play className="w-4 h-4" /> Activate REM Device
+          <Play className="w-4 h-4" /> Activate Vibration Device
         </button>
       </div>
     );

@@ -78,7 +78,6 @@ function detectFigures(imageData, width, height) {
 export default function SLSCamera() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const overlayCanvasRef = useRef(null);
   const animFrameRef = useRef(null);
   const streamRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -130,16 +129,25 @@ export default function SLSCamera() {
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
 
-      // Start recording
+      setActive(true);
+      processFrame();
+
+      // Record from canvas (what's shown on screen) + audio from camera
+      await new Promise(r => setTimeout(r, 300));
+      const canvasStream = canvasRef.current.captureStream(30);
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) canvasStream.addTrack(audioTrack);
+
       const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
         .find(t => MediaRecorder.isTypeSupported(t)) || '';
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
         setRecordedBlob(blob);
+        canvasStream.getTracks().forEach(t => t.stop());
         stream.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       };
@@ -149,9 +157,6 @@ export default function SLSCamera() {
       // Timer
       setRecordDuration(0);
       timerRef.current = setInterval(() => setRecordDuration(prev => prev + 1), 1000);
-
-      setActive(true);
-      processFrame();
     } catch (e) {
       setError('Camera access denied. Please allow camera permissions.');
     }
@@ -160,8 +165,7 @@ export default function SLSCamera() {
   const processFrame = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const overlay = overlayCanvasRef.current;
-    if (!video || !canvas || !overlay || video.readyState < 2) {
+    if (!video || !canvas || video.readyState < 2) {
       animFrameRef.current = requestAnimationFrame(processFrame);
       return;
     }
@@ -169,10 +173,8 @@ export default function SLSCamera() {
     const w = video.videoWidth || 640;
     const h = video.videoHeight || 480;
     canvas.width = w; canvas.height = h;
-    overlay.width = w; overlay.height = h;
 
     const ctx = canvas.getContext('2d');
-    const octx = overlay.getContext('2d');
 
     ctx.drawImage(video, 0, 0, w, h);
     const imageData = ctx.getImageData(0, 0, w, h);
@@ -185,11 +187,11 @@ export default function SLSCamera() {
     }
     ctx.putImageData(imageData, 0, 0);
 
-    octx.clearRect(0, 0, w, h);
-    octx.strokeStyle = 'rgba(0, 255, 100, 0.06)';
-    octx.lineWidth = 0.5;
-    for (let x = 0; x < w; x += 20) { octx.beginPath(); octx.moveTo(x, 0); octx.lineTo(x, h); octx.stroke(); }
-    for (let y = 0; y < h; y += 20) { octx.beginPath(); octx.moveTo(0, y); octx.lineTo(w, y); octx.stroke(); }
+    // Overlay drawn directly on canvas so recording captures what's on screen
+    ctx.strokeStyle = 'rgba(0, 255, 100, 0.06)';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < w; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y < h; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
 
     setFigureCount(figures.length);
     if (figures.length > 0 && !anomalyDetected) {
@@ -200,28 +202,28 @@ export default function SLSCamera() {
 
     figures.forEach(({ x, y, w: bw, h: bh }) => {
       const joints = BASE_SKELETON.map(([jx, jy]) => [x + jx * bw, y + jy * bh]);
-      octx.strokeStyle = 'rgba(0, 255, 200, 0.9)';
-      octx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(0, 255, 200, 0.9)';
+      ctx.lineWidth = 2;
       JOINT_CONNECTIONS.forEach(([a, b]) => {
-        octx.beginPath(); octx.moveTo(joints[a][0], joints[a][1]); octx.lineTo(joints[b][0], joints[b][1]); octx.stroke();
+        ctx.beginPath(); ctx.moveTo(joints[a][0], joints[a][1]); ctx.lineTo(joints[b][0], joints[b][1]); ctx.stroke();
       });
       joints.forEach(([jx, jy], idx) => {
         if (idx === 4) return;
-        octx.beginPath();
-        octx.arc(jx, jy, idx === 0 ? 7 : 4, 0, Math.PI * 2);
-        octx.fillStyle = idx === 0 ? 'rgba(0,255,150,1)' : 'rgba(0,220,255,0.9)';
-        octx.fill();
+        ctx.beginPath();
+        ctx.arc(jx, jy, idx === 0 ? 7 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = idx === 0 ? 'rgba(0,255,150,1)' : 'rgba(0,220,255,0.9)';
+        ctx.fill();
       });
-      octx.fillStyle = 'rgba(0,255,150,0.9)';
-      octx.font = 'bold 11px monospace';
-      octx.fillText('FIGURE DETECTED', x, y - 8);
+      ctx.fillStyle = 'rgba(0,255,150,0.9)';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText('FIGURE DETECTED', x, y - 8);
     });
 
-    octx.fillStyle = 'rgba(0, 255, 100, 0.7)';
-    octx.font = '10px monospace';
-    octx.fillText('ANOMALY CAM · IR DEPTH SCAN', 8, 16);
-    octx.fillText(`FIGURES: ${figures.length}`, 8, 30);
-    octx.fillText(new Date().toLocaleTimeString(), w - 72, 16);
+    ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';
+    ctx.font = '10px monospace';
+    ctx.fillText('ANOMALY CAM · IR DEPTH SCAN', 8, 16);
+    ctx.fillText(`FIGURES: ${figures.length}`, 8, 30);
+    ctx.fillText(new Date().toLocaleTimeString(), w - 72, 16);
 
     animFrameRef.current = requestAnimationFrame(processFrame);
   };
@@ -255,7 +257,6 @@ export default function SLSCamera() {
       <div className="relative rounded-lg overflow-hidden bg-black border border-green-500/30" style={{ aspectRatio: '4/3' }}>
         <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover opacity-0" playsInline muted />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover" />
-        <canvas ref={overlayCanvasRef} className="absolute inset-0 w-full h-full object-cover" />
 
         {!active && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80">
