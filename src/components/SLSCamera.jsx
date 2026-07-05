@@ -3,7 +3,7 @@ import { Camera, CameraOff, Video, Save, X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 const JOINT_CONNECTIONS = [
-  [0, 1], [1, 2], [2, 3], [3, 4],
+  [0, 1], [1, 2], [2, 3],
   [2, 5], [5, 6], [6, 7],
   [2, 8], [8, 9], [9, 10],
   [3, 11], [11, 12], [12, 13],
@@ -50,7 +50,7 @@ function detectFigures(imageData, width, height) {
         }
         if (pixelCount > SKIN_THRESHOLD) {
           const bw = maxX - minX, bh = maxY - minY;
-          if (bh > bw * 0.8 && bh > 40 && bw > 15) regions.push({ x: minX, y: minY, w: bw, h: bh });
+          if (bh > bw * 0.8 && bh > 40 && bw > 15) regions.push({ x: minX, y: minY, w: bw, h: bh, count: pixelCount });
         }
       }
     }
@@ -66,7 +66,7 @@ function detectFigures(imageData, width, height) {
       const a = r, b = regions[j];
       if (!(a.x + a.w < b.x - 20 || b.x + b.w < a.x - 20 || a.y + a.h < b.y - 20 || b.y + b.h < a.y - 20)) {
         const nx = Math.min(a.x, b.x), ny = Math.min(a.y, b.y);
-        r = { x: nx, y: ny, w: Math.max(a.x + a.w, b.x + b.w) - nx, h: Math.max(a.y + a.h, b.y + b.h) - ny };
+        r = { x: nx, y: ny, w: Math.max(a.x + a.w, b.x + b.w) - nx, h: Math.max(a.y + a.h, b.y + b.h) - ny, count: (a.count || 0) + (b.count || 0) };
         used.add(j);
       }
     }
@@ -200,7 +200,11 @@ export default function SLSCamera() {
       anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
     }
 
-    figures.forEach(({ x, y, w: bw, h: bh }) => {
+    figures.forEach(({ x, y, w: bw, h: bh, count }) => {
+      const strength = Math.min((count || 1800) / 6000, 1);
+      const scale = 0.5 + strength * 0.5;
+      const sw = bw * scale, sh = bh * scale;
+      const sx = x + (bw - sw) / 2, sy = y + (bh - sh) / 2;
       const wave = Math.sin(Date.now() / 300);
       const joints = BASE_SKELETON.map(([jx, jy], idx) => {
         let nx = jx, ny = jy;
@@ -208,7 +212,7 @@ export default function SLSCamera() {
         if (idx === 7) { ny = 0.05; nx = 0.35 + wave * 0.15; }
         if (idx === 9) { ny = 0.12; nx = 0.65 - wave * 0.08; }
         if (idx === 10) { ny = 0.05; nx = 0.65 - wave * 0.15; }
-        return [x + nx * bw, y + ny * bh];
+        return [sx + nx * sw, sy + ny * sh];
       });
       ctx.strokeStyle = 'rgba(0, 255, 200, 0.9)';
       ctx.lineWidth = 2;
