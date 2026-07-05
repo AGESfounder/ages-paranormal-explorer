@@ -249,11 +249,12 @@ export default function Toolkit() {
       const now = new Date();
       const date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
       const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-      let description = 'Recorded EVP session — ' + formatDuration(recordDuration);
+      const isRadio = activeTool?.type === 'audio';
+      let description = (isRadio ? 'Radio Sweeper session — ' : 'Recorded EVP session — ') + formatDuration(recordDuration);
       if (recorderNotes.trim()) description += '\n\nNotes: ' + recorderNotes.trim();
       if (savedWords.length > 0) description += '\n\nWords heard: ' + savedWords.join(', ');
       await base44.entities.Evidence.create({
-        title: 'EVP Session ' + date,
+        title: (isRadio ? 'Radio Sweeper Session ' : 'EVP Session ') + date,
         type: 'evp',
         description,
         file_url: uploadRes.file_url,

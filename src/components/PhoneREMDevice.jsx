@@ -48,6 +48,7 @@ export default function PhoneREMDevice() {
   const alertLevelRef = useRef(0);
   const sessionDurationRef = useRef(0);
   const eventsRef = useRef([]);
+  const sensorDataReceivedRef = useRef(false);
 
   const timerRef = useRef(null);
   const beepCtxRef = useRef(null);
@@ -61,6 +62,7 @@ export default function PhoneREMDevice() {
 
   // Sensor handlers
   const handleMotion = (e) => {
+    sensorDataReceivedRef.current = true;
     const a = e.acceleration || e.accelerationIncludingGravity || {};
     currentSensor.current.ax = a.x || 0;
     currentSensor.current.ay = a.y || 0;
@@ -86,7 +88,7 @@ export default function PhoneREMDevice() {
         const res = await DeviceMotionEvent.requestPermission();
         if (res !== 'granted') throw new Error('Motion permission denied');
       } catch (e) {
-        setSensorError('Motion sensor permission denied. Press the button below and allow sensor access when prompted.');
+        setSensorError('Motion sensor permission was denied. To fix: on iPhone, go to Settings → Safari → Motion & Orientation Access and enable it, then reload this page. On Android, allow sensor access in your browser settings and try again.');
         return false;
       }
     }
@@ -246,6 +248,11 @@ export default function PhoneREMDevice() {
       // Wait for canvas to be ready
       await new Promise(r => setTimeout(r, 200));
 
+      if (!canvasRef.current || typeof canvasRef.current.captureStream !== 'function') {
+        setSensorError('Recording not supported in this browser. Sensor detection still works — you just won\'t get a video file.');
+        return false;
+      }
+
       const canvasStream = canvasRef.current.captureStream(30);
       const audioTrack = audioStream.getAudioTracks()[0];
       if (audioTrack) canvasStream.addTrack(audioTrack);
@@ -324,6 +331,7 @@ export default function PhoneREMDevice() {
     sessionDurationRef.current = 0;
     setAlertLevel(0);
     alertLevelRef.current = 0;
+    sensorDataReceivedRef.current = false;
     baselineSamples.current = [];
 
     const ok = await requestSensorPermissions();
@@ -363,6 +371,10 @@ export default function PhoneREMDevice() {
       setSessionDuration(elapsed);
       sessionDurationRef.current = elapsed;
       calibrateBaseline();
+
+      if (elapsed === 5 && !sensorDataReceivedRef.current) {
+        setSensorError('No motion sensor data detected. This tool requires a mobile device with accelerometer/gyroscope sensors.');
+      }
 
       const level = computeAlertLevel();
       setAlertLevel(level);
@@ -536,6 +548,12 @@ export default function PhoneREMDevice() {
   if (phase === 'active') {
     return (
       <div className="space-y-3">
+        {sensorError && (
+          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-amber-300">{sensorError}</p>
+          </div>
+        )}
         {/* Main alert display */}
         <div className={`p-4 rounded-lg border transition-all duration-500 ${alertBg(alertLevel)}`}>
           <div className="flex items-center justify-between mb-2">
