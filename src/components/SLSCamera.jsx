@@ -216,7 +216,7 @@ export default function SLSCamera() {
       });
       ctx.fillStyle = 'rgba(0,255,150,0.9)';
       ctx.font = 'bold 11px monospace';
-      ctx.fillText('FIGURE DETECTED', x, y - 8);
+      ctx.fillText('ANOMALY DETECTED', x, y - 8);
     });
 
     ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';

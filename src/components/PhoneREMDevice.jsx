@@ -498,7 +498,7 @@ export default function PhoneREMDevice() {
           <Zap className="w-10 h-10 text-primary mx-auto opacity-60" />
           <p className="text-xs font-heading uppercase tracking-wider text-primary">Vibration Communicator</p>
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Uses your phone's motion, gyroscope & orientation sensors to detect energy disturbances — just like a physical REM device. The on-screen visualization is recorded for evidence.
+            Uses your phone's motion, gyroscope & orientation sensors to detect energy disturbances — modeled after a physical REM device. The on-screen visualization is recorded for evidence.
           </p>
         </div>
 
