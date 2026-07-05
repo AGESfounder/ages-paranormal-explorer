@@ -201,7 +201,15 @@ export default function SLSCamera() {
     }
 
     figures.forEach(({ x, y, w: bw, h: bh }) => {
-      const joints = BASE_SKELETON.map(([jx, jy]) => [x + jx * bw, y + jy * bh]);
+      const wave = Math.sin(Date.now() / 300);
+      const joints = BASE_SKELETON.map(([jx, jy], idx) => {
+        let nx = jx, ny = jy;
+        if (idx === 6) { ny = 0.12; nx = 0.35 + wave * 0.08; }
+        if (idx === 7) { ny = 0.05; nx = 0.35 + wave * 0.15; }
+        if (idx === 9) { ny = 0.12; nx = 0.65 - wave * 0.08; }
+        if (idx === 10) { ny = 0.05; nx = 0.65 - wave * 0.15; }
+        return [x + nx * bw, y + ny * bh];
+      });
       ctx.strokeStyle = 'rgba(0, 255, 200, 0.9)';
       ctx.lineWidth = 2;
       JOINT_CONNECTIONS.forEach(([a, b]) => {
