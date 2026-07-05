@@ -29,6 +29,7 @@ export default function Toolkit() {
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordDuration, setRecordDuration] = useState(0);
   const [savingRec, setSavingRec] = useState(false);
+  const [recorderNotes, setRecorderNotes] = useState('');
   const [weatherData, setWeatherData] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherLocation, setWeatherLocation] = useState('');
@@ -248,16 +249,21 @@ export default function Toolkit() {
       const now = new Date();
       const date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
       const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      let description = 'Recorded EVP session — ' + formatDuration(recordDuration);
+      if (recorderNotes.trim()) description += '\n\nNotes: ' + recorderNotes.trim();
+      if (savedWords.length > 0) description += '\n\nWords heard: ' + savedWords.join(', ');
       await base44.entities.Evidence.create({
         title: 'EVP Session ' + date,
         type: 'evp',
-        description: 'Recorded EVP session — ' + formatDuration(recordDuration),
+        description,
         file_url: uploadRes.file_url,
         date,
         time,
       });
       setRecordedBlob(null);
       setRecordDuration(0);
+      setRecorderNotes('');
+      setSavedWords([]);
     } catch (err) {
       console.error('Save failed', err);
     }
@@ -348,12 +354,23 @@ export default function Toolkit() {
                 <Play className="w-3.5 h-3.5" /> Start Recording
               </button>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
+                <audio src={URL.createObjectURL(recordedBlob)} controls className="w-full" />
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">What did you hear?</p>
+                  <textarea
+                    placeholder="Play back the recording and type any words or sounds you hear..."
+                    value={recorderNotes}
+                    onChange={e => setRecorderNotes(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 resize-none"
+                  />
+                </div>
                 <button onClick={saveRecording} disabled={savingRec} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
                   <Save className="w-3.5 h-3.5" /> {savingRec ? 'Saving...' : 'Save to Evidence Journal'}
                 </button>
                 <p className="text-[10px] text-muted-foreground/60 text-center">Saves automatically with date & time</p>
-                <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
+                <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); setRecorderNotes(''); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
                   <X className="w-3.5 h-3.5" /> Discard
                 </button>
               </div>
@@ -960,6 +977,7 @@ Best Practices
                   if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
                 }
                 setRecordedBlob(null);
+                setRecorderNotes('');
                 setSavedWords([]);
                 setGuideDetail(null);
                 stopNarration();

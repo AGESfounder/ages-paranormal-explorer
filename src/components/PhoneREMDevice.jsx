@@ -22,6 +22,13 @@ function alertBg(level) {
   return 'border-red-500/50 bg-red-500/10';
 }
 
+function alertHexColor(level) {
+  if (level < 20) return '#4ade80';
+  if (level < 50) return '#facc15';
+  if (level < 80) return '#fb923c';
+  return '#ef4444';
+}
+
 export default function PhoneREMDevice() {
   const [phase, setPhase] = useState('idle'); // idle | countdown | active | stopped
   const [countdown, setCountdown] = useState(3);
@@ -37,15 +44,20 @@ export default function PhoneREMDevice() {
   const baselineSamples = useRef([]);
   const currentSensor = useRef({ ax: 0, ay: 0, az: 9.8, gx: 0, gy: 0, gz: 0, mx: 0, my: 0, mz: 0 });
 
+  // Refs for canvas drawing (avoid stale closures inside interval)
+  const alertLevelRef = useRef(0);
+  const sessionDurationRef = useRef(0);
+  const eventsRef = useRef([]);
+
   const timerRef = useRef(null);
-  const alertTimerRef = useRef(null);
   const beepCtxRef = useRef(null);
   const beepIntervalRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const videoChunksRef = useRef([]);
   const videoBlobRef = useRef(null);
-  const videoPreviewRef = useRef(null);
-  const streamRef = useRef(null);
+  const canvasRef = useRef(null);
+  const canvasIntervalRef = useRef(null);
+  const audioStreamRef = useRef(null);
 
   // Sensor handlers
   const handleMotion = (e) => {
@@ -60,7 +72,6 @@ export default function PhoneREMDevice() {
   };
 
   const handleOrientation = (e) => {
-    // Use orientation as a proxy for magnetometer when DeviceOrientationEvent has absolute data
     if (e.absolute) {
       currentSensor.current.mx = e.alpha || 0;
       currentSensor.current.my = e.beta || 0;
@@ -75,7 +86,7 @@ export default function PhoneREMDevice() {
         const res = await DeviceMotionEvent.requestPermission();
         if (res !== 'granted') throw new Error('Motion permission denied');
       } catch (e) {
-        setSensorError('Motion sensor permission denied. Please allow sensor access in your browser settings.');
+        setSensorError('Motion sensor permission denied. Press the button below and allow sensor access when prompted.');
         return false;
       }
     }
@@ -93,7 +104,6 @@ export default function PhoneREMDevice() {
     const ctx = beepCtxRef.current;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    // Sine wave with a slight detuned overtone for creepy texture
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
 
@@ -104,7 +114,7 @@ export default function PhoneREMDevice() {
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
 
     osc2.type = 'triangle';
-    osc2.frequency.value = frequency * 1.007; // slight detune = eerie beating effect
+    osc2.frequency.value = frequency * 1.007;
     gain2.gain.setValueAtTime(0.0001, ctx.currentTime);
     gain2.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01);
     gain2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
@@ -118,16 +128,12 @@ export default function PhoneREMDevice() {
   };
 
   const updateBeeping = (level) => {
-    // Clear existing interval
     if (beepIntervalRef.current) {
       clearInterval(beepIntervalRef.current);
       beepIntervalRef.current = null;
     }
-
-    if (level < 20) return; // silent in green zone
-
-    // level 20→100: pitch rises from 220Hz → 1000Hz, steady beep throughout
-    const t = (level - 20) / 80; // 0 at level 20, 1 at level 100
+    if (level < 20) return;
+    const t = (level - 20) / 80;
     const freq = 220 + t * 780;
     beepIntervalRef.current = setInterval(() => playBeep(freq, 0.08), 90);
   };
@@ -143,25 +149,111 @@ export default function PhoneREMDevice() {
     if (beepCtxRef.current) { beepCtxRef.current.close(); beepCtxRef.current = null; }
   };
 
-  const startVideoCapture = async () => {
+  // Canvas drawing — renders the REM device visualization for recording
+  const drawCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    const level = alertLevelRef.current;
+    const dur = sessionDurationRef.current;
+    const evs = eventsRef.current;
+    const color = alertHexColor(level);
+
+    // Background
+    ctx.fillStyle = '#0a0e1a';
+    ctx.fillRect(0, 0, w, h);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(0, 255, 100, 0.05)';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < w; x += 30) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y < h; y += 30) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+    // Title
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('VIBRATION COMMUNICATOR', w / 2, 30);
+
+    // Alert level number
+    ctx.fillStyle = color;
+    ctx.font = 'bold 80px monospace';
+    ctx.fillText(String(level), w / 2, h / 2 + 15);
+
+    // Label
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '12px monospace';
+    ctx.fillText('ENERGY LEVEL', w / 2, h / 2 + 40);
+
+    // Status text
+    const statusText = level < 20 ? 'QUIET' : level < 50 ? 'MINOR ACTIVITY' : level < 80 ? 'MODERATE DISTURBANCE' : 'STRONG DISTURBANCE';
+    ctx.fillStyle = color;
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText(statusText, w / 2, h / 2 + 62);
+
+    // Bar
+    const barY = h - 50;
+    const barW = w - 80;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(40, barY, barW, 12);
+    ctx.fillStyle = color;
+    ctx.fillRect(40, barY, barW * (level / 100), 12);
+
+    // REC indicator
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(w - 60, 25, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('REC ' + formatDuration(dur), w - 15, 29);
+
+    // Event log
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px monospace';
+    ctx.fillText('EVENT LOG', 15, h - 20);
+    evs.slice(0, 3).forEach((ev, i) => {
+      const y = h - 35 - i * 14;
+      if (y < 0) return;
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(ev.time, 15, y);
+      ctx.fillStyle = alertHexColor(ev.level);
+      ctx.fillText(ev.label.replace(/[🔴🟠🟡]/g, '').trim(), 80, y);
+    });
+  };
+
+  const startCanvasDrawing = () => {
+    if (canvasIntervalRef.current) clearInterval(canvasIntervalRef.current);
+    drawCanvas();
+    canvasIntervalRef.current = setInterval(drawCanvas, 33); // ~30fps
+  };
+
+  const stopCanvasDrawing = () => {
+    if (canvasIntervalRef.current) { clearInterval(canvasIntervalRef.current); canvasIntervalRef.current = null; }
+  };
+
+  // Record from canvas (what's shown on screen) + audio from mic
+  const startRecording = async () => {
     try {
-      // Use selfie (user-facing) camera
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true,
-      });
-      streamRef.current = stream;
+      // Request audio only — video comes from the canvas
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = audioStream;
 
-      // Show live preview
-      if (videoPreviewRef.current) {
-        videoPreviewRef.current.srcObject = stream;
-      }
+      // Wait for canvas to be ready
+      await new Promise(r => setTimeout(r, 200));
 
-      // Pick a supported mimeType
+      const canvasStream = canvasRef.current.captureStream(30);
+      const audioTrack = audioStream.getAudioTracks()[0];
+      if (audioTrack) canvasStream.addTrack(audioTrack);
+
       const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
         .find(t => MediaRecorder.isTypeSupported(t)) || '';
 
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = mr;
       videoChunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
@@ -169,19 +261,19 @@ export default function PhoneREMDevice() {
         const blob = new Blob(videoChunksRef.current, { type: mimeType || 'video/webm' });
         videoBlobRef.current = blob;
         setVideoBlob(blob);
-        stream.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
+        canvasStream.getTracks().forEach(t => t.stop());
+        audioStream.getTracks().forEach(t => t.stop());
+        audioStreamRef.current = null;
       };
       mr.start(1000);
       return true;
     } catch (e) {
-      setSensorError('Camera/mic access denied. Grant permission to record the session.');
+      setSensorError('Microphone access denied. Grant permission to record the session.');
       return false;
     }
   };
 
   const calibrateBaseline = () => {
-    // Collect ~20 samples over 1s during countdown to establish a quiet baseline
     const s = currentSensor.current;
     baselineSamples.current.push({ ...s });
     if (baselineSamples.current.length >= 20) {
@@ -214,12 +306,10 @@ export default function PhoneREMDevice() {
       Math.pow(cur.mz - base.mz, 2)
     );
 
-    // Normalize each to 0–1 range then combine
     const accelScore = Math.min(dAccel / (SENSITIVITY_THRESHOLDS.accel * 5), 1);
     const gyroScore = Math.min(dGyro / (SENSITIVITY_THRESHOLDS.gyro * 5), 1);
     const magScore = Math.min(dMag / (SENSITIVITY_THRESHOLDS.mag * 5), 1);
 
-    // Weighted combination: accel most sensitive, mag adds presence-style detection
     const combined = (accelScore * 0.5 + gyroScore * 0.3 + magScore * 0.2) * 100;
     return Math.round(Math.min(combined, 100));
   };
@@ -229,8 +319,11 @@ export default function PhoneREMDevice() {
     setVideoBlob(null);
     videoBlobRef.current = null;
     setEvents([]);
+    eventsRef.current = [];
     setSessionDuration(0);
+    sessionDurationRef.current = 0;
     setAlertLevel(0);
+    alertLevelRef.current = 0;
     baselineSamples.current = [];
 
     const ok = await requestSensorPermissions();
@@ -257,40 +350,51 @@ export default function PhoneREMDevice() {
 
   const beginSession = async () => {
     setPhase('active');
-    await startVideoCapture();
+    // Wait for canvas to render
+    await new Promise(r => setTimeout(r, 100));
+
+    startCanvasDrawing();
+    await startRecording();
     await startAudioEngine();
 
     let elapsed = 0;
     timerRef.current = setInterval(() => {
       elapsed++;
       setSessionDuration(elapsed);
+      sessionDurationRef.current = elapsed;
       calibrateBaseline();
 
       const level = computeAlertLevel();
       setAlertLevel(level);
+      alertLevelRef.current = level;
       updateBeeping(level);
 
       if (level >= 20) {
         const label = level >= 80 ? '🔴 STRONG DISTURBANCE' : level >= 50 ? '🟠 MODERATE ACTIVITY' : '🟡 MINOR FLUCTUATION';
         const ts = new Date().toLocaleTimeString();
-        setEvents(prev => [{ time: ts, label, level }, ...prev].slice(0, 20));
+        const newEvent = { time: ts, label, level };
+        setEvents(prev => {
+          const updated = [newEvent, ...prev].slice(0, 20);
+          eventsRef.current = updated;
+          return updated;
+        });
       }
     }, 300);
   };
 
   const deactivate = () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    stopCanvasDrawing();
     stopAudioEngine();
     window.removeEventListener('devicemotion', handleMotion);
     window.removeEventListener('deviceorientationabsolute', handleOrientation);
     window.removeEventListener('deviceorientation', handleOrientation);
 
-    // Stop media recorder — onstop fires async and sets videoBlob
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-    } else if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
+    } else if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(t => t.stop());
+      audioStreamRef.current = null;
     }
 
     setPhase('stopped');
@@ -319,6 +423,7 @@ export default function PhoneREMDevice() {
       videoBlobRef.current = null;
       setPhase('idle');
       setEvents([]);
+      eventsRef.current = [];
     } catch (e) {
       console.error('Save failed', e);
     }
@@ -330,12 +435,15 @@ export default function PhoneREMDevice() {
     videoBlobRef.current = null;
     setPhase('idle');
     setEvents([]);
+    eventsRef.current = [];
     setAlertLevel(0);
+    alertLevelRef.current = 0;
   };
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      stopCanvasDrawing();
       stopAudioEngine();
       window.removeEventListener('devicemotion', handleMotion);
       window.removeEventListener('deviceorientationabsolute', handleOrientation);
@@ -343,8 +451,8 @@ export default function PhoneREMDevice() {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try { mediaRecorderRef.current.stop(); } catch (e) {}
       }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(t => t.stop());
       }
     };
   }, []);
@@ -360,9 +468,17 @@ export default function PhoneREMDevice() {
     return (
       <div className="space-y-4">
         {sensorError && (
-          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-300">{sensorError}</p>
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-300">{sensorError}</p>
+            </div>
+            <button
+              onClick={activate}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors"
+            >
+              <Play className="w-3.5 h-3.5" /> Allow Access
+            </button>
           </div>
         )}
 
@@ -370,7 +486,7 @@ export default function PhoneREMDevice() {
           <Zap className="w-10 h-10 text-primary mx-auto opacity-60" />
           <p className="text-xs font-heading uppercase tracking-wider text-primary">Vibration Communicator</p>
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Uses your phone's motion, gyroscope & orientation sensors to detect energy disturbances — just like a physical REM device. Camera + audio is recorded for evidence.
+            Uses your phone's motion, gyroscope & orientation sensors to detect energy disturbances — just like a physical REM device. The on-screen visualization is recorded for evidence.
           </p>
         </div>
 
@@ -378,9 +494,9 @@ export default function PhoneREMDevice() {
           <p className="text-[10px] font-heading uppercase tracking-wider text-amber-400">Instructions</p>
           <ol className="space-y-1">
             {[
-              'Press Activate and grant sensor, camera & mic permissions.',
+              'Press Activate and grant sensor & mic permissions.',
               'Wait for the 3-second calibration countdown.',
-              'Set your phone face-down (camera side up) on a flat surface.',
+              'Set your phone face-down on a flat surface.',
               'Step away and observe — any energy disturbance will be detected.',
               'Press Deactivate when finished. You can save the video as evidence.',
             ].map((step, i) => (
@@ -441,9 +557,9 @@ export default function PhoneREMDevice() {
           </div>
         </div>
 
-        {/* Live camera preview (small, so user can confirm camera is recording) */}
+        {/* Canvas recording — captures what's shown on screen */}
         <div className="rounded-lg overflow-hidden border border-border/30 bg-black relative">
-          <video ref={videoPreviewRef} autoPlay muted playsInline className="w-full h-32 object-cover opacity-70" />
+          <canvas ref={canvasRef} width={640} height={360} className="w-full h-32 object-cover" />
           <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/80">
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             <span className="text-[9px] text-white font-mono">REC</span>
@@ -521,7 +637,7 @@ export default function PhoneREMDevice() {
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">
-            <p className="text-xs text-muted-foreground">No video captured (camera may not have been available).</p>
+            <p className="text-xs text-muted-foreground">No video captured (recording may not have been available).</p>
           </div>
         )}
 
