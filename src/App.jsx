@@ -29,6 +29,7 @@ import Admin from '@/pages/Admin';
 import Store from '@/pages/Store';
 import Leaderboard from '@/pages/Leaderboard';
 import CommunityMap from '@/pages/CommunityMap';
+import EvidenceDashboard from '@/pages/EvidenceDashboard';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -79,6 +80,7 @@ const AuthenticatedApp = () => {
         <Route path="/store" element={<Store />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/community-map" element={<CommunityMap />} />
+        <Route path="/evidence-dashboard" element={<EvidenceDashboard />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

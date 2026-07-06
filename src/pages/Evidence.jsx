@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ChevronDown, ClipboardList, Lock, Globe } from 'lucide-react';
+import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ChevronDown, ClipboardList, Lock, Globe, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -586,7 +586,10 @@ export default function Evidence() {
   return (
     <PageContainer>
       <SectionHeader title="Evidence Journal" subtitle="Your Findings" rightAction={
-        <button onClick={() => setShowForm(true)} className="p-2"><Plus className="w-5 h-5 text-primary" /></button>
+        <div className="flex items-center gap-1">
+          <Link to="/evidence-dashboard" className="p-2" title="Evidence Dashboard"><BarChart3 className="w-5 h-5 text-primary" /></Link>
+          <button onClick={() => setShowForm(true)} className="p-2"><Plus className="w-5 h-5 text-primary" /></button>
+        </div>
       } />
       <div className="px-4 pb-28 space-y-3 pt-3">
         {loading ? (
