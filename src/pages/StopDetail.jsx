@@ -38,9 +38,20 @@ export default function StopDetail() {
     setLoading(true);
     const results = await base44.entities.TourStop.filter({ id: stopId });
     if (results.length > 0) {
-      setStop(results[0]);
-      const siblings = await base44.entities.TourStop.filter({ tour_id: results[0].tour_id });
+      const currentStop = results[0];
+      setStop(currentStop);
+      const siblings = await base44.entities.TourStop.filter({ tour_id: currentStop.tour_id });
       setAllStops(siblings.sort((a, b) => a.stop_number - b.stop_number));
+      try {
+        const tours = await base44.entities.Tour.filter({ id: currentStop.tour_id });
+        await base44.auth.updateMe({
+          last_tour_id: currentStop.tour_id,
+          last_stop_id: currentStop.id,
+          last_stop_number: currentStop.stop_number,
+          last_stop_name: currentStop.name,
+          last_tour_title: tours[0]?.title || '',
+        });
+      } catch (e) {}
     }
     setLoading(false);
   };

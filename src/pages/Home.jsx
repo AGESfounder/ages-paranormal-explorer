@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe } from 'lucide-react';
+import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, ChevronRight, RotateCcw } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
@@ -162,6 +162,31 @@ export default function Home() {
             </div>
           </div>
         </motion.div>
+
+        {user?.last_stop_id && (
+          <motion.div
+            className="w-full max-w-sm px-6 mb-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.55 }}
+          >
+            <Link
+              to={`/stop/${user.last_stop_id}`}
+              className="flex items-center gap-3 p-4 rounded-xl border border-primary/40 bg-primary/10 hover:bg-primary/15 hover:shadow-[0_0_24px_hsl(199,89%,48%,0.2)] transition-all duration-300 group"
+            >
+              <div className="p-2.5 rounded-lg bg-primary/20 group-hover:bg-primary/30 transition-colors">
+                <RotateCcw className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-heading text-xs font-semibold tracking-wide uppercase text-primary">Continue Where You Left Off</p>
+                <p className="text-[11px] text-foreground/80 mt-0.5 truncate">
+                  {user.last_tour_title ? `${user.last_tour_title} · ` : ''}Stop {user.last_stop_number}: {user.last_stop_name}
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-primary shrink-0 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          </motion.div>
+        )}
 
         <motion.div
           className="w-full max-w-sm px-6 grid grid-cols-2 gap-3 mb-4"

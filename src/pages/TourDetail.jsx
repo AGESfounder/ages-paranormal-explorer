@@ -249,6 +249,15 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
         notes: `Completed tour: ${tour.title}`,
       });
       setIsCompleted(true);
+      try {
+        await base44.auth.updateMe({
+          last_tour_id: '',
+          last_stop_id: '',
+          last_stop_number: 0,
+          last_stop_name: '',
+          last_tour_title: '',
+        });
+      } catch (e) {}
     } catch (e) {}
     setCompletingTour(false);
   };
