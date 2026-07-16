@@ -82,8 +82,8 @@ export default function Home() {
             >
               <div className="space-y-1">
                 <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                  <span className="text-primary font-bold text-base">A</span>ffordable
-                </p>
+                  <span className="text-primary font-bold text-base">A</span>ccessible
+                  </p>
                 <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
                   <span className="text-primary font-bold text-base">G</span>host
                 </p>
