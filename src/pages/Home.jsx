@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, ChevronRight, RotateCcw } from 'lucide-react';
+import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, Square, Play } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
@@ -21,11 +21,30 @@ export default function Home() {
   const [user, setUser] = useState(null);
   const [evidences, setEvidences] = useState([]);
   const [showCustomTour, setShowCustomTour] = useState(false);
+  const [tourInProgress, setTourInProgress] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
+    base44.auth.me().then(u => { setUser(u); setTourInProgress(!!u?.last_stop_id); }).catch(() => {});
     base44.entities.Evidence.list('-created_date', 5).then(setEvidences).catch(() => {});
   }, []);
+
+  const handleStopTour = async () => {
+    setTourInProgress(false);
+    try {
+      await base44.auth.updateMe({
+        last_tour_id: '',
+        last_stop_id: '',
+        last_stop_number: 0,
+        last_stop_name: '',
+        last_tour_title: '',
+      });
+    } catch (e) {}
+  };
+
+  const handleContinueTour = () => {
+    if (user?.last_stop_id) navigate(`/stop/${user.last_stop_id}`);
+  };
 
   return (
     <PageContainer>
@@ -163,28 +182,39 @@ export default function Home() {
           </div>
         </motion.div>
 
-        {user?.last_stop_id && (
+        {user && (
           <motion.div
             className="w-full max-w-sm px-6 mb-4"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.55 }}
           >
-            <Link
-              to={`/stop/${user.last_stop_id}`}
-              className="flex items-center gap-3 p-4 rounded-xl border border-primary/40 bg-primary/10 hover:bg-primary/15 hover:shadow-[0_0_24px_hsl(199,89%,48%,0.2)] transition-all duration-300 group"
-            >
-              <div className="p-2.5 rounded-lg bg-primary/20 group-hover:bg-primary/30 transition-colors">
-                <RotateCcw className="w-5 h-5 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-heading text-xs font-semibold tracking-wide uppercase text-primary">Continue Where You Left Off</p>
-                <p className="text-[11px] text-foreground/80 mt-0.5 truncate">
-                  {user.last_tour_title ? `${user.last_tour_title} · ` : ''}Stop {user.last_stop_number}: {user.last_stop_name}
+            <div className="flex items-center gap-2 p-3 rounded-xl border border-primary/40 bg-primary/10">
+              <button
+                onClick={handleStopTour}
+                disabled={!tourInProgress}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-red-500/15 border border-red-500/40 text-red-400 font-heading text-xs uppercase tracking-wider hover:bg-red-500/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" /> Stop
+              </button>
+              <div className="flex-1 min-w-0 text-center px-1">
+                <p className="font-heading text-xs font-semibold tracking-wide uppercase text-primary">
+                  {tourInProgress ? 'Continue Current Tour?' : 'No Tour In Progress'}
                 </p>
+                {tourInProgress && (
+                  <p className="text-[11px] text-foreground/80 mt-0.5 truncate">
+                    {user.last_tour_title ? `${user.last_tour_title} · ` : ''}Stop {user.last_stop_number}: {user.last_stop_name}
+                  </p>
+                )}
               </div>
-              <ChevronRight className="w-4 h-4 text-primary shrink-0 group-hover:translate-x-0.5 transition-transform" />
-            </Link>
+              <button
+                onClick={handleContinueTour}
+                disabled={!tourInProgress}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-green-500/15 border border-green-500/40 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              >
+                Go <Play className="w-3.5 h-3.5 fill-current" />
+              </button>
+            </div>
           </motion.div>
         )}
 
