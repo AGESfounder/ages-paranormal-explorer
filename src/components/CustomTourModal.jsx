@@ -77,7 +77,9 @@ PLUS a "stops" array (7-12 stops) — each with:
 - hours_of_operation: e.g. "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday"
 - entry_fee: e.g. "$25 for day tour, $45 for overnight investigation"
 
-Use real locations and real paranormal history for "${dest}". Verify hours, pricing, and after-7PM accessibility. Make every stop feel distinct and worth visiting.`,
+Use real locations and real paranormal history for "${dest}". Verify hours, pricing, and after-7PM accessibility. Make every stop feel distinct and worth visiting.
+
+BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".`,
 
         response_json_schema: {
           type: "object",
