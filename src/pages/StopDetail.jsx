@@ -84,6 +84,7 @@ export default function StopDetail() {
         title={`Stop ${stop.stop_number}`}
         subtitle={stop.name}
         showBack
+        onBack={() => prevStop ? navigate(`/stop/${prevStop.id}`) : navigate(`/tour/${stop.tour_id}`)}
         rightAction={
           <button onClick={() => narrate(stop.narration_text || stop.paranormal_info)} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
             {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
