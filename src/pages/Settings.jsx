@@ -141,8 +141,8 @@ export default function Settings() {
             <h3 className="text-xs font-heading uppercase tracking-wider text-primary flex items-center gap-2"><Info className="w-3.5 h-3.5" /> About</h3>
           </div>
           <div className="p-4 text-center">
-            <h2 className="font-display text-2xl text-primary mb-1">A.G.E.S.</h2>
-            <p className="text-xs text-muted-foreground">Affordable Ghost Exploration Solutions</p>
+            <h2 className="font-display text-2xl text-primary mb-1">AGES</h2>
+            <p className="text-xs text-muted-foreground">Accessible Ghost Exploration Solutions</p>
             <p className="text-[10px] text-muted-foreground/60 mt-2">Version 1.0.0</p>
             <p className="text-[10px] text-muted-foreground/40 mt-1">Every legend has a story. Every location has a history.</p>
           </div>

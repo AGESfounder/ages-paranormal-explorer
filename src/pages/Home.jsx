@@ -52,8 +52,22 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="w-full pt-10 pb-4 px-6 text-center"
+        >
+          <h1 className="font-display text-4xl text-primary tracking-[0.2em] drop-shadow-[0_0_18px_hsl(199,89%,48%,0.5)] leading-none">
+            SGT
+          </h1>
+          <p className="mt-2 font-heading text-sm tracking-[0.25em] uppercase text-primary/80 drop-shadow-[0_0_10px_hsl(199,89%,48%,0.3)]">
+            Self Guided Tours
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="w-full max-w-sm pt-12 pb-6 px-6"
+          className="w-full max-w-sm pb-6 px-6"
         >
           <div className="grid grid-cols-2 grid-rows-2 gap-4">
             {/* Top Left: A.G.E.S. */}
@@ -64,7 +78,7 @@ export default function Home() {
               className="flex items-center justify-center"
             >
               <h1 className="font-display text-5xl text-primary tracking-wider drop-shadow-[0_0_20px_hsl(199,89%,48%,0.4)] leading-none">
-                A.G.E.S.
+                AGES
               </h1>
             </motion.div>
 
@@ -352,7 +366,7 @@ export default function Home() {
           transition={{ delay: 1 }}
           className="mt-8 text-[10px] font-heading tracking-widest uppercase text-muted-foreground/60 text-center px-8"
         >
-          Every legend has a story • Every location has a history
+          Explore Past Existence and its connection to today's unknown
         </motion.p>
       </div>
       <CustomTourModal isOpen={showCustomTour} onClose={() => setShowCustomTour(false)} />

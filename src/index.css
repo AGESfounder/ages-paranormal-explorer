@@ -95,6 +95,11 @@
 
   body {
     @apply bg-background text-foreground font-body;
+    text-shadow: 0 0 6px hsl(199 89% 48% / 0.10);
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading, .font-display {
+    text-shadow: 0 0 10px hsl(199 89% 48% / 0.22), 0 0 22px hsl(199 89% 48% / 0.10);
   }
 }
 
