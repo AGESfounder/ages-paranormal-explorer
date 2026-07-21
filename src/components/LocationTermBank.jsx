@@ -107,11 +107,18 @@ export default function LocationTermBank() {
       } catch {}
 
       const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `Build a "spirit term bank" for a paranormal investigator standing at latitude ${coords.latitude}, longitude ${coords.longitude}. Identify the nearest city/town and region, then generate 60 single-word or short-phrase terms a spirit might "select".
+        prompt: `Generate 60 single-word or short-phrase terms a spirit might "select" for a paranormal investigator standing at latitude ${coords.latitude}, longitude ${coords.longitude}. Identify the nearest city/town and region first.
 
-Prioritize LOCALIZED PARANORMAL HISTORY for this exact area. ${tourContext ? `Here are the closest documented AGES ghost tours near the user and their stops — draw heavily from these locations, their ghosts, notable figures, events, and reported activity:\n${tourContext}` : "No nearby tours were found — rely on the area's own folklore and hauntings."}
+Mix these categories across the 60 terms:
+- VERBS (about 12): actions a spirit might convey or relate to — e.g. flee, watch, hide, remember, follow, knock, whisper, remain, haunt, guard, wait, leave.
+- PEOPLE'S NAMES (about 12): real or historically plausible given names and surnames tied to THIS location — its founders, residents, victims, and reported ghosts. Use full names or first names drawn from local history.
+- HISTORY NOUNS (about 24): nouns tied to THIS location's history, era, landmarks, industry, objects, occupations, dates, and documented events — specific to the area, not generic.
+- YES / NO (about 8): include the literal words "yes" and "no", repeated several times and INTERSPERSED REGULARLY throughout the list (never clustered together) so they recur often during a sweep.
+- GENERAL HAUNTED-LOCATION TERMS (a few): shadow, cold spot, orbs, apparition, EMF, footsteps, cemetery, whisper — common to haunted places in general.
 
-Terms should be evocative nouns or short phrases — specific names of places, people, landmarks, dates, occupations, objects, emotions, weather, and reported paranormal phenomena tied to THIS location and these tours. Avoid generic words. Return a JSON object with "location" (nearest city, state/country) and "terms" (array of 60 strings).`,
+${tourContext ? `Closest documented AGES ghost tours and their stops near the user — draw names, figures, and history from these:\n${tourContext}` : "No nearby tours were found — rely on the area's own history and folklore."}
+
+Keep each term short. Return a JSON object with "location" (nearest city, state/country) and "terms" (array of 60 strings).`,
         response_json_schema: {
           type: 'object',
           properties: {

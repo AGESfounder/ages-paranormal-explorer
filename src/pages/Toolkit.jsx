@@ -4,6 +4,7 @@ import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play,
 import SLSCamera from '../components/SLSCamera';
 import PhoneREMDevice from '../components/PhoneREMDevice';
 import LocationTermBank from '../components/LocationTermBank';
+import ToolkitGrid from '../components/ToolkitGrid';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -11,7 +12,7 @@ import { base44 } from '@/api/base44Client';
 import ResearchDatabase from '../components/ResearchDatabase';
 import useGhostVoice from '../hooks/useGhostVoice';
 
-const tools = [
+const DEFAULT_TOOLS = [
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
   { name: 'Weather Monitor', icon: Cloud, desc: 'Real-time local weather conditions', type: 'weather' },
   { name: 'Vibration Communicator', icon: Zap, desc: 'Detect energy disturbances via phone sensors + video record', type: 'rem' },
@@ -27,6 +28,30 @@ const tools = [
 
 export default function Toolkit() {
   const [activeTool, setActiveTool] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [tools, setTools] = useState(DEFAULT_TOOLS);
+
+  // Reorder DEFAULT_TOOLS to match a saved list of tool names, appending any
+  // new tools that aren't in the saved order.
+  const applyOrder = (defaults, order) => {
+    const byName = Object.fromEntries(defaults.map(t => [t.name, t]));
+    const ordered = (order || []).map(n => byName[n]).filter(Boolean);
+    const seen = new Set(ordered.map(t => t.name));
+    defaults.forEach(t => { if (!seen.has(t.name)) ordered.push(t); });
+    return ordered;
+  };
+
+  useEffect(() => {
+    base44.auth.me().then(u => {
+      setIsAdmin(u?.role === 'admin');
+      if (Array.isArray(u?.toolkit_order)) setTools(applyOrder(DEFAULT_TOOLS, u.toolkit_order));
+    }).catch(() => {});
+  }, []);
+
+  const handleReorder = (next) => {
+    setTools(next);
+    try { base44.auth.updateMe({ toolkit_order: next.map(t => t.name) }); } catch {}
+  };
   const [recording, setRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordDuration, setRecordDuration] = useState(0);
@@ -997,27 +1022,13 @@ Best Practices
           <p className="text-xs text-muted-foreground/60 text-center mb-4">Tap a tool below to open it</p>
         )}
 
-        <div className="grid grid-cols-2 gap-2.5">
-          {tools.map((tool, i) => (
-            <motion.div
-              key={tool.name}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
-              onClick={() => setActiveTool(tool)}
-              className={`p-3.5 rounded-xl border transition-all cursor-pointer ${activeTool?.name === tool.name ? 'border-primary/60 bg-primary/5' : 'border-border/40 bg-card/30 hover:border-primary/30 hover:bg-card/50'}`}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`p-1.5 rounded-md ${activeTool?.name === tool.name ? 'bg-primary/20' : 'bg-secondary/30'}`}>
-                  <tool.icon className={`w-4 h-4 ${activeTool?.name === tool.name ? 'text-primary' : 'text-muted-foreground'}`} />
-                </div>
-                <span className="text-[9px] px-1.5 py-0.5 rounded font-heading uppercase tracking-wider bg-primary/10 text-primary">Tap to Open</span>
-              </div>
-              <p className="text-xs font-medium text-foreground mb-1">{tool.name}</p>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">{tool.desc}</p>
-            </motion.div>
-          ))}
-        </div>
+        <ToolkitGrid
+          tools={tools}
+          activeTool={activeTool}
+          onSelect={setActiveTool}
+          isAdmin={isAdmin}
+          onReorder={handleReorder}
+        />
       </div>
       <NavBar />
     </PageContainer>
