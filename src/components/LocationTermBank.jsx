@@ -130,7 +130,7 @@ export default function LocationTermBank() {
     setLockedWord(word);
     currentWordRef.current = word;
     setCaptured(prev => { const updated = [...prev, { word, at: new Date().toLocaleTimeString() }]; capturedRef.current = updated; return updated; });
-    try { narrate(word); } catch {}
+    try { narrate(word, { creepy: true }); } catch {}
   }, [narrate]);
 
   const requestSensorPermissions = async () => {

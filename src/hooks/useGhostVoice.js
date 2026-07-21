@@ -96,13 +96,13 @@ export default function useGhostVoice() {
     return text.replace(/A\.G\.E\.S\.?/gi, 'Ages');
   };
 
-  const speak = useCallback(async (text) => {
+  const speak = useCallback(async (text, opts = {}) => {
     if (isSpeaking || isGenerating) return;
     setIsGenerating(true);
     try {
       const result = await base44.integrations.Core.GenerateSpeech({
         text: sanitizeText(text),
-        voice: 'storm',
+        voice: opts.voice || 'storm',
       });
 
       startEerieBackground();
@@ -110,6 +110,10 @@ export default function useGhostVoice() {
       const audio = new Audio(result.url);
       audioRef.current = audio;
       audio.volume = 1;
+      // Creepy mode: slow + deepen the playback for a haunting delivery
+      if (opts.creepy) {
+        audio.playbackRate = 0.8;
+      }
       setIsGenerating(false);
       setIsSpeaking(true);
 
@@ -143,11 +147,11 @@ export default function useGhostVoice() {
     setIsGenerating(false);
   }, []);
 
-  const narrate = useCallback((text) => {
+  const narrate = useCallback((text, opts = {}) => {
     if (isSpeaking || isGenerating) {
       stop();
     } else {
-      speak(text);
+      speak(text, opts);
     }
   }, [isSpeaking, isGenerating, speak, stop]);
 
