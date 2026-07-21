@@ -272,7 +272,18 @@ export default function LocationTermBank() {
     }
   };
 
+  // Unlock HTML audio playback within a user gesture so sensor-triggered
+  // speech plays on iOS without requiring an extra screen touch.
+  const unlockAudio = () => {
+    try {
+      const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
+      a.volume = 0;
+      a.play().then(() => { a.pause(); }).catch(() => {});
+    } catch {}
+  };
+
   const startSession = async () => {
+    unlockAudio();
     setCaptured([]);
     setVideoBlob(null);
     setLockedWord(null);
