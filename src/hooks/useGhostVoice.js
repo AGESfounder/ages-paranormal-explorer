@@ -97,7 +97,14 @@ export default function useGhostVoice() {
   };
 
   const speak = useCallback(async (text, opts = {}) => {
-    if (isSpeaking || isGenerating) return;
+    // Stop any current playback so a new word can be spoken immediately
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    stopEerieBackground();
+    setIsSpeaking(false);
     setIsGenerating(true);
     try {
       const result = await base44.integrations.Core.GenerateSpeech({
@@ -155,5 +162,5 @@ export default function useGhostVoice() {
     }
   }, [isSpeaking, isGenerating, speak, stop]);
 
-  return { isSpeaking, isGenerating, narrate, stop };
+  return { isSpeaking, isGenerating, narrate, speak, stop };
 }

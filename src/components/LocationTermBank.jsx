@@ -27,7 +27,7 @@ export default function LocationTermBank() {
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
 
-  const { isSpeaking, isGenerating, narrate } = useGhostVoice();
+  const { isSpeaking, isGenerating, speak } = useGhostVoice();
 
   const rotRef = useRef(null);
   const drawRef = useRef(null);
@@ -130,8 +130,8 @@ export default function LocationTermBank() {
     setLockedWord(word);
     currentWordRef.current = word;
     setCaptured(prev => { const updated = [...prev, { word, at: new Date().toLocaleTimeString() }]; capturedRef.current = updated; return updated; });
-    try { narrate(word, { creepy: true }); } catch {}
-  }, [narrate]);
+    try { speak(word, { creepy: true }); } catch {}
+  }, [speak]);
 
   const requestSensorPermissions = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
