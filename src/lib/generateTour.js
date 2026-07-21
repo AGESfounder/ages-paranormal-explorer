@@ -4,6 +4,10 @@ import { callJson } from '@/lib/llmJson';
 export async function generateLocationTour(destination, state) {
   const dest = destination.trim();
 
+  // Creation generates a LIGHTWEIGHT tour + stop skeletons. Full rich
+  // historical/paranormal detail and notable people are generated lazily,
+  // per stop, when a user opens that stop (see StopDetail.ensureRichContent).
+  // This keeps creation fast and reliable (no oversized AI call / timeout).
   const prompt = `Generate a paranormal ghost hunting tour for the haunted destination "${dest}" in ${state}.
 
 This is a SINGLE DESTINATION tour — ALL stops must be specific areas, rooms, buildings, wings, features, or sections within or on the grounds of "${dest}". Do NOT create stops that are separate, unaffiliated locations.
@@ -39,42 +43,37 @@ Return a JSON object with:
 - safety_info: 2-3 practical safety notes for this specific location
 - best_time: best season/time for investigating
 
-PLUS a "stops" array (6-8 stops) — each with:
+PLUS a "stops" array (6-8 stops) — each a LIGHTWEIGHT skeleton (full detail is generated later, so keep these fields brief):
 - stop_number: starting from 1
 - name: specific area/building/room name within "${dest}"
 - latitude: real coordinates (number)
 - longitude: real coordinates (number)
-- address: street address of "${dest}" (same for all stops since it's one destination — use "${dest}" full address)
-- historical_info: 4-5 DETAILED paragraphs covering construction dates and architecture, major historical events that occurred in that specific area, notable figures who lived/worked/visited/died there, scandals/murders/tragedies, and the area's significance over time. Go deep into specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters.
-- paranormal_info: 4-5 DETAILED paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, exact location within the building), shadow figures, cold spots, poltergeist activity, residual hauntings vs intelligent hauntings, and local folklore/urban legends tied to that area. Include investigator testimonies and well-known paranormal events. Do not just list ghost names — tell their full stories.
+- address: street address of "${dest}" (same for all stops — use "${dest}" full address)
+- historical_info: 2-3 sentences summarizing the key history (construction dates, notable figures, major events). Brief summary only.
+- paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
 - investigation_suggestions: 3-5 specific items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
 - estimated_investigation_time: e.g. "20-30 minutes"
 - construction_date: when that area was built if known (with year)
-- famous_people: notable people associated with that area — include full names, roles, and what happened to them
+- famous_people: notable people associated with that area — full names, roles
 - image_url: empty string
-- narration_text: 6-9 sentences of dramatic, immersive storytelling narration written in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking to fellow investigators about what awaits them. Include vivid sensory details (sounds, smells, temperature, lighting), specific ghost stories, and build anticipation. This should feel like a professional ghost tour guide speaking.
+- narration_text: 4-6 sentences of dramatic, immersive storytelling narration in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking to fellow investigators about what awaits them. Include vivid sensory details and specific ghost stories.
 - travel_method: "walking"
 - hours_of_operation: e.g. "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday"
 - entry_fee: e.g. "$25 for day tour, $45 for overnight investigation"
-- people: array of objects, each { name, story }. Include EVERY notable person mentioned in this stop's historical_info or paranormal_info. The "name" MUST appear verbatim (same spelling and casing) within historical_info or paranormal_info so it can be highlighted. The "story" is a detailed account (4-6 sentences) of who they were, their role, what happened to them (including how they died if relevant), and their paranormal connection — ghost sightings, apparitions, EVPs, and phenomena tied to them.
 
-Use real locations and real paranormal history for "${dest}". Make every stop feel distinct and worth visiting. Every historical_info and paranormal_info field MUST be richly detailed (4-5 paragraphs each) — never brief. When people are mentioned, always include their full story, role, and fate, not just a name.
+Use real locations and real coordinates for "${dest}". Keep every historical_info and paranormal_info field BRIEF (2-3 sentences) — the full rich detail is generated later.
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
 
 Output ONLY a valid JSON object. No markdown fences, no commentary.`;
 
-  // Robust multi-attempt generation: web search first, then a more concise web
-  // attempt, then a no-web fallback using the model's training knowledge.
+  // Robust multi-attempt generation: web search first, then a no-web fallback
+  // using the model's training knowledge. The lightweight payload makes either
+  // attempt fast enough to avoid timeouts.
   let result = null;
   try {
     result = await callJson(prompt, { useWeb: true });
   } catch (e) { console.error('Tour generation (web) failed:', e); }
-  if (!result || !result.stops || result.stops.length === 0) {
-    try {
-      result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info to keep the response complete. Output ONLY valid JSON.', { useWeb: true });
-    } catch (e) { console.error('Tour generation (web, concise) failed:', e); }
-  }
   if (!result || !result.stops || result.stops.length === 0) {
     try {
       result = await callJson(prompt, { useWeb: false });
@@ -126,7 +125,6 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.`;
         travel_method: s.travel_method || 'walking',
         hours_of_operation: s.hours_of_operation || '',
         entry_fee: s.entry_fee || '',
-        people: s.people || [],
       }));
       await base44.entities.TourStop.bulkCreate(stopRecords);
     } catch (e) {

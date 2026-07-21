@@ -155,18 +155,17 @@ export default function TourDetail() {
     try {
       const prompt = `Generate 8-10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
 
-Each stop must have RICH, DETAILED content suitable for 3-5 minutes of spoken narration per stop (~400-600 words across the fields below):
+Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand when a user opens the stop, so keep these fields brief:
 - stop_number: 1-10 in logical route order
 - name, latitude, longitude (real GPS), address
-- historical_info: 4-5 detailed paragraphs covering construction dates and architecture, major historical events that occurred there, notable figures who lived/visited/died there, scandals/murders/tragedies, and the building's significance to the community over time. Go deep into specific dates, names, and documented events.
-- paranormal_info: 4-5 detailed paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, location within the building), shadow figures, cold spots, poltergeist activity, residual hauntings vs intelligent hauntings, and local folklore/urban legends. Include investigator testimonies and well-known paranormal events tied to the location.
+- historical_info: 2-3 sentences summarizing the key history (dates, notable figures, major events). Brief summary only.
+- paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
 - investigation_suggestions: 3-5 items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
 - estimated_investigation_time: "10 minutes" / "15 minutes" / "20 minutes"
 - construction_date, famous_people
-- narration_text: 6-9 sentences of dramatic, immersive storytelling narration written in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking directly to fellow investigators about what awaits them. Include vivid sensory details (sounds, smells, temperature, lighting), specific ghost stories, and build anticipation for the investigation. This should feel like a professional ghost tour guide speaking.
+- narration_text: 4-6 sentences of dramatic, immersive storytelling narration in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking to fellow investigators about what awaits them. Include vivid sensory details and specific ghost stories.
 - hours_of_operation: if the location has restricted public hours, note them (e.g. "Open to public daily 9am-5pm", "Grounds open dawn to dusk, building closed after 4pm"). Leave empty if publicly accessible 24/7.
 - entry_fee: if there is an admission charge, note the cost (e.g. "$10 adults, $5 children", "Free, donations welcome"). Leave empty if completely free.
-- people: array of { name, story }. Include EVERY notable person mentioned in historical_info or paranormal_info. "name" MUST appear verbatim (same spelling/casing) in the text. "story": 4-6 detailed sentences — who they were, their role, fate (how they died if relevant), and their paranormal connection (ghost sightings, apparitions, EVPs, phenomena).
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 

@@ -12,7 +12,10 @@ import StopComments from '../components/StopComments';
 import HighlightPeople from '../components/HighlightPeople';
 import PersonStoryDialog from '../components/PersonStoryDialog';
 import { base44 } from '@/api/base44Client';
+import { callJson } from '@/lib/llmJson';
 import { getOfflineStop } from '@/lib/offlineTours';
+
+const isThinContent = (s) => !s || s.trim().length < 600;
 
 const suggestionIcons = {
   'EVP Session': Radio,
@@ -35,36 +38,59 @@ export default function StopDetail() {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const { isSpeaking, isGenerating, narrate } = useGhostVoice();
 
-  // For existing tours created before the "people" feature, extract notable
-  // figures on first view and persist them to the stop so it only runs once.
-  const ensurePeople = async (currentStop) => {
-    if (!currentStop.paranormal_info && !currentStop.historical_info) return;
+  // Lazily enrich a stop the first time it is viewed. Tour creation stores only
+  // lightweight summaries, so the full rich historical/paranormal detail and
+  // notable people are generated here per-stop (small, reliable calls) and
+  // persisted. Stops that already have rich content only get people filled in.
+  const ensureRichContent = async (currentStop) => {
+    const needsFull = isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info);
+    if (!needsFull && currentStop.people && currentStop.people.length > 0) return;
     setPeopleLoading(true);
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `For the paranormal tour stop "${currentStop.name}", identify EVERY notable person mentioned in the historical and paranormal information. For each person, write a detailed account (4-6 sentences) of who they were, their role, what happened to them (including how they died if relevant), and their paranormal connection — the ghost stories, sightings, apparitions, EVPs, and phenomena associated with them. Only include people actually mentioned in the text. Each person's "name" MUST match exactly how they appear in the text so it can be highlighted.
+      let updates = {};
+      let generatedPeople = [];
+      if (needsFull) {
+        const prompt = `Generate rich, detailed content for a single paranormal investigation stop.
+
+Stop name: ${currentStop.name}
+Address: ${currentStop.address || ''}
+Existing notes: ${(currentStop.historical_info || '')} ${(currentStop.paranormal_info || '')}
+
+Produce a JSON object with:
+- historical_info: 4-5 DETAILED paragraphs covering construction dates and architecture, major historical events that occurred there, notable figures who lived/worked/visited/died there, scandals/murders/tragedies, and the area's significance over time. Include specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters.
+- paranormal_info: 4-5 DETAILED paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, exact location), shadow figures, cold spots, poltergeist activity, residual vs intelligent hauntings, and local folklore. Include investigator testimonies and well-known paranormal events. Tell full ghost stories, not just names.
+- people: array of { name, story }. Include EVERY notable person mentioned in historical_info or paranormal_info. "name" MUST appear verbatim (same spelling/casing) in the text so it can be highlighted. "story": 4-6 detailed sentences — who they were, their role, fate (how they died if relevant), and their paranormal connection (sightings, apparitions, EVPs, phenomena).
+
+Use real history and paranormal lore for this location. Output ONLY a valid JSON object. No markdown fences, no commentary.`;
+        let data = null;
+        try { data = await callJson(prompt, { useWeb: true }); } catch (e) { console.error('Enrich (web) failed:', e); }
+        if (!data) { try { data = await callJson(prompt, { useWeb: false }); } catch (e) { console.error('Enrich (no-web) failed:', e); } }
+        if (data) {
+          if (data.historical_info) updates.historical_info = data.historical_info;
+          if (data.paranormal_info) updates.paranormal_info = data.paranormal_info;
+          generatedPeople = (data.people || []).filter(p => p.name && p.story);
+          if (generatedPeople.length) updates.people = generatedPeople;
+        }
+      } else {
+        const prompt = `For the paranormal tour stop "${currentStop.name}", identify EVERY notable person mentioned in the historical and paranormal information. For each person, write a detailed account (4-6 sentences) of who they were, their role, what happened to them (including how they died if relevant), and their paranormal connection — the ghost stories, sightings, apparitions, EVPs, and phenomena associated with them. Only include people actually mentioned in the text. Each person's "name" MUST match exactly how they appear in the text so it can be highlighted.
 
 Stop name: ${currentStop.name}
 Historical information: ${currentStop.historical_info || ''}
 Paranormal information: ${currentStop.paranormal_info || ''}
 
-Return JSON with a "people" array, each item { name, story }.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            people: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: { name: { type: "string" }, story: { type: "string" } },
-              },
-            },
-          },
-        },
-      });
-      const generated = (result.people || []).filter(p => p.name && p.story);
-      setPeople(generated);
-      try { await base44.entities.TourStop.update(currentStop.id, { people: generated }); } catch (e) {}
+Return JSON with a "people" array, each item { name, story }. Output ONLY valid JSON. No markdown fences.`;
+        let data = null;
+        try { data = await callJson(prompt, { useWeb: false }); } catch (e) { console.error('People extract failed:', e); }
+        if (data) {
+          generatedPeople = (data.people || []).filter(p => p.name && p.story);
+          if (generatedPeople.length) updates.people = generatedPeople;
+        }
+      }
+      if (Object.keys(updates).length) {
+        try { await base44.entities.TourStop.update(currentStop.id, updates); } catch (e) {}
+        setStop(prev => ({ ...prev, ...updates }));
+      }
+      setPeople(generatedPeople);
     } catch (e) {}
     setPeopleLoading(false);
   };
@@ -82,7 +108,7 @@ Return JSON with a "people" array, each item { name, story }.`,
         const currentStop = results[0];
         setStop(currentStop);
         setPeople(currentStop.people || []);
-        if (!currentStop.people || currentStop.people.length === 0) ensurePeople(currentStop);
+        if (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0) ensureRichContent(currentStop);
         const siblings = await base44.entities.TourStop.filter({ tour_id: currentStop.tour_id });
         setAllStops(siblings.sort((a, b) => a.stop_number - b.stop_number));
         try {
@@ -226,7 +252,7 @@ Return JSON with a "people" array, each item { name, story }.`,
                 />
               </p>
               {peopleLoading && (
-                <p className="text-[10px] text-muted-foreground mt-2 italic">Extracting notable figures…</p>
+                <p className="text-[10px] text-muted-foreground mt-2 italic">{isThinContent(stop.paranormal_info) ? 'Loading detailed findings…' : 'Extracting notable figures…'}</p>
               )}
               {people.length > 0 && !peopleLoading && (
                 <p className="text-[10px] text-sky-400/70 mt-2">Tap a highlighted name to reveal their story.</p>
@@ -242,6 +268,9 @@ Return JSON with a "people" array, each item { name, story }.`,
                 </button>
               </div>
               <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{stop.historical_info}</p>
+              {peopleLoading && isThinContent(stop.historical_info) && (
+                <p className="text-[10px] text-muted-foreground mt-2 italic">Loading detailed history…</p>
+              )}
             </div>
           </TabsContent>
           <TabsContent value="investigate" className="mt-3">
