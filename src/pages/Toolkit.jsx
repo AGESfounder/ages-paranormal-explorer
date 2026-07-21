@@ -19,10 +19,10 @@ const tools = [
   { name: 'Radio Sweeper', icon: Volume2, desc: 'AM/FM frequency sweep for EVP', type: 'audio' },
   { name: 'Evidence Analyzer', icon: Wrench, desc: 'Review & rate your evidence', type: 'analyzer' },
   { name: 'Anomaly Camera', icon: ScanFace, desc: 'Detect human & ghost figures via IR depth scan', type: 'sls' },
-  { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
+  { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
+  { name: 'Term Sweeper', icon: Library, desc: 'Sweep location terms — environment-triggered spirit dictation + screen record', type: 'termbank' },
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
-  { name: 'Location Term Bank', icon: Library, desc: 'Location word bank — environment-triggered spirit dictation + screen record', type: 'termbank' },
 ];
 
 export default function Toolkit() {

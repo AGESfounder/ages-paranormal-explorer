@@ -10,6 +10,7 @@ export default function useGhostVoice() {
   const gainRef = useRef(null);
   const audioCtxRef = useRef(null);
   const srcRef = useRef(null);
+  const recordDestRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -110,6 +111,7 @@ export default function useGhostVoice() {
       }
       audioCtxRef.current.resume();
       const ctx = audioCtxRef.current;
+      try { if (!recordDestRef.current) recordDestRef.current = ctx.createMediaStreamDestination(); } catch {}
       const buf = ctx.createBuffer(1, 1, 8000);
       const s = ctx.createBufferSource();
       s.buffer = buf;
@@ -154,6 +156,7 @@ export default function useGhostVoice() {
           sNode.buffer = audioBuf;
           if (opts.creepy) sNode.playbackRate.value = 0.8;
           sNode.connect(ctx.destination);
+          if (recordDestRef.current) sNode.connect(recordDestRef.current);
           srcRef.current = sNode;
           setIsGenerating(false);
           setIsSpeaking(true);
@@ -212,5 +215,21 @@ export default function useGhostVoice() {
     }
   }, [isSpeaking, isGenerating, speak, stop]);
 
-  return { isSpeaking, isGenerating, narrate, speak, stop, unlock };
+  // Connect the mic into the same Web Audio destination that captures the
+  // dictated speech, returning one audio track containing both — so the
+  // recorded video includes the voiced terms, not just ambient sound.
+  const attachMicToRecording = useCallback((micStream) => {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx) return null;
+      if (!recordDestRef.current) recordDestRef.current = ctx.createMediaStreamDestination();
+      if (micStream) {
+        const micSrc = ctx.createMediaStreamSource(micStream);
+        micSrc.connect(recordDestRef.current);
+      }
+      return recordDestRef.current.stream.getAudioTracks()[0] || null;
+    } catch { return null; }
+  }, []);
+
+  return { isSpeaking, isGenerating, narrate, speak, stop, unlock, attachMicToRecording };
 }

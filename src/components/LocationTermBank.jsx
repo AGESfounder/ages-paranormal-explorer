@@ -27,7 +27,7 @@ export default function LocationTermBank() {
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
 
-  const { isSpeaking, isGenerating, speak, unlock } = useGhostVoice();
+  const { isSpeaking, isGenerating, speak, unlock, attachMicToRecording } = useGhostVoice();
 
   const rotRef = useRef(null);
   const drawRef = useRef(null);
@@ -218,7 +218,7 @@ Terms should be evocative nouns or short phrases — specific names of places, p
     ctx.fillStyle = '#3b82f6';
     ctx.font = 'bold 15px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('LOCATION TERM BANK', w / 2, 28);
+    ctx.fillText('TERM SWEEPER', w / 2, 28);
 
     // REC indicator
     ctx.fillStyle = '#ef4444';
@@ -275,7 +275,10 @@ Terms should be evocative nouns or short phrases — specific names of places, p
         return false;
       }
       const canvasStream = canvasRef.current.captureStream(30);
-      const audioTrack = audioStream.getAudioTracks()[0];
+      // Mix the mic + creepy-voice speech (Web Audio) so dictated terms are
+      // captured directly in the recorded video, not just ambient sound.
+      const mixedTrack = attachMicToRecording(audioStream);
+      let audioTrack = mixedTrack || audioStream.getAudioTracks()[0];
       if (audioTrack) canvasStream.addTrack(audioTrack);
       const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
         .find(t => MediaRecorder.isTypeSupported(t)) || '';
@@ -286,7 +289,7 @@ Terms should be evocative nouns or short phrases — specific names of places, p
       mr.onstop = () => {
         const blob = new Blob(videoChunksRef.current, { type: mimeType || 'video/webm' });
         setVideoBlob(blob);
-        canvasStream.getTracks().forEach(t => t.stop());
+        canvasStream.getVideoTracks().forEach(t => t.stop());
         audioStream.getTracks().forEach(t => t.stop());
         audioStreamRef.current = null;
       };
@@ -347,9 +350,9 @@ Terms should be evocative nouns or short phrases — specific names of places, p
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
       await base44.entities.Evidence.create({
-        title: `Location Term Bank — ${locationLabel} — ${date}`,
+        title: `Term Sweeper — ${locationLabel} — ${date}`,
         type: 'video',
-        description: `Location Term Bank session at ${locationLabel} — ${formatDuration(sessionDuration)} — ${captured.length} term(s) captured via environment trigger: ${captured.map(c => c.word).join(', ') || 'none'}.`,
+        description: `Term Sweeper session at ${locationLabel} — ${formatDuration(sessionDuration)} — ${captured.length} term(s) captured via environment trigger: ${captured.map(c => c.word).join(', ') || 'none'}.`,
         file_url,
         date,
         time,
@@ -379,7 +382,7 @@ Terms should be evocative nouns or short phrases — specific names of places, p
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
-            <li>Tap <span className="text-primary font-medium">Build Term Bank</span> — allow location access so AGES gathers 60 words tied to your area's history & hauntings.</li>
+            <li>Tap <span className="text-primary font-medium">Build Terms</span> — allow location access so AGES gathers 60 words tied to your area's history & hauntings.</li>
             <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 2 seconds each; the session records.</li>
             <li>Hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud.</li>
             <li>After each word is dictated, the scan resumes automatically.</li>
@@ -387,7 +390,7 @@ Terms should be evocative nouns or short phrases — specific names of places, p
           </ol>
         </div>
         <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
-          <Library className="w-4 h-4" /> Build Term Bank
+          <Library className="w-4 h-4" /> Build Terms
         </button>
       </div>
     );
@@ -418,7 +421,7 @@ Terms should be evocative nouns or short phrases — specific names of places, p
           <Play className="w-4 h-4" /> Start Session
         </button>
         <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-primary/30 hover:text-primary transition-colors">
-          <RefreshCw className="w-3.5 h-3.5" /> Rebuild Term Bank
+          <RefreshCw className="w-3.5 h-3.5" /> Rebuild Terms
         </button>
       </div>
     );
