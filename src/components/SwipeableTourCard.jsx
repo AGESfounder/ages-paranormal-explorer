@@ -84,6 +84,15 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
       const stops = await base44.entities.TourStop.filter({ tour_id: tour.id });
       saveTourOffline(tour, stops);
       setIsDownloaded(true);
+      const blob = new Blob([JSON.stringify({ tour, stops, savedAt: Date.now() }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(tour.title || 'AGES Tour').replace(/[^a-z0-9]+/gi, '_')} - AGES Tour.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (err) { /* ignore */ }
     setActionLoading(null);
   };
