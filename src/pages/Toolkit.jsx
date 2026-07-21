@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap } from 'lucide-react';
+import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap, Library } from 'lucide-react';
 import SLSCamera from '../components/SLSCamera';
 import PhoneREMDevice from '../components/PhoneREMDevice';
+import LocationTermBank from '../components/LocationTermBank';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -21,6 +22,7 @@ const tools = [
   { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
+  { name: 'Location Term Bank', icon: Library, desc: 'Location word bank — environment-triggered spirit dictation + screen record', type: 'termbank' },
 ];
 
 export default function Toolkit() {
@@ -937,6 +939,9 @@ Best Practices
 
       case 'rem':
         return <PhoneREMDevice />;
+
+      case 'termbank':
+        return <LocationTermBank />;
 
       default:
         return null;
