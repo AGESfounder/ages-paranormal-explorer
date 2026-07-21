@@ -118,6 +118,25 @@
 .leaflet-container {
   background: hsl(222 47% 5%) !important;
 }
+
+.toolkit-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(199 89% 48% / 0.5) hsl(222 47% 8%);
+}
+.toolkit-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.toolkit-scroll::-webkit-scrollbar-track {
+  background: hsl(222 47% 8%);
+  border-radius: 4px;
+}
+.toolkit-scroll::-webkit-scrollbar-thumb {
+  background: hsl(199 89% 48% / 0.5);
+  border-radius: 4px;
+}
+.toolkit-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(199 89% 48% / 0.8);
+}
 .leaflet-control-attribution {
   background: rgba(0,0,0,0.5) !important;
   color: hsl(215 20% 40%) !important;

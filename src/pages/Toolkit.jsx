@@ -18,7 +18,6 @@ const DEFAULT_TOOLS = [
   { name: 'Vibration Communicator', icon: Zap, desc: 'Detect energy disturbances via phone sensors + video record', type: 'rem' },
   { name: 'Moon Phase', icon: Moon, desc: 'Current moon phase & illumination', type: 'moon' },
   { name: 'Radio Sweeper', icon: Volume2, desc: 'AM/FM frequency sweep for EVP', type: 'audio' },
-  { name: 'Evidence Analyzer', icon: Wrench, desc: 'Review & rate your evidence', type: 'analyzer' },
   { name: 'Anomaly Camera', icon: ScanFace, desc: 'Detect human & ghost figures via IR depth scan', type: 'sls' },
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
@@ -974,9 +973,9 @@ Best Practices
   };
 
   return (
-    <PageContainer>
+    <PageContainer className="h-screen flex flex-col overflow-hidden">
       <SectionHeader title="Investigation Toolkit" subtitle="Ghost Hunting Tools" showBack />
-      <div className="px-4 pb-28 pt-3">
+      <div className="flex-1 overflow-y-auto px-4 pb-28 pt-3 toolkit-scroll">
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 mb-4">
           <p className="text-xs text-muted-foreground leading-relaxed">
             Your paranormal investigation toolkit. Tap any tool to open its interactive interface. Always bring physical equipment as backup.
