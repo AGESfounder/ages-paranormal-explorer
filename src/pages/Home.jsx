@@ -5,6 +5,7 @@ import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, 
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
+import HauntedLocations from '../components/HauntedLocations';
 import { base44 } from '@/api/base44Client';
 
 const menuItems = [
@@ -231,6 +232,8 @@ export default function Home() {
             </div>
           </motion.div>
         )}
+
+        <HauntedLocations />
 
         <motion.div
           className="w-full max-w-sm px-6 grid grid-cols-2 gap-3 mb-4"
