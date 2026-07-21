@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Ghost, Navigation, Search, Loader2, Clock, DollarSign, MapPin, X, ChevronDown, Sparkles } from 'lucide-react';
+import { Ghost, Navigation, Search, Loader2, Clock, DollarSign, MapPin, X, ChevronDown, Sparkles, Volume2, Square } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { generateLocationTour } from '@/lib/generateTour';
+import useGhostVoice from '../hooks/useGhostVoice';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -74,7 +75,18 @@ export default function HauntedLocations() {
   const [expandedId, setExpandedId] = useState(null);
   const [expandedOverviews, setExpandedOverviews] = useState({});
   const [creatingId, setCreatingId] = useState(null);
+  const [narratingId, setNarratingId] = useState(null);
   const navigate = useNavigate();
+  const { narrate, stop, isSpeaking, isGenerating } = useGhostVoice();
+
+  useEffect(() => {
+    if (!isSpeaking && !isGenerating) setNarratingId(null);
+  }, [isSpeaking, isGenerating]);
+
+  const handleNarrate = (loc) => {
+    if (narratingId === loc.id) { stop(); setNarratingId(null); }
+    else { setNarratingId(loc.id); narrate(loc.overview || loc.name, { voice: 'storm' }); }
+  };
 
   const buildLocations = async (lat, lon) => {
     const [tours, stops] = await Promise.all([
@@ -340,6 +352,21 @@ export default function HauntedLocations() {
                               );
                             })() : (
                               <p className="text-[11px] text-muted-foreground italic p-2">No overview available.</p>
+                            )}
+                            {loc.overview && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleNarrate(loc); }}
+                                className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-secondary/60 border border-border/40 text-foreground font-heading text-[11px] uppercase tracking-wider hover:border-primary/40 hover:text-primary transition-colors"
+                              >
+                                {narratingId === loc.id && isGenerating ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : narratingId === loc.id ? (
+                                  <Square className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Volume2 className="w-3.5 h-3.5" />
+                                )}
+                                {narratingId === loc.id ? (isGenerating ? 'Generating…' : 'Stop Narration') : 'Narrate Summary'}
+                              </button>
                             )}
                             {loc.existingTourId ? (
                               <button
