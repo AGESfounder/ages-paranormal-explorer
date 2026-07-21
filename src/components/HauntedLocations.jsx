@@ -108,6 +108,7 @@ export default function HauntedLocations() {
           city: tour.city,
           createName: tour.title,
           createState: tour.state,
+          existingTourId: tour.id,
         });
       } else {
         clusterStops(ts, 0.15).forEach(cluster => {
@@ -324,14 +325,23 @@ export default function HauntedLocations() {
                             ) : (
                               <p className="text-[11px] text-muted-foreground italic p-2">No overview available.</p>
                             )}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleCreateTour(loc); }}
-                              disabled={creatingId === loc.id}
-                              className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-60"
-                            >
-                              {creatingId === loc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                              {creatingId === loc.id ? 'Creating Tour…' : 'Create Tour of This Location'}
-                            </button>
+                            {loc.existingTourId ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); navigate(`/tour/${loc.existingTourId}`); }}
+                                className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-accent-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-accent/80 transition-colors"
+                              >
+                                <MapPin className="w-3.5 h-3.5" /> Go to Existing Tour
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleCreateTour(loc); }}
+                                disabled={creatingId === loc.id}
+                                className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-60"
+                              >
+                                {creatingId === loc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                {creatingId === loc.id ? 'Creating Tour…' : 'Create Tour of This Location'}
+                              </button>
+                            )}
                           </div>
                         </motion.div>
                       )}

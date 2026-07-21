@@ -24,9 +24,9 @@ Return a JSON object with:
 - state: "${state}"
 - city: the city where "${dest}" is located
 - tour_type: "walking" (use "walking" unless the destination is extremely spread out)
-- description: 2-3 sentences about the destination's haunted history
-- introduction: 3-4 sentences setting the scene for investigators
-- conclusion: 2-3 sentences wrapping up the investigation
+- description: 4-6 detailed sentences about the destination's haunted history, founding, and why it's notorious
+- introduction: 2-3 rich paragraphs setting the scene for investigators — the atmosphere, what to expect, and the location's dark legacy
+- conclusion: 2-3 paragraphs wrapping up the investigation and reflecting on what was explored
 - difficulty: "easy", "moderate", or "challenging"
 - estimated_duration: e.g. "2-3 hours"
 - total_distance: e.g. "~0.8 miles"
@@ -44,19 +44,19 @@ PLUS a "stops" array (7-12 stops) — each with:
 - latitude: real coordinates (number)
 - longitude: real coordinates (number)
 - address: street address of "${dest}" (same for all stops since it's one destination — use "${dest}" full address)
-- historical_info: 2-3 sentences of the specific area's history
-- paranormal_info: 2-3 sentences about paranormal activity reported in that specific area
-- investigation_suggestions: 3-4 specific suggestions for investigating that area
+- historical_info: 4-5 DETAILED paragraphs covering construction dates and architecture, major historical events that occurred in that specific area, notable figures who lived/worked/visited/died there, scandals/murders/tragedies, and the area's significance over time. Go deep into specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters.
+- paranormal_info: 4-5 DETAILED paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, exact location within the building), shadow figures, cold spots, poltergeist activity, residual hauntings vs intelligent hauntings, and local folklore/urban legends tied to that area. Include investigator testimonies and well-known paranormal events. Do not just list ghost names — tell their full stories.
+- investigation_suggestions: 3-5 specific items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
 - estimated_investigation_time: e.g. "20-30 minutes"
-- construction_date: when that area was built if known
-- famous_people: notable people associated with that area
+- construction_date: when that area was built if known (with year)
+- famous_people: notable people associated with that area — include full names, roles, and what happened to them
 - image_url: empty string
-- narration_text: 2-3 sentences of evocative narration for audio guides
+- narration_text: 8-12 sentences of dramatic, immersive storytelling narration written in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking to fellow investigators about what awaits them. Include vivid sensory details (sounds, smells, temperature, lighting), specific ghost stories, and build anticipation. This should feel like a professional ghost tour guide speaking.
 - travel_method: "walking"
 - hours_of_operation: e.g. "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday"
 - entry_fee: e.g. "$25 for day tour, $45 for overnight investigation"
 
-Use real locations and real paranormal history for "${dest}". Verify hours, pricing, and after-7PM accessibility. Make every stop feel distinct and worth visiting.
+Use real locations and real paranormal history for "${dest}". Verify hours, pricing, and after-7PM accessibility. Make every stop feel distinct and worth visiting. Every historical_info and paranormal_info field MUST be richly detailed (4-5 paragraphs each) — never brief. When people are mentioned, always include their full story, role, and fate, not just a name.
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".`,
 
