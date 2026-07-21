@@ -1,50 +1,61 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Library, MapPin, Play, Square, Save, RefreshCw, Loader2, Volume2, Video, VideoOff, X, Zap, Info } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Library, MapPin, Play, Square, Save, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import useGhostVoice from '../hooks/useGhostVoice';
 
-const ROTATION_MS = 110;          // how fast words cycle
-const TRIGGER_COOLDOWN_MS = 3500; // min time between triggers
-const ACCEL_THRESHOLD = 3.2;      // m/s² deviation from gravity baseline
-const ORIENT_THRESHOLD = 28;     // degrees of sudden tilt
+const ROTATION_MS = 2000;         // each word stays 2 seconds
+const TRIGGER_COOLDOWN_MS = 3500;
+const ACCEL_THRESHOLD = 3.2;
+const ORIENT_THRESHOLD = 28;
+
+function formatDuration(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 export default function LocationTermBank() {
-  const [phase, setPhase] = useState('idle'); // idle | loading | ready | running
+  const [phase, setPhase] = useState('idle'); // idle | loading | ready | running | stopped
   const [terms, setTerms] = useState([]);
   const [locationLabel, setLocationLabel] = useState('');
-  const [currentWord, setCurrentWord] = useState('');
   const [lockedWord, setLockedWord] = useState(null);
   const [captured, setCaptured] = useState([]);
-  const [error, setError] = useState('');
-
-  // screen recording
-  const [recState, setRecState] = useState('idle'); // idle | recording | stopped
-  const [recBlob, setRecBlob] = useState(null);
-  const [recDuration, setRecDuration] = useState(0);
-  const [recError, setRecError] = useState('');
+  const [sessionDuration, setSessionDuration] = useState(0);
+  const [videoBlob, setVideoBlob] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [sensorError, setSensorError] = useState('');
 
   const { isSpeaking, isGenerating, narrate } = useGhostVoice();
 
   const rotRef = useRef(null);
+  const drawRef = useRef(null);
+  const canvasRef = useRef(null);
   const motionHandlerRef = useRef(null);
   const orientHandlerRef = useRef(null);
   const baselineRef = useRef(9.8);
+  const lastOrientRef = useRef(null);
   const lastTriggerRef = useRef(0);
   const lockedRef = useRef(false);
   const termsRef = useRef([]);
-  const recRef = useRef(null);
-  const recChunksRef = useRef([]);
-  const recStreamRef = useRef(null);
-  const recTimerRef = useRef(null);
+  const currentWordRef = useRef('');
+  const lockedWordRef = useRef(null);
+  const sessionDurRef = useRef(0);
+  const capturedRef = useRef([]);
+  const mediaRecorderRef = useRef(null);
+  const videoChunksRef = useRef([]);
+  const audioStreamRef = useRef(null);
+  const timerRef = useRef(null);
 
   useEffect(() => { termsRef.current = terms; }, [terms]);
+  useEffect(() => { capturedRef.current = captured; }, [captured]);
 
   // Resume scanning once narration of a locked word finishes
   useEffect(() => {
     if (lockedWord && !isSpeaking && !isGenerating) {
       setLockedWord(null);
+      lockedWordRef.current = null;
       lockedRef.current = false;
       if (phase === 'running') startRotation();
     }
@@ -54,11 +65,12 @@ export default function LocationTermBank() {
 
   const stopEverything = () => {
     if (rotRef.current) { clearInterval(rotRef.current); rotRef.current = null; }
+    if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
-    if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
-    if (recRef.current && recRef.current.state === 'recording') { try { recRef.current.stop(); } catch {} }
-    if (recStreamRef.current) { recStreamRef.current.getTracks().forEach(t => t.stop()); recStreamRef.current = null; }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
+    if (audioStreamRef.current) { audioStreamRef.current.getTracks().forEach(t => t.stop()); audioStreamRef.current = null; }
   };
 
   const generateBank = async () => {
@@ -73,7 +85,7 @@ export default function LocationTermBank() {
       });
 
       const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `Build a "spirit term bank" for a paranormal investigator standing at latitude ${coords.latitude}, longitude ${coords.longitude}. Identify the nearest city/town and region, then generate 50 single-word or short-phrase terms associated with THIS location's history, folklore, hauntings, notable people, landmarks, events, industries, and reported paranormal activity. Terms should be evocative nouns or short phrases a spirit might "select" — e.g. names, places, emotions, objects, occupations, dates, weather. Avoid generic words. Return a JSON object with "location" (nearest city, state/country) and "terms" (array of 50 strings).`,
+        prompt: `Build a "spirit term bank" for a paranormal investigator standing at latitude ${coords.latitude}, longitude ${coords.longitude}. Identify the nearest city/town and region, then generate 60 single-word or short-phrase terms associated with THIS location's history, folklore, hauntings, notable people, landmarks, events, industries, and reported paranormal activity. Terms should be evocative nouns or short phrases a spirit might "select" — e.g. names, places, emotions, objects, occupations, dates, weather. Avoid generic words. Return a JSON object with "location" (nearest city, state/country) and "terms" (array of 60 strings).`,
         response_json_schema: {
           type: 'object',
           properties: {
@@ -97,10 +109,13 @@ export default function LocationTermBank() {
 
   const startRotation = () => {
     if (rotRef.current) clearInterval(rotRef.current);
+    const pool = termsRef.current;
+    if (pool.length) currentWordRef.current = pool[Math.floor(Math.random() * pool.length)];
     rotRef.current = setInterval(() => {
-      const pool = termsRef.current;
-      if (!pool.length) return;
-      setCurrentWord(pool[Math.floor(Math.random() * pool.length)]);
+      if (lockedRef.current) return;
+      const p = termsRef.current;
+      if (!p.length) return;
+      currentWordRef.current = p[Math.floor(Math.random() * p.length)];
     }, ROTATION_MS);
   };
 
@@ -109,253 +124,372 @@ export default function LocationTermBank() {
     if (lockedRef.current || now - lastTriggerRef.current < TRIGGER_COOLDOWN_MS) return;
     if (!termsRef.current.length) return;
     lastTriggerRef.current = now;
-    const word = currentWord || termsRef.current[Math.floor(Math.random() * termsRef.current.length)];
-    if (rotRef.current) { clearInterval(rotRef.current); rotRef.current = null; }
+    const word = currentWordRef.current || termsRef.current[Math.floor(Math.random() * termsRef.current.length)];
     lockedRef.current = true;
+    lockedWordRef.current = word;
     setLockedWord(word);
-    setCurrentWord(word);
-    setCaptured(prev => [...prev, { word, at: new Date().toLocaleTimeString() }]);
+    currentWordRef.current = word;
+    setCaptured(prev => { const updated = [...prev, { word, at: new Date().toLocaleTimeString() }]; capturedRef.current = updated; return updated; });
     try { narrate(word); } catch {}
-  }, [currentWord, narrate]);
+  }, [narrate]);
 
-  const startSensors = async () => {
-    // iOS 13+ requires explicit permission
+  const requestSensorPermissions = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
       try {
-        const perm = await DeviceMotionEvent.requestPermission();
-        if (perm !== 'granted') { /* still attach; desktop works without it */ }
-      } catch {}
+        const res = await DeviceMotionEvent.requestPermission();
+        if (res !== 'granted') { setSensorError('Motion sensor permission was denied. Lock-on-trigger needs movement detection — enable Motion & Orientation Access in your browser/Safari settings and reload.'); return false; }
+      } catch { /* desktop works without */ }
     }
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try { await DeviceOrientationEvent.requestPermission(); } catch {}
+    }
+    return true;
+  };
+
+  const startSensors = async () => {
+    const ok = await requestSensorPermissions();
+    if (!ok) return;
 
     const motionHandler = (e) => {
       const a = e.accelerationIncludingGravity;
       if (!a) return;
       const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
       if (Math.abs(mag - baselineRef.current) > ACCEL_THRESHOLD) triggerLock();
-      // gently track baseline so slow drifts don't fire
       baselineRef.current = baselineRef.current * 0.97 + mag * 0.03;
     };
     motionHandlerRef.current = motionHandler;
     window.addEventListener('devicemotion', motionHandler);
 
-    let lastOrient = null;
     const orientHandler = (e) => {
-      if (lastOrient == null) { lastOrient = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 }; return; }
-      const da = Math.abs((e.alpha || 0) - lastOrient.a);
-      const db = Math.abs((e.beta || 0) - lastOrient.b);
-      const dg = Math.abs((e.gamma || 0) - lastOrient.g);
-      if (da > ORIENT_THRESHOLD || db > ORIENT_THRESHOLD || dg > ORIENT_THRESHOLD) triggerLock();
-      lastOrient = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
+      const cur = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
+      if (lastOrientRef.current == null) { lastOrientRef.current = cur; return; }
+      const lo = lastOrientRef.current;
+      if (Math.abs(cur.a - lo.a) > ORIENT_THRESHOLD || Math.abs(cur.b - lo.b) > ORIENT_THRESHOLD || Math.abs(cur.g - lo.g) > ORIENT_THRESHOLD) triggerLock();
+      lastOrientRef.current = cur;
     };
     orientHandlerRef.current = orientHandler;
     window.addEventListener('deviceorientation', orientHandler);
   };
 
-  const startScreenRecord = async () => {
-    setRecError('');
+  // Canvas draw — renders what gets recorded
+  const draw = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const word = lockedWordRef.current || currentWordRef.current || '';
+
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(0, 0, w, h);
+
+    // subtle grid
+    ctx.strokeStyle = 'rgba(0,200,255,0.05)';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < w; x += 32) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y < h; y += 32) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+    // title
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 15px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('LOCATION TERM BANK', w / 2, 28);
+
+    // REC indicator
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath(); ctx.arc(w - 58, 22, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('REC ' + formatDuration(sessionDurRef.current), w - 14, 26);
+
+    // main word
+    ctx.textAlign = 'center';
+    if (lockedWordRef.current) {
+      ctx.shadowColor = 'rgba(34,211,238,0.9)';
+      ctx.shadowBlur = 24;
+      ctx.fillStyle = '#22d3ee';
+      ctx.font = 'bold 44px sans-serif';
+      ctx.fillText(word.toUpperCase(), w / 2, h / 2 + 8);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#67e8f9';
+      ctx.font = '12px monospace';
+      ctx.fillText('LOCKED — DICTATING', w / 2, h / 2 + 44);
+    } else if (word) {
+      ctx.fillStyle = 'rgba(148,163,184,0.55)';
+      ctx.font = 'bold 34px sans-serif';
+      ctx.fillText(word.toUpperCase(), w / 2, h / 2 + 8);
+    }
+
+    // captured count
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#64748b';
+    ctx.font = '11px monospace';
+    ctx.fillText('CAPTURED: ' + capturedRef.current.length, 14, h - 14);
+    ctx.textAlign = 'right';
+    ctx.fillText((locationLabel || '').slice(0, 30), w - 14, h - 14);
+  };
+
+  const startDrawing = () => {
+    if (drawRef.current) clearInterval(drawRef.current);
+    draw();
+    drawRef.current = setInterval(draw, 33);
+  };
+
+  const stopDrawing = () => {
+    if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
+  };
+
+  const startRecording = async () => {
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        setRecError('Screen recording not supported on this device. Session will run without recording.');
-        return;
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = audioStream;
+      await new Promise(r => setTimeout(r, 150));
+      if (!canvasRef.current || typeof canvasRef.current.captureStream !== 'function') {
+        setSensorError('Recording not supported in this browser. The session still runs — you just won\'t get a video file.');
+        return false;
       }
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
-      recStreamRef.current = stream;
-      const mr = new MediaRecorder(stream, { mimeType: 'video/webm' });
-      recChunksRef.current = [];
-      mr.ondataavailable = (ev) => { if (ev.data.size) recChunksRef.current.push(ev.data); };
+      const canvasStream = canvasRef.current.captureStream(30);
+      const audioTrack = audioStream.getAudioTracks()[0];
+      if (audioTrack) canvasStream.addTrack(audioTrack);
+      const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+        .find(t => MediaRecorder.isTypeSupported(t)) || '';
+      const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
+      mediaRecorderRef.current = mr;
+      videoChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(recChunksRef.current, { type: 'video/webm' });
-        setRecBlob(blob);
-        setRecState('stopped');
+        const blob = new Blob(videoChunksRef.current, { type: mimeType || 'video/webm' });
+        setVideoBlob(blob);
+        canvasStream.getTracks().forEach(t => t.stop());
+        audioStream.getTracks().forEach(t => t.stop());
+        audioStreamRef.current = null;
       };
-      stream.getVideoTracks()[0].addEventListener('ended', () => stopSession());
-      mr.start();
-      recRef.current = mr;
-      setRecState('recording');
-      setRecDuration(0);
-      recTimerRef.current = setInterval(() => setRecDuration(d => d + 1), 1000);
+      mr.start(1000);
+      return true;
     } catch (e) {
-      setRecError('Screen recording was denied or unavailable. Session will run without recording.');
+      setSensorError('Microphone access denied. Grant permission to record the session.');
+      return false;
     }
   };
 
   const startSession = async () => {
     setCaptured([]);
+    setVideoBlob(null);
     setLockedWord(null);
+    setSensorError('');
     lockedRef.current = false;
+    lockedWordRef.current = null;
     baselineRef.current = 9.8;
+    lastOrientRef.current = null;
     lastTriggerRef.current = 0;
+    sessionDurRef.current = 0;
+    setSessionDuration(0);
     setPhase('running');
-    startRotation();
     await startSensors();
-    await startScreenRecord();
+    await new Promise(r => setTimeout(r, 80));
+    startDrawing();
+    await startRecording();
+    startRotation();
+    let elapsed = 0;
+    timerRef.current = setInterval(() => {
+      elapsed++;
+      sessionDurRef.current = elapsed;
+      setSessionDuration(elapsed);
+    }, 1000);
   };
 
   const stopSession = () => {
     if (rotRef.current) { clearInterval(rotRef.current); rotRef.current = null; }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    stopDrawing();
     if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
-    if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
-    if (recRef.current && recRef.current.state === 'recording') { try { recRef.current.stop(); } catch {} }
-    if (recStreamRef.current) { recStreamRef.current.getTracks().forEach(t => t.stop()); recStreamRef.current = null; }
-    if (recState !== 'recording') setRecState(recBlob ? 'stopped' : 'idle');
-    setPhase('ready');
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
+    lockedRef.current = false;
+    setPhase('stopped');
   };
 
-  const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-
   const saveSession = async () => {
-    if (!recBlob) return;
+    if (!videoBlob) return;
     setSaving(true);
     try {
-      const file = new File([recBlob], 'term_bank_session.webm', { type: 'video/webm' });
-      const up = await base44.integrations.Core.UploadFile({ file });
+      const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([videoBlob], `term_bank_session.${ext}`, { type: videoBlob.type });
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
-      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const date = now.toISOString().split('T')[0];
+      const time = now.toTimeString().slice(0, 5);
       await base44.entities.Evidence.create({
         title: `Location Term Bank — ${locationLabel} — ${date}`,
         type: 'video',
-        description: `Location Term Bank session at ${locationLabel}. ${captured.length} term(s) captured via environment trigger: ${captured.map(c => c.word).join(', ') || 'none'}. Duration: ${fmt(recDuration)}.`,
-        file_url: up.file_url,
+        description: `Location Term Bank session at ${locationLabel} — ${formatDuration(sessionDuration)} — ${captured.length} term(s) captured via environment trigger: ${captured.map(c => c.word).join(', ') || 'none'}.`,
+        file_url,
         date,
         time,
         location_name: locationLabel,
       });
-      setRecBlob(null);
-      setRecDuration(0);
-      setRecState('idle');
+      setVideoBlob(null);
+      setCaptured([]);
+      setPhase('idle');
     } catch (e) {
       setError('Save failed. Please try again.');
     }
     setSaving(false);
   };
 
-  return (
-    <div className="space-y-4">
-      {/* Directions */}
-      <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
-        <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
-        <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
-          <li>Tap <span className="text-primary font-medium">Build Term Bank</span> — allow location access so AGES gathers 50 words tied to your area's history & hauntings.</li>
-          <li>Tap <span className="text-primary font-medium">Start Session</span>. Words flash rapidly on screen; screen recording begins.</li>
-          <li>Hold your device still. Any sudden movement, tilt, or shake "locks" the word on screen — it glows bright and is spoken aloud.</li>
-          <li>After each word is dictated, the rapid scan resumes automatically.</li>
-          <li>Tap <span className="text-primary font-medium">Stop</span> to end, then <span className="text-primary font-medium">Save</span> the screen recording to your Evidence Journal.</li>
-        </ol>
-      </div>
+  const discard = () => {
+    setVideoBlob(null);
+    setCaptured([]);
+    setLockedWord(null);
+    setPhase('ready');
+  };
 
-      {phase === 'idle' && (
+  // ── IDLE ──────────────────────────────────────────────────────────────────
+  if (phase === 'idle') {
+    return (
+      <div className="space-y-4">
+        {error && <p className="text-[11px] text-red-400/80 text-center">{error}</p>}
+        <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
+          <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
+          <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
+            <li>Tap <span className="text-primary font-medium">Build Term Bank</span> — allow location access so AGES gathers 60 words tied to your area's history & hauntings.</li>
+            <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 2 seconds each; the session records.</li>
+            <li>Hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud.</li>
+            <li>After each word is dictated, the scan resumes automatically.</li>
+            <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
+          </ol>
+        </div>
         <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Library className="w-4 h-4" /> Build Term Bank
         </button>
-      )}
+      </div>
+    );
+  }
 
-      {phase === 'loading' && (
-        <div className="flex flex-col items-center py-8 gap-2">
-          <Loader2 className="w-7 h-7 text-primary animate-spin" />
-          <p className="text-xs text-muted-foreground">Gathering location terms…</p>
+  // ── LOADING ───────────────────────────────────────────────────────────────
+  if (phase === 'loading') {
+    return (
+      <div className="flex flex-col items-center py-8 gap-2">
+        <Loader2 className="w-7 h-7 text-primary animate-spin" />
+        <p className="text-xs text-muted-foreground">Gathering location terms…</p>
+      </div>
+    );
+  }
+
+  // ── READY ─────────────────────────────────────────────────────────────────
+  if (phase === 'ready') {
+    return (
+      <div className="space-y-3">
+        <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
+          <MapPin className="w-3 h-3" /> {locationLabel} · {terms.length} terms
+        </p>
+        <div className="p-4 rounded-lg bg-black/40 border border-primary/20 text-center space-y-2">
+          <Library className="w-8 h-8 text-primary mx-auto opacity-60" />
+          <p className="text-[11px] text-muted-foreground leading-relaxed">60 location terms ready. Start the session to begin the rotating word scan with environment-triggered dictation and screen recording.</p>
         </div>
-      )}
+        <button onClick={startSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
+          <Play className="w-4 h-4" /> Start Session
+        </button>
+        <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-primary/30 hover:text-primary transition-colors">
+          <RefreshCw className="w-3.5 h-3.5" /> Rebuild Term Bank
+        </button>
+      </div>
+    );
+  }
 
-      {(phase === 'ready' || phase === 'running') && (
-        <>
-          <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
-            <MapPin className="w-3 h-3" /> {locationLabel} · {terms.length} terms
-          </p>
-
-          {/* Word display */}
-          <div className="relative rounded-xl border border-border/50 bg-black/60 overflow-hidden flex items-center justify-center min-h-[180px]">
-            {phase === 'running' && recState === 'recording' && (
-              <span className="absolute top-2 right-2 flex items-center gap-1 text-[9px] font-mono text-red-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> REC {fmt(recDuration)}
-              </span>
-            )}
-            <AnimatePresence mode="popLayout">
-              {lockedWord ? (
-                <motion.p
-                  key={lockedWord + '-lock'}
-                  initial={{ scale: 0.6, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="px-4 text-center font-display text-3xl text-cyan-glow drop-shadow-[0_0_18px_hsl(185,80%,55%,0.85)] animate-glow-pulse"
-                >
-                  {lockedWord}
-                </motion.p>
-              ) : currentWord ? (
-                <motion.p
-                  key={currentWord + Math.random()}
-                  initial={{ opacity: 0.2 }}
-                  animate={{ opacity: 0.5 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.1 }}
-                  className="px-4 text-center font-display text-2xl text-muted-foreground/70"
-                >
-                  {currentWord}
-                </motion.p>
-              ) : (
-                <p className="text-xs text-muted-foreground/50">—</p>
-              )}
-            </AnimatePresence>
+  // ── RUNNING ───────────────────────────────────────────────────────────────
+  if (phase === 'running') {
+    return (
+      <div className="space-y-3">
+        {sensorError && (
+          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-amber-300">{sensorError}</p>
           </div>
+        )}
+        <div className="rounded-lg overflow-hidden border border-border/30 bg-black relative">
+          <canvas ref={canvasRef} width={640} height={360} className="w-full h-44 object-cover" />
+          <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span className="text-[9px] text-white font-mono">REC {formatDuration(sessionDuration)}</span>
+          </div>
+        </div>
+        <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
+          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device to lock a word
+        </p>
+        {lockedWord && (
+          <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            className="text-center font-display text-2xl text-cyan-glow drop-shadow-[0_0_18px_hsl(185,80%,55%,0.85)] animate-glow-pulse">
+            {lockedWord}
+          </motion.p>
+        )}
+        {captured.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Captured Terms ({captured.length})</p>
+            <div className="flex flex-wrap gap-1.5">
+              {captured.map((c, i) => (
+                <span key={i} className="px-2 py-1 rounded text-[10px] bg-cyan-glow/10 border border-cyan-glow/30 text-cyan-glow font-mono">
+                  {c.word} <span className="text-muted-foreground/60">· {c.at}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        <button onClick={stopSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-heading text-xs uppercase tracking-wider hover:bg-red-500/20 transition-colors">
+          <Square className="w-3.5 h-3.5" /> Stop Session
+        </button>
+      </div>
+    );
+  }
 
-          {/* Status / controls */}
-          {phase === 'ready' && (
-            <button onClick={startSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
-              <Play className="w-4 h-4" /> Start Session
-            </button>
-          )}
+  // ── STOPPED ───────────────────────────────────────────────────────────────
+  if (phase === 'stopped') {
+    return (
+      <div className="space-y-4">
+        <div className="p-4 rounded-lg bg-card/30 border border-border/30 space-y-2">
+          <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Session Complete</p>
+          <div className="flex gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> Duration: {formatDuration(sessionDuration)}</span>
+            <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> Terms: {captured.length}</span>
+          </div>
+        </div>
 
-          {phase === 'running' && (
-            <button onClick={stopSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-heading text-xs uppercase tracking-wider hover:bg-red-500/20 transition-colors">
-              <Square className="w-3.5 h-3.5" /> Stop Session
-            </button>
-          )}
-
-          {/* Sensor hint */}
-          {phase === 'running' && (
-            <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
-              <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device to lock a word
-            </p>
-          )}
-
-          {recError && <p className="text-[10px] text-amber-400/80 text-center">{recError}</p>}
-
-          {/* Captured terms */}
-          {captured.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Captured Terms ({captured.length})</p>
-              <div className="flex flex-wrap gap-1.5">
-                {captured.map((c, i) => (
-                  <span key={i} className="px-2 py-1 rounded text-[10px] bg-cyan-glow/10 border border-cyan-glow/30 text-cyan-glow font-mono">
-                    {c.word} <span className="text-muted-foreground/60">· {c.at}</span>
-                  </span>
-                ))}
+        {captured.length > 0 && (
+          <div className="space-y-1.5 max-h-36 overflow-y-auto">
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Captured Terms</p>
+            {captured.map((c, i) => (
+              <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded bg-card/30 border border-border/20">
+                <span className="text-[10px] text-muted-foreground font-mono">{c.at}</span>
+                <span className="text-[10px] font-medium text-cyan-glow">{c.word}</span>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
+        )}
 
-          {/* Save recording */}
-          {recState === 'stopped' && recBlob && (
-            <div className="space-y-2">
-              <video src={URL.createObjectURL(recBlob)} controls className="w-full rounded-lg border border-border/40" />
-              <button onClick={saveSession} disabled={saving} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} {saving ? 'Saving…' : 'Save Recording to Journal'}
-              </button>
-              <button onClick={() => { setRecBlob(null); setRecState('idle'); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
-                <X className="w-3.5 h-3.5" /> Discard Recording
-              </button>
+        {videoBlob ? (
+          <div className="space-y-3">
+            <div className="p-2 rounded-lg bg-card/30 border border-border/30">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Video className="w-3 h-3" /> Session Recording Ready
+              </p>
+              <video src={URL.createObjectURL(videoBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
             </div>
-          )}
-
-          {phase === 'ready' && (
-            <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-primary/30 hover:text-primary transition-colors">
-              <RefreshCw className="w-3.5 h-3.5" /> Rebuild Term Bank
+            <button onClick={saveSession} disabled={saving} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
+              <Save className="w-3.5 h-3.5" /> {saving ? 'Saving to Evidence…' : 'Save Video to Evidence Journal'}
             </button>
-          )}
-        </>
-      )}
+          </div>
+        ) : (
+          <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">
+            <p className="text-xs text-muted-foreground">No video captured (recording may not have been available).</p>
+          </div>
+        )}
 
-      {error && <p className="text-[11px] text-red-400/80 text-center">{error}</p>}
-    </div>
-  );
+        <button onClick={discard} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
+          <X className="w-3.5 h-3.5" /> Discard & Reset
+        </button>
+      </div>
+    );
+  }
+
+  return null;
 }
