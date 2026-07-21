@@ -191,7 +191,8 @@ export default function HauntedLocations() {
       const newTour = await generateLocationTour(loc.createName, loc.createState);
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
-      setError('Failed to create tour. Please try again.');
+      console.error('Tour creation failed:', e);
+      setError(e?.message ? `Failed to create tour: ${e.message}` : 'Failed to create tour. Please try again.');
     }
     setCreatingId(null);
   };
