@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign, CheckCircle2, PartyPopper } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign, CheckCircle2, PartyPopper, Route } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -86,6 +86,17 @@ export default function TourDetail() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [completingTour, setCompletingTour] = useState(false);
   const { isSpeaking, isGenerating, narrate } = useGhostVoice();
+
+  const totalDistance = useMemo(() => {
+    if (stops.length < 2) return 0;
+    let total = 0;
+    for (let i = 1; i < stops.length; i++) {
+      total += haversineDistance(stops[i - 1].latitude, stops[i - 1].longitude, stops[i].latitude, stops[i].longitude);
+    }
+    return total;
+  }, [stops]);
+
+  const formatDistance = (mi) => mi < 1 ? `${Math.round(mi * 5280)} ft` : `${mi.toFixed(1)} mi`;
 
   useEffect(() => {
     loadTour();
@@ -323,6 +334,9 @@ BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Explorat
               {tour.tour_type === 'mixed' ? 'Walking + Driving' : tour.tour_type}
             </span>
             <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {tour.estimated_duration}</span>
+            {totalDistance > 0 && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground"><Route className="w-3.5 h-3.5" /> {formatDistance(totalDistance)}</span>
+            )}
           </div>
           <div className="flex items-start justify-between gap-3">
             <p className="text-sm text-foreground/80 leading-relaxed">{tour.description}</p>
