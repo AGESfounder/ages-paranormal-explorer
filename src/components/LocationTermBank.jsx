@@ -27,7 +27,7 @@ export default function LocationTermBank() {
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
 
-  const { isSpeaking, isGenerating, speak } = useGhostVoice();
+  const { isSpeaking, isGenerating, speak, unlock } = useGhostVoice();
 
   const rotRef = useRef(null);
   const drawRef = useRef(null);
@@ -84,8 +84,34 @@ export default function LocationTermBank() {
         navigator.geolocation.getCurrentPosition(p => resolve(p.coords), () => reject(new Error('denied')), { timeout: 8000 });
       });
 
+      // Pull nearby AGES ghost tours + their documented stops so the term
+      // bank reflects localized paranormal history and the closest tours.
+      let tourContext = '';
+      try {
+        const allTours = await base44.entities.Tour.list('-created_date', 100);
+        const dist = (lat, lon) => {
+          const R = 3958.8, dLat = (lat - coords.latitude) * Math.PI / 180, dLon = (lon - coords.longitude) * Math.PI / 180;
+          const a = Math.sin(dLat / 2) ** 2 + Math.cos(coords.latitude * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+        const nearest = allTours
+          .filter(t => t.start_latitude && t.start_longitude)
+          .map(t => ({ t, d: dist(t.start_latitude, t.start_longitude) }))
+          .sort((a, b) => a.d - b.d)
+          .slice(0, 6);
+        for (const { t, d } of nearest.slice(0, 5)) {
+          const stops = await base44.entities.TourStop.filter({ tour_id: t.id });
+          const stopNames = (stops || []).map(s => s.name).filter(Boolean).slice(0, 10).join(', ');
+          tourContext += `\n- "${t.title}" — ${t.city}, ${t.state} (~${d.toFixed(1)} mi). ${(t.description || '').trim()} Documented stops: ${stopNames || 'n/a'}.`;
+        }
+      } catch {}
+
       const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `Build a "spirit term bank" for a paranormal investigator standing at latitude ${coords.latitude}, longitude ${coords.longitude}. Identify the nearest city/town and region, then generate 60 single-word or short-phrase terms associated with THIS location's history, folklore, hauntings, notable people, landmarks, events, industries, and reported paranormal activity. Terms should be evocative nouns or short phrases a spirit might "select" — e.g. names, places, emotions, objects, occupations, dates, weather. Avoid generic words. Return a JSON object with "location" (nearest city, state/country) and "terms" (array of 60 strings).`,
+        prompt: `Build a "spirit term bank" for a paranormal investigator standing at latitude ${coords.latitude}, longitude ${coords.longitude}. Identify the nearest city/town and region, then generate 60 single-word or short-phrase terms a spirit might "select".
+
+Prioritize LOCALIZED PARANORMAL HISTORY for this exact area. ${tourContext ? `Here are the closest documented AGES ghost tours near the user and their stops — draw heavily from these locations, their ghosts, notable figures, events, and reported activity:\n${tourContext}` : "No nearby tours were found — rely on the area's own folklore and hauntings."}
+
+Terms should be evocative nouns or short phrases — specific names of places, people, landmarks, dates, occupations, objects, emotions, weather, and reported paranormal phenomena tied to THIS location and these tours. Avoid generic words. Return a JSON object with "location" (nearest city, state/country) and "terms" (array of 60 strings).`,
         response_json_schema: {
           type: 'object',
           properties: {
@@ -272,18 +298,8 @@ export default function LocationTermBank() {
     }
   };
 
-  // Unlock HTML audio playback within a user gesture so sensor-triggered
-  // speech plays on iOS without requiring an extra screen touch.
-  const unlockAudio = () => {
-    try {
-      const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
-      a.volume = 0;
-      a.play().then(() => { a.pause(); }).catch(() => {});
-    } catch {}
-  };
-
   const startSession = async () => {
-    unlockAudio();
+    unlock();
     setCaptured([]);
     setVideoBlob(null);
     setLockedWord(null);

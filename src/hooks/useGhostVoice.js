@@ -8,6 +8,8 @@ export default function useGhostVoice() {
   const ctxRef = useRef(null);
   const chimeIntervalRef = useRef(null);
   const gainRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const srcRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -16,6 +18,8 @@ export default function useGhostVoice() {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
+      if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} audioCtxRef.current = null; }
     };
   }, []);
 
@@ -96,6 +100,29 @@ export default function useGhostVoice() {
     return text.replace(/A\.G\.E\.S\.?/gi, 'Ages');
   };
 
+  // Call within a user gesture (e.g. a button tap) to unlock Web Audio + HTML
+  // audio playback so speech triggered later by non-gesture events (sensors)
+  // can actually play on iOS.
+  const unlock = useCallback(() => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      audioCtxRef.current.resume();
+      const ctx = audioCtxRef.current;
+      const buf = ctx.createBuffer(1, 1, 8000);
+      const s = ctx.createBufferSource();
+      s.buffer = buf;
+      s.connect(ctx.destination);
+      s.start();
+    } catch {}
+    try {
+      const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
+      a.volume = 0;
+      a.play().then(() => a.pause()).catch(() => {});
+    } catch {}
+  }, []);
+
   const speak = useCallback(async (text, opts = {}) => {
     // Stop any current playback so a new word can be spoken immediately
     if (audioRef.current) {
@@ -113,6 +140,28 @@ export default function useGhostVoice() {
       });
 
       startEerieBackground();
+
+      // Prefer Web Audio (unlocked via unlock()) so non-gesture-triggered
+      // speech plays on iOS. Fall back to HTMLAudio if unavailable/blocked.
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state === 'running') {
+        try {
+          const resp = await fetch(result.url);
+          const ab = await resp.arrayBuffer();
+          const audioBuf = await ctx.decodeAudioData(ab);
+          if (srcRef.current) { try { srcRef.current.stop(); } catch {} }
+          const sNode = ctx.createBufferSource();
+          sNode.buffer = audioBuf;
+          if (opts.creepy) sNode.playbackRate.value = 0.8;
+          sNode.connect(ctx.destination);
+          srcRef.current = sNode;
+          setIsGenerating(false);
+          setIsSpeaking(true);
+          sNode.onended = () => { setIsSpeaking(false); stopEerieBackground(); srcRef.current = null; };
+          sNode.start();
+          return;
+        } catch {}
+      }
 
       const audio = new Audio(result.url);
       audioRef.current = audio;
@@ -149,6 +198,7 @@ export default function useGhostVoice() {
       audioRef.current.currentTime = 0;
       audioRef.current = null;
     }
+    if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
     stopEerieBackground();
     setIsSpeaking(false);
     setIsGenerating(false);
@@ -162,5 +212,5 @@ export default function useGhostVoice() {
     }
   }, [isSpeaking, isGenerating, speak, stop]);
 
-  return { isSpeaking, isGenerating, narrate, speak, stop };
+  return { isSpeaking, isGenerating, narrate, speak, stop, unlock };
 }
