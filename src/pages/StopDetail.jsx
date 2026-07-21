@@ -10,6 +10,7 @@ import TourMap from '../components/TourMap';
 import useGhostVoice from '../hooks/useGhostVoice';
 import StopComments from '../components/StopComments';
 import { base44 } from '@/api/base44Client';
+import { getOfflineStop } from '@/lib/offlineTours';
 
 const suggestionIcons = {
   'EVP Session': Radio,
@@ -36,22 +37,30 @@ export default function StopDetail() {
 
   const loadStop = async () => {
     setLoading(true);
-    const results = await base44.entities.TourStop.filter({ id: stopId });
-    if (results.length > 0) {
-      const currentStop = results[0];
-      setStop(currentStop);
-      const siblings = await base44.entities.TourStop.filter({ tour_id: currentStop.tour_id });
-      setAllStops(siblings.sort((a, b) => a.stop_number - b.stop_number));
-      try {
-        const tours = await base44.entities.Tour.filter({ id: currentStop.tour_id });
-        await base44.auth.updateMe({
-          last_tour_id: currentStop.tour_id,
-          last_stop_id: currentStop.id,
-          last_stop_number: currentStop.stop_number,
-          last_stop_name: currentStop.name,
-          last_tour_title: tours[0]?.title || '',
-        });
-      } catch (e) {}
+    try {
+      const results = await base44.entities.TourStop.filter({ id: stopId });
+      if (results.length > 0) {
+        const currentStop = results[0];
+        setStop(currentStop);
+        const siblings = await base44.entities.TourStop.filter({ tour_id: currentStop.tour_id });
+        setAllStops(siblings.sort((a, b) => a.stop_number - b.stop_number));
+        try {
+          const tours = await base44.entities.Tour.filter({ id: currentStop.tour_id });
+          await base44.auth.updateMe({
+            last_tour_id: currentStop.tour_id,
+            last_stop_id: currentStop.id,
+            last_stop_number: currentStop.stop_number,
+            last_stop_name: currentStop.name,
+            last_tour_title: tours[0]?.title || '',
+          });
+        } catch (e) {}
+      }
+    } catch (err) {
+      const cached = getOfflineStop(stopId);
+      if (cached) {
+        setStop(cached.stop);
+        setAllStops((cached.allStops || []).sort((a, b) => a.stop_number - b.stop_number));
+      }
     }
     setLoading(false);
   };

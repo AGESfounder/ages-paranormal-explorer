@@ -1,16 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Heart, RefreshCw, Trash2, Loader2 } from 'lucide-react';
+import { Heart, RefreshCw, Trash2, Loader2, Download, CheckCircle2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { isTourOffline, saveTourOffline, removeTourOffline } from '@/lib/offlineTours';
 
 const BUTTON_WIDTH = 60;
 const SWIPE_THRESHOLD = 50;
-const TOTAL_BUTTONS = 3;
+const TOTAL_BUTTONS = 4;
 const MAX_SWIPE = BUTTON_WIDTH * TOTAL_BUTTONS;
 
 export default function SwipeableTourCard({ tour, onRefresh, onDelete, children }) {
   const [swipeX, setSwipeX] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -18,6 +20,7 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
 
   useEffect(() => {
     base44.entities.Favorite.filter({ tour_id: tour.id }).then(favs => setIsFavorite(favs.length > 0));
+    setIsDownloaded(isTourOffline(tour.id));
   }, [tour.id]);
 
   const reset = () => { setSwipeX(0); setIsOpen(false); };
@@ -65,6 +68,23 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
         setIsFavorite(true);
       }
     } catch (e) { /* ignore */ }
+    setActionLoading(null);
+  };
+
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    reset();
+    if (isDownloaded) {
+      removeTourOffline(tour.id);
+      setIsDownloaded(false);
+      return;
+    }
+    setActionLoading('download');
+    try {
+      const stops = await base44.entities.TourStop.filter({ tour_id: tour.id });
+      saveTourOffline(tour, stops);
+      setIsDownloaded(true);
+    } catch (err) { /* ignore */ }
     setActionLoading(null);
   };
 
@@ -178,6 +198,14 @@ Critically verify pricing, hours of operation, and public accessibility after 7 
         >
           {actionLoading === 'refresh' ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
           <span className="text-[8px] font-heading uppercase tracking-wider">Refresh</span>
+        </button>
+        <button
+          onClick={handleDownload}
+          disabled={!!actionLoading}
+          className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-primary/30 text-white/60 disabled:opacity-30"
+        >
+          {actionLoading === 'download' ? <Loader2 className="w-5 h-5 animate-spin" /> : isDownloaded ? <CheckCircle2 className="w-5 h-5" /> : <Download className="w-5 h-5" />}
+          <span className="text-[8px] font-heading uppercase tracking-wider">{isDownloaded ? 'Saved' : 'Download'}</span>
         </button>
         <button
           onClick={handleDelete}

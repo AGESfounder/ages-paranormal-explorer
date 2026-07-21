@@ -9,6 +9,7 @@ import SectionHeader from '../components/SectionHeader';
 import TourMap from '../components/TourMap';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { base44 } from '@/api/base44Client';
+import { getOfflineTour } from '@/lib/offlineTours';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -93,6 +94,7 @@ export default function TourDetail() {
 
   const loadTour = async () => {
     setLoading(true);
+    try {
     const tourData = await base44.entities.Tour.filter({ id: tourId });
     if (tourData.length > 0) {
       setTour(tourData[0]);
@@ -123,6 +125,13 @@ export default function TourDetail() {
           tourData[0].tour_type = correctedType;
         }
         setStops(reordered);
+      }
+    }
+    } catch (err) {
+      const cached = getOfflineTour(tourId);
+      if (cached) {
+        setTour(cached.tour);
+        setStops(enforceWalkingDistance(cached.stops || [], cached.tour.tour_type));
       }
     }
     setLoading(false);
