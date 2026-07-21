@@ -369,7 +369,7 @@ export default function Home() {
           transition={{ delay: 1 }}
           className="mt-8 text-[10px] font-heading tracking-widest uppercase text-muted-foreground/60 text-center px-8"
         >
-          Explore Past Existence and its connection to today's unknown
+          Explore Past Existence and its connection to today's enigmas
         </motion.p>
       </div>
       <CustomTourModal isOpen={showCustomTour} onClose={() => setShowCustomTour(false)} />
