@@ -18,21 +18,25 @@ export default function HighlightPeople({ text, people, onPerson }) {
 
   return (
     <>
-      {parts.map((part, i) => {
-        const match = people.find(p => p.name.toLowerCase() === part.toLowerCase());
-        if (match) {
-          return (
-            <button
-              key={i}
-              onClick={() => onPerson && onPerson(match)}
-              className="text-sky-400 font-semibold hover:text-sky-300 hover:underline underline-offset-2 transition-colors"
-            >
-              {part}
-            </button>
-          );
-        }
-        return <span key={i}>{part}</span>;
-      })}
+      {(() => {
+        const seen = new Set();
+        return parts.map((part, i) => {
+          const match = people.find(p => p.name.toLowerCase() === part.toLowerCase());
+          if (match && !seen.has(match.name.toLowerCase())) {
+            seen.add(match.name.toLowerCase());
+            return (
+              <button
+                key={i}
+                onClick={() => onPerson && onPerson(match)}
+                className="text-sky-400 font-semibold hover:text-sky-300 hover:underline underline-offset-2 transition-colors"
+              >
+                {part}
+              </button>
+            );
+          }
+          return <span key={i}>{part}</span>;
+        });
+      })()}
     </>
   );
 }

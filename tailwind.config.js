@@ -80,18 +80,23 @@ module.exports = {
   				}
   			},
   			'accordion-up': {
-  				from: {
-  					height: 'var(--radix-accordion-content-height)'
+  					from: {
+  						height: 'var(--radix-accordion-content-height)'
+  					},
+  					to: {
+  						height: '0'
+  					}
   				},
-  				to: {
-  					height: '0'
+  				'glow-pulse': {
+  					'0%, 100%': { opacity: '0.35', 'text-shadow': '0 0 4px hsl(199 89% 48% / 0.08)' },
+  					'50%': { opacity: '1', 'text-shadow': '0 0 14px hsl(199 89% 48% / 0.55)' }
   				}
+  			},
+  			animation: {
+  				'accordion-down': 'accordion-down 0.2s ease-out',
+  				'accordion-up': 'accordion-up 0.2s ease-out',
+  				'glow-pulse': 'glow-pulse 1.8s ease-in-out infinite'
   			}
-  		},
-  		animation: {
-  			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
-  		}
   	}
   },
   plugins: [require("tailwindcss-animate")],

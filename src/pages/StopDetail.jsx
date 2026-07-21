@@ -252,7 +252,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 />
               </p>
               {peopleLoading && (
-                <p className="text-[10px] text-muted-foreground mt-2 italic">{isThinContent(stop.paranormal_info) ? 'Loading detailed findings…' : 'Extracting notable figures…'}</p>
+                <p className="text-[10px] text-muted-foreground mt-2 italic animate-glow-pulse">Be Patient: {isThinContent(stop.paranormal_info) ? 'Loading detailed findings…' : 'Extracting notable figures…'}</p>
               )}
               {people.length > 0 && !peopleLoading && (
                 <p className="text-[10px] text-sky-400/70 mt-2">Tap a highlighted name to reveal their story.</p>
@@ -269,7 +269,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
               </div>
               <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{stop.historical_info}</p>
               {peopleLoading && isThinContent(stop.historical_info) && (
-                <p className="text-[10px] text-muted-foreground mt-2 italic">Loading detailed history…</p>
+                <p className="text-[10px] text-muted-foreground mt-2 italic animate-glow-pulse">Be Patient: Loading detailed history…</p>
               )}
             </div>
           </TabsContent>
