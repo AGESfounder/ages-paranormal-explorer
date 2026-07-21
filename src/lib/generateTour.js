@@ -1,9 +1,10 @@
 import { base44 } from '@/api/base44Client';
+import { callJson } from '@/lib/llmJson';
 
 export async function generateLocationTour(destination, state) {
   const dest = destination.trim();
-  const result = await base44.integrations.Core.InvokeLLM({
-    prompt: `Generate a paranormal ghost hunting tour for the haunted destination "${dest}" in ${state}.
+
+  const prompt = `Generate a paranormal ghost hunting tour for the haunted destination "${dest}" in ${state}.
 
 This is a SINGLE DESTINATION tour — ALL stops must be specific areas, rooms, buildings, wings, features, or sections within or on the grounds of "${dest}". Do NOT create stops that are separate, unaffiliated locations.
 
@@ -55,75 +56,46 @@ PLUS a "stops" array (6-8 stops) — each with:
 - travel_method: "walking"
 - hours_of_operation: e.g. "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday"
 - entry_fee: e.g. "$25 for day tour, $45 for overnight investigation"
+- people: array of objects, each { name, story }. Include EVERY notable person mentioned in this stop's historical_info or paranormal_info. The "name" MUST appear verbatim (same spelling and casing) within historical_info or paranormal_info so it can be highlighted. The "story" is a detailed account (4-6 sentences) of who they were, their role, what happened to them (including how they died if relevant), and their paranormal connection — ghost sightings, apparitions, EVPs, and phenomena tied to them.
 
-Use real locations and real paranormal history for "${dest}". Verify hours, pricing, and after-7PM accessibility. Make every stop feel distinct and worth visiting. Every historical_info and paranormal_info field MUST be richly detailed (4-5 paragraphs each) — never brief. When people are mentioned, always include their full story, role, and fate, not just a name.
+Use real locations and real paranormal history for "${dest}". Make every stop feel distinct and worth visiting. Every historical_info and paranormal_info field MUST be richly detailed (4-5 paragraphs each) — never brief. When people are mentioned, always include their full story, role, and fate, not just a name.
 
-BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".`,
+BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
 
-    response_json_schema: {
-      type: "object",
-      properties: {
-        title: { type: "string" },
-        state: { type: "string" },
-        city: { type: "string" },
-        tour_type: { type: "string", enum: ["walking", "driving", "mixed"] },
-        description: { type: "string" },
-        introduction: { type: "string" },
-        conclusion: { type: "string" },
-        difficulty: { type: "string", enum: ["easy", "moderate", "challenging"] },
-        estimated_duration: { type: "string" },
-        total_distance: { type: "string" },
-        start_location_name: { type: "string" },
-        start_latitude: { type: "number" },
-        start_longitude: { type: "number" },
-        image_url: { type: "string" },
-        tags: { type: "array", items: { type: "string" } },
-        safety_info: { type: "string" },
-        best_time: { type: "string" },
-        stops: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              stop_number: { type: "number" },
-              name: { type: "string" },
-              latitude: { type: "number" },
-              longitude: { type: "number" },
-              address: { type: "string" },
-              historical_info: { type: "string" },
-              paranormal_info: { type: "string" },
-              investigation_suggestions: { type: "array", items: { type: "string" } },
-              estimated_investigation_time: { type: "string" },
-              construction_date: { type: "string" },
-              famous_people: { type: "string" },
-              image_url: { type: "string" },
-              narration_text: { type: "string" },
-              travel_method: { type: "string", enum: ["walking", "driving"] },
-              hours_of_operation: { type: "string" },
-              entry_fee: { type: "string" },
-            },
-            required: ["stop_number", "name", "latitude", "longitude", "address"],
-          }
-        }
-      },
-      required: ["title", "state", "city", "tour_type", "stops"],
-    },
-    model: "gemini_3_flash",
-    add_context_from_internet: true,
-  });
+Output ONLY a valid JSON object. No markdown fences, no commentary.`;
+
+  // Robust multi-attempt generation: web search first, then a more concise web
+  // attempt, then a no-web fallback using the model's training knowledge.
+  let result = null;
+  try {
+    result = await callJson(prompt, { useWeb: true });
+  } catch (e) { console.error('Tour generation (web) failed:', e); }
+  if (!result || !result.stops || result.stops.length === 0) {
+    try {
+      result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info to keep the response complete. Output ONLY valid JSON.', { useWeb: true });
+    } catch (e) { console.error('Tour generation (web, concise) failed:', e); }
+  }
+  if (!result || !result.stops || result.stops.length === 0) {
+    try {
+      result = await callJson(prompt, { useWeb: false });
+    } catch (e) { console.error('Tour generation (no-web) failed:', e); }
+  }
+  if (!result || !result.stops || result.stops.length === 0) {
+    throw new Error('Could not generate this tour after several attempts. Please try again.');
+  }
 
   const tourData = {
-    title: result.title,
+    title: result.title || `${dest} Paranormal Investigation`,
     state,
-    city: result.city,
-    tour_type: result.tour_type,
-    description: result.description,
-    introduction: result.introduction,
-    conclusion: result.conclusion,
-    difficulty: result.difficulty,
-    estimated_duration: result.estimated_duration,
-    total_distance: result.total_distance,
-    start_location_name: result.start_location_name,
+    city: result.city || '',
+    tour_type: result.tour_type || 'walking',
+    description: result.description || '',
+    introduction: result.introduction || '',
+    conclusion: result.conclusion || '',
+    difficulty: result.difficulty || 'moderate',
+    estimated_duration: result.estimated_duration || '',
+    total_distance: result.total_distance || '',
+    start_location_name: result.start_location_name || '',
     start_latitude: result.start_latitude,
     start_longitude: result.start_longitude,
     image_url: result.image_url || '',
@@ -154,10 +126,12 @@ BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Explorat
         travel_method: s.travel_method || 'walking',
         hours_of_operation: s.hours_of_operation || '',
         entry_fee: s.entry_fee || '',
+        people: s.people || [],
       }));
       await base44.entities.TourStop.bulkCreate(stopRecords);
     } catch (e) {
       // Stop creation failure must not block the tour; TourDetail backfills stops.
+      console.error('Stop creation failed (tour still created):', e);
     }
   }
 

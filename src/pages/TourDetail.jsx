@@ -10,6 +10,7 @@ import TourMap from '../components/TourMap';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { base44 } from '@/api/base44Client';
 import { getOfflineTour } from '@/lib/offlineTours';
+import { callJson } from '@/lib/llmJson';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -152,8 +153,7 @@ export default function TourDetail() {
     setGeneratingStops(true);
     setStopsError('');
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Generate 8-10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
+      const prompt = `Generate 8-10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
 
 Each stop must have RICH, DETAILED content suitable for 3-5 minutes of spoken narration per stop (~400-600 words across the fields below):
 - stop_number: 1-10 in logical route order
@@ -166,6 +166,7 @@ Each stop must have RICH, DETAILED content suitable for 3-5 minutes of spoken na
 - narration_text: 6-9 sentences of dramatic, immersive storytelling narration written in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking directly to fellow investigators about what awaits them. Include vivid sensory details (sounds, smells, temperature, lighting), specific ghost stories, and build anticipation for the investigation. This should feel like a professional ghost tour guide speaking.
 - hours_of_operation: if the location has restricted public hours, note them (e.g. "Open to public daily 9am-5pm", "Grounds open dawn to dusk, building closed after 4pm"). Leave empty if publicly accessible 24/7.
 - entry_fee: if there is an admission charge, note the cost (e.g. "$10 adults, $5 children", "Free, donations welcome"). Leave empty if completely free.
+- people: array of { name, story }. Include EVERY notable person mentioned in historical_info or paranormal_info. "name" MUST appear verbatim (same spelling/casing) in the text. "story": 4-6 detailed sentences — who they were, their role, fate (how they died if relevant), and their paranormal connection (ghost sightings, apparitions, EVPs, phenomena).
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
@@ -181,36 +182,22 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
 6. MOST POPULAR STOPS: Include the most popular, most talked-about paranormal hotspots near ${tourData.city}, ${tourData.state} — the locations where paranormal activity and ghosts have been observed, recorded, and discussed most. Prioritize locations with the richest documented paranormal history, famous ghost sightings, and active investigations. Do NOT include obscure or unknown locations.
 
-BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            stops: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  stop_number: { type: "number" },
-                  name: { type: "string" },
-                  latitude: { type: "number" },
-                  longitude: { type: "number" },
-                  address: { type: "string" },
-                  historical_info: { type: "string" },
-                  paranormal_info: { type: "string" },
-                  investigation_suggestions: { type: "array", items: { type: "string" } },
-                  estimated_investigation_time: { type: "string" },
-                  construction_date: { type: "string" },
-                  famous_people: { type: "string" },
-                  narration_text: { type: "string" },
-                  hours_of_operation: { type: "string" },
-                  entry_fee: { type: "string" }
-                }
-              }
-            }
-          }
-        },
-        model: "automatic"
-      });
+BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
+
+Output ONLY a valid JSON object with a "stops" array. No markdown fences, no commentary.`;
+
+      let result = null;
+      try {
+        result = await callJson(prompt, { useWeb: false });
+      } catch (e) { console.error('Stop generation failed:', e); }
+      if (!result || !result.stops || result.stops.length === 0) {
+        try {
+          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: false });
+        } catch (e) { console.error('Stop generation (concise) failed:', e); }
+      }
+      if (!result || !result.stops || result.stops.length === 0) {
+        throw new Error('Could not generate stops after multiple attempts. Please try again.');
+      }
 
       const processed = enforceWalkingDistance(result.stops || [], tourData.tour_type);
       // Auto-correct tour type if stops are a mix of walking + driving
