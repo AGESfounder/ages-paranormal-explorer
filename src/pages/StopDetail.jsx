@@ -9,6 +9,8 @@ import SectionHeader from '../components/SectionHeader';
 import TourMap from '../components/TourMap';
 import useGhostVoice from '../hooks/useGhostVoice';
 import StopComments from '../components/StopComments';
+import HighlightPeople from '../components/HighlightPeople';
+import PersonStoryDialog from '../components/PersonStoryDialog';
 import { base44 } from '@/api/base44Client';
 import { getOfflineStop } from '@/lib/offlineTours';
 
@@ -28,7 +30,44 @@ export default function StopDetail() {
   const [allStops, setAllStops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAccessInfo, setShowAccessInfo] = useState(false);
+  const [people, setPeople] = useState([]);
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState(null);
   const { isSpeaking, isGenerating, narrate } = useGhostVoice();
+
+  // For existing tours created before the "people" feature, extract notable
+  // figures on first view and persist them to the stop so it only runs once.
+  const ensurePeople = async (currentStop) => {
+    if (!currentStop.paranormal_info && !currentStop.historical_info) return;
+    setPeopleLoading(true);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `For the paranormal tour stop "${currentStop.name}", identify EVERY notable person mentioned in the historical and paranormal information. For each person, write a detailed account (4-6 sentences) of who they were, their role, what happened to them (including how they died if relevant), and their paranormal connection — the ghost stories, sightings, apparitions, EVPs, and phenomena associated with them. Only include people actually mentioned in the text. Each person's "name" MUST match exactly how they appear in the text so it can be highlighted.
+
+Stop name: ${currentStop.name}
+Historical information: ${currentStop.historical_info || ''}
+Paranormal information: ${currentStop.paranormal_info || ''}
+
+Return JSON with a "people" array, each item { name, story }.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            people: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { name: { type: "string" }, story: { type: "string" } },
+              },
+            },
+          },
+        },
+      });
+      const generated = (result.people || []).filter(p => p.name && p.story);
+      setPeople(generated);
+      try { await base44.entities.TourStop.update(currentStop.id, { people: generated }); } catch (e) {}
+    } catch (e) {}
+    setPeopleLoading(false);
+  };
 
   useEffect(() => {
     loadStop();
@@ -42,6 +81,8 @@ export default function StopDetail() {
       if (results.length > 0) {
         const currentStop = results[0];
         setStop(currentStop);
+        setPeople(currentStop.people || []);
+        if (!currentStop.people || currentStop.people.length === 0) ensurePeople(currentStop);
         const siblings = await base44.entities.TourStop.filter({ tour_id: currentStop.tour_id });
         setAllStops(siblings.sort((a, b) => a.stop_number - b.stop_number));
         try {
@@ -59,6 +100,7 @@ export default function StopDetail() {
       const cached = getOfflineStop(stopId);
       if (cached) {
         setStop(cached.stop);
+        setPeople(cached.stop.people || []);
         setAllStops((cached.allStops || []).sort((a, b) => a.stop_number - b.stop_number));
       }
     }
@@ -176,7 +218,19 @@ export default function StopDetail() {
                   {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
                 </button>
               </div>
-              <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{stop.paranormal_info}</p>
+              <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
+                <HighlightPeople
+                  text={stop.paranormal_info}
+                  people={people}
+                  onPerson={(p) => { setSelectedPerson(p); narrate(p.story); }}
+                />
+              </p>
+              {peopleLoading && (
+                <p className="text-[10px] text-muted-foreground mt-2 italic">Extracting notable figures…</p>
+              )}
+              {people.length > 0 && !peopleLoading && (
+                <p className="text-[10px] text-sky-400/70 mt-2">Tap a highlighted name to reveal their story.</p>
+              )}
             </div>
           </TabsContent>
           <TabsContent value="history" className="mt-3">
@@ -233,6 +287,14 @@ export default function StopDetail() {
           <BookOpen className="w-4 h-4" /> Log Evidence at This Stop
         </button>
       </div>
+      <PersonStoryDialog
+        person={selectedPerson}
+        open={!!selectedPerson}
+        onOpenChange={(o) => { if (!o) setSelectedPerson(null); }}
+        isGenerating={isGenerating}
+        isSpeaking={isSpeaking}
+        onNarrate={() => selectedPerson && narrate(selectedPerson.story)}
+      />
       <NavBar />
     </PageContainer>
   );

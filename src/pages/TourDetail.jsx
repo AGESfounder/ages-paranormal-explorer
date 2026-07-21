@@ -166,6 +166,7 @@ Each stop must have RICH, DETAILED content suitable for 3-5 minutes of spoken na
 - narration_text: 8-12 sentences of dramatic, immersive storytelling narration written in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking directly to fellow investigators about what awaits them. Include vivid sensory details (sounds, smells, temperature, lighting), specific ghost stories, and build anticipation for the investigation. This should feel like a professional ghost tour guide speaking.
 - hours_of_operation: if the location has restricted public hours, note them (e.g. "Open to public daily 9am-5pm", "Grounds open dawn to dusk, building closed after 4pm"). Leave empty if publicly accessible 24/7.
 - entry_fee: if there is an admission charge, note the cost (e.g. "$10 adults, $5 children", "Free, donations welcome"). Leave empty if completely free.
+- people: array of { name, story }. Include EVERY notable person mentioned in historical_info or paranormal_info. "name" MUST appear verbatim (same spelling/casing) in the text. "story": 4-6 detailed sentences — who they were, their role, fate (how they died if relevant), and their paranormal connection (ghost sightings, apparitions, EVPs, phenomena).
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
@@ -203,7 +204,14 @@ BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Explorat
                   famous_people: { type: "string" },
                   narration_text: { type: "string" },
                   hours_of_operation: { type: "string" },
-                  entry_fee: { type: "string" }
+                  entry_fee: { type: "string" },
+                  people: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: { name: { type: "string" }, story: { type: "string" } },
+                    },
+                  }
                 }
               }
             }

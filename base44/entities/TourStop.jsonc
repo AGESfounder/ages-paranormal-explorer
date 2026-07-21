@@ -59,6 +59,20 @@
     },
     "entry_fee": {
       "type": "string"
+    },
+    "people": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "story": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "required": [

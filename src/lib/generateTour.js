@@ -55,6 +55,7 @@ PLUS a "stops" array (7-12 stops) — each with:
 - travel_method: "walking"
 - hours_of_operation: e.g. "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday"
 - entry_fee: e.g. "$25 for day tour, $45 for overnight investigation"
+- people: array of objects, each { name, story }. Include EVERY notable person mentioned in this stop's historical_info or paranormal_info. The "name" MUST appear verbatim (same spelling and casing) within historical_info or paranormal_info so it can be highlighted. The "story" is a detailed account (4-6 sentences) of who they were, their role, what happened to them (including how they died if relevant), and their paranormal connection — ghost sightings, apparitions, EVPs, and phenomena tied to them.
 
 Use real locations and real paranormal history for "${dest}". Verify hours, pricing, and after-7PM accessibility. Make every stop feel distinct and worth visiting. Every historical_info and paranormal_info field MUST be richly detailed (4-5 paragraphs each) — never brief. When people are mentioned, always include their full story, role, and fate, not just a name.
 
@@ -101,6 +102,13 @@ BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Explorat
               travel_method: { type: "string", enum: ["walking", "driving"] },
               hours_of_operation: { type: "string" },
               entry_fee: { type: "string" },
+              people: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: { name: { type: "string" }, story: { type: "string" } },
+                },
+              },
             },
             required: ["stop_number", "name", "latitude", "longitude", "address"],
           }
@@ -153,6 +161,7 @@ BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Explorat
       travel_method: s.travel_method || 'walking',
       hours_of_operation: s.hours_of_operation || '',
       entry_fee: s.entry_fee || '',
+      people: s.people || [],
     }));
     await base44.entities.TourStop.bulkCreate(stopRecords);
   }

@@ -72,6 +72,7 @@ export default function HauntedLocations() {
   const [zip, setZip] = useState('');
   const [originLabel, setOriginLabel] = useState('');
   const [expandedId, setExpandedId] = useState(null);
+  const [expandedOverviews, setExpandedOverviews] = useState({});
   const [creatingId, setCreatingId] = useState(null);
   const navigate = useNavigate();
 
@@ -318,11 +319,25 @@ export default function HauntedLocations() {
                           className="overflow-hidden"
                         >
                           <div className="px-2.5 pb-2.5">
-                            {loc.overview ? (
-                              <p className="text-[11px] text-foreground/70 leading-relaxed bg-background/40 rounded-md p-2 whitespace-pre-line">
-                                {truncate(loc.overview, 500)}
-                              </p>
-                            ) : (
+                            {loc.overview ? (() => {
+                              const full = loc.overview.trim();
+                              const cut = truncate(full, 500);
+                              const isCut = cut !== full;
+                              const isOpen = expandedOverviews[loc.id];
+                              return (
+                                <div className="text-[11px] text-foreground/70 leading-relaxed bg-background/40 rounded-md p-2 whitespace-pre-line">
+                                  {isCut && !isOpen ? cut : full}
+                                  {isCut && !isOpen && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setExpandedOverviews(s => ({ ...s, [loc.id]: true })); }}
+                                      className="text-primary hover:underline underline-offset-2 ml-1 font-heading"
+                                    >
+                                      Show more
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })() : (
                               <p className="text-[11px] text-muted-foreground italic p-2">No overview available.</p>
                             )}
                             {loc.existingTourId ? (
