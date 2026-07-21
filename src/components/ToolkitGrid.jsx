@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { GripVertical } from 'lucide-react';
 
@@ -51,6 +51,16 @@ export default function ToolkitGrid({ tools, activeTool, onSelect, isAdmin, onRe
 
   const [dragging, setDragging] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
+
+  // Only block page scrolling while a drag is actually in progress; otherwise
+  // touches on the grid scroll the page normally.
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const handler = (e) => { if (dragInfo.current) e.preventDefault(); };
+    el.addEventListener('touchmove', handler, { passive: false });
+    return () => el.removeEventListener('touchmove', handler);
+  }, []);
 
   const hitTest = (x, y) => {
     for (let i = 0; i < cellRefs.current.length; i++) {
@@ -160,7 +170,6 @@ export default function ToolkitGrid({ tools, activeTool, onSelect, isAdmin, onRe
       <div
         ref={gridRef}
         className="grid grid-cols-2 gap-2.5"
-        style={{ touchAction: 'none' }}
         onPointerMove={onPointerMove}
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
