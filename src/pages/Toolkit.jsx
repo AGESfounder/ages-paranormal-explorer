@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap, Library } from 'lucide-react';
+import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap, Library, Type } from 'lucide-react';
 import SLSCamera from '../components/SLSCamera';
 import PhoneREMDevice from '../components/PhoneREMDevice';
 import LocationTermBank from '../components/LocationTermBank';
+import AlphabetSweeper from '../components/AlphabetSweeper';
 import ToolkitGrid from '../components/ToolkitGrid';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
@@ -22,6 +23,7 @@ const DEFAULT_TOOLS = [
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
   { name: 'Term Sweeper', icon: Library, desc: 'Sweep location terms — environment-triggered spirit dictation + screen record', type: 'termbank' },
+  { name: 'Alphabet Sweeper', icon: Type, desc: 'Sweep A→Z — environment-triggered letter dictation + screen record', type: 'alphabet' },
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
 ];
 
@@ -966,6 +968,9 @@ Best Practices
 
       case 'termbank':
         return <LocationTermBank />;
+
+      case 'alphabet':
+        return <AlphabetSweeper />;
 
       default:
         return null;
