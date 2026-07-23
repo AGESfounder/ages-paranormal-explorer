@@ -109,12 +109,14 @@ export default function LocationTermBank() {
       const res = await base44.integrations.Core.InvokeLLM({
         prompt: `Generate 60 single-word or short-phrase terms a spirit might "select" for a paranormal investigator standing at latitude ${coords.latitude}, longitude ${coords.longitude}. Identify the nearest city/town and region first.
 
-Mix these categories across the 60 terms:
-- VERBS (about 12): actions a spirit might convey or relate to — e.g. flee, watch, hide, remember, follow, knock, whisper, remain, haunt, guard, wait, leave.
-- PEOPLE'S NAMES (about 12): real or historically plausible given names and surnames tied to THIS location — its founders, residents, victims, and reported ghosts. Use full names or first names drawn from local history.
-- HISTORY NOUNS (about 24): nouns tied to THIS location's history, era, landmarks, industry, objects, occupations, dates, and documented events — specific to the area, not generic.
-- YES / NO (about 8): include the literal words "yes" and "no", repeated several times and INTERSPERSED REGULARLY throughout the list (never clustered together) so they recur often during a sweep.
-- GENERAL HAUNTED-LOCATION TERMS (a few): shadow, cold spot, orbs, apparition, EMF, footsteps, cemetery, whisper — common to haunted places in general.
+IMPORTANT CONSTRAINTS:
+- Do NOT include the words "yes" or "no".
+- Do NOT include generic paranormal jargon common to any haunted place (e.g. shadow, cold spot, orbs, apparition, EMF, footsteps, cemetery, whisper, ghost, spirit, haunting, demon). Every term must be specific to THIS location.
+
+All 60 terms must relate to THIS location's paranormal history OR general history. Across the 60, mix:
+- PEOPLE (about 20): real or historically plausible names of people tied to THIS location — founders, residents, victims, reported ghosts, notable figures. Use full names or first names drawn from local history.
+- HISTORY NOUNS (about 25): nouns tied to THIS location's history, era, landmarks, buildings, industry, objects, occupations, dates, and documented events — specific to the area, not generic.
+- PARANORMAL-HISTORY TERMS (about 15): terms specific to THIS location's documented hauntings and local folklore — names of local spirits, the specific reported phenomena at this place, local legend names, haunted landmarks, and documented paranormal events — never generic paranormal vocabulary.
 
 ${tourContext ? `Closest documented AGES ghost tours and their stops near the user — draw names, figures, and history from these:\n${tourContext}` : "No nearby tours were found — rely on the area's own history and folklore."}
 
