@@ -12,6 +12,7 @@ import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import ResearchDatabase from '../components/ResearchDatabase';
 import useGhostVoice from '../hooks/useGhostVoice';
+import useWakeLock from '../hooks/useWakeLock';
 
 const DEFAULT_TOOLS = [
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
@@ -77,6 +78,7 @@ export default function Toolkit() {
   const gainNodeRef = useRef(null);
   const [radioVolume, setRadioVolume] = useState(0.35);
   const { isSpeaking: narrating, isGenerating, narrate, stop: stopNarration } = useGhostVoice();
+  useWakeLock(!!activeTool);
 
   useEffect(() => {
     return () => {
