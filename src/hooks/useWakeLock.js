@@ -1,45 +1,56 @@
 import { useEffect, useRef } from 'react';
 
 // Keeps the device screen awake (no auto-lock/dim) while `active` is true,
-// using the Screen Wake Lock API. Re-acquires the lock when the tab becomes
-// visible again (browsers release it when the page is hidden).
+// using the Screen Wake Lock API. Robust on mobile: re-acquires the lock on
+// visibility changes and user interaction (iOS often requires a fresh
+// gesture), and re-grabs it if the system releases the sentinel mid-session.
 export default function useWakeLock(active) {
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const lockRef = useRef(null);
+  const lastRequestRef = useRef(0);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!('wakeLock' in navigator)) return;
 
     const request = async () => {
       try {
-        if (!('wakeLock' in navigator)) return;
+        if (!activeRef.current) return;
         if (document.visibilityState !== 'visible') return;
-        lockRef.current = await navigator.wakeLock.request('screen');
+        if (lockRef.current && !lockRef.current.released) return; // already held
+        const now = Date.now();
+        if (now - lastRequestRef.current < 1000) return; // throttle
+        lastRequestRef.current = now;
+        const sentinel = await navigator.wakeLock.request('screen');
+        lockRef.current = sentinel;
+        sentinel.addEventListener('release', () => {
+          // System released it (e.g. tab briefly hidden) — re-acquire if
+          // still active. Throttled to avoid loops.
+          if (activeRef.current) request();
+        });
       } catch {
-        // user denied or unsupported — silently ignore
+        // unsupported / blocked — ignore
       }
     };
 
-    const release = async () => {
-      try {
-        if (lockRef.current) { await lockRef.current.release(); }
-      } catch {}
+    const release = () => {
+      try { if (lockRef.current && !lockRef.current.released) lockRef.current.release(); } catch {}
       lockRef.current = null;
     };
 
     const onVisibility = () => {
-      if (document.visibilityState === 'visible' && active) request();
+      if (document.visibilityState === 'visible') request();
     };
+    // iOS often requires the request to happen within a user gesture
+    const onInteraction = () => request();
 
-    if (active) {
-      request();
-      document.addEventListener('visibilitychange', onVisibility);
-    } else {
-      release();
-    }
+    if (active) request();
+    document.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener('pointerdown', onInteraction, { passive: true });
 
     return () => {
-      cancelled = true;
       document.removeEventListener('visibilitychange', onVisibility);
+      document.removeEventListener('pointerdown', onInteraction);
       release();
     };
   }, [active]);
