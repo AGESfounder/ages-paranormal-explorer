@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap, Library, Type } from 'lucide-react';
+import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap, Library, Type, MessageCircle } from 'lucide-react';
 import SLSCamera from '../components/SLSCamera';
 import PhoneREMDevice from '../components/PhoneREMDevice';
 import LocationTermBank from '../components/LocationTermBank';
 import AlphabetSweeper from '../components/AlphabetSweeper';
+import YesNoSweeper from '../components/YesNoSweeper';
 import ToolkitGrid from '../components/ToolkitGrid';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
@@ -25,6 +26,7 @@ const DEFAULT_TOOLS = [
   { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
   { name: 'Term Sweeper', icon: Library, desc: 'Sweep location terms — environment-triggered spirit dictation + screen record', type: 'termbank' },
   { name: 'Alphabet Sweeper', icon: Type, desc: 'Sweep A→Z — environment-triggered letter dictation + screen record', type: 'alphabet' },
+  { name: 'Yes/No/IDK Sweeper', icon: MessageCircle, desc: 'Sweep Yes · No · I Don\'t Know — motion-triggered answer + screen record', type: 'yesno' },
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
 ];
 
@@ -973,6 +975,8 @@ Best Practices
 
       case 'alphabet':
         return <AlphabetSweeper />;
+      case 'yesno':
+        return <YesNoSweeper />;
 
       default:
         return null;
