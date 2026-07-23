@@ -5,6 +5,8 @@ import { base44 } from '@/api/base44Client';
 import useGhostVoice from '../hooks/useGhostVoice';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+// Phonetic spellings so TTS says the letter name (not "capital A" / "uh")
+const PHONETIC = { A:'ay', B:'bee', C:'see', D:'dee', E:'ee', F:'eff', G:'jee', H:'aitch', I:'eye', J:'jay', K:'kay', L:'el', M:'em', N:'en', O:'oh', P:'pee', Q:'cue', R:'ar', S:'ess', T:'tee', U:'you', V:'vee', W:'double you', X:'ex', Y:'why', Z:'zee' };
 const LETTER_MS = 1250;          // each letter displayed 1.25 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
 const ACCEL_THRESHOLD = 3.2;
@@ -35,7 +37,7 @@ export default function AlphabetSweeper() {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
       // Warm up the voice list on first use (some browsers load lazily)
       try { window.speechSynthesis.getVoices(); } catch {}
-      const u = new SpeechSynthesisUtterance(letter);
+      const u = new SpeechSynthesisUtterance(PHONETIC[letter] || letter);
       u.rate = 0.9;
       u.pitch = 1;
       u.volume = 1;
@@ -58,6 +60,8 @@ export default function AlphabetSweeper() {
   const lockedRef = useRef(false);
   const indexRef = useRef(0);
   const lockedLetterRef = useRef(null);
+  const creepyStartedRef = useRef(false);
+  const creepyFallbackRef = useRef(null);
   const currentLetterRef = useRef('A');
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
@@ -68,23 +72,34 @@ export default function AlphabetSweeper() {
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
 
-  // Resume the alphabet from A once narration of a locked letter finishes
+  // Resume the alphabet from A once the creepy voice has actually started AND
+  // finished. We must wait for isGenerating/isSpeaking to go true (speech began)
+  // before treating a subsequent false as "finished" — otherwise we'd resume
+  // instantly, before the creepy voice even starts.
+  const resumeFromLock = useCallback(() => {
+    if (creepyFallbackRef.current) { clearTimeout(creepyFallbackRef.current); creepyFallbackRef.current = null; }
+    creepyStartedRef.current = false;
+    setLockedLetter(null);
+    lockedLetterRef.current = null;
+    lockedRef.current = false;
+    indexRef.current = 0;
+    currentLetterRef.current = LETTERS[0];
+    setCurrentLetter(LETTERS[0]);
+    if (phase === 'running') startStepping();
+  }, [phase]);
+
   useEffect(() => {
-    if (lockedLetter && !isSpeaking && !isGenerating) {
-      setLockedLetter(null);
-      lockedLetterRef.current = null;
-      lockedRef.current = false;
-      indexRef.current = 0;
-      currentLetterRef.current = LETTERS[0];
-      setCurrentLetter(LETTERS[0]);
-      if (phase === 'running') startStepping();
+    if (lockedLetter && (isGenerating || isSpeaking)) creepyStartedRef.current = true;
+    if (lockedLetter && creepyStartedRef.current && !isSpeaking && !isGenerating) {
+      resumeFromLock();
     }
-  }, [isSpeaking, isGenerating, lockedLetter]);
+  }, [isSpeaking, isGenerating, lockedLetter, resumeFromLock]);
 
   useEffect(() => () => stopEverything(), []);
 
   const stopEverything = () => {
     stopNormalVoice();
+    if (creepyFallbackRef.current) { clearTimeout(creepyFallbackRef.current); creepyFallbackRef.current = null; }
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -120,8 +135,13 @@ export default function AlphabetSweeper() {
     stopNormalVoice();
     setCaptured(prev => { const updated = [...prev, letter]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
-    try { speak(letter, { creepy: true }); } catch {}
-  }, [speak]);
+    creepyStartedRef.current = false;
+    try { speak(PHONETIC[letter] || letter, { creepy: true }); } catch {}
+    // Safety net: if speech never starts or never reports completion, resume
+    // anyway so the sweep doesn't stall.
+    if (creepyFallbackRef.current) clearTimeout(creepyFallbackRef.current);
+    creepyFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 7000);
+  }, [speak, resumeFromLock]);
 
   const requestSensorPermissions = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
