@@ -33,7 +33,8 @@ export default function AlphabetSweeper() {
   const speakNormal = (letter) => {
     try {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
+      // Warm up the voice list on first use (some browsers load lazily)
+      try { window.speechSynthesis.getVoices(); } catch {}
       const u = new SpeechSynthesisUtterance(letter);
       u.rate = 0.9;
       u.pitch = 1;
@@ -268,11 +269,14 @@ export default function AlphabetSweeper() {
     sessionDurRef.current = 0;
     setSessionDuration(0);
     setPhase('running');
+    // Start the letter sweep synchronously, inside the user's tap gesture, so
+    // the first letter is spoken immediately (iOS blocks speechSynthesis that
+    // begins after an await). Sensors/recording/drawing come next.
+    startStepping();
     await startSensors();
     await new Promise(r => setTimeout(r, 80));
     startDrawing();
     await startRecording();
-    startStepping();
     let elapsed = 0;
     timerRef.current = setInterval(() => {
       elapsed++;
