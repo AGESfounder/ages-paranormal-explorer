@@ -48,7 +48,6 @@ export default function Toolkit() {
   useEffect(() => {
     base44.auth.me().then(u => {
       setIsAdmin(u?.role === 'admin');
-      if (Array.isArray(u?.toolkit_order)) setTools(applyOrder(DEFAULT_TOOLS, u.toolkit_order));
     }).catch(() => {});
   }, []);
 
