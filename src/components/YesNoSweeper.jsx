@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Square, Save, Info, X, Activity, Zap, Video, AlertTriangle, MessageCircle } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import useGhostVoice from '../hooks/useGhostVoice';
 
 // Phrases cycle every 3 seconds. They are NOT spoken while cycling — only the
-// phrase that is "locked" by an environmental disturbance is read aloud in a
-// normal voice, then the sweep restarts.
+// phrase "locked" by an environmental disturbance is read aloud (normal voice),
+// then the sweep restarts.
 const PHRASES = [
   { display: 'YES', speech: 'Yes' },
   { display: 'NO', speech: 'No' },
@@ -33,30 +34,10 @@ export default function YesNoSweeper() {
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
 
-  // Normal browser TTS — used only to announce a locked phrase.
-  const speakPhrase = (text, onDone) => {
-    try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { onDone && onDone(); return; }
-      const synth = window.speechSynthesis;
-      try { synth.getVoices(); } catch {}
-      try { synth.cancel(); } catch {}
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'en-US';
-      u.rate = 0.85;
-      u.pitch = 1;
-      u.volume = 1;
-      const voices = synth.getVoices();
-      const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
-      if (en) u.voice = en;
-      if (onDone) u.onend = () => onDone();
-      u.onerror = () => onDone && onDone();
-      synth.speak(u);
-    } catch { onDone && onDone(); }
-  };
-
-  const stopVoice = () => {
-    try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
-  };
+  // Web Audio–based voice (unlocked on the Start tap) so the spoken answer
+  // plays reliably on iOS even though it's triggered by a sensor event. Called
+  // WITHOUT the creepy flag → normal-speed delivery.
+  const { isSpeaking, isGenerating, speak, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
 
   const stepRef = useRef(null);
   const drawRef = useRef(null);
@@ -69,6 +50,7 @@ export default function YesNoSweeper() {
   const lockedRef = useRef(false);
   const indexRef = useRef(0);
   const lockedIdxRef = useRef(null);
+  const speechStartedRef = useRef(false);
   const resumeFallbackRef = useRef(null);
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
@@ -81,19 +63,20 @@ export default function YesNoSweeper() {
   useEffect(() => () => stopEverything(), []);
 
   const stopEverything = () => {
-    stopVoice();
-    if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
     if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     if (audioStreamRef.current) { audioStreamRef.current.getTracks().forEach(t => t.stop()); audioStreamRef.current = null; }
+    try { stopVoice(); } catch {}
   };
 
   const resumeFromLock = useCallback(() => {
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
+    speechStartedRef.current = false;
     setLockedPhrase(null);
     lockedIdxRef.current = null;
     lockedRef.current = false;
@@ -101,6 +84,16 @@ export default function YesNoSweeper() {
     setCurrentIdx(0);
     if (phase === 'running') startStepping();
   }, [phase]);
+
+  // Resume once the spoken phrase has actually started AND finished — wait for
+  // isGenerating/isSpeaking to go true first so we don't resume before playback
+  // begins.
+  useEffect(() => {
+    if (lockedPhrase && (isGenerating || isSpeaking)) speechStartedRef.current = true;
+    if (lockedPhrase && speechStartedRef.current && !isSpeaking && !isGenerating) {
+      resumeFromLock();
+    }
+  }, [isSpeaking, isGenerating, lockedPhrase, resumeFromLock]);
 
   // Cycle through phrases silently every 3 seconds (no voice while cycling).
   const startStepping = () => {
@@ -125,12 +118,11 @@ export default function YesNoSweeper() {
     setLockedPhrase(phrase.display);
     setCaptured(prev => { const updated = [...prev, phrase.display]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
-    // Speak the locked phrase in a normal voice, then resume the sweep.
-    const estMs = Math.max(2500, phrase.speech.length * 180);
-    speakPhrase(phrase.speech, () => { if (lockedRef.current) resumeFromLock(); });
+    speechStartedRef.current = false;
+    try { speak(phrase.speech, {}); } catch {} // normal-speed voice
     if (resumeFallbackRef.current) clearTimeout(resumeFallbackRef.current);
-    resumeFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, estMs + 2500);
-  }, [resumeFromLock]);
+    resumeFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 8000);
+  }, [speak, resumeFromLock]);
 
   const requestSensorPermissions = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -239,7 +231,8 @@ export default function YesNoSweeper() {
         return false;
       }
       const canvasStream = canvasRef.current.captureStream(30);
-      const audioTrack = audioStream.getAudioTracks()[0];
+      const mixedTrack = attachMicToRecording(audioStream);
+      const audioTrack = mixedTrack || audioStream.getAudioTracks()[0];
       if (audioTrack) canvasStream.addTrack(audioTrack);
       const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
         .find(t => MediaRecorder.isTypeSupported(t)) || '';
@@ -277,8 +270,9 @@ export default function YesNoSweeper() {
     sessionDurRef.current = 0;
     setSessionDuration(0);
     setPhase('running');
-    // Start the silent sweep synchronously inside the tap gesture (iOS needs
-    // a user gesture to unlock audio for the later spoken phrase).
+    // Unlock Web Audio inside the tap gesture so the later sensor-triggered
+    // spoken answer plays on iOS.
+    unlock();
     startStepping();
     await startSensors();
     await new Promise(r => setTimeout(r, 80));
@@ -301,7 +295,7 @@ export default function YesNoSweeper() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
     lockedRef.current = false;
-    stopVoice();
+    try { stopVoice(); } catch {}
     setPhase('stopped');
   };
 
@@ -346,9 +340,9 @@ export default function YesNoSweeper() {
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
-            <li>Tap <span className="text-primary font-medium">Start</span>. The phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> cycle silently, one every 3 seconds.</li>
+            <li>Tap <span className="text-primary font-medium">Start</span>. The phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> cycle silently, one every 3 seconds, over and over.</li>
             <li>Hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and is spoken aloud in a normal voice.</li>
-            <li>After a phrase is spoken, the sweep restarts from YES.</li>
+            <li>After a phrase is spoken, the sweep starts again from YES.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
         </div>
