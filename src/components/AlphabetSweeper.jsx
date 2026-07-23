@@ -29,6 +29,23 @@ export default function AlphabetSweeper() {
 
   const { isSpeaking, isGenerating, speak, unlock, attachMicToRecording } = useGhostVoice();
 
+  // Normal browser TTS announces each letter as it cycles (instant, local).
+  const speakNormal = (letter) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(letter);
+      u.rate = 0.9;
+      u.pitch = 1;
+      u.volume = 1;
+      window.speechSynthesis.speak(u);
+    } catch {}
+  };
+
+  const stopNormalVoice = () => {
+    try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
+  };
+
   const stepRef = useRef(null);
   const drawRef = useRef(null);
   const canvasRef = useRef(null);
@@ -66,6 +83,7 @@ export default function AlphabetSweeper() {
   useEffect(() => () => stopEverything(), []);
 
   const stopEverything = () => {
+    stopNormalVoice();
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -80,11 +98,13 @@ export default function AlphabetSweeper() {
     indexRef.current = 0;
     currentLetterRef.current = LETTERS[0];
     setCurrentLetter(LETTERS[0]);
+    speakNormal(LETTERS[0]);
     stepRef.current = setInterval(() => {
       if (lockedRef.current) return;
       indexRef.current = (indexRef.current + 1) % LETTERS.length;
       currentLetterRef.current = LETTERS[indexRef.current];
       setCurrentLetter(LETTERS[indexRef.current]);
+      speakNormal(LETTERS[indexRef.current]);
     }, LETTER_MS);
   };
 
@@ -96,7 +116,8 @@ export default function AlphabetSweeper() {
     lockedRef.current = true;
     lockedLetterRef.current = letter;
     setLockedLetter(letter);
-    setCaptured(prev => { const updated = [...prev, { letter, at: new Date().toLocaleTimeString() }]; capturedRef.current = updated; return updated; });
+    stopNormalVoice();
+    setCaptured(prev => { const updated = [...prev, letter]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     try { speak(letter, { creepy: true }); } catch {}
   }, [speak]);
@@ -268,6 +289,7 @@ export default function AlphabetSweeper() {
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     lockedRef.current = false;
+    stopNormalVoice();
     setPhase('stopped');
   };
 
@@ -284,7 +306,7 @@ export default function AlphabetSweeper() {
       await base44.entities.Evidence.create({
         title: `Alphabet Sweeper — ${date}`,
         type: 'video',
-        description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.map(c => c.letter).join(', ') || 'none'}.`,
+        description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.join('') || 'none'}.`,
         file_url,
         date,
         time,
@@ -358,13 +380,9 @@ export default function AlphabetSweeper() {
         )}
         {captured.length > 0 && (
           <div className="space-y-1.5">
-            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Captured Letters ({captured.length})</p>
-            <div className="flex flex-wrap gap-1.5">
-              {captured.map((c, i) => (
-                <span key={i} className="px-2 py-1 rounded text-[10px] bg-cyan-glow/10 border border-cyan-glow/30 text-cyan-glow font-mono">
-                  {c.letter} <span className="text-muted-foreground/60">· {c.at}</span>
-                </span>
-              ))}
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Spelling ({captured.length} letters)</p>
+            <div className="px-3 py-2 rounded-lg bg-cyan-glow/10 border border-cyan-glow/30 text-cyan-glow font-mono text-lg tracking-[0.25em] break-all leading-relaxed">
+              {captured.join('')}
             </div>
           </div>
         )}
@@ -388,14 +406,11 @@ export default function AlphabetSweeper() {
         </div>
 
         {captured.length > 0 && (
-          <div className="space-y-1.5 max-h-36 overflow-y-auto">
-            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Captured Letters</p>
-            {captured.map((c, i) => (
-              <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded bg-card/30 border border-border/20">
-                <span className="text-[10px] text-muted-foreground font-mono">{c.at}</span>
-                <span className="text-[10px] font-medium text-cyan-glow">{c.letter}</span>
-              </div>
-            ))}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Spelling ({captured.length} letters)</p>
+            <div className="px-3 py-2 rounded-lg bg-cyan-glow/10 border border-cyan-glow/30 text-cyan-glow font-mono text-lg tracking-[0.25em] break-all leading-relaxed">
+              {captured.join('')}
+            </div>
           </div>
         )}
 
