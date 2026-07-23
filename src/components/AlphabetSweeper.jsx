@@ -5,8 +5,6 @@ import { base44 } from '@/api/base44Client';
 import useGhostVoice from '../hooks/useGhostVoice';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-// Phonetic spellings so TTS says the letter name (not "capital A" / "uh")
-const PHONETIC = { A:'ay', B:'bee', C:'see', D:'dee', E:'ee', F:'eff', G:'jee', H:'aitch', I:'eye', J:'jay', K:'kay', L:'el', M:'em', N:'en', O:'oh', P:'pee', Q:'cue', R:'ar', S:'ess', T:'tee', U:'you', V:'vee', W:'double you', X:'ex', Y:'why', Z:'zee' };
 const LETTER_MS = 1250;          // each letter displayed 1.25 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
 const ACCEL_THRESHOLD = 3.2;
@@ -35,13 +33,19 @@ export default function AlphabetSweeper() {
   const speakNormal = (letter) => {
     try {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-      // Warm up the voice list on first use (some browsers load lazily)
-      try { window.speechSynthesis.getVoices(); } catch {}
-      const u = new SpeechSynthesisUtterance(PHONETIC[letter] || letter);
+      const synth = window.speechSynthesis;
+      try { synth.getVoices(); } catch {}
+      // A single lowercase letter is read as the letter name (e.g. "ay") and
+      // avoids the "capital X" announcement some voices add for uppercase.
+      const u = new SpeechSynthesisUtterance(letter.toLowerCase());
+      u.lang = 'en-US';
       u.rate = 0.9;
       u.pitch = 1;
       u.volume = 1;
-      window.speechSynthesis.speak(u);
+      const voices = synth.getVoices();
+      const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+      if (en) u.voice = en;
+      synth.speak(u);
     } catch {}
   };
 
@@ -136,7 +140,7 @@ export default function AlphabetSweeper() {
     setCaptured(prev => { const updated = [...prev, letter]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     creepyStartedRef.current = false;
-    try { speak(PHONETIC[letter] || letter, { creepy: true }); } catch {}
+    try { speak(letter, { creepy: true }); } catch {}
     // Safety net: if speech never starts or never reports completion, resume
     // anyway so the sweep doesn't stall.
     if (creepyFallbackRef.current) clearTimeout(creepyFallbackRef.current);
