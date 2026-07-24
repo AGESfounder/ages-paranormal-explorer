@@ -12,6 +12,7 @@ import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import TabNavigationProvider from '@/components/TabNavigationProvider';
 import { Navigate } from 'react-router-dom';
 // Add page imports here
 import Home from '@/pages/Home';
@@ -58,6 +59,7 @@ const AuthenticatedApp = () => {
 
   // Render the main app
   return (
+    <TabNavigationProvider>
     <AnimatePresence mode="wait">
     <motion.div key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
     <Routes location={location}>
@@ -90,6 +92,7 @@ const AuthenticatedApp = () => {
     </Routes>
     </motion.div>
     </AnimatePresence>
+    </TabNavigationProvider>
   );
 };
 

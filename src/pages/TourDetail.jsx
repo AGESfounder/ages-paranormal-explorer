@@ -222,13 +222,17 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
   };
 
   const toggleFavorite = async () => {
-    if (isFavorite) {
-      const favs = await base44.entities.Favorite.filter({ tour_id: tourId });
-      for (const f of favs) await base44.entities.Favorite.delete(f.id);
-      setIsFavorite(false);
-    } else {
-      await base44.entities.Favorite.create({ tour_id: tourId, tour_title: tour.title, state: tour.state, city: tour.city });
-      setIsFavorite(true);
+    const prev = isFavorite;
+    setIsFavorite(!prev);
+    try {
+      if (prev) {
+        const favs = await base44.entities.Favorite.filter({ tour_id: tourId });
+        for (const f of favs) await base44.entities.Favorite.delete(f.id);
+      } else {
+        await base44.entities.Favorite.create({ tour_id: tourId, tour_title: tour.title, state: tour.state, city: tour.city });
+      }
+    } catch (err) {
+      setIsFavorite(prev);
     }
   };
 

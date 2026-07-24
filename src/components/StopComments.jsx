@@ -23,16 +23,32 @@ export default function StopComments({ stopId, tourId }) {
   };
 
   const handleSubmit = async () => {
-    if (!text.trim()) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
     setSubmitting(true);
-    await base44.entities.StopComment.create({
+    setText('');
+    const tempId = `temp_${Date.now()}`;
+    const optimisticComment = {
+      id: tempId,
       stop_id: stopId,
       tour_id: tourId,
-      text: text.trim(),
+      text: trimmed,
       author_name: user?.full_name || 'Anonymous Investigator',
-    });
-    setText('');
-    await loadComments();
+      created_date: new Date().toISOString(),
+    };
+    setComments((prev) => [optimisticComment, ...prev]);
+    try {
+      const saved = await base44.entities.StopComment.create({
+        stop_id: stopId,
+        tour_id: tourId,
+        text: trimmed,
+        author_name: user?.full_name || 'Anonymous Investigator',
+      });
+      setComments((prev) => prev.map((c) => (c.id === tempId ? saved : c)));
+    } catch (err) {
+      setComments((prev) => prev.filter((c) => c.id !== tempId));
+      setText(trimmed);
+    }
     setSubmitting(false);
   };
 

@@ -54,7 +54,7 @@ export default function Home() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="w-full pt-10 pb-4 px-6 text-center"
+          className="w-full pt-[max(2.5rem,env(safe-area-inset-top))] pb-4 px-6 text-center"
         >
           <h1 className="font-display text-4xl text-primary tracking-[0.2em] drop-shadow-[0_0_18px_hsl(199,89%,48%,0.5)] leading-none">
             SGT
