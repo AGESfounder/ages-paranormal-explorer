@@ -8,29 +8,24 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { US_STATES } from '../lib/statesData';
 import { base44 } from '@/api/base44Client';
+import PullToRefresh from '@/components/PullToRefresh';
 
 export default function States() {
   const [search, setSearch] = useState('');
   const [tourCounts, setTourCounts] = useState({});
 
-  useEffect(() => {
-    base44.entities.Tour.list().then(tours => {
-      const counts = {};
-      tours.forEach(t => {
-        if (t.state) counts[t.state] = (counts[t.state] || 0) + 1;
-      });
-      setTourCounts(counts);
-    }).catch(() => {});
-
-    const unsubscribe = base44.entities.Tour.subscribe(() => {
-      base44.entities.Tour.list().then(tours => {
-        const counts = {};
-        tours.forEach(t => {
-          if (t.state) counts[t.state] = (counts[t.state] || 0) + 1;
-        });
-        setTourCounts(counts);
-      }).catch(() => {});
+  const loadCounts = async () => {
+    const tours = await base44.entities.Tour.list();
+    const counts = {};
+    tours.forEach(t => {
+      if (t.state) counts[t.state] = (counts[t.state] || 0) + 1;
     });
+    setTourCounts(counts);
+  };
+
+  useEffect(() => {
+    loadCounts();
+    const unsubscribe = base44.entities.Tour.subscribe(() => loadCounts());
     return unsubscribe;
   }, []);
 
@@ -41,7 +36,7 @@ export default function States() {
 
   return (
     <PageContainer>
-      <SectionHeader title="Explore States" subtitle="All 50 U.S. States" showBack />
+      <SectionHeader title="Explore States" subtitle="All 50 U.S. States" />
 
       <div className="px-4 py-3">
         <div className="relative">
@@ -55,6 +50,7 @@ export default function States() {
         </div>
       </div>
 
+      <PullToRefresh onRefresh={loadCounts}>
       <div className="px-4 pb-28 grid grid-cols-2 gap-2.5">
         {filtered.map((state, i) => (
           <motion.div
@@ -80,6 +76,7 @@ export default function States() {
           </motion.div>
         ))}
       </div>
+      </PullToRefresh>
 
       <NavBar />
     </PageContainer>

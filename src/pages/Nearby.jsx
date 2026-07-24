@@ -7,6 +7,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import SwipeableTourCard from '../components/SwipeableTourCard';
 import { base44 } from '@/api/base44Client';
+import PullToRefresh from '@/components/PullToRefresh';
 
 export default function Nearby() {
   const navigate = useNavigate();
@@ -234,6 +235,11 @@ Use real locations with documented paranormal history only.`,
     setLoading(false);
   };
 
+  const refreshNearby = async () => {
+    if (coords) await loadNearby();
+    else await loadAllTours();
+  };
+
   const handleRefreshTour = async (tourId) => {
     const results = await base44.entities.Tour.filter({ id: tourId });
     if (results.length > 0) setTours(prev => prev.map(t => t.id === tourId ? results[0] : t));
@@ -261,7 +267,8 @@ Use real locations with documented paranormal history only.`,
 
   return (
     <PageContainer>
-      <SectionHeader title="Nearby Tours" subtitle={coords ? 'Sorted by distance' : 'Recent tours'} showBack />
+      <SectionHeader title="Nearby Tours" subtitle={coords ? 'Sorted by distance' : 'Recent tours'} />
+      <PullToRefresh onRefresh={refreshNearby}>
       <div className="px-4 pb-28 space-y-3 pt-3">
 
         {coords && (
@@ -364,6 +371,7 @@ Use real locations with documented paranormal history only.`,
           ))
         )}
       </div>
+      </PullToRefresh>
       <NavBar />
     </PageContainer>
   );

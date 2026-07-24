@@ -3,6 +3,78 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Loader2, Globe, Ship, Ghost } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
+import DrawerSelect from '@/components/DrawerSelect';
+
+const LOCATION_OPTIONS = [
+  { value: 'England', label: 'England' },
+  { value: 'Scotland', label: 'Scotland' },
+  { value: 'Ireland', label: 'Ireland' },
+  { value: 'Wales', label: 'Wales' },
+  { value: 'France', label: 'France' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'Italy', label: 'Italy' },
+  { value: 'Spain', label: 'Spain' },
+  { value: 'Portugal', label: 'Portugal' },
+  { value: 'Netherlands', label: 'Netherlands' },
+  { value: 'Belgium', label: 'Belgium' },
+  { value: 'Switzerland', label: 'Switzerland' },
+  { value: 'Austria', label: 'Austria' },
+  { value: 'Czech Republic', label: 'Czech Republic' },
+  { value: 'Poland', label: 'Poland' },
+  { value: 'Romania', label: 'Romania' },
+  { value: 'Greece', label: 'Greece' },
+  { value: 'Turkey', label: 'Turkey' },
+  { value: 'Sweden', label: 'Sweden' },
+  { value: 'Norway', label: 'Norway' },
+  { value: 'Denmark', label: 'Denmark' },
+  { value: 'Finland', label: 'Finland' },
+  { value: 'Iceland', label: 'Iceland' },
+  { value: 'Russia', label: 'Russia' },
+  { value: 'Japan', label: 'Japan' },
+  { value: 'China', label: 'China' },
+  { value: 'India', label: 'India' },
+  { value: 'Thailand', label: 'Thailand' },
+  { value: 'South Korea', label: 'South Korea' },
+  { value: 'Vietnam', label: 'Vietnam' },
+  { value: 'Philippines', label: 'Philippines' },
+  { value: 'Indonesia', label: 'Indonesia' },
+  { value: 'Australia', label: 'Australia' },
+  { value: 'New Zealand', label: 'New Zealand' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Mexico', label: 'Mexico' },
+  { value: 'Brazil', label: 'Brazil' },
+  { value: 'Argentina', label: 'Argentina' },
+  { value: 'Peru', label: 'Peru' },
+  { value: 'Chile', label: 'Chile' },
+  { value: 'Colombia', label: 'Colombia' },
+  { value: 'Egypt', label: 'Egypt' },
+  { value: 'Morocco', label: 'Morocco' },
+  { value: 'South Africa', label: 'South Africa' },
+  { value: 'Kenya', label: 'Kenya' },
+  { value: 'United Arab Emirates', label: 'United Arab Emirates' },
+  { value: 'Israel', label: 'Israel' },
+  { value: 'Saudi Arabia', label: 'Saudi Arabia' },
+  { value: 'Singapore', label: 'Singapore' },
+  { value: 'Malaysia', label: 'Malaysia' },
+  { value: 'Caribbean Sea', label: 'Caribbean Sea' },
+  { value: 'Mediterranean Sea', label: 'Mediterranean Sea' },
+  { value: 'North Atlantic', label: 'North Atlantic' },
+  { value: 'Pacific Ocean', label: 'Pacific Ocean' },
+  { value: 'Indian Ocean', label: 'Indian Ocean' },
+];
+
+const TYPE_OPTIONS = [
+  { value: 'Island', label: 'Island' },
+  { value: 'Ship', label: 'Ship' },
+  { value: 'Territory', label: 'Territory' },
+  { value: 'N/A', label: 'N/A' },
+];
+
+const STOP_OPTIONS = [
+  { value: '3-4', label: '3–4 stops' },
+  { value: '5-7', label: '5–7 stops' },
+  { value: '8-10', label: '8–10 stops' },
+];
 
 export default function ToursAbroadModal({ isOpen, onClose }) {
   const navigate = useNavigate();
@@ -253,90 +325,13 @@ Use real locations and real paranormal history for "${dest}". Verify hours, pric
                   <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
                     Location
                   </label>
-                  <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
-                    <select
-                      value={location}
-                      onChange={e => setLocation(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors appearance-none cursor-pointer"
-                    >
-                      <option value="" disabled className="bg-card text-muted-foreground">Select...</option>
-                      <option value="England" className="bg-card text-foreground">England</option>
-                      <option value="Scotland" className="bg-card text-foreground">Scotland</option>
-                      <option value="Ireland" className="bg-card text-foreground">Ireland</option>
-                      <option value="Wales" className="bg-card text-foreground">Wales</option>
-                      <option value="France" className="bg-card text-foreground">France</option>
-                      <option value="Germany" className="bg-card text-foreground">Germany</option>
-                      <option value="Italy" className="bg-card text-foreground">Italy</option>
-                      <option value="Spain" className="bg-card text-foreground">Spain</option>
-                      <option value="Portugal" className="bg-card text-foreground">Portugal</option>
-                      <option value="Netherlands" className="bg-card text-foreground">Netherlands</option>
-                      <option value="Belgium" className="bg-card text-foreground">Belgium</option>
-                      <option value="Switzerland" className="bg-card text-foreground">Switzerland</option>
-                      <option value="Austria" className="bg-card text-foreground">Austria</option>
-                      <option value="Czech Republic" className="bg-card text-foreground">Czech Republic</option>
-                      <option value="Poland" className="bg-card text-foreground">Poland</option>
-                      <option value="Romania" className="bg-card text-foreground">Romania</option>
-                      <option value="Greece" className="bg-card text-foreground">Greece</option>
-                      <option value="Turkey" className="bg-card text-foreground">Turkey</option>
-                      <option value="Sweden" className="bg-card text-foreground">Sweden</option>
-                      <option value="Norway" className="bg-card text-foreground">Norway</option>
-                      <option value="Denmark" className="bg-card text-foreground">Denmark</option>
-                      <option value="Finland" className="bg-card text-foreground">Finland</option>
-                      <option value="Iceland" className="bg-card text-foreground">Iceland</option>
-                      <option value="Russia" className="bg-card text-foreground">Russia</option>
-                      <option value="Japan" className="bg-card text-foreground">Japan</option>
-                      <option value="China" className="bg-card text-foreground">China</option>
-                      <option value="India" className="bg-card text-foreground">India</option>
-                      <option value="Thailand" className="bg-card text-foreground">Thailand</option>
-                      <option value="South Korea" className="bg-card text-foreground">South Korea</option>
-                      <option value="Vietnam" className="bg-card text-foreground">Vietnam</option>
-                      <option value="Philippines" className="bg-card text-foreground">Philippines</option>
-                      <option value="Indonesia" className="bg-card text-foreground">Indonesia</option>
-                      <option value="Australia" className="bg-card text-foreground">Australia</option>
-                      <option value="New Zealand" className="bg-card text-foreground">New Zealand</option>
-                      <option value="Canada" className="bg-card text-foreground">Canada</option>
-                      <option value="Mexico" className="bg-card text-foreground">Mexico</option>
-                      <option value="Brazil" className="bg-card text-foreground">Brazil</option>
-                      <option value="Argentina" className="bg-card text-foreground">Argentina</option>
-                      <option value="Peru" className="bg-card text-foreground">Peru</option>
-                      <option value="Chile" className="bg-card text-foreground">Chile</option>
-                      <option value="Colombia" className="bg-card text-foreground">Colombia</option>
-                      <option value="Egypt" className="bg-card text-foreground">Egypt</option>
-                      <option value="Morocco" className="bg-card text-foreground">Morocco</option>
-                      <option value="South Africa" className="bg-card text-foreground">South Africa</option>
-                      <option value="Kenya" className="bg-card text-foreground">Kenya</option>
-                      <option value="United Arab Emirates" className="bg-card text-foreground">United Arab Emirates</option>
-                      <option value="Israel" className="bg-card text-foreground">Israel</option>
-                      <option value="Saudi Arabia" className="bg-card text-foreground">Saudi Arabia</option>
-                      <option value="Singapore" className="bg-card text-foreground">Singapore</option>
-                      <option value="Malaysia" className="bg-card text-foreground">Malaysia</option>
-                      <option value="Caribbean Sea" className="bg-card text-foreground">Caribbean Sea</option>
-                      <option value="Mediterranean Sea" className="bg-card text-foreground">Mediterranean Sea</option>
-                      <option value="North Atlantic" className="bg-card text-foreground">North Atlantic</option>
-                      <option value="Pacific Ocean" className="bg-card text-foreground">Pacific Ocean</option>
-                      <option value="Indian Ocean" className="bg-card text-foreground">Indian Ocean</option>
-                    </select>
-                  </div>
+                    <DrawerSelect icon={Globe} value={location} onChange={setLocation} placeholder="Select..." options={LOCATION_OPTIONS} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
                     Type
                   </label>
-                  <div className="relative">
-                    <Ship className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
-                    <select
-                      value={locationType}
-                      onChange={e => setLocationType(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors appearance-none cursor-pointer"
-                    >
-                      <option value="" disabled className="bg-card text-muted-foreground">Select...</option>
-                      <option value="Island" className="bg-card text-foreground">Island</option>
-                      <option value="Ship" className="bg-card text-foreground">Ship</option>
-                      <option value="Territory" className="bg-card text-foreground">Territory</option>
-                      <option value="N/A" className="bg-card text-foreground">N/A</option>
-                    </select>
-                  </div>
+                    <DrawerSelect icon={Ship} value={locationType} onChange={setLocationType} placeholder="Select..." options={TYPE_OPTIONS} />
                 </div>
               </div>
 
@@ -344,15 +339,7 @@ Use real locations and real paranormal history for "${dest}". Verify hours, pric
                 <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
                   Number of Stops
                 </label>
-                <select
-                  value={stopCount}
-                  onChange={e => setStopCount(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors appearance-none cursor-pointer"
-                >
-                  <option value="3-4" className="bg-card text-foreground">3–4 stops</option>
-                  <option value="5-7" className="bg-card text-foreground">5–7 stops</option>
-                  <option value="8-10" className="bg-card text-foreground">8–10 stops</option>
-                </select>
+                <DrawerSelect value={stopCount} onChange={setStopCount} options={STOP_OPTIONS} />
               </div>
 
               <div>

@@ -9,6 +9,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import PullToRefresh from '@/components/PullToRefresh';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
@@ -591,6 +592,7 @@ export default function Evidence() {
           <button onClick={() => setShowForm(true)} className="p-2"><Plus className="w-5 h-5 text-primary" /></button>
         </div>
       } />
+      <PullToRefresh onRefresh={loadEvidence}>
       <div className="px-4 pb-28 space-y-3 pt-3">
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 text-primary animate-spin" /></div>
@@ -628,6 +630,7 @@ export default function Evidence() {
           })
         )}
       </div>
+      </PullToRefresh>
       <NavBar />
     </PageContainer>
   );
