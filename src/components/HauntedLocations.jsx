@@ -150,15 +150,71 @@ export default function HauntedLocations() {
     return locations;
   };
 
+  // Fallback: when the local database has no saved tours/stops near the
+  // searched point, discover real haunted locations via web search so the
+  // feature works for any U.S. zip code (e.g. Las Vegas) instead of returning
+  // an empty "no locations" result.
+  const discoverLocations = async (lat, lon, label) => {
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Find real haunted locations with documented paranormal history within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return up to 8 of the most notable, publicly accessible haunted locations that can be visited or approached after 7 PM. For each location provide: name, address (street address if known, otherwise the city), city, state (full state name), latitude, longitude (real GPS coordinates), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
+        add_context_from_internet: true,
+        model: 'gemini_3_flash',
+        response_json_schema: {
+          type: 'object',
+          properties: {
+            locations: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  address: { type: 'string' },
+                  city: { type: 'string' },
+                  state: { type: 'string' },
+                  latitude: { type: 'number' },
+                  longitude: { type: 'number' },
+                  overview: { type: 'string' },
+                  hours: { type: 'string' },
+                  fee: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      });
+      return (result.locations || [])
+        .filter((l) => l.latitude && l.longitude)
+        .map((l, i) => ({
+          id: `discovered-${i}`,
+          kind: 'discovered',
+          name: l.name,
+          address: l.address || '',
+          dist: haversineDistance(lat, lon, l.latitude, l.longitude),
+          overview: l.overview || '',
+          hours: l.hours || '',
+          fee: l.fee || '',
+          city: l.city || '',
+          createName: l.name,
+          createState: l.state || '',
+        }))
+        .filter((l) => l.dist <= 30)
+        .sort((a, b) => a.dist - b.dist);
+    } catch (e) {
+      return [];
+    }
+  };
+
   const runSearch = async (lat, lon, label) => {
     setError('');
     setSearching(true);
     setResults(null);
     try {
-      const locs = await buildLocations(lat, lon);
+      let locs = await buildLocations(lat, lon);
+      if (locs.length === 0) locs = await discoverLocations(lat, lon, label);
       setOriginLabel(label);
       setResults(locs);
-      if (locs.length === 0) setError('No haunted locations found within 30 miles.');
+      if (locs.length === 0) setError('No haunted locations found within 30 miles. Try a different zip code, or use Nearby Tours to generate one.');
     } catch (e) {
       setError('Could not load locations. Please try again.');
     }
@@ -295,6 +351,7 @@ export default function HauntedLocations() {
                         <p className="text-xs font-medium text-foreground leading-snug flex items-center gap-1">
                           {i + 1}. {loc.name}
                           {loc.kind === 'tour' && <span className="text-[8px] text-accent font-heading uppercase">Landmark</span>}
+                          {loc.kind === 'discovered' && <span className="text-[8px] text-cyan-glow font-heading uppercase">Web</span>}
                         </p>
                         <div className="flex items-center gap-1 shrink-0">
                           <span className="text-[10px] text-primary font-heading">{loc.dist.toFixed(1)} mi</span>

@@ -113,8 +113,23 @@ Use real locations with documented paranormal history only.`,
     if (!zipCode.trim() || generatingRange || zipCode.length < 5) return;
     setGeneratingRange('Custom Zip Code');
     try {
+      let zipLat, zipLon, zipLabel;
+      try {
+        const resp = await fetch(`https://api.zippopotam.us/us/${zipCode.trim()}`);
+        if (!resp.ok) throw new Error('not found');
+        const data = await resp.json();
+        const place = data.places?.[0];
+        if (!place) throw new Error('not found');
+        zipLat = parseFloat(place.latitude);
+        zipLon = parseFloat(place.longitude);
+        zipLabel = `${place['place name']}, ${place['state abbreviation']}`;
+      } catch (e) {
+        setGeneratingRange(null);
+        setError('Could not find that zip code. Please check and try again.');
+        return;
+      }
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Generate exactly 1 paranormal tour within a 30-mile radius of the zip code "${zipCode.trim()}" in the USA. First determine the city/state for this zip code, then find a real haunted location within 30 miles.
+        prompt: `Generate exactly 1 paranormal tour within a 30-mile radius of ${zipLabel} (latitude ${zipLat}, longitude ${zipLon}, zip code ${zipCode.trim()}). Find a real haunted location within 30 miles of these coordinates.
 
 Include:
 - title: a creative, spooky tour name
@@ -127,7 +142,7 @@ Include:
 - difficulty: "easy", "moderate", or "challenging"
 - estimated_duration: e.g. "2-3 hours"
 - total_distance: e.g. "1.5 miles"
-- start_location_name, start_latitude, start_longitude (real coordinates within 30 miles of zip code ${zipCode.trim()})
+- start_location_name, start_latitude, start_longitude (real coordinates within 30 miles of ${zipLabel} (${zipLat}, ${zipLon}))
 - tags: array of relevant tags
 - safety_info: important safety notes
 - best_time: "Dusk to midnight"
