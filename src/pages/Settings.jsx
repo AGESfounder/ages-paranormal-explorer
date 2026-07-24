@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Moon, Sun, Volume2, Music, Download, Shield, Info, Navigation } from 'lucide-react';
+import { Moon, Sun, Volume2, Music, Download, Shield, Info, Navigation, Trash2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -48,6 +50,19 @@ export default function Settings() {
   };
 
   const toggle = (key) => updateSetting(key, !settings[key]);
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await base44.functions.invoke('delete-account');
+      base44.auth.logout('/login');
+    } catch (e) {
+      setDeleting(false);
+    }
+  };
 
   if (!loaded) {
     return (
@@ -147,7 +162,36 @@ export default function Settings() {
             <p className="text-[10px] text-muted-foreground/40 mt-1">Explore Past Existence and its Connection to Today's Enigmas.</p>
           </div>
         </div>
+
+        {/* Danger Zone */}
+        <div className="rounded-xl border border-destructive/40 bg-destructive/5 overflow-hidden">
+          <div className="p-3 border-b border-destructive/20">
+            <h3 className="text-xs font-heading uppercase tracking-wider text-destructive flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" /> Danger Zone</h3>
+          </div>
+          <div className="p-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-foreground">Delete Account</p>
+              <p className="text-[10px] text-muted-foreground">Permanently remove your account & sign out</p>
+            </div>
+            <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>Delete</Button>
+          </div>
+        </div>
       </div>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete your account?</DialogTitle>
+            <DialogDescription>This permanently removes your AGES account and all associated data. This action cannot be undone. You will be signed out immediately.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={deleting}>Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" disabled={deleting} onClick={handleDeleteAccount}>{deleting ? 'Deleting…' : 'Delete Account'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <NavBar />
     </PageContainer>
   );

@@ -91,11 +91,23 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Keep selection enabled for editable fields and main text logs */
+  input, textarea, [contenteditable="true"], .text-log, .text-log * {
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   body {
     @apply bg-background text-foreground font-body;
     text-shadow: 0 0 6px hsl(199 89% 48% / 0.10);
+    overscroll-behavior-y: none;
   }
 
   h1, h2, h3, h4, h5, h6, .font-heading, .font-display {
