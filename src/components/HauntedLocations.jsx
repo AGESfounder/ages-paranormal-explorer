@@ -294,8 +294,18 @@ export default function HauntedLocations() {
     setSearching(true);
     setResults(null);
     try {
-      let locs = await buildLocations(lat, lon);
-      if (locs.length === 0) locs = await discoverLocations(lat, lon, label);
+      // Always gather locally-saved tours/stops first (these show "Go to Existing Tour").
+      const local = await buildLocations(lat, lon);
+      // Also discover real haunted locations via web search so the list always
+      // includes other nearby locations — not just tours already created.
+      let discovered = await discoverLocations(lat, lon, label);
+      // Filter out discovered locations that already have a dedicated tour (matched
+      // by name) so we don't show a duplicate "Create Tour" card for one that exists.
+      const existingNames = local.map(l => l.name).filter(Boolean);
+      discovered = discovered.filter(d => !existingNames.some(n =>
+        nameMatchesLocation(d.name, n) || nameMatchesLocation(n, d.name)
+      ));
+      const locs = [...local, ...discovered];
       setOriginLabel(label);
       setResults(locs);
       if (locs.length === 0) setError('No haunted locations found within 30 miles. Try a different zip code, or use Nearby Tours to generate one.');
