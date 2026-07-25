@@ -15,9 +15,12 @@ export default function PullToRefresh({ onRefresh, children }) {
   const pullRef = useRef(0);
   const pulling = useRef(false);
   const refreshRef = useRef(onRefresh);
+  const containerRef = useRef(null);
   refreshRef.current = onRefresh;
 
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
     const onStart = (e) => {
       if (window.scrollY <= 0 && !refreshing) {
         startY.current = e.touches[0].clientY;
@@ -46,13 +49,13 @@ export default function PullToRefresh({ onRefresh, children }) {
       pullRef.current = 0;
       setPull(0);
     };
-    window.addEventListener('touchstart', onStart, { passive: true });
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onEnd);
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
     return () => {
-      window.removeEventListener('touchstart', onStart);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
     };
   }, [refreshing]);
 
@@ -69,7 +72,7 @@ export default function PullToRefresh({ onRefresh, children }) {
           )}
         </div>
       </div>
-      {children}
+      <div ref={containerRef}>{children}</div>
     </>
   );
 }

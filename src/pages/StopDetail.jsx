@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car, Info, DollarSign, ChevronDown } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageContainer from '../components/PageContainer';
-import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import TourMap from '../components/TourMap';
 import useGhostVoice from '../hooks/useGhostVoice';
@@ -151,7 +150,6 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         <div className="flex items-center justify-center h-[60vh]">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-        <NavBar />
       </PageContainer>
     );
   }
@@ -162,7 +160,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         title={`Stop ${stop.stop_number}`}
         subtitle={stop.name}
         showBack
-        onBack={() => prevStop ? navigate(`/stop/${prevStop.id}`) : navigate(`/tour/${stop.tour_id}`)}
+        onBack={() => navigate(`/tour/${stop.tour_id}`)}
         rightAction={
           <button onClick={() => narrate(stop.narration_text || stop.paranormal_info)} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
             {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -325,7 +323,6 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         isSpeaking={isSpeaking}
         onNarrate={() => selectedPerson && narrate(selectedPerson.story)}
       />
-      <NavBar />
     </PageContainer>
   );
 }
