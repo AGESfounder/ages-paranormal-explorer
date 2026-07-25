@@ -75,17 +75,45 @@ function nameMatchesLocation(stopName, tourTitle) {
   return st.every(t => tt.has(t));
 }
 
-// Two location names refer to the same place if the significant tokens of one are
-// all present in the other, or the normalized names are identical.
+// Generic building/property words and common descriptors that should NOT count
+// when deciding two names refer to the same haunted place (e.g. the LLM names a
+// tour "Shadows of the Stanley" — "stanley" is the distinctive token, "hotel"
+// may be dropped, so requiring all tokens fails).
+const GENERIC_TOKENS = new Set([
+  'hotel','house','manor','asylum','cemetery','hospital','prison','jail','theatre','theater',
+  'inn','tavern','mansion','church','school','bridge','park','woods','estate','haunted',
+  'paranormal','ghost','investigation','tour','tours','spirits','haunting','memorial',
+  'university','college','academy','castle','fort','plantation','hall','lodge','resort',
+  'motel','museum','library','gallery','station','tunnel','basement','grounds','building',
+  'rooms','wards','morgue','infirmary','exterior','downtown','district','valley','mountains',
+  'country','creek','river','lake','lakes','springs','heights','village','town','city','county',
+  'street','avenue','road','blvd','drive','lane','place','north','south','east','west',
+  'upper','lower','old','new','great','little','main','general','historic','historical',
+  'famous','notable','grove','oaks','oak','elm','pine','cedar','maple','hill','hills','ridge',
+  'field','fields','meadow','gardens','garden','falls','brook','mill','mills','cross',
+  'crossing','junction','corner','center','central','mount','saint','walk','shadow','shadows',
+  'dark','night','tale','tales','story','stories','legend','legends','mystery','mysteries',
+  'chronicles','secrets','echoes','whispers'
+]);
+function distinctiveTokens(s) {
+  return new Set(significantTokens(s).filter(t => t.length >= 5 && !GENERIC_TOKENS.has(t)));
+}
+// Two location names refer to the same place if the normalized names are identical,
+// all significant tokens of one are in the other, or they share at least one
+// distinctive (non-generic) token.
 function sameName(a, b) {
   if (!a || !b) return false;
   if (normAddr(a) && normAddr(a) === normAddr(b)) return true;
-  return nameMatchesLocation(a, b) || nameMatchesLocation(b, a);
+  if (nameMatchesLocation(a, b) || nameMatchesLocation(b, a)) return true;
+  const da = distinctiveTokens(a), db = distinctiveTokens(b);
+  if (da.size === 0 || db.size === 0) return false;
+  for (const t of da) if (db.has(t)) return true;
+  return false;
 }
-// Two spots are the same physical place if within ~0.2 mi (~320 m) of each other.
+// Two spots are the same physical place if within ~0.3 mi (~480 m) of each other.
 function sameSpot(a, b) {
   if (a.lat == null || a.lng == null || b.lat == null || b.lng == null) return false;
-  return haversineDistance(a.lat, a.lng, b.lat, b.lng) <= 0.2;
+  return haversineDistance(a.lat, a.lng, b.lat, b.lng) <= 0.3;
 }
 
 function truncate(text, n) {
