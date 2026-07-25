@@ -107,12 +107,13 @@ export default function Toolkit() {
     return () => { if (radioIntervalRef.current) clearInterval(radioIntervalRef.current); };
   }, [radioSweepSpeed]);
 
-  // When a tool is opened, scroll the panel into view at the top of the list.
+  // When a tool is opened (or a guide detail expands), scroll the panel into
+  // view at the top of the list.
   useEffect(() => {
     if (activeTool && scrollRef.current) {
       scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [activeTool]);
+  }, [activeTool, guideDetail]);
 
   useEffect(() => {
     if (activeTool?.type === 'weather') {
