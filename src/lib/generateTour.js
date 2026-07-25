@@ -22,32 +22,36 @@ export async function generateLocationTour(destination, state, coords) {
   // This keeps creation fast and reliable (no oversized AI call / timeout).
   const prompt = `Generate a paranormal ghost hunting tour for the haunted destination "${dest}" in ${state}.
 
-This is a SINGLE DESTINATION tour — ALL stops must be specific areas, rooms, buildings, wings, features, or sections within or on the grounds of "${dest}". Do NOT create stops that are separate, unaffiliated locations.
+First, decide whether "${dest}" is a REGION or a SINGLE LANDMARK:
 
-Examples of valid stops (for a destination like Pennhurst Asylum): Administration Building, Devon Building, Quaker Building, Tunnels, Patient Wards, Basement, Infirmary, Morgue, Museum, Exterior Grounds. Every stop belongs to the same destination.
+(A) REGION — a broad geographic area that spans multiple distinct locations (e.g. "Finger Lakes", "Hudson Valley", "Catskill Mountains", "Amish Country", "Poconos", "Delaware Water Gap", a county, a downtown district, a lakes region, a coastline). For a REGION: create stops at 6-8 DIFFERENT real haunted locations spread across the area — each stop has its OWN real street address and its OWN real GPS coordinates. Do NOT cluster all stops at one site; spread them across the region. Set tour_type to "driving" or "mixed" (use "walking" only if the region has a tight walkable cluster). The title should reflect the region (e.g. "Finger Lakes Paranormal Investigation").
+
+(B) SINGLE LANDMARK — one specific property or site (e.g. an asylum, hotel, bridge, cemetery, museum, prison, battlefield, furnace, mansion). For a SINGLE LANDMARK: ALL stops must be specific areas, rooms, buildings, wings, or sections within or on the grounds of that one location, and all stops share the same street address. Set tour_type to "walking". Example (for Pennhurst Asylum): Administration Building, Devon Building, Quaker Building, Tunnels, Patient Wards, Basement, Infirmary, Morgue, Museum, Exterior Grounds — every stop belongs to the same destination.
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
-1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. Arrange stops in the most efficient order possible.
+1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. For driving/mixed tours, arrange stops in the most efficient order with the shortest total driving distance — linear progression, no doubling back.
 
-2. WALKING TOURS (preferred for single destinations): Stops form a logical loop — start and end near the entrance/main building. Route proceeds in an efficient circle so investigators return to their starting point. Every stop ≤0.33 miles from the previous.
+2. WALKING TOURS (single landmark, or a tight walkable cluster within a region): Stops form a logical loop — start and end near the same point. Route proceeds in an efficient circle so investigators return to their starting point. Every stop ≤0.33 miles from the previous.
 
-3. PUBLIC ACCESS AFTER 7 PM: ALL stops must be accessible after 7 PM — at minimum, investigators must be able to be outside each building/area after 7 PM. Note any interior access restrictions in hours_of_operation. Include entry fees and ticket pricing in entry_fee.
+3. DRIVING & MIXED TOURS (regions): Driving stops follow a logical linear progression — each stop advances in a single direction with no doubling back. For mixed tours, walking stops form a tight loop (≤0.33 miles between them) at one cluster, then driving stops continue in a linear progression. Minimize both walking and driving distances.
 
-4. MOST POPULAR STOPS: Prioritize the most famous, most talked-about areas of "${dest}" — the locations where paranormal activity and ghosts have been observed and recorded most. Include stops that are widely discussed in paranormal circles.
+4. PUBLIC ACCESS AFTER 7 PM: ALL stops must be accessible after 7 PM — at minimum, investigators must be able to be outside each building/area after 7 PM. Note any interior access restrictions in hours_of_operation. Include entry fees and ticket pricing in entry_fee.
+
+5. MOST POPULAR STOPS: Prioritize the most famous, most talked-about haunted locations in the area — the places where paranormal activity and ghosts have been observed and recorded most. Include stops that are widely discussed in paranormal circles.
 
 Return a JSON object with:
-- title: "${dest} Paranormal Investigation"
+- title: a creative, spooky tour name for "${dest}"
 - state: "${state}"
-- city: the city where "${dest}" is located
-- tour_type: "walking" (use "walking" unless the destination is extremely spread out)
+- city: the primary city or area where "${dest}" is located (for a region, the main city/area)
+- tour_type: "walking", "driving", or "mixed" (per the REGION/SINGLE LANDMARK rules above)
 - description: 4-6 detailed sentences about the destination's haunted history, founding, and why it's notorious
 - introduction: 2-3 rich paragraphs setting the scene for investigators — the atmosphere, what to expect, and the location's dark legacy
 - conclusion: 2-3 paragraphs wrapping up the investigation and reflecting on what was explored
 - difficulty: "easy", "moderate", or "challenging"
 - estimated_duration: e.g. "2-3 hours"
-- total_distance: e.g. "~0.8 miles"
-- start_location_name: the main entrance or parking area
+- total_distance: e.g. "~0.8 miles" (walking) or "~15 miles" (driving)
+- start_location_name: the main entrance, parking area, or first stop
 - start_latitude: number (use real coordinates for "${dest}")
 - start_longitude: number (use real coordinates for "${dest}")
 - image_url: empty string
@@ -57,19 +61,19 @@ Return a JSON object with:
 
 PLUS a "stops" array (6-8 stops) — each a LIGHTWEIGHT skeleton (full detail is generated later, so keep these fields brief):
 - stop_number: starting from 1
-- name: specific area/building/room name within "${dest}"
-- latitude: real coordinates (number)
+- name: for a SINGLE LANDMARK, a specific area/building/room within the location; for a REGION, the name of that distinct haunted location
+- latitude: real coordinates (number) — for a SINGLE LANDMARK all stops share the destination's coordinates (areas within one site); for a REGION each stop has its OWN distinct coordinates
 - longitude: real coordinates (number)
-- address: street address of "${dest}" (same for all stops — use "${dest}" full address)
+- address: for a SINGLE LANDMARK, the full street address of "${dest}" (same for all stops); for a REGION, each stop's own real street address
 - historical_info: 2-3 sentences summarizing the key history (construction dates, notable figures, major events). Brief summary only.
 - paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
 - investigation_suggestions: 3-5 specific items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
 - estimated_investigation_time: e.g. "20-30 minutes"
-- construction_date: when that area was built if known (with year)
-- famous_people: notable people associated with that area — full names, roles
+- construction_date: when that area/location was built if known (with year)
+- famous_people: notable people associated with that area/location — full names, roles
 - image_url: empty string
 - narration_text: 4-6 sentences of dramatic, immersive storytelling narration in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking to fellow investigators about what awaits them. Include vivid sensory details and specific ghost stories.
-- travel_method: "walking"
+- travel_method: "walking" or "driving" (per the tour type; for mixed tours, "walking" for walking stops and "driving" for driving stops)
 - hours_of_operation: e.g. "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday"
 - entry_fee: e.g. "$25 for day tour, $45 for overnight investigation"
 
@@ -77,7 +81,7 @@ Use real locations and real coordinates for "${dest}". Keep every historical_inf
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
 
-Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nEXACT COORDINATES: This destination is located at exactly latitude ${coords.lat}, longitude ${coords.lng}. Use these EXACT coordinates for start_latitude, start_longitude, and for EVERY stop's latitude and longitude (all stops are areas within this single destination). Do not use any other coordinates.` : ''}`;
+Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a SINGLE LANDMARK, every stop uses these same coordinates (areas within one site). For a REGION, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
 
   // Robust multi-attempt generation: web search first, then a no-web fallback
   // using the model's training knowledge. The lightweight payload makes either

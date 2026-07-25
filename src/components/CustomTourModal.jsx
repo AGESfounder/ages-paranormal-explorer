@@ -119,7 +119,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
               </button>
 
               <p className="text-[10px] text-muted-foreground/60 text-center">
-                Creates a destination-focused tour with stops at specific areas, rooms, and features within the location.
+                Creates a custom tour — a single-location tour (stops within one haunted site) for landmarks like an asylum or hotel, or a regional tour (stops spread across a broader area) for areas like Finger Lakes or Hudson Valley.
               </p>
             </div>
           </motion.div>
