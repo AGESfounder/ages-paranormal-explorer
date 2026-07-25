@@ -162,7 +162,7 @@ export default function Store() {
   return (
     <PageContainer>
       <SectionHeader
-        title="A.G.E.S. Store"
+        title="AGES Store"
         subtitle="Ghost Hunting Gear & Apparel"
         showBack
         rightAction={
