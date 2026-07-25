@@ -13,7 +13,7 @@ export default function PersonStoryDialog({ person, open, onOpenChange, isGenera
           </DialogTitle>
           <DialogDescription className="sr-only">Notable figure associated with this location</DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-foreground/80 leading-relaxed">{person.story}</p>
+        <p className="text-log text-sm text-foreground/80 leading-relaxed">{person.story}</p>
         <button
           onClick={onNarrate}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-sky-500/15 border border-sky-500/40 text-sky-400 font-heading text-xs uppercase tracking-wider hover:bg-sky-500/25 transition-colors"

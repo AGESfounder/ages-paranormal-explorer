@@ -60,7 +60,7 @@ export default function PrivacyPolicy() {
         {SECTIONS.map((s) => (
           <section key={s.h} className="space-y-2">
             <h2 className="font-heading text-sm uppercase tracking-wider text-primary">{s.h}</h2>
-            <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{s.p}</p>
+            <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{s.p}</p>
           </section>
         ))}
       </div>

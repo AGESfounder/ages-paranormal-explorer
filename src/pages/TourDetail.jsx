@@ -329,7 +329,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
             )}
           </div>
           <div className="flex items-start justify-between gap-3">
-            <p className="text-sm text-foreground/80 leading-relaxed">{tour.description}</p>
+            <p className="text-log text-sm text-foreground/80 leading-relaxed">{tour.description}</p>
             <button onClick={() => narrate(tour.description)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
               {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> Loading</> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
             </button>
@@ -345,14 +345,14 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
                 {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> Loading</> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
-            <p className="text-xs text-foreground/70 leading-relaxed">{tour.introduction}</p>
+            <p className="text-log text-xs text-foreground/70 leading-relaxed">{tour.introduction}</p>
           </div>
         )}
 
         {tour.safety_info && (
           <div className="p-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5">
             <p className="text-[10px] font-heading uppercase tracking-wider text-yellow-500 mb-1">Safety Information</p>
-            <p className="text-xs text-foreground/60 leading-relaxed">{tour.safety_info}</p>
+            <p className="text-log text-xs text-foreground/60 leading-relaxed">{tour.safety_info}</p>
           </div>
         )}
 
@@ -448,7 +448,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
                 {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> Loading</> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
-            <p className="text-xs text-foreground/70 leading-relaxed" onScroll={() => setConclusionRead(true)}>{tour.conclusion}</p>
+            <p className="text-log text-xs text-foreground/70 leading-relaxed" onScroll={() => setConclusionRead(true)}>{tour.conclusion}</p>
             <button onClick={() => setConclusionRead(true)} className="text-[10px] text-dim-purple/60 underline underline-offset-2 hover:text-dim-purple transition-colors">
               I've read the conclusion
             </button>

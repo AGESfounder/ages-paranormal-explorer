@@ -367,7 +367,7 @@ export default function Evidence() {
                         </div>
                         <button onClick={() => handleDelete(e.id)} className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
-                      {e.description && <p className="text-xs text-foreground/60 mt-2 ml-3 leading-relaxed">{e.description}</p>}
+                      {e.description && <p className="text-log text-xs text-foreground/60 mt-2 ml-3 leading-relaxed">{e.description}</p>}
                       {e.file_url && (
                         <div className="mt-2 ml-3">
                           {e.type === 'photo' ? (
@@ -586,7 +586,7 @@ export default function Evidence() {
                   </div>
                   <button onClick={() => handleDelete(e.id)} className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
-                {e.description && <p className="text-xs text-foreground/60 mt-2 leading-relaxed">{e.description}</p>}
+                {e.description && <p className="text-log text-xs text-foreground/60 mt-2 leading-relaxed">{e.description}</p>}
                 {e.file_url && e.type === 'photo' && <img src={e.file_url} alt={e.title} className="mt-2 w-full max-h-48 object-cover rounded-lg" />}
                 {e.file_url && e.type === 'video' && <video src={e.file_url} controls className="mt-2 w-full max-h-48 rounded-lg" />}
                 {e.file_url && e.type === 'evp' && <audio src={e.file_url} controls className="mt-2 w-full" />}

@@ -226,7 +226,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
               </button>
             </div>
-            <p className="text-xs text-foreground/70 leading-relaxed italic">"{stop.narration_text}"</p>
+            <p className="text-log text-xs text-foreground/70 leading-relaxed italic">"{stop.narration_text}"</p>
           </div>
         )}
 
@@ -244,7 +244,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                   {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
                 </button>
               </div>
-              <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
+              <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
                 <HighlightPeople
                   text={stop.paranormal_info}
                   people={people}
@@ -267,7 +267,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                   {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
                 </button>
               </div>
-              <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{stop.historical_info}</p>
+              <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{stop.historical_info}</p>
               {peopleLoading && isThinContent(stop.historical_info) && (
                 <p className="text-[10px] text-muted-foreground mt-2 italic animate-glow-pulse">Be Patient: Loading detailed history…</p>
               )}
