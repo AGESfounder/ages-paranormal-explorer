@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ChevronDown, ClipboardList, Lock, Globe, BarChart3 } from 'lucide-react';
+import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3 } from 'lucide-react';
+import EquipmentSelectDrawer from '@/components/EquipmentSelectDrawer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -252,32 +253,14 @@ export default function Evidence() {
             </div>
           </div>
 
-          {/* Equipment Dropdown */}
-          <div className="relative">
+          {/* Equipment */}
+          <div>
             <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Equipment Used</label>
-            <button
-              onClick={() => setEquipmentOpen(!equipmentOpen)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-sm text-foreground hover:border-primary/40 transition-colors"
-            >
-              <span className={form.equipment.length === 0 ? 'text-muted-foreground' : ''}>
-                {form.equipment.length === 0 ? 'Select equipment...' : form.equipment.join(', ')}
-              </span>
-              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${equipmentOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {equipmentOpen && (
-              <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border/60 bg-card shadow-xl overflow-y-auto max-h-48">
-                {equipmentOptions.map(opt => (
-                  <button
-                    key={opt}
-                    onClick={() => toggleEquipment(opt)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-left hover:bg-primary/10 transition-colors"
-                  >
-                    <span className="text-foreground">{opt}</span>
-                    {form.equipment.includes(opt) && <Check className="w-4 h-4 text-primary" />}
-                  </button>
-                ))}
-              </div>
-            )}
+            <EquipmentSelectDrawer
+              value={form.equipment}
+              onChange={(eq) => setForm(prev => ({ ...prev, equipment: eq }))}
+              options={equipmentOptions}
+            />
             {form.equipment.includes('Other') && (
               <Input
                 placeholder="Specify equipment..."
@@ -475,32 +458,14 @@ export default function Evidence() {
             </div>
           </div>
 
-          {/* Equipment Dropdown */}
-          <div className="relative">
+          {/* Equipment */}
+          <div>
             <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Equipment Used</label>
-            <button
-              onClick={() => setEquipmentOpen(!equipmentOpen)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-sm text-foreground hover:border-primary/40 transition-colors"
-            >
-              <span className={form.equipment.length === 0 ? 'text-muted-foreground' : ''}>
-                {form.equipment.length === 0 ? 'Select equipment...' : form.equipment.join(', ')}
-              </span>
-              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${equipmentOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {equipmentOpen && (
-              <div className="absolute z-50 top-full mt-1 w-full rounded-lg border border-border/60 bg-card shadow-xl overflow-y-auto max-h-48">
-                {equipmentOptions.map(opt => (
-                  <button
-                    key={opt}
-                    onClick={() => toggleEquipment(opt)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-left hover:bg-primary/10 transition-colors"
-                  >
-                    <span className="text-foreground">{opt}</span>
-                    {form.equipment.includes(opt) && <Check className="w-4 h-4 text-primary" />}
-                  </button>
-                ))}
-              </div>
-            )}
+            <EquipmentSelectDrawer
+              value={form.equipment}
+              onChange={(eq) => setForm(prev => ({ ...prev, equipment: eq }))}
+              options={equipmentOptions}
+            />
             {form.equipment.includes('Other') && (
               <Input
                 placeholder="Specify equipment..."

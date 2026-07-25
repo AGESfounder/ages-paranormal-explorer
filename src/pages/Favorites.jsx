@@ -21,7 +21,7 @@ export default function Favorites() {
 
   return (
     <PageContainer>
-      <SectionHeader title="Favorites" subtitle="Your Saved Tours" />
+      <SectionHeader title="Favorites" subtitle="Your Saved Tours" showBack />
       <div className="px-4 pb-28 space-y-3 pt-3">
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 text-primary animate-spin" /></div>
