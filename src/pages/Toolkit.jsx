@@ -87,6 +87,7 @@ export default function Toolkit() {
   const [radioSweepSpeed, setRadioSweepSpeed] = useState('normal');
   const freqRef = useRef(null);
   const dirRef = useRef(1);
+  const scrollRef = useRef(null);
   const { isSpeaking: narrating, isGenerating, narrate, stop: stopNarration } = useGhostVoice();
   useWakeLock(!!activeTool);
 
@@ -105,6 +106,13 @@ export default function Toolkit() {
     if (radioActive) runSweepTicker();
     return () => { if (radioIntervalRef.current) clearInterval(radioIntervalRef.current); };
   }, [radioSweepSpeed]);
+
+  // When a tool is opened, scroll the panel into view at the top of the list.
+  useEffect(() => {
+    if (activeTool && scrollRef.current) {
+      scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [activeTool]);
 
   useEffect(() => {
     if (activeTool?.type === 'weather') {
@@ -1033,7 +1041,7 @@ Best Practices
   return (
     <PageContainer className="h-screen flex flex-col overflow-hidden">
       <SectionHeader title="Investigation Toolkit" subtitle="Ghost Hunting Tools" showBack />
-      <div className="flex-1 overflow-y-auto px-4 pb-28 pt-3 toolkit-scroll">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pb-28 pt-3 toolkit-scroll">
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 mb-4">
           <p className="text-xs text-muted-foreground leading-relaxed">
             Your paranormal investigation toolkit. Tap any tool to open its interactive interface. Always bring physical equipment as backup.
