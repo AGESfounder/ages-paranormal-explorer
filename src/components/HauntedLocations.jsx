@@ -99,6 +99,7 @@ export default function HauntedLocations() {
     stops.filter(s => s.latitude && s.longitude).forEach(s => { (byTour[s.tour_id] ||= []).push(s); });
 
     const locations = [];
+    const representedTours = new Set();
     for (const tid of Object.keys(byTour)) {
       const tour = tourMap[tid];
       if (!tour) continue;
@@ -109,11 +110,14 @@ export default function HauntedLocations() {
         const clon = ts.reduce((a, s) => a + s.longitude, 0) / ts.length;
         const dist = haversineDistance(lat, lon, clat, clon);
         if (dist > 30) continue;
+        representedTours.add(tour.id);
         locations.push({
           id: `tour-${tour.id}`,
           kind: 'tour',
           name: tour.title,
           address: ts[0].address || '',
+          lat: clat,
+          lng: clon,
           dist,
           overview: [tour.description, tour.introduction].filter(Boolean).join('\n\n'),
           hours: ts.map(s => s.hours_of_operation).filter(Boolean)[0] || '',
@@ -130,6 +134,7 @@ export default function HauntedLocations() {
           const clon = cluster.reduce((a, s) => a + s.longitude, 0) / cluster.length;
           const dist = haversineDistance(lat, lon, clat, clon);
           if (dist > 30) return;
+          representedTours.add(tour.id);
           locations.push({
             id: `stop-${rep.id}`,
             kind: 'stop',
@@ -144,9 +149,32 @@ export default function HauntedLocations() {
             city: tour.city,
             createName: rep.name,
             createState: tour.state,
+            existingTourId: tour.id,
           });
         });
       }
+    }
+    for (const tour of tours) {
+      if (representedTours.has(tour.id)) continue;
+      if (!tour.start_latitude || !tour.start_longitude) continue;
+      const dist = haversineDistance(lat, lon, tour.start_latitude, tour.start_longitude);
+      if (dist > 30) continue;
+      locations.push({
+        id: `tour-${tour.id}`,
+        kind: 'tour',
+        name: tour.title,
+        address: '',
+        lat: tour.start_latitude,
+        lng: tour.start_longitude,
+        dist,
+        overview: [tour.description, tour.introduction].filter(Boolean).join('\n\n'),
+        hours: '',
+        fee: '',
+        city: tour.city,
+        createName: tour.title,
+        createState: tour.state,
+        existingTourId: tour.id,
+      });
     }
     locations.sort((a, b) => a.dist - b.dist);
     return locations;

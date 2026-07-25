@@ -1,5 +1,16 @@
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
+import { US_STATES } from '@/lib/statesData';
+
+function normalizeStateName(state) {
+  if (!state) return '';
+  const s = String(state).trim();
+  const byName = US_STATES.find((st) => st.name.toLowerCase() === s.toLowerCase());
+  if (byName) return byName.name;
+  const byAbbr = US_STATES.find((st) => st.abbr.toLowerCase() === s.toLowerCase());
+  if (byAbbr) return byAbbr.name;
+  return s;
+}
 
 export async function generateLocationTour(destination, state, coords) {
   const dest = destination.trim();
@@ -86,7 +97,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
 
   const tourData = {
     title: result.title || `${dest} Paranormal Investigation`,
-    state,
+    state: normalizeStateName(state),
     city: result.city || '',
     tour_type: result.tour_type || 'walking',
     description: result.description || '',
