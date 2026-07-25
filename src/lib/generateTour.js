@@ -95,46 +95,68 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
     throw new Error('Could not generate this tour after several attempts. Please try again.');
   }
 
+  // Coerce LLM output into the exact types/enums the schema expects. The LLM
+  // often returns capitalized enums ("Moderate", "Walking") or tags as a string,
+  // which fail schema validation and cause Tour.create / TourStop.bulkCreate to
+  // throw — so the tour is never stored. Normalizing here fixes that.
+  const normEnum = (v, valid, dflt) => {
+    const s = String(v || '').toLowerCase().trim();
+    return valid.includes(s) ? s : dflt;
+  };
+  const toNum = (v) => {
+    if (typeof v === 'number' && isFinite(v)) return v;
+    if (typeof v === 'string' && v.trim() !== '' && !isNaN(parseFloat(v))) return parseFloat(v);
+    return null;
+  };
+  const toStrArr = (v) => Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()) : [];
+
   const tourData = {
     title: result.title || `${dest} Paranormal Investigation`,
     state: normalizeStateName(state),
     city: result.city || '',
-    tour_type: result.tour_type || 'walking',
+    tour_type: normEnum(result.tour_type, ['walking', 'driving', 'mixed'], 'walking'),
     description: result.description || '',
     introduction: result.introduction || '',
     conclusion: result.conclusion || '',
-    difficulty: result.difficulty || 'moderate',
+    difficulty: normEnum(result.difficulty, ['easy', 'moderate', 'challenging'], 'moderate'),
     estimated_duration: result.estimated_duration || '',
     total_distance: result.total_distance || '',
     start_location_name: result.start_location_name || '',
-    start_latitude: useCoords ? coords.lat : result.start_latitude,
-    start_longitude: useCoords ? coords.lng : result.start_longitude,
+    start_latitude: useCoords ? coords.lat : toNum(result.start_latitude),
+    start_longitude: useCoords ? coords.lng : toNum(result.start_longitude),
     image_url: result.image_url || '',
-    tags: result.tags || [],
+    tags: toStrArr(result.tags),
     safety_info: result.safety_info || '',
     best_time: result.best_time || '',
   };
 
   const newTour = await base44.entities.Tour.create(tourData);
 
-  if (result.stops?.length > 0) {
+  const stopsIn = Array.isArray(result.stops) ? result.stops : [];
+  const validStops = stopsIn.map((s, i) => ({
+    s,
+    name: (s && typeof s.name === 'string' && s.name.trim()) ? s.name : `${dest} Stop ${i + 1}`,
+    stop_number: (s && typeof s.stop_number === 'number') ? s.stop_number : i + 1,
+  }));
+
+  if (validStops.length > 0) {
     try {
-      const stopRecords = result.stops.map((s) => ({
+      const stopRecords = validStops.map(({ s, name, stop_number }) => ({
         tour_id: newTour.id,
-        stop_number: s.stop_number,
-        name: s.name,
-        latitude: useCoords ? coords.lat : s.latitude,
-        longitude: useCoords ? coords.lng : s.longitude,
-        address: s.address,
+        stop_number,
+        name,
+        latitude: useCoords ? coords.lat : toNum(s.latitude),
+        longitude: useCoords ? coords.lng : toNum(s.longitude),
+        address: s.address || '',
         historical_info: s.historical_info || '',
         paranormal_info: s.paranormal_info || '',
-        investigation_suggestions: s.investigation_suggestions || [],
+        investigation_suggestions: toStrArr(s.investigation_suggestions),
         estimated_investigation_time: s.estimated_investigation_time || '',
         construction_date: s.construction_date || '',
         famous_people: s.famous_people || '',
         image_url: s.image_url || '',
         narration_text: s.narration_text || '',
-        travel_method: s.travel_method || 'walking',
+        travel_method: normEnum(s.travel_method, ['walking', 'driving'], 'walking'),
         hours_of_operation: s.hours_of_operation || '',
         entry_fee: s.entry_fee || '',
       }));
