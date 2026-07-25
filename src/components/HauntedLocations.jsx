@@ -60,6 +60,21 @@ function representative(cluster) {
   }, null);
 }
 
+// Token-based name match: does a stop location name match a tour title?
+// Used to recognize a dedicated (single-destination) tour already created for
+// a stop location, so its card says "Go to Existing Tour" instead of "Create
+// New Tour". Requires >=2 significant tokens (len>=4) all present in the title.
+function significantTokens(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t.length >= 4);
+}
+function nameMatchesLocation(stopName, tourTitle) {
+  const st = significantTokens(stopName);
+  if (st.length < 2) return false;
+  const tt = new Set(significantTokens(tourTitle));
+  if (tt.size === 0) return false;
+  return st.every(t => tt.has(t));
+}
+
 function truncate(text, n) {
   const t = (text || '').trim();
   return t.length > n ? t.slice(0, n).trim() + '…' : t;
@@ -98,66 +113,101 @@ export default function HauntedLocations() {
     const byTour = {};
     stops.filter(s => s.latitude && s.longitude).forEach(s => { (byTour[s.tour_id] ||= []).push(s); });
 
+    // Precompute which tours are single-destination (dedicated tours for one landmark).
+    const singleDest = {};
+    tours.forEach(t => { singleDest[t.id] = isSingleDestination(byTour[t.id] || []); });
+
+    // Find a dedicated (single-destination) tour already created for a stop location,
+    // matched by name. Tracks matched tours so they aren't also shown as a separate
+    // "Go to Existing Tour" card (the stop card already links to them).
+    const matchedDedicated = new Set();
+    const findDedicated = (stopName, excludeTourId) => {
+      for (const t of tours) {
+        if (t.id === excludeTourId) continue;
+        if (!singleDest[t.id]) continue;
+        if (nameMatchesLocation(stopName, t.title)) {
+          matchedDedicated.add(t.id);
+          return t.id;
+        }
+      }
+      return null;
+    };
+
     const locations = [];
     const representedTours = new Set();
+
+    // Multi-stop tours: list each landmark stop. If a dedicated tour exists for that
+    // landmark (matched by name), the card says "Go to Existing Tour"; otherwise
+    // "Create New Tour".
     for (const tid of Object.keys(byTour)) {
       const tour = tourMap[tid];
       if (!tour) continue;
       const ts = byTour[tid];
+      if (singleDest[tid]) continue;
 
-      if (isSingleDestination(ts)) {
-        const clat = ts.reduce((a, s) => a + s.latitude, 0) / ts.length;
-        const clon = ts.reduce((a, s) => a + s.longitude, 0) / ts.length;
+      clusterStops(ts, 0.15).forEach(cluster => {
+        const rep = representative(cluster);
+        const clat = cluster.reduce((a, s) => a + s.latitude, 0) / cluster.length;
+        const clon = cluster.reduce((a, s) => a + s.longitude, 0) / cluster.length;
         const dist = haversineDistance(lat, lon, clat, clon);
-        if (dist > 30) continue;
+        if (dist > 30) return;
         representedTours.add(tour.id);
         locations.push({
-          id: `tour-${tour.id}`,
-          kind: 'tour',
-          name: tour.title,
-          address: ts[0].address || '',
+          id: `stop-${rep.id}`,
+          kind: 'stop',
+          name: rep.name,
+          address: rep.address || '',
           lat: clat,
           lng: clon,
           dist,
-          overview: [tour.description, tour.introduction].filter(Boolean).join('\n\n'),
-          hours: ts.map(s => s.hours_of_operation).filter(Boolean)[0] || '',
-          fee: ts.map(s => s.entry_fee).filter(Boolean)[0] || '',
+          overview: [rep.historical_info, rep.paranormal_info].filter(Boolean).join('\n\n'),
+          hours: rep.hours_of_operation || '',
+          fee: rep.entry_fee || '',
           city: tour.city,
-          createName: tour.title,
+          createName: rep.name,
           createState: tour.state,
-          existingTourId: tour.id,
+          existingTourId: findDedicated(rep.name, tour.id),
         });
-      } else {
-        clusterStops(ts, 0.15).forEach(cluster => {
-          const rep = representative(cluster);
-          const clat = cluster.reduce((a, s) => a + s.latitude, 0) / cluster.length;
-          const clon = cluster.reduce((a, s) => a + s.longitude, 0) / cluster.length;
-          const dist = haversineDistance(lat, lon, clat, clon);
-          if (dist > 30) return;
-          representedTours.add(tour.id);
-          locations.push({
-            id: `stop-${rep.id}`,
-            kind: 'stop',
-            name: rep.name,
-            address: rep.address || '',
-            lat: clat,
-            lng: clon,
-            dist,
-            overview: [rep.historical_info, rep.paranormal_info].filter(Boolean).join('\n\n'),
-            hours: rep.hours_of_operation || '',
-            fee: rep.entry_fee || '',
-            city: tour.city,
-            createName: rep.name,
-            createState: tour.state,
-          });
-        });
-      }
+      });
     }
+
+    // Single-destination dedicated tours: one "Go to Existing Tour" card each,
+    // unless a stop card already links to them (avoids duplicate cards).
+    for (const tid of Object.keys(byTour)) {
+      if (!singleDest[tid]) continue;
+      const tour = tourMap[tid];
+      if (!tour || matchedDedicated.has(tour.id) || representedTours.has(tour.id)) continue;
+      const ts = byTour[tid];
+      const clat = ts.reduce((a, s) => a + s.latitude, 0) / ts.length;
+      const clon = ts.reduce((a, s) => a + s.longitude, 0) / ts.length;
+      const dist = haversineDistance(lat, lon, clat, clon);
+      if (dist > 30) continue;
+      representedTours.add(tour.id);
+      locations.push({
+        id: `tour-${tour.id}`,
+        kind: 'tour',
+        name: tour.title,
+        address: ts[0].address || '',
+        lat: clat,
+        lng: clon,
+        dist,
+        overview: [tour.description, tour.introduction].filter(Boolean).join('\n\n'),
+        hours: ts.map(s => s.hours_of_operation).filter(Boolean)[0] || '',
+        fee: ts.map(s => s.entry_fee).filter(Boolean)[0] || '',
+        city: tour.city,
+        createName: tour.title,
+        createState: tour.state,
+        existingTourId: tour.id,
+      });
+    }
+
+    // Tours with no geocoded stops: use start coords.
     for (const tour of tours) {
-      if (representedTours.has(tour.id)) continue;
+      if (representedTours.has(tour.id) || matchedDedicated.has(tour.id)) continue;
       if (!tour.start_latitude || !tour.start_longitude) continue;
       const dist = haversineDistance(lat, lon, tour.start_latitude, tour.start_longitude);
       if (dist > 30) continue;
+      representedTours.add(tour.id);
       locations.push({
         id: `tour-${tour.id}`,
         kind: 'tour',
@@ -175,9 +225,10 @@ export default function HauntedLocations() {
         existingTourId: tour.id,
       });
     }
+
     locations.sort((a, b) => a.dist - b.dist);
     return locations;
-  };
+    };
 
   // Fallback: when the local database has no saved tours/stops near the
   // searched point, discover real haunted locations via web search so the
