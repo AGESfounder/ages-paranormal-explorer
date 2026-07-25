@@ -11,6 +11,7 @@ import useGhostVoice from '../hooks/useGhostVoice';
 import { base44 } from '@/api/base44Client';
 import { getOfflineTour } from '@/lib/offlineTours';
 import { callJson } from '@/lib/llmJson';
+import BePatient from '@/components/BePatient';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -336,7 +337,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
           <div className="flex items-start justify-between gap-3">
             <p className="text-log text-sm text-foreground/80 leading-relaxed">{tour.description}</p>
             <button onClick={() => narrate(tour.description)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-              {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> Loading</> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
+              {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
             </button>
           </div>
           {tour.best_time && <p className="text-xs text-primary flex items-center gap-1"><Zap className="w-3 h-3" /> Best time: {tour.best_time}</p>}
@@ -347,7 +348,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-primary">Introduction</h3>
               <button onClick={() => narrate(tour.introduction)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> Loading</> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
             <p className="text-log text-xs text-foreground/70 leading-relaxed">{tour.introduction}</p>
@@ -390,6 +391,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
                 <Ghost className="w-10 h-10 text-primary" />
               </motion.div>
               <p className="text-xs text-muted-foreground">Mapping paranormal hotspots...</p>
+              <BePatient />
             </div>
           ) : (
             <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -450,7 +452,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-dim-purple">Conclusion</h3>
               <button onClick={() => { narrate(tour.conclusion); setConclusionRead(true); }} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
-                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> Loading</> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
             <p className="text-log text-xs text-foreground/70 leading-relaxed" onScroll={() => setConclusionRead(true)}>{tour.conclusion}</p>
@@ -487,7 +489,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
                   className="flex items-center justify-center gap-2 w-full py-3 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground font-heading text-sm uppercase tracking-wider transition-colors disabled:opacity-60"
                 >
                   {completingTour ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  {completingTour ? 'Saving...' : 'Mark Tour Complete'}
+                  {completingTour ? <BePatient /> : 'Mark Tour Complete'}
                 </button>
               </>
             )}

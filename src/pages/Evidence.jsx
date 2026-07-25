@@ -11,6 +11,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import PullToRefresh from '@/components/PullToRefresh';
+import BePatient from '@/components/BePatient';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
@@ -300,7 +301,7 @@ export default function Evidence() {
               >
                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                 <span className="text-xs font-heading uppercase tracking-wider">
-                  {uploading ? 'Uploading...' : 'Upload Photo, Video, or Recording'}
+                  {uploading ? <BePatient /> : 'Upload Photo, Video, or Recording'}
                 </span>
               </button>
             )}
@@ -336,7 +337,7 @@ export default function Evidence() {
           </div>
 
           <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-heading uppercase tracking-wider">
-            {submitting ? 'Saving...' : 'Save Evidence'}
+            {submitting ? <BePatient /> : 'Save Evidence'}
           </Button>
 
           {/* ── Saved entries for this stop ── */}
@@ -505,7 +506,7 @@ export default function Evidence() {
               >
                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                 <span className="text-xs font-heading uppercase tracking-wider">
-                  {uploading ? 'Uploading...' : 'Upload Photo, Video, or Recording'}
+                  {uploading ? <BePatient /> : 'Upload Photo, Video, or Recording'}
                 </span>
               </button>
             )}
@@ -541,7 +542,7 @@ export default function Evidence() {
           </div>
 
           <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-heading uppercase tracking-wider">
-            {submitting ? 'Saving...' : 'Save Evidence'}
+            {submitting ? <BePatient /> : 'Save Evidence'}
           </Button>
         </div>
         <NavBar />

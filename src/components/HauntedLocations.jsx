@@ -5,6 +5,7 @@ import { Ghost, Navigation, Search, Loader2, Clock, DollarSign, MapPin, X, Chevr
 import { base44 } from '@/api/base44Client';
 import { generateLocationTour } from '@/lib/generateTour';
 import useGhostVoice from '../hooks/useGhostVoice';
+import BePatient from '@/components/BePatient';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -442,6 +443,12 @@ export default function HauntedLocations() {
           </button>
         </div>
 
+        {searching && (
+          <div className="px-3 pb-2 flex justify-center">
+            <BePatient />
+          </div>
+        )}
+
         <AnimatePresence>
           {zipMode && (
             <motion.div
@@ -566,7 +573,7 @@ export default function HauntedLocations() {
                                 ) : (
                                   <Volume2 className="w-3.5 h-3.5" />
                                 )}
-                                {narratingId === loc.id ? (isGenerating ? 'Generating…' : 'Stop Narration') : 'Narrate Summary'}
+                                {narratingId === loc.id ? (isGenerating ? <BePatient /> : 'Stop Narration') : 'Narrate Summary'}
                               </button>
                             )}
                             {loc.existingTourId ? (
@@ -577,14 +584,19 @@ export default function HauntedLocations() {
                                 <MapPin className="w-3.5 h-3.5" /> Go to Existing Tour
                               </button>
                             ) : (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleCreateTour(loc); }}
-                                disabled={creatingId === loc.id}
-                                className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-60"
-                              >
-                                {creatingId === loc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                {creatingId === loc.id ? 'Creating Tour…' : 'Create Tour of This Location'}
-                              </button>
+                              <>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleCreateTour(loc); }}
+                                  disabled={creatingId === loc.id}
+                                  className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-60"
+                                >
+                                  {creatingId === loc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                  {creatingId === loc.id ? 'Creating Tour…' : 'Create Tour of This Location'}
+                                </button>
+                                {creatingId === loc.id && (
+                                  <div className="mt-2 flex justify-center"><BePatient /></div>
+                                )}
+                              </>
                             )}
                           </div>
                         </motion.div>

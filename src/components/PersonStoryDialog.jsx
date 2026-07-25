@@ -1,6 +1,7 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Volume2, VolumeX, Loader2, User } from 'lucide-react';
+import BePatient from '@/components/BePatient';
 
 export default function PersonStoryDialog({ person, open, onOpenChange, isGenerating, isSpeaking, onNarrate }) {
   if (!person) return null;
@@ -19,7 +20,7 @@ export default function PersonStoryDialog({ person, open, onOpenChange, isGenera
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-sky-500/15 border border-sky-500/40 text-sky-400 font-heading text-xs uppercase tracking-wider hover:bg-sky-500/25 transition-colors"
         >
           {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isSpeaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-          {isGenerating ? 'Loading' : isSpeaking ? 'Stop' : 'Narrate Story'}
+          {isGenerating ? <BePatient /> : isSpeaking ? 'Stop' : 'Narrate Story'}
         </button>
       </DialogContent>
     </Dialog>

@@ -7,6 +7,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
+import BePatient from '@/components/BePatient';
 
 const categoryLabel = {
   equipment: 'Equipment',
@@ -137,7 +138,7 @@ export default function Store() {
                 </div>
                 <Button onClick={checkout} disabled={checkingOut} className="w-full gap-2">
                   {checkingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                  Pay with Card
+                  {checkingOut ? <BePatient /> : 'Pay with Card'}
                 </Button>
               </div>
             </>
