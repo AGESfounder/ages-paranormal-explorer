@@ -149,7 +149,6 @@ export default function HauntedLocations() {
             city: tour.city,
             createName: rep.name,
             createState: tour.state,
-            existingTourId: tour.id,
           });
         });
       }
