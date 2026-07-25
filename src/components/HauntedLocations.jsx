@@ -186,8 +186,7 @@ export default function HauntedLocations() {
   // an empty "no locations" result.
   const discoverLocations = async (lat, lon, label) => {
     try {
-      const [result, tours] = await Promise.all([
-        base44.integrations.Core.InvokeLLM({
+      const result = await base44.integrations.Core.InvokeLLM({
         prompt: `Find real haunted locations with documented paranormal history within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return up to 8 of the most notable, publicly accessible haunted locations that can be visited or approached after 7 PM. For each location provide: name, address (street address if known, otherwise the city), city, state (full state name), latitude, longitude (real GPS coordinates), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
         add_context_from_internet: true,
         model: 'gemini_3_flash',
@@ -213,49 +212,28 @@ export default function HauntedLocations() {
             },
           },
         },
-        }),
-        base44.entities.Tour.list('-created_date', 500),
-      ]);
-      const findExistingTour = (name) => {
-        const n = normAddr(name).replace(/^the\s+/, '').trim();
-        if (!n) return null;
-        const nTokens = n.split(' ').filter((t) => t.length > 2);
-        if (nTokens.length === 0) return null;
-        return tours.find((t) => {
-          const tt = normAddr(t.title || '')
-            .replace(/\bparanormal investigation\b/g, '')
-            .replace(/^the\s+/, '')
-            .trim();
-          if (!tt) return false;
-          if (tt.includes(n) || n.includes(tt)) return true;
-          const ttTokens = tt.split(' ');
-          const matched = nTokens.filter((tok) => ttTokens.includes(tok)).length;
-          return matched >= 2 && matched / nTokens.length >= 0.5;
-        });
-      };
+      });
+      // buildLocations already surfaces every existing tour within 30 mi (by
+      // stop coords or start coords) with a "Go to Existing Tour" button. This
+      // web-search fallback only runs when no nearby tour exists, so every
+      // discovered location is genuinely new and gets a "Create Tour" button.
       return (result.locations || [])
         .filter((l) => l.latitude && l.longitude)
-        .map((l, i) => {
-          const existing = findExistingTour(l.name);
-          return {
-            id: existing ? `tour-${existing.id}` : `discovered-${i}`,
-            kind: existing ? 'tour' : 'discovered',
-            name: l.name,
-            address: l.address || '',
-            lat: l.latitude,
-            lng: l.longitude,
-            dist: haversineDistance(lat, lon, l.latitude, l.longitude),
-            overview: existing
-              ? [existing.description, existing.introduction].filter(Boolean).join('\n\n')
-              : (l.overview || ''),
-            hours: l.hours || '',
-            fee: l.fee || '',
-            city: existing ? (existing.city || l.city || '') : (l.city || ''),
-            createName: l.name,
-            createState: existing ? (existing.state || l.state || '') : (l.state || ''),
-            existingTourId: existing ? existing.id : undefined,
-          };
-        })
+        .map((l, i) => ({
+          id: `discovered-${i}`,
+          kind: 'discovered',
+          name: l.name,
+          address: l.address || '',
+          lat: l.latitude,
+          lng: l.longitude,
+          dist: haversineDistance(lat, lon, l.latitude, l.longitude),
+          overview: l.overview || '',
+          hours: l.hours || '',
+          fee: l.fee || '',
+          city: l.city || '',
+          createName: l.name,
+          createState: l.state || '',
+        }))
         .filter((l) => l.dist <= 30)
         .sort((a, b) => a.dist - b.dist);
     } catch (e) {
