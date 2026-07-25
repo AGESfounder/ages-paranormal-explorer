@@ -59,8 +59,9 @@ export default function AbroadTours() {
         subtitle="International Haunted Destinations"
         showBack
         rightAction={
-          <button onClick={() => setShowModal(true)} className="p-2 rounded-lg bg-accent/20 hover:bg-accent/30 text-cyan-glow transition-colors">
-            <Plus className="w-5 h-5" />
+          <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/20 hover:bg-accent/30 text-cyan-glow transition-colors">
+            <Plus className="w-4 h-4" />
+            <span className="font-heading text-xs uppercase tracking-wider">Create Tour</span>
           </button>
         }
       />
