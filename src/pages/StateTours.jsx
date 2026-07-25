@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Loader2, Ghost, AlertTriangle, RefreshCw } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Loader2, Ghost, AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import SwipeableTourCard from '../components/SwipeableTourCard';
+import BePatient from '@/components/BePatient';
 import { US_STATES } from '../lib/statesData';
 import { base44 } from '@/api/base44Client';
+import { generateLocationTour } from '@/lib/generateTour';
 
 export default function StateTours() {
   const { stateAbbr } = useParams();
+  const navigate = useNavigate();
   const [tours, setTours] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [creatingNew, setCreatingNew] = useState(false);
   const [error, setError] = useState('');
 
   const stateName = US_STATES.find(s => s.abbr === stateAbbr)?.name || stateAbbr;
@@ -125,6 +129,36 @@ Use real locations with documented paranormal history only.`,
     } catch (e) { /* silently handled */ }
   };
 
+  // Picks a real haunted area in this state that has NO existing tour yet, then
+  // generates a brand-new tour there. Keeps the state's catalogue growing into
+  // untouched paranormal territory instead of re-covering the same cities.
+  const handleCreateNewTour = async () => {
+    setCreatingNew(true);
+    setError('');
+    try {
+      const existingCities = tours.map(t => t.city).filter(Boolean);
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Suggest ONE real haunted area, city, town, or landmark in ${stateName}, USA that has well-documented paranormal history and is NOT already covered by this list of locations: ${existingCities.length ? existingCities.join(', ') : 'none yet'}. Pick a genuinely different area from any listed. Use current web search to verify it is real and has documented paranormal activity.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            reason: { type: "string" }
+          }
+        },
+        add_context_from_internet: true,
+        model: "gemini_3_flash"
+      });
+      const dest = result?.name?.trim();
+      if (!dest) throw new Error('Could not find a new haunted area. Please try again.');
+      const newTour = await generateLocationTour(dest, stateName);
+      navigate(`/tour/${newTour.id}`);
+    } catch (e) {
+      setError(e?.message || 'Failed to create a new tour. Please try again.');
+      setCreatingNew(false);
+    }
+  };
+
   if (loading) {
     return (
       <PageContainer>
@@ -164,6 +198,17 @@ Use real locations with documented paranormal history only.`,
     <PageContainer>
       <SectionHeader title={stateName} subtitle={`${tours.length} Paranormal Tours`} showBack />
       <div className="px-4 pb-28 space-y-3 pt-3">
+        <button
+          onClick={handleCreateNewTour}
+          disabled={creatingNew}
+          className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-primary/30 bg-primary/10 text-primary font-heading text-sm uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-60"
+        >
+          {creatingNew ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          {creatingNew ? <BePatient /> : 'Create New Tour'}
+        </button>
+        {error && !creatingNew && (
+          <p className="text-xs text-yellow-400 text-center">{error}</p>
+        )}
         {tours.map((tour, i) => (
           <motion.div
             key={tour.id}
