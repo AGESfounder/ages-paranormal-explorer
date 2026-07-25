@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Navigation, MapPin, Loader2, Ghost, Compass } from 'lucide-react';
+import { Navigation, MapPin, Loader2, Ghost, Compass, Sparkles } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -22,10 +22,11 @@ export default function Nearby() {
   const [zipMode, setZipMode] = useState(false);
 
   const distanceRanges = [
-    { label: '1-20 Miles', min: 1, max: 20, icon: Compass },
+    { label: '1-20 Miles', min: 0, max: 20, icon: Compass },
     { label: '21-40 Miles', min: 21, max: 40, icon: MapPin },
     { label: '41-60 Miles', min: 41, max: 60, icon: Navigation },
   ];
+  const [selectedRange, setSelectedRange] = useState(distanceRanges[0]);
 
   const generateTourForRange = async (range) => {
     if (!coords || generatingRange) return;
@@ -240,7 +241,7 @@ Use real locations with documented paranormal history only.`,
       return { ...t, distance: dist };
     });
     withDist.sort((a, b) => a.distance - b.distance);
-    setTours(withDist.slice(0, 10));
+    setTours(withDist);
     setLoading(false);
   };
 
@@ -280,6 +281,10 @@ Use real locations with documented paranormal history only.`,
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   };
 
+  const visibleTours = coords && selectedRange
+    ? tours.filter((t) => t.distance >= selectedRange.min && t.distance <= selectedRange.max)
+    : tours;
+
   return (
     <PageContainer>
       <SectionHeader title="Nearby Tours" subtitle={coords ? 'Sorted by distance' : 'Recent tours'} />
@@ -292,31 +297,25 @@ Use real locations with documented paranormal history only.`,
             <div className="grid grid-cols-2 gap-2">
               {distanceRanges.map((range) => {
                 const Icon = range.icon;
-                const isGenerating = generatingRange === range.label;
+                const isSelected = selectedRange?.label === range.label;
                 return (
                   <button
                     key={range.label}
-                    onClick={() => { setZipMode(false); generateTourForRange(range); }}
-                    disabled={!!generatingRange}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all disabled:opacity-40 ${
-                      isGenerating
+                    onClick={() => { setZipMode(false); setSelectedRange(range); }}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+                      isSelected
                         ? 'border-primary/50 bg-primary/10 text-primary'
                         : 'border-border/40 bg-card/40 hover:border-primary/30 hover:bg-card/50 text-foreground'
                     }`}
                   >
-                    {isGenerating ? (
-                      <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                    ) : (
-                      <Icon className="w-5 h-5 text-primary" />
-                    )}
+                    <Icon className="w-5 h-5 text-primary" />
                     <span className="font-heading text-xs tracking-wide">{range.label}</span>
                   </button>
                 );
               })}
               <button
                 onClick={() => { setZipMode(!zipMode); setError(''); }}
-                disabled={!!generatingRange}
-                className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all disabled:opacity-40 ${
+                className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
                   zipMode
                     ? 'border-primary/50 bg-primary/10 text-primary'
                     : 'border-border/40 bg-card/40 hover:border-primary/30 hover:bg-card/50 text-foreground'
@@ -326,6 +325,14 @@ Use real locations with documented paranormal history only.`,
                 <span className="font-heading text-xs tracking-wide">Custom Zip</span>
               </button>
             </div>
+            <button
+              onClick={() => generateTourForRange(selectedRange)}
+              disabled={!!generatingRange || !selectedRange}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-xs uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-50"
+            >
+              {generatingRange ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {generatingRange ? 'Creating…' : `Create New Tour${selectedRange ? ` · ${selectedRange.label}` : ''}`}
+            </button>
             {zipMode && (
               <div className="flex gap-2 pt-1">
                 <input
@@ -357,14 +364,14 @@ Use real locations with documented paranormal history only.`,
           </div>
         ) : loading ? (
           <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 text-primary animate-spin" /></div>
-        ) : error && tours.length === 0 ? (
+        ) : visibleTours.length === 0 ? (
           <div className="text-center py-16">
             <Navigation className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-            <p className="text-muted-foreground text-sm">{error}</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">Explore states to browse all tours</p>
+            <p className="text-muted-foreground text-sm">{error || `No existing tours within ${selectedRange?.label || 'this range'}.`}</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Tap “Create New Tour” to generate one.</p>
           </div>
         ) : (
-          tours.map((tour, i) => (
+          visibleTours.map((tour, i) => (
             <motion.div key={tour.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
               <SwipeableTourCard tour={tour} onRefresh={handleRefreshTour} onDelete={handleDeleteTour}>
               <Link to={`/tour/${tour.id}`} className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card/40 hover:border-primary/40 hover:bg-card/50 transition-all group">
