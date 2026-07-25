@@ -14,7 +14,7 @@ export default function DrawerSelect({ value, onChange, options, placeholder = '
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`relative w-full flex items-center ${Icon ? 'pl-10' : 'pl-4'} pr-10 py-2.5 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors cursor-pointer ${className}`}
+        className={`relative w-full flex items-center min-h-[44px] ${Icon ? 'pl-10' : 'pl-4'} pr-10 py-3 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all active:scale-[0.98] cursor-pointer ${className}`}
       >
         {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />}
         <span className={`flex-1 text-left truncate ${selected ? 'text-foreground' : 'text-muted-foreground'}`}>
@@ -34,7 +34,7 @@ export default function DrawerSelect({ value, onChange, options, placeholder = '
                 key={opt.value}
                 type="button"
                 onClick={() => { onChange(opt.value); setOpen(false); }}
-                className="flex items-center justify-between w-full px-4 py-3 rounded-lg text-left text-sm hover:bg-primary/10 active:bg-primary/15 transition-colors"
+                className="flex items-center justify-between w-full min-h-[44px] px-4 py-3 rounded-lg text-left text-sm transition-colors hover:bg-primary/10 active:bg-primary/15"
               >
                 <span className={opt.value === value ? 'text-primary font-medium' : 'text-foreground'}>{opt.label}</span>
                 {opt.value === value && <Check className="w-4 h-4 text-primary" />}
