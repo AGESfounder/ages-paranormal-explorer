@@ -131,35 +131,11 @@ export default function Toolkit() {
     setSavedWords([]);
     setHeardWord('');
 
-    // Auto-start recording
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        setRecordedBlob(blob);
-        stream.getTracks().forEach(t => t.stop());
-      };
-      mediaRecorder.start();
-      setRecording(true);
-      setRecordDuration(0);
-      setRecordedBlob(null);
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        setRecordDuration(prev => prev + 1);
-      }, 1000);
-    } catch (err) {
-      console.error('Microphone access denied', err);
-    }
-
-    // Build audio graph: white noise → lowpass filter → gain → speakers
-    // The filter sweeps through the AUDIBLE range (200–6000 Hz) to create
-    // the sound of tuning through static, while the display shows radio frequency
+    // Build audio graph: white noise → lowpass filter → gain → speakers + recording.
+    // The filter sweeps through the AUDIBLE range (200–6000 Hz) to create the
+    // sound of tuning through static, while the display shows radio frequency.
+    // The recording captures BOTH the generated sweep audio AND the microphone,
+    // so playback matches exactly what was heard during the session.
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     audioCtxRef.current = ctx;
 
@@ -191,12 +167,52 @@ export default function Toolkit() {
 
     noise.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(ctx.destination);   // speakers (what the user hears)
     noise.start();
 
     noiseNodeRef.current = noise;
     filterNodeRef.current = filter;
     gainNodeRef.current = gain;
+
+    // Recording destination — captures the sweep audio
+    const dest = ctx.createMediaStreamDestination();
+    gain.connect(dest);               // sweep audio → recording
+
+    // Microphone → recording (so mic-picked noises are captured too).
+    // NOT connected to speakers to avoid feedback.
+    let micStream = null;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const micSource = ctx.createMediaStreamSource(micStream);
+      micSource.connect(dest);
+    } catch (err) {
+      console.error('Microphone access denied', err);
+    }
+
+    // Record the mixed stream (sweep + mic)
+    try {
+      const mediaRecorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setRecordedBlob(blob);
+        if (micStream) micStream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorder.start();
+      setRecording(true);
+      setRecordDuration(0);
+      setRecordedBlob(null);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        setRecordDuration(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('MediaRecorder setup failed', err);
+    }
 
     // Sweep the radio display AND map to audible filter range (200–6000 Hz)
     freqRef.current = radioBand === 'AM' ? 530 : 88.1;
@@ -233,8 +249,8 @@ export default function Toolkit() {
   const stopRadioSweep = () => {
     if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
     radioIntervalRef.current = null;
-    stopRadioAudio();
     stopRecording();
+    stopRadioAudio();
     setRadioActive(false);
   };
 
