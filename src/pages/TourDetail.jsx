@@ -236,7 +236,12 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
     }
   };
 
+  const onDragStart = () => {
+    document.body.style.overflow = 'hidden';
+  };
+
   const onDragEnd = async (result) => {
+    document.body.style.overflow = '';
     if (!result.destination || result.source.index === result.destination.index) return;
     const reordered = Array.from(stops);
     const [removed] = reordered.splice(result.source.index, 1);
@@ -387,7 +392,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
               <p className="text-xs text-muted-foreground">Mapping paranormal hotspots...</p>
             </div>
           ) : (
-            <DragDropContext onDragEnd={onDragEnd}>
+            <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
               <Droppable droppableId="stops">
                 {(provided) => (
                   <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
