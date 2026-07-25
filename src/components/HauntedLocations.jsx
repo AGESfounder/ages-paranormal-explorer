@@ -187,11 +187,15 @@ export default function HauntedLocations() {
         base44.entities.Tour.list('-created_date', 500),
       ]);
       const findExistingTour = (name) => {
-        const n = normAddr(name);
+        const n = normAddr(name).replace(/^the\s+/, '').trim();
         if (!n || n.length < 5) return null;
         return tours.find((t) => {
-          const tt = normAddr(t.title || '');
-          return tt && tt.includes(n);
+          const tt = normAddr(t.title || '')
+            .replace(/\bparanormal investigation\b/g, '')
+            .replace(/^the\s+/, '')
+            .trim();
+          if (!tt) return false;
+          return tt.includes(n) || n.includes(tt);
         });
       };
       return (result.locations || [])
