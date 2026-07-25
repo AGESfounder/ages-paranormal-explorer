@@ -135,6 +135,8 @@ export default function HauntedLocations() {
             kind: 'stop',
             name: rep.name,
             address: rep.address || '',
+            lat: clat,
+            lng: clon,
             dist,
             overview: [rep.historical_info, rep.paranormal_info].filter(Boolean).join('\n\n'),
             hours: rep.hours_of_operation || '',
@@ -188,14 +190,19 @@ export default function HauntedLocations() {
       ]);
       const findExistingTour = (name) => {
         const n = normAddr(name).replace(/^the\s+/, '').trim();
-        if (!n || n.length < 5) return null;
+        if (!n) return null;
+        const nTokens = n.split(' ').filter((t) => t.length > 2);
+        if (nTokens.length === 0) return null;
         return tours.find((t) => {
           const tt = normAddr(t.title || '')
             .replace(/\bparanormal investigation\b/g, '')
             .replace(/^the\s+/, '')
             .trim();
           if (!tt) return false;
-          return tt.includes(n) || n.includes(tt);
+          if (tt.includes(n) || n.includes(tt)) return true;
+          const ttTokens = tt.split(' ');
+          const matched = nTokens.filter((tok) => ttTokens.includes(tok)).length;
+          return matched >= 2 && matched / nTokens.length >= 0.5;
         });
       };
       return (result.locations || [])
@@ -207,6 +214,8 @@ export default function HauntedLocations() {
             kind: existing ? 'tour' : 'discovered',
             name: l.name,
             address: l.address || '',
+            lat: l.latitude,
+            lng: l.longitude,
             dist: haversineDistance(lat, lon, l.latitude, l.longitude),
             overview: existing
               ? [existing.description, existing.introduction].filter(Boolean).join('\n\n')
@@ -277,7 +286,11 @@ export default function HauntedLocations() {
     setError('');
     setCreatingId(loc.id);
     try {
-      const newTour = await generateLocationTour(loc.createName, loc.createState);
+      const newTour = await generateLocationTour(
+        loc.createName,
+        loc.createState,
+        loc.lat != null && loc.lng != null ? { lat: loc.lat, lng: loc.lng } : undefined
+      );
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
       console.error('Tour creation failed:', e);

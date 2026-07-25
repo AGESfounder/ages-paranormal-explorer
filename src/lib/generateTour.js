@@ -1,8 +1,9 @@
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 
-export async function generateLocationTour(destination, state) {
+export async function generateLocationTour(destination, state, coords) {
   const dest = destination.trim();
+  const useCoords = coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
 
   // Creation generates a LIGHTWEIGHT tour + stop skeletons. Full rich
   // historical/paranormal detail and notable people are generated lazily,
@@ -65,7 +66,7 @@ Use real locations and real coordinates for "${dest}". Keep every historical_inf
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
 
-Output ONLY a valid JSON object. No markdown fences, no commentary.`;
+Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nEXACT COORDINATES: This destination is located at exactly latitude ${coords.lat}, longitude ${coords.lng}. Use these EXACT coordinates for start_latitude, start_longitude, and for EVERY stop's latitude and longitude (all stops are areas within this single destination). Do not use any other coordinates.` : ''}`;
 
   // Robust multi-attempt generation: web search first, then a no-web fallback
   // using the model's training knowledge. The lightweight payload makes either
@@ -95,8 +96,8 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.`;
     estimated_duration: result.estimated_duration || '',
     total_distance: result.total_distance || '',
     start_location_name: result.start_location_name || '',
-    start_latitude: result.start_latitude,
-    start_longitude: result.start_longitude,
+    start_latitude: useCoords ? coords.lat : result.start_latitude,
+    start_longitude: useCoords ? coords.lng : result.start_longitude,
     image_url: result.image_url || '',
     tags: result.tags || [],
     safety_info: result.safety_info || '',
@@ -111,8 +112,8 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.`;
         tour_id: newTour.id,
         stop_number: s.stop_number,
         name: s.name,
-        latitude: s.latitude,
-        longitude: s.longitude,
+        latitude: useCoords ? coords.lat : s.latitude,
+        longitude: useCoords ? coords.lng : s.longitude,
         address: s.address,
         historical_info: s.historical_info || '',
         paranormal_info: s.paranormal_info || '',
