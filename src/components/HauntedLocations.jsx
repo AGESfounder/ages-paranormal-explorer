@@ -156,7 +156,8 @@ export default function HauntedLocations() {
   // an empty "no locations" result.
   const discoverLocations = async (lat, lon, label) => {
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
+      const [result, tours] = await Promise.all([
+        base44.integrations.Core.InvokeLLM({
         prompt: `Find real haunted locations with documented paranormal history within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return up to 8 of the most notable, publicly accessible haunted locations that can be visited or approached after 7 PM. For each location provide: name, address (street address if known, otherwise the city), city, state (full state name), latitude, longitude (real GPS coordinates), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
         add_context_from_internet: true,
         model: 'gemini_3_flash',
@@ -182,22 +183,38 @@ export default function HauntedLocations() {
             },
           },
         },
-      });
+        }),
+        base44.entities.Tour.list('-created_date', 500),
+      ]);
+      const findExistingTour = (name) => {
+        const n = normAddr(name);
+        if (!n || n.length < 5) return null;
+        return tours.find((t) => {
+          const tt = normAddr(t.title || '');
+          return tt && tt.includes(n);
+        });
+      };
       return (result.locations || [])
         .filter((l) => l.latitude && l.longitude)
-        .map((l, i) => ({
-          id: `discovered-${i}`,
-          kind: 'discovered',
-          name: l.name,
-          address: l.address || '',
-          dist: haversineDistance(lat, lon, l.latitude, l.longitude),
-          overview: l.overview || '',
-          hours: l.hours || '',
-          fee: l.fee || '',
-          city: l.city || '',
-          createName: l.name,
-          createState: l.state || '',
-        }))
+        .map((l, i) => {
+          const existing = findExistingTour(l.name);
+          return {
+            id: existing ? `tour-${existing.id}` : `discovered-${i}`,
+            kind: existing ? 'tour' : 'discovered',
+            name: l.name,
+            address: l.address || '',
+            dist: haversineDistance(lat, lon, l.latitude, l.longitude),
+            overview: existing
+              ? [existing.description, existing.introduction].filter(Boolean).join('\n\n')
+              : (l.overview || ''),
+            hours: l.hours || '',
+            fee: l.fee || '',
+            city: existing ? (existing.city || l.city || '') : (l.city || ''),
+            createName: l.name,
+            createState: existing ? (existing.state || l.state || '') : (l.state || ''),
+            existingTourId: existing ? existing.id : undefined,
+          };
+        })
         .filter((l) => l.dist <= 30)
         .sort((a, b) => a.dist - b.dist);
     } catch (e) {
