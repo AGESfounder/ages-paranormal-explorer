@@ -30,6 +30,12 @@ const DEFAULT_TOOLS = [
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
 ];
 
+const SWEEP_SPEEDS = {
+  slow: { label: 'Slow', ms: 400 },
+  normal: { label: 'Normal', ms: 200 },
+  fast: { label: 'Fast', ms: 80 },
+};
+
 export default function Toolkit() {
   const [activeTool, setActiveTool] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -78,6 +84,9 @@ export default function Toolkit() {
   const filterNodeRef = useRef(null);
   const gainNodeRef = useRef(null);
   const [radioVolume, setRadioVolume] = useState(0.35);
+  const [radioSweepSpeed, setRadioSweepSpeed] = useState('normal');
+  const freqRef = useRef(null);
+  const dirRef = useRef(1);
   const { isSpeaking: narrating, isGenerating, narrate, stop: stopNarration } = useGhostVoice();
   useWakeLock(!!activeTool);
 
@@ -91,6 +100,11 @@ export default function Toolkit() {
       stopRadioAudio();
     };
   }, []);
+
+  useEffect(() => {
+    if (radioActive) runSweepTicker();
+    return () => { if (radioIntervalRef.current) clearInterval(radioIntervalRef.current); };
+  }, [radioSweepSpeed]);
 
   useEffect(() => {
     if (activeTool?.type === 'weather') {
@@ -185,18 +199,24 @@ export default function Toolkit() {
     gainNodeRef.current = gain;
 
     // Sweep the radio display AND map to audible filter range (200–6000 Hz)
+    freqRef.current = radioBand === 'AM' ? 530 : 88.1;
+    dirRef.current = 1;
+    runSweepTicker();
+  };
+
+  const runSweepTicker = () => {
+    if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
     const amMin = 530, amMax = 1700, fmMin = 88.1, fmMax = 107.9;
     const filterMin = 200, filterMax = 6000;
-    let freq = radioBand === 'AM' ? amMin : fmMin;
-    let dir = 1;
-
+    const ms = SWEEP_SPEEDS[radioSweepSpeed]?.ms ?? 200;
     radioIntervalRef.current = setInterval(() => {
       const min = radioBand === 'AM' ? amMin : fmMin;
       const max = radioBand === 'AM' ? amMax : fmMax;
       const step = radioBand === 'AM' ? 10 : 0.2;
-      freq += step * dir;
-      if (freq >= max) { freq = max; dir = -1; }
-      if (freq <= min) { freq = min; dir = 1; }
+      let freq = (freqRef.current ?? min) + step * dirRef.current;
+      if (freq >= max) { freq = max; dirRef.current = -1; }
+      if (freq <= min) { freq = min; dirRef.current = 1; }
+      freqRef.current = freq;
 
       // Display: radio frequency
       setRadioFrequency(Math.round(freq * 10) / 10);
@@ -204,10 +224,10 @@ export default function Toolkit() {
       // Audio: map radio freq range → audible filter range
       const ratio = (freq - min) / (max - min);
       const audibleFreq = filterMin + ratio * (filterMax - filterMin);
-      if (filterNodeRef.current) {
-        filterNodeRef.current.frequency.setValueAtTime(audibleFreq, ctx.currentTime);
+      if (filterNodeRef.current && audioCtxRef.current) {
+        filterNodeRef.current.frequency.setValueAtTime(audibleFreq, audioCtxRef.current.currentTime);
       }
-    }, 200);
+    }, ms);
   };
 
   const stopRadioSweep = () => {
@@ -472,6 +492,18 @@ export default function Toolkit() {
                 }}
                 className="w-full h-1.5 rounded-full bg-secondary appearance-none cursor-pointer accent-primary"
               />
+            </div>
+
+            {/* Sweep speed control */}
+            <div>
+              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1 block">Sweep Speed</label>
+              <div className="flex gap-1.5">
+                {Object.entries(SWEEP_SPEEDS).map(([key, val]) => (
+                  <button key={key} onClick={() => setRadioSweepSpeed(key)} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${radioSweepSpeed === key ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
+                    {val.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {radioActive ? (
