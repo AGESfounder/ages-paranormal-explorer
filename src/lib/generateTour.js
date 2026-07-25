@@ -109,25 +109,33 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
     return null;
   };
   const toStrArr = (v) => Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()) : [];
+  // The LLM often returns string fields as arrays (e.g. safety_info: ["note 1", "note 2"]),
+  // which fail schema validation. Coerce to a single string.
+  const toStr = (v) => {
+    if (Array.isArray(v)) return v.filter((x) => typeof x === 'string' && x.trim()).join('\n\n');
+    if (typeof v === 'string') return v;
+    if (v == null) return '';
+    return String(v);
+  };
 
   const tourData = {
     title: result.title || `${dest} Paranormal Investigation`,
     state: normalizeStateName(state),
     city: result.city || '',
     tour_type: normEnum(result.tour_type, ['walking', 'driving', 'mixed'], 'walking'),
-    description: result.description || '',
-    introduction: result.introduction || '',
-    conclusion: result.conclusion || '',
+    description: toStr(result.description),
+    introduction: toStr(result.introduction),
+    conclusion: toStr(result.conclusion),
     difficulty: normEnum(result.difficulty, ['easy', 'moderate', 'challenging'], 'moderate'),
-    estimated_duration: result.estimated_duration || '',
-    total_distance: result.total_distance || '',
-    start_location_name: result.start_location_name || '',
+    estimated_duration: toStr(result.estimated_duration),
+    total_distance: toStr(result.total_distance),
+    start_location_name: toStr(result.start_location_name),
     start_latitude: useCoords ? coords.lat : toNum(result.start_latitude),
     start_longitude: useCoords ? coords.lng : toNum(result.start_longitude),
-    image_url: result.image_url || '',
+    image_url: toStr(result.image_url),
     tags: toStrArr(result.tags),
-    safety_info: result.safety_info || '',
-    best_time: result.best_time || '',
+    safety_info: toStr(result.safety_info),
+    best_time: toStr(result.best_time),
   };
 
   const newTour = await base44.entities.Tour.create(tourData);
@@ -147,18 +155,18 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
         name,
         latitude: useCoords ? coords.lat : toNum(s.latitude),
         longitude: useCoords ? coords.lng : toNum(s.longitude),
-        address: s.address || '',
-        historical_info: s.historical_info || '',
-        paranormal_info: s.paranormal_info || '',
+        address: toStr(s.address),
+        historical_info: toStr(s.historical_info),
+        paranormal_info: toStr(s.paranormal_info),
         investigation_suggestions: toStrArr(s.investigation_suggestions),
-        estimated_investigation_time: s.estimated_investigation_time || '',
-        construction_date: s.construction_date || '',
-        famous_people: s.famous_people || '',
-        image_url: s.image_url || '',
-        narration_text: s.narration_text || '',
+        estimated_investigation_time: toStr(s.estimated_investigation_time),
+        construction_date: toStr(s.construction_date),
+        famous_people: toStr(s.famous_people),
+        image_url: toStr(s.image_url),
+        narration_text: toStr(s.narration_text),
         travel_method: normEnum(s.travel_method, ['walking', 'driving'], 'walking'),
-        hours_of_operation: s.hours_of_operation || '',
-        entry_fee: s.entry_fee || '',
+        hours_of_operation: toStr(s.hours_of_operation),
+        entry_fee: toStr(s.entry_fee),
       }));
       await base44.entities.TourStop.bulkCreate(stopRecords);
     } catch (e) {
