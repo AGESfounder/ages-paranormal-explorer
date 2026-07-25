@@ -118,17 +118,13 @@ export default function HauntedLocations() {
     tours.forEach(t => { singleDest[t.id] = isSingleDestination(byTour[t.id] || []); });
 
     // Find a dedicated (single-destination) tour already created for a stop location,
-    // matched by name. Tracks matched tours so they aren't also shown as a separate
-    // "Go to Existing Tour" card (the stop card already links to them).
-    const matchedDedicated = new Set();
+    // matched by name. When one exists, the individual location card is suppressed and
+    // the dedicated tour is listed once instead (as a single "Go to Existing Tour" card).
     const findDedicated = (stopName, excludeTourId) => {
       for (const t of tours) {
         if (t.id === excludeTourId) continue;
         if (!singleDest[t.id]) continue;
-        if (nameMatchesLocation(stopName, t.title)) {
-          matchedDedicated.add(t.id);
-          return t.id;
-        }
+        if (nameMatchesLocation(stopName, t.title)) return t.id;
       }
       return null;
     };
@@ -151,6 +147,9 @@ export default function HauntedLocations() {
         const clon = cluster.reduce((a, s) => a + s.longitude, 0) / cluster.length;
         const dist = haversineDistance(lat, lon, clat, clon);
         if (dist > 30) return;
+        // A dedicated tour already exists for this landmark — suppress the individual
+        // location card; the dedicated tour is listed separately below.
+        if (findDedicated(rep.name, tour.id)) return;
         representedTours.add(tour.id);
         locations.push({
           id: `stop-${rep.id}`,
@@ -166,7 +165,6 @@ export default function HauntedLocations() {
           city: tour.city,
           createName: rep.name,
           createState: tour.state,
-          existingTourId: findDedicated(rep.name, tour.id),
         });
       });
     }
@@ -176,7 +174,7 @@ export default function HauntedLocations() {
     for (const tid of Object.keys(byTour)) {
       if (!singleDest[tid]) continue;
       const tour = tourMap[tid];
-      if (!tour || matchedDedicated.has(tour.id) || representedTours.has(tour.id)) continue;
+      if (!tour || representedTours.has(tour.id)) continue;
       const ts = byTour[tid];
       const clat = ts.reduce((a, s) => a + s.latitude, 0) / ts.length;
       const clon = ts.reduce((a, s) => a + s.longitude, 0) / ts.length;
@@ -203,7 +201,7 @@ export default function HauntedLocations() {
 
     // Tours with no geocoded stops: use start coords.
     for (const tour of tours) {
-      if (representedTours.has(tour.id) || matchedDedicated.has(tour.id)) continue;
+      if (representedTours.has(tour.id)) continue;
       if (!tour.start_latitude || !tour.start_longitude) continue;
       const dist = haversineDistance(lat, lon, tour.start_latitude, tour.start_longitude);
       if (dist > 30) continue;
