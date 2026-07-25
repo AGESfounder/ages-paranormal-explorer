@@ -75,6 +75,19 @@ function nameMatchesLocation(stopName, tourTitle) {
   return st.every(t => tt.has(t));
 }
 
+// Two location names refer to the same place if the significant tokens of one are
+// all present in the other, or the normalized names are identical.
+function sameName(a, b) {
+  if (!a || !b) return false;
+  if (normAddr(a) && normAddr(a) === normAddr(b)) return true;
+  return nameMatchesLocation(a, b) || nameMatchesLocation(b, a);
+}
+// Two spots are the same physical place if within ~0.2 mi (~320 m) of each other.
+function sameSpot(a, b) {
+  if (a.lat == null || a.lng == null || b.lat == null || b.lng == null) return false;
+  return haversineDistance(a.lat, a.lng, b.lat, b.lng) <= 0.2;
+}
+
 function truncate(text, n) {
   const t = (text || '').trim();
   return t.length > n ? t.slice(0, n).trim() + '…' : t;
@@ -299,12 +312,17 @@ export default function HauntedLocations() {
       // Also discover real haunted locations via web search so the list always
       // includes other nearby locations — not just tours already created.
       let discovered = await discoverLocations(lat, lon, label);
-      // Filter out discovered locations that already have a dedicated tour (matched
-      // by name) so we don't show a duplicate "Create Tour" card for one that exists.
-      const existingNames = local.map(l => l.name).filter(Boolean);
-      discovered = discovered.filter(d => !existingNames.some(n =>
-        nameMatchesLocation(d.name, n) || nameMatchesLocation(n, d.name)
-      ));
+      // Filter out discovered locations that already have a local tour/stop card
+      // (matched by name OR by overlapping coordinates) to avoid duplicates.
+      discovered = discovered.filter(d => !local.some(l => sameName(d.name, l.name) || sameSpot(d, l)));
+      // Also de-duplicate within the discovered list itself (same place, slightly
+      // different name or coordinates returned by the web search).
+      const seen = [];
+      discovered = discovered.filter(d => {
+        if (seen.some(s => sameName(d.name, s.name) || sameSpot(d, s))) return false;
+        seen.push(d);
+        return true;
+      });
       const locs = [...local, ...discovered];
       setOriginLabel(label);
       setResults(locs);
