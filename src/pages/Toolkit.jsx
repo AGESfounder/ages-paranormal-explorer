@@ -968,6 +968,175 @@ Best Practices
 • Play back at increased volume with noise-reduction software.
 • Never use voice activation — it can cut off beginnings of EVPs.`
               },
+              {
+                name: 'Radio Sweeper',
+                short: 'AM/FM Frequency Sweep for EVP',
+                detail: `Radio Sweepers in Ghost Hunting
+
+What Is a Radio Sweeper?
+
+A radio sweeper continuously cycles through AM or FM broadcast frequencies, producing a rapid stream of static, fragments of stations, and white noise. In ghost hunting, it functions as a spirit box or "ghost box" — a device spirits are believed to manipulate to form words from the audio fragments.
+
+Scientific Theory
+
+A radio sweeper tunes across a frequency band (e.g. AM 530–1700 kHz or FM 88.1–107.9 MHz), stepping through channels faster than a person could manually dial. The resulting audio is a blend of carrier static and brief snippets of broadcast audio. The continuous change in frequency creates a rich bed of raw sound fragments.
+
+Paranormal Theory
+
+Spirit communicators are theorized to:
+• Select and assemble fragments from the sweeping audio to form words or short phrases.
+• Influence the tuning to land on meaningful syllables at the right moment.
+• Produce real-time, audible responses that are absent from a normal broadcast.
+
+Capturing both the sweep audio and the microphone ensures playback contains exactly what was heard — the sweeping static and any voices, including ambient sounds in the room.
+
+Best Practices
+• Allow the sweep to run for several minutes to give spirits time to respond.
+• Ask clear, simple questions and pause between them.
+• Record the session so fragments can be reviewed later.
+• Note any words heard and the question being asked at the time.
+• Distinguish genuine responses from coincidental broadcast fragments — consistency and relevance are key.`
+              },
+              {
+                name: 'Term Sweeper',
+                short: 'Environment-Triggered Spirit Dictation',
+                detail: `Term Sweepers in Ghost Hunting
+
+What Is a Term Sweeper?
+
+A term sweeper is a phone-based tool that cycles through a list of location-relevant words (place names, object names, historical terms) and is believed to be triggered by environmental energy to "dictate" a term from the surrounding spirit. It typically pairs with screen recording to capture which term appears and when.
+
+Scientific Theory
+
+The device rapidly presents candidate terms while monitoring environmental sensors (motion, magnetic disturbance, device tilt). When a significant environmental change is detected, the currently displayed term is "captured," suggesting a spirit selected it.
+
+Paranormal Theory
+
+Investigators theorize that:
+• Spirits can influence the device's sensors to pause or select a term.
+• Location-specific word banks increase the chance of meaningful, relevant responses.
+• Repeated selection of the same term across sessions strengthens the evidence.
+
+Best Practices
+• Curate the term list to the location's history and reported phenomena.
+• Run sessions quietly and ask prompting questions.
+• Record the screen so captures are timestamped and verifiable.
+• Look for repeated or thematically clustered terms rather than single hits.
+• Treat a single captured term as suggestive, not conclusive.`
+              },
+              {
+                name: 'Yes/No/IDK Sweeper',
+                short: 'Motion-Triggered Answer Dictation',
+                detail: `Yes/No/IDK Sweepers in Ghost Hunting
+
+What Is a Yes/No/IDK Sweeper?
+
+A phone-based tool that cycles through three answers — Yes, No, and I Don't Know — and is triggered by motion or environmental disturbance to "dictate" a response to a spoken question. It is commonly used with screen recording for later review.
+
+Scientific Theory
+
+The device continuously rotates the answer options while watching device motion and sensor activity. A significant disturbance freezes the cycle on the answer being displayed at that instant, producing a recorded response.
+
+Paranormal Theory
+
+Investigators theorize that:
+• Spirits can trigger motion or energy events to select an answer.
+• The simple Yes/No/I Don't Know format mirrors classic spirit communication.
+• Responses that directly address the question are more likely meaningful.
+
+Best Practices
+• Ask clear yes/no questions and pause for a response.
+• Keep the device still between questions to avoid false triggers.
+• Record the session for timestamped verification.
+• Look for consistent answers across multiple questions about the same topic.
+• Single responses are suggestive — patterns across a session are stronger.`
+              },
+              {
+                name: 'Vibration Communicator',
+                short: 'Phone Sensor Energy Disturbance Detection',
+                detail: `Vibration Communicators in Ghost Hunting
+
+What Is a Vibration Communicator?
+
+A vibration communicator uses a smartphone's built-in sensors (accelerometer, gyroscope, magnetometer) to detect sudden energy and motion disturbances, and pairs detection with video recording so the moment of disturbance is captured visually.
+
+Scientific Theory
+
+Modern phones contain sensitive microelectromechanical (MEMS) sensors that measure acceleration, rotation, and magnetic field. The tool reads these sensors in real time and flags spikes that exceed a baseline — sudden tilts, vibrations, or magnetic shifts — then marks and records the event.
+
+Paranormal Theory
+
+Some researchers theorize that:
+• Spirit manifestations may produce localized energy or physical disturbances detectable by these sensors.
+• Sudden, unexplained sensor spikes near a reported haunt can correlate with paranormal events.
+• Pairing sensor spikes with video provides corroborating visual evidence.
+
+Best Practices
+• Place the phone on a stable surface to establish a clean baseline.
+• Note known sources of vibration (HVAC, traffic, footsteps).
+• Use video recording so any visual anomaly at the moment of a spike is captured.
+• Correlate spikes with other equipment readings (EMF, audio).
+• A single spike is not proof — look for repeatable, contextual patterns.`
+              },
+              {
+                name: 'Anomaly Camera',
+                short: 'IR Depth Scan for Human & Ghost Figures',
+                detail: `Anomaly Cameras in Ghost Hunting
+
+What Is an Anomaly Camera?
+
+An anomaly camera uses a phone's depth and infrared sensing capabilities to scan a scene for human-shaped figures and anomalies that may be invisible to the naked eye, mapping detected forms and flagging potential apparitions in real time.
+
+Scientific Theory
+
+The camera reads depth and IR data to build a spatial map of the scene. Software analyzes the map for shapes and silhouettes that resemble a human form — head, torso, limbs — and highlights them on screen. The system can detect movement and depth changes beyond standard visible-light capture.
+
+Paranormal Theory
+
+Investigators theorize that:
+• Spirits may present as energy fields or forms detectable by depth/IR sensing.
+• Humanoid shapes appearing where no living person is present may indicate an apparition.
+• Figures mapped at unusual heights or positions can be especially notable.
+
+Limitations and False Positives
+• Furniture, curtains, and reflections can be misread as humanoid shapes.
+• Shadows and lighting changes can confuse depth sensing.
+• Other people in range can create overlapping readings.
+
+Best Practices
+• Clear the area of people before scanning.
+• Note reflective surfaces and light sources.
+• Document any detected figure with a screenshot or recording.
+• Cross-reference with EMF, temperature, and audio for corroboration.
+• A single detected shape alone is not proof.`
+              },
+              {
+                name: 'Alphabet Sweeper',
+                short: 'A→Z Environment-Triggered Letter Dictation',
+                detail: `Alphabet Sweepers in Ghost Hunting
+
+What Is an Alphabet Sweeper?
+
+A phone-based tool that cycles through the alphabet A→Z and is believed to be triggered by environmental energy to "dictate" a letter, allowing spirits to spell out words letter by letter. It is commonly paired with screen recording.
+
+Scientific Theory
+
+The device continuously rotates through letters while monitoring motion and sensor activity. A significant environmental disturbance freezes the cycle on the letter being displayed, producing a captured letter that can be assembled with others into words.
+
+Paranormal Theory
+
+Investigators theorize that:
+• Spirits can influence the device to select letters in sequence.
+• Over a session, captured letters may spell names, places, or messages.
+• Relevant, coherent spellings across multiple sessions strengthen the evidence.
+
+Best Practices
+• Ask prompting questions and pause for letter responses.
+• Keep the device still between captures to avoid false triggers.
+• Record the screen so each captured letter is timestamped.
+• Look for coherent words across a session rather than isolated letters.
+• Treat single letters as suggestive — meaningful spellings are stronger.`
+              },
             ].map((item, i) => (
               <div key={i} className="p-2.5 rounded-lg bg-card/30 border border-border/30">
                 <p className="text-xs font-medium text-foreground">{item.name}</p>
