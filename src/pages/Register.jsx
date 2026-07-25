@@ -19,12 +19,17 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
   const [otpCode, setOtpCode] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      return;
+    }
+    if (!agreedToTerms) {
+      setError("Please review and accept the Terms of Service to continue.");
       return;
     }
     setLoading(true);
@@ -143,6 +148,7 @@ export default function Register() {
         variant="outline"
         className="w-full h-12 text-sm font-medium mb-6"
         onClick={handleGoogle}
+        disabled={!agreedToTerms}
       >
         <GoogleIcon className="w-5 h-5 mr-2" />
         Continue with Google
@@ -229,7 +235,21 @@ export default function Register() {
             />
           </div>
         </div>
-        <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
+        <label className="flex items-start gap-2.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={agreedToTerms}
+            onChange={(e) => setAgreedToTerms(e.target.checked)}
+            className="accent-primary w-4 h-4 mt-0.5 shrink-0"
+          />
+          <span className="text-xs text-muted-foreground leading-relaxed">
+            I have read and agree to the{" "}
+            <Link to="/terms" className="text-primary font-medium hover:underline">Terms of Service</Link>{" "}
+            and{" "}
+            <Link to="/privacy" className="text-primary font-medium hover:underline">Privacy Policy</Link>.
+          </span>
+        </label>
+        <Button type="submit" className="w-full h-12 font-medium" disabled={loading || !agreedToTerms}>
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

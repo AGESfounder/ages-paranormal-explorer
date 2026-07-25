@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Moon, Sun, Volume2, Music, Download, Shield, Info, Navigation, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Moon, Sun, Volume2, Music, Download, Shield, Info, Navigation, Trash2, FileText, ScrollText, Ban } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import { getBlockedUsers, unblockUser } from '@/lib/userBlocks';
 
 const defaultSettings = {
   backgroundMusic: false,
@@ -53,6 +55,20 @@ export default function Settings() {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+
+  useEffect(() => {
+    loadBlockedUsers();
+  }, []);
+
+  const loadBlockedUsers = async () => {
+    try { setBlockedUsers(await getBlockedUsers()); } catch {}
+  };
+
+  const handleUnblock = async (id) => {
+    const next = await unblockUser(id);
+    setBlockedUsers(next.map((b) => (typeof b === 'string' ? { id: b, name: 'Blocked user' } : b)).filter((b) => b?.id));
+  };
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
@@ -149,6 +165,48 @@ export default function Settings() {
             </div>
           </a>
         )}
+
+        {/* Legal — Privacy Policy & Terms of Service */}
+        <div className="rounded-xl border border-border/40 bg-card/40 overflow-hidden">
+          <div className="p-3 border-b border-border/30">
+            <h3 className="text-xs font-heading uppercase tracking-wider text-primary flex items-center gap-2"><ScrollText className="w-3.5 h-3.5" /> Legal</h3>
+          </div>
+          <Link to="/privacy" className="flex items-center justify-between p-3 border-b border-border/20 hover:bg-primary/5 transition-colors">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary/70" />
+              <span className="text-sm text-foreground">Privacy Policy</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">View ›</span>
+          </Link>
+          <Link to="/terms" className="flex items-center justify-between p-3 hover:bg-primary/5 transition-colors">
+            <div className="flex items-center gap-2">
+              <ScrollText className="w-4 h-4 text-primary/70" />
+              <span className="text-sm text-foreground">Terms of Service</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">View ›</span>
+          </Link>
+        </div>
+
+        {/* Blocked Users */}
+        <div className="rounded-xl border border-border/40 bg-card/40 overflow-hidden">
+          <div className="p-3 border-b border-border/30">
+            <h3 className="text-xs font-heading uppercase tracking-wider text-primary flex items-center gap-2"><Ban className="w-3.5 h-3.5" /> Blocked Users</h3>
+          </div>
+          <div className="p-3">
+            {blockedUsers.length === 0 ? (
+              <p className="text-xs text-muted-foreground">You haven't blocked anyone.</p>
+            ) : (
+              <div className="space-y-2">
+                {blockedUsers.map((b) => (
+                  <div key={b.id} className="flex items-center justify-between rounded-lg bg-secondary/30 border border-border/30 px-3 py-2">
+                    <span className="text-sm text-foreground truncate">{b.name}</span>
+                    <Button variant="outline" size="sm" onClick={() => handleUnblock(b.id)}>Unblock</Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* About */}
         <div className="rounded-xl border border-border/40 bg-card/40 overflow-hidden">

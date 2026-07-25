@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { motion } from 'framer-motion';
-import { Ghost, Loader2, FileText, Image, Video, ClipboardList, Users } from 'lucide-react';
+import { Ghost, Loader2, FileText, Image, Video, ClipboardList, Users, Flag } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import ReportContentDialog from '@/components/ReportContentDialog';
+import { getBlockedIds } from '@/lib/userBlocks';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
@@ -33,9 +35,12 @@ export default function CommunityMap() {
   const [pins, setPins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [blockedIds, setBlockedIds] = useState([]);
+  const [reportingPin, setReportingPin] = useState(null);
 
   useEffect(() => {
     loadPins();
+    getBlockedIds().then(setBlockedIds).catch(() => {});
   }, []);
 
   const loadPins = async () => {
@@ -47,7 +52,10 @@ export default function CommunityMap() {
     setLoading(false);
   };
 
-  const filtered = filter === 'all' ? pins : pins.filter(p => p.type === filter);
+  // Hide pins authored by blocked users.
+  const visiblePins = pins.filter(p => !blockedIds.includes(p.created_by_id));
+
+  const filtered = filter === 'all' ? visiblePins : visiblePins.filter(p => p.type === filter);
 
   const center = filtered.length > 0
     ? [
@@ -119,7 +127,7 @@ export default function CommunityMap() {
                 {filtered.map(pin => (
                   <Marker key={pin.id} position={[pin.latitude, pin.longitude]} icon={createPin(pin.type)}>
                     <Popup>
-                      <div className="min-w-[160px]">
+                      <div className="min-w-[180px]">
                         <p className="font-semibold text-sm mb-1">{pin.title}</p>
                         <p className="text-xs text-muted-foreground mb-1">{typeLabel[pin.type]}</p>
                         {pin.location_name && <p className="text-xs">📍 {pin.location_name}</p>}
@@ -128,6 +136,12 @@ export default function CommunityMap() {
                         {pin.activity_level > 0 && (
                           <p className="text-xs mt-1">{'★'.repeat(pin.activity_level)}{'☆'.repeat(5 - pin.activity_level)}</p>
                         )}
+                        <button
+                          onClick={() => setReportingPin(pin)}
+                          className="mt-2 flex items-center gap-1 text-[11px] text-destructive hover:underline"
+                        >
+                          <Flag className="w-3 h-3" /> Report
+                        </button>
                       </div>
                     </Popup>
                   </Marker>
@@ -148,6 +162,14 @@ export default function CommunityMap() {
         </>
       )}
 
+      <ReportContentDialog
+        open={!!reportingPin}
+        onOpenChange={(v) => !v && setReportingPin(null)}
+        targetType="evidence"
+        targetId={reportingPin?.id}
+        authorId={reportingPin?.created_by_id}
+        authorName={reportingPin?.location_name || 'Evidence author'}
+      />
       <NavBar />
     </PageContainer>
   );

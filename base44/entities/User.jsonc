@@ -11,6 +11,10 @@
     "settings": {
       "type": "string",
       "description": "JSON-encoded user settings"
+    },
+    "blocked_users": {
+      "type": "string",
+      "description": "JSON-encoded list of blocked user ids"
     }
   },
   "required": [

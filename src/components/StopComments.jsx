@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Send, Loader2, Ghost } from 'lucide-react';
+import { MessageSquare, Send, Loader2, Ghost, Flag } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { base44 } from '@/api/base44Client';
+import ReportContentDialog from '@/components/ReportContentDialog';
+import { getBlockedIds } from '@/lib/userBlocks';
 
 export default function StopComments({ stopId, tourId }) {
   const [comments, setComments] = useState([]);
@@ -9,10 +11,13 @@ export default function StopComments({ stopId, tourId }) {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [user, setUser] = useState(null);
+  const [blockedIds, setBlockedIds] = useState([]);
+  const [reporting, setReporting] = useState(null); // comment being reported
 
   useEffect(() => {
     loadComments();
     base44.auth.me().then(setUser).catch(() => {});
+    getBlockedIds().then(setBlockedIds).catch(() => {});
   }, [stopId]);
 
   const loadComments = async () => {
@@ -21,6 +26,9 @@ export default function StopComments({ stopId, tourId }) {
     setComments(data);
     setLoading(false);
   };
+
+  // Hide content authored by blocked users.
+  const visibleComments = comments.filter((c) => !blockedIds.includes(c.created_by_id));
 
   const handleSubmit = async () => {
     const trimmed = text.trim();
@@ -94,24 +102,45 @@ export default function StopComments({ stopId, tourId }) {
         <div className="flex justify-center py-4">
           <Loader2 className="w-5 h-5 text-primary animate-spin" />
         </div>
-      ) : comments.length === 0 ? (
+      ) : visibleComments.length === 0 ? (
         <div className="flex flex-col items-center py-6 gap-2 text-center">
           <Ghost className="w-8 h-8 text-muted-foreground/30" />
           <p className="text-xs text-muted-foreground">No reports yet. Be the first to share your experience!</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {comments.map(c => (
+          {visibleComments.map(c => (
             <div key={c.id} className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-heading uppercase tracking-wider text-primary">{c.author_name || 'Anonymous Investigator'}</span>
-                <span className="text-[10px] text-muted-foreground">{timeAgo(c.created_date)}</span>
+                <div className="flex items-center gap-2">
+                  {/* Don't show report on your own comments */}
+                  {user && c.created_by_id && c.created_by_id !== user.id && (
+                    <button
+                      onClick={() => setReporting(c)}
+                      className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                      aria-label="Report comment"
+                    >
+                      <Flag className="w-3 h-3" />
+                    </button>
+                  )}
+                  <span className="text-[10px] text-muted-foreground">{timeAgo(c.created_date)}</span>
+                </div>
               </div>
               <p className="text-sm text-foreground/80 leading-relaxed">{c.text}</p>
             </div>
           ))}
         </div>
       )}
+
+      <ReportContentDialog
+        open={!!reporting}
+        onOpenChange={(v) => !v && setReporting(null)}
+        targetType="comment"
+        targetId={reporting?.id}
+        authorId={reporting?.created_by_id}
+        authorName={reporting?.author_name}
+      />
     </div>
   );
 }
