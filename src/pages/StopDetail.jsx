@@ -274,6 +274,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           </TabsContent>
           <TabsContent value="investigate" className="mt-3">
             <div className="p-4 rounded-xl border border-border/40 bg-card/30 space-y-3">
+              <button onClick={() => navigate('/toolkit')} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-primary/40 bg-primary/15 text-primary text-sm font-heading uppercase tracking-wider hover:bg-primary/25 transition-colors">
+                <Navigation className="w-4 h-4" /> Investigation Toolkit
+              </button>
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-heading uppercase tracking-wider text-primary">Investigation Suggestions</h4>
                 <button onClick={() => narrate(stop.investigation_suggestions?.join('. ') + '. Estimated investigation time: ' + stop.estimated_investigation_time + '.')} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
