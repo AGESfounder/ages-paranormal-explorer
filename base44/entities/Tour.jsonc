@@ -72,6 +72,10 @@
     "is_featured": {
       "type": "boolean",
       "default": false
+    },
+    "user_reordered": {
+      "type": "boolean",
+      "default": false
     }
   },
   "required": [

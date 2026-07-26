@@ -120,6 +120,9 @@ export default function TourDetail() {
       const tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
       if (tourStops.length === 0) {
         await generateStops(tourData[0]);
+      } else if (tourData[0].user_reordered) {
+        // Respect the user's manual stop order — do not re-sort by proximity
+        setStops(tourStops.sort((a, b) => a.stop_number - b.stop_number));
       } else {
         const reordered = enforceWalkingDistance(tourStops, tourData[0].tour_type);
         // Update stop_numbers in the database if they changed
@@ -252,6 +255,11 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
     for (const s of withNumbers) {
       await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number });
     }
+    // Remember that the user customized the stop order so we don't re-sort by proximity on next load
+    try {
+      await base44.entities.Tour.update(tourId, { user_reordered: true });
+      setTour(prev => prev ? { ...prev, user_reordered: true } : prev);
+    } catch (e) {}
   };
 
   const markComplete = async () => {
