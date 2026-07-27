@@ -13,11 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const categoryOptions = [
-  { value: 'equipment', label: 'Equipment' },
+  { value: 'equipment', label: 'Devices' },
   { value: 'apparel', label: 'Apparel' },
-  { value: 'books', label: 'Books' },
-  { value: 'accessories', label: 'Accessories' },
+  { value: 'other', label: 'Other' },
 ];
+
+const categoryLabelMap = Object.fromEntries(categoryOptions.map(c => [c.value, c.label]));
 
 const statusColors = {
   pending: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
@@ -118,21 +119,21 @@ export default function Admin() {
   // --- Products ---
   const openAddProduct = () => {
     setEditingProduct('new');
-    setProductForm({ name: '', description: '', price: '', image_url: '', video_url: '', category: 'equipment', stock: 0 });
+    setProductForm({ name: '', description: '', price: '', original_price: '', image_url: '', video_url: '', category: 'equipment', stock: 0, is_featured: false });
   };
 
   const openEditProduct = (p) => {
     setEditingProduct(p.id);
     setProductForm({
       name: p.name || '', description: p.description || '', price: p.price || '',
-      image_url: p.image_url || '', video_url: p.video_url || '',
-      category: p.category || 'equipment', stock: p.stock || 0,
+      original_price: p.original_price || '', image_url: p.image_url || '', video_url: p.video_url || '',
+      category: p.category || 'equipment', stock: p.stock || 0, is_featured: p.is_featured || false,
     });
   };
 
   const saveProduct = async () => {
     setSaving(true);
-    const data = { ...productForm, price: parseFloat(productForm.price) || 0, stock: parseInt(productForm.stock) || 0 };
+    const data = { ...productForm, price: parseFloat(productForm.price) || 0, stock: parseInt(productForm.stock) || 0, original_price: productForm.original_price ? parseFloat(productForm.original_price) : null, is_featured: !!productForm.is_featured };
     if (editingProduct === 'new') {
       const created = await base44.asServiceRole.entities.Product.create(data);
       setProducts(prev => [created, ...prev]);
@@ -258,7 +259,8 @@ export default function Admin() {
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{p.description || '—'}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs font-mono text-primary">${p.price?.toFixed(2)}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary/50 text-muted-foreground uppercase">{p.category}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary/50 text-muted-foreground uppercase">{categoryLabelMap[p.category] || p.category}</span>
+                          {p.original_price > p.price && <span className="text-[10px] text-green-400 font-heading uppercase">Sale</span>}
                           <span className="text-[10px] text-muted-foreground">Stock: {p.stock ?? 0}</span>
                           {p.video_url && <span className="text-[10px] text-cyan-glow">🎬 Video</span>}
                         </div>
@@ -425,6 +427,11 @@ export default function Admin() {
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs">Price ($) *</Label><Input type="number" step="0.01" value={productForm.price} onChange={e => setProductForm({ ...productForm, price: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
               <div><Label className="text-xs">Stock</Label><Input type="number" value={productForm.stock} onChange={e => setProductForm({ ...productForm, stock: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+            </div>
+            <div><Label className="text-xs">Original Price ($) — for sale items</Label><Input type="number" step="0.01" value={productForm.original_price} onChange={e => setProductForm({ ...productForm, original_price: e.target.value })} placeholder="Leave empty if not on sale" className="bg-secondary/50 border-border/40 text-sm" /></div>
+            <div className="flex items-center gap-3">
+              <Label className="text-xs">Featured Product of the Week</Label>
+              <button type="button" onClick={() => setProductForm({ ...productForm, is_featured: !productForm.is_featured })} className={`px-3 py-1.5 rounded-lg text-xs font-heading uppercase tracking-wider border ${productForm.is_featured ? 'bg-primary/15 border-primary/40 text-primary' : 'border-border/40 text-muted-foreground'}`}>{productForm.is_featured ? '★ Featured' : 'Mark as Featured'}</button>
             </div>
             <div><Label className="text-xs">Category</Label><Select value={productForm.category} onValueChange={v => setProductForm({ ...productForm, category: v })}><SelectTrigger className="bg-secondary/50 border-border/40 text-sm"><SelectValue /></SelectTrigger><SelectContent>{categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
             <div><Label className="text-xs">Image URL</Label><Input value={productForm.image_url} onChange={e => setProductForm({ ...productForm, image_url: e.target.value })} placeholder="https://..." className="bg-secondary/50 border-border/40 text-sm" /></div>

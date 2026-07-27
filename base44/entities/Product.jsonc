@@ -11,6 +11,9 @@
     "price": {
       "type": "number"
     },
+    "original_price": {
+      "type": "number"
+    },
     "image_url": {
       "type": "string"
     },
@@ -22,8 +25,7 @@
       "enum": [
         "equipment",
         "apparel",
-        "books",
-        "accessories"
+        "other"
       ]
     },
     "stock": {

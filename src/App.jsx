@@ -29,6 +29,8 @@ import AbroadTours from '@/pages/AbroadTours';
 import Settings from '@/pages/Settings';
 import Admin from '@/pages/Admin';
 import Store from '@/pages/Store';
+import StoreCategory from '@/pages/StoreCategory';
+import StoreLayout from '@/components/store/StoreLayout';
 import Leaderboard from '@/pages/Leaderboard';
 import CommunityMap from '@/pages/CommunityMap';
 import EvidenceDashboard from '@/pages/EvidenceDashboard';
@@ -87,7 +89,12 @@ const AuthenticatedApp = () => {
         <Route path="/abroad" element={<AbroadTours />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<Admin />} />
-        <Route path="/store" element={<Store />} />
+        <Route element={<StoreLayout />}>
+          <Route path="/store" element={<Store />} />
+          <Route path="/store/devices" element={<StoreCategory category="equipment" />} />
+          <Route path="/store/apparel" element={<StoreCategory category="apparel" />} />
+          <Route path="/store/other" element={<StoreCategory category="other" />} />
+        </Route>
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/community-map" element={<CommunityMap />} />
         <Route path="/evidence-dashboard" element={<EvidenceDashboard />} />
