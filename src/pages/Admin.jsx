@@ -56,9 +56,9 @@ export default function Admin() {
   const loadAll = useCallback(async () => {
     try {
       const [t, p, o] = await Promise.all([
-        base44.asServiceRole.entities.Tour.list('-created_date', 500),
-        base44.asServiceRole.entities.Product.list('-created_date', 200),
-        base44.asServiceRole.entities.Order.list('-created_date', 200),
+        base44.entities.Tour.list('-created_date', 500),
+        base44.entities.Product.list('-created_date', 200),
+        base44.entities.Order.list('-created_date', 200),
       ]);
       setTours(t);
       setProducts(p);
@@ -99,7 +99,7 @@ export default function Admin() {
   const saveEdit = async () => {
     if (!editingTour) return;
     setSaving(true);
-    await base44.asServiceRole.entities.Tour.update(editingTour.id, editForm);
+    await base44.entities.Tour.update(editingTour.id, editForm);
     setTours(prev => prev.map(t => t.id === editingTour.id ? { ...t, ...editForm } : t));
     setEditingTour(null); setSaving(false);
   };
@@ -107,11 +107,11 @@ export default function Admin() {
   const confirmDelete = async () => {
     if (!deleteConfirm) return;
     setDeletingId(deleteConfirm.id);
-    const stops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: deleteConfirm.id });
-    for (const s of stops) await base44.asServiceRole.entities.TourStop.delete(s.id);
-    const favs = await base44.asServiceRole.entities.Favorite.filter({ tour_id: deleteConfirm.id });
-    for (const f of favs) await base44.asServiceRole.entities.Favorite.delete(f.id);
-    await base44.asServiceRole.entities.Tour.delete(deleteConfirm.id);
+    const stops = await base44.entities.TourStop.filter({ tour_id: deleteConfirm.id });
+    for (const s of stops) await base44.entities.TourStop.delete(s.id);
+    const favs = await base44.entities.Favorite.filter({ tour_id: deleteConfirm.id });
+    for (const f of favs) await base44.entities.Favorite.delete(f.id);
+    await base44.entities.Tour.delete(deleteConfirm.id);
     setTours(prev => prev.filter(t => t.id !== deleteConfirm.id));
     setDeletingId(null); setDeleteConfirm(null);
   };
@@ -135,10 +135,10 @@ export default function Admin() {
     setSaving(true);
     const data = { ...productForm, price: parseFloat(productForm.price) || 0, stock: parseInt(productForm.stock) || 0, original_price: productForm.original_price ? parseFloat(productForm.original_price) : null, is_featured: !!productForm.is_featured };
     if (editingProduct === 'new') {
-      const created = await base44.asServiceRole.entities.Product.create(data);
+      const created = await base44.entities.Product.create(data);
       setProducts(prev => [created, ...prev]);
     } else {
-      await base44.asServiceRole.entities.Product.update(editingProduct, data);
+      await base44.entities.Product.update(editingProduct, data);
       setProducts(prev => prev.map(p => p.id === editingProduct ? { ...p, ...data } : p));
     }
     setEditingProduct(null); setSaving(false);
@@ -146,7 +146,7 @@ export default function Admin() {
 
   const deleteProduct = async () => {
     if (!productDeleteConfirm) return;
-    await base44.asServiceRole.entities.Product.delete(productDeleteConfirm.id);
+    await base44.entities.Product.delete(productDeleteConfirm.id);
     setProducts(prev => prev.filter(p => p.id !== productDeleteConfirm.id));
     setProductDeleteConfirm(null);
   };
@@ -167,7 +167,7 @@ export default function Admin() {
 
   const updateOrderStatus = async (orderId, status) => {
     setUpdatingOrderId(orderId);
-    await base44.asServiceRole.entities.Order.update(orderId, { status });
+    await base44.entities.Order.update(orderId, { status });
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
     setUpdatingOrderId(null);
   };
