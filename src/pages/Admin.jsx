@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import MediaUpload from '@/components/store/MediaUpload';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const categoryOptions = [
@@ -119,7 +120,7 @@ export default function Admin() {
   // --- Products ---
   const openAddProduct = () => {
     setEditingProduct('new');
-    setProductForm({ name: '', description: '', price: '', original_price: '', image_url: '', video_url: '', category: 'equipment', stock: 0, is_featured: false });
+    setProductForm({ name: '', description: '', price: '', original_price: '', image_url: '', video_url: '', category: 'equipment', stock: 0, is_featured: false, gender: 'unisex', sizes_text: '', colors_text: '' });
   };
 
   const openEditProduct = (p) => {
@@ -128,12 +129,14 @@ export default function Admin() {
       name: p.name || '', description: p.description || '', price: p.price || '',
       original_price: p.original_price || '', image_url: p.image_url || '', video_url: p.video_url || '',
       category: p.category || 'equipment', stock: p.stock || 0, is_featured: p.is_featured || false,
+      gender: p.gender || 'unisex', sizes_text: (p.sizes || []).join(', '), colors_text: (p.colors || []).join(', '),
     });
   };
 
   const saveProduct = async () => {
     setSaving(true);
-    const data = { ...productForm, price: parseFloat(productForm.price) || 0, stock: parseInt(productForm.stock) || 0, original_price: productForm.original_price ? parseFloat(productForm.original_price) : null, is_featured: !!productForm.is_featured };
+    const { sizes_text, colors_text, ...rest } = productForm;
+    const data = { ...rest, price: parseFloat(rest.price) || 0, stock: parseInt(rest.stock) || 0, original_price: rest.original_price ? parseFloat(rest.original_price) : null, is_featured: !!rest.is_featured, gender: rest.category === 'apparel' ? (rest.gender || 'unisex') : null, sizes: rest.category === 'apparel' && sizes_text ? sizes_text.split(',').map(s => s.trim()).filter(Boolean) : [], colors: rest.category === 'apparel' && colors_text ? colors_text.split(',').map(s => s.trim()).filter(Boolean) : [] };
     if (editingProduct === 'new') {
       const created = await base44.entities.Product.create(data);
       setProducts(prev => [created, ...prev]);
@@ -434,8 +437,15 @@ export default function Admin() {
               <button type="button" onClick={() => setProductForm({ ...productForm, is_featured: !productForm.is_featured })} className={`px-3 py-1.5 rounded-lg text-xs font-heading uppercase tracking-wider border ${productForm.is_featured ? 'bg-primary/15 border-primary/40 text-primary' : 'border-border/40 text-muted-foreground'}`}>{productForm.is_featured ? '★ Featured' : 'Mark as Featured'}</button>
             </div>
             <div><Label className="text-xs">Category</Label><Select value={productForm.category} onValueChange={v => setProductForm({ ...productForm, category: v })}><SelectTrigger className="bg-secondary/50 border-border/40 text-sm"><SelectValue /></SelectTrigger><SelectContent>{categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label className="text-xs">Image URL</Label><Input value={productForm.image_url} onChange={e => setProductForm({ ...productForm, image_url: e.target.value })} placeholder="https://..." className="bg-secondary/50 border-border/40 text-sm" /></div>
-            <div><Label className="text-xs">Video URL</Label><Input value={productForm.video_url} onChange={e => setProductForm({ ...productForm, video_url: e.target.value })} placeholder="https://youtube.com/..." className="bg-secondary/50 border-border/40 text-sm" /></div>
+            {productForm.category === 'apparel' && (
+              <div className="space-y-3 p-3 rounded-lg border border-border/40 bg-secondary/20">
+                <div><Label className="text-xs">Gender</Label><Select value={productForm.gender || 'unisex'} onValueChange={v => setProductForm({ ...productForm, gender: v })}><SelectTrigger className="bg-secondary/50 border-border/40 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="men">Men's</SelectItem><SelectItem value="women">Women's</SelectItem><SelectItem value="unisex">Unisex</SelectItem></SelectContent></Select></div>
+                <div><Label className="text-xs">Sizes (comma separated, e.g. S, M, L, XL)</Label><Input value={productForm.sizes_text} onChange={e => setProductForm({ ...productForm, sizes_text: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+                <div><Label className="text-xs">Colors (comma separated)</Label><Input value={productForm.colors_text} onChange={e => setProductForm({ ...productForm, colors_text: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
+              </div>
+            )}
+            <MediaUpload label="Product Picture" accept="image/*" type="image" value={productForm.image_url} onChange={url => setProductForm({ ...productForm, image_url: url })} />
+            <MediaUpload label="Product Video" accept="video/*" type="video" value={productForm.video_url} onChange={url => setProductForm({ ...productForm, video_url: url })} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingProduct(null)} className="text-xs">Cancel</Button>

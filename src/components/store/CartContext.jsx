@@ -15,21 +15,23 @@ export function CartProvider({ children }) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cart)); } catch { /* */ }
   }, [cart]);
 
-  const addToCart = useCallback((product) => {
+  const addToCart = useCallback((product, variant) => {
+    const variantLabel = variant || '';
+    const key = product.id + (variantLabel ? `__${variantLabel}` : '');
     setCart(prev => {
-      const existing = prev.find(i => i.product_id === product.id);
-      if (existing) return prev.map(i => i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { product_id: product.id, name: product.name, price: product.price, quantity: 1 }];
+      const existing = prev.find(i => i.key === key);
+      if (existing) return prev.map(i => i.key === key ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { key, product_id: product.id, name: variantLabel ? `${product.name} — ${variantLabel}` : product.name, price: product.price, quantity: 1 }];
     });
   }, []);
 
-  const removeFromCart = useCallback((productId) => {
-    setCart(prev => prev.filter(i => i.product_id !== productId));
+  const removeFromCart = useCallback((key) => {
+    setCart(prev => prev.filter(i => i.key !== key));
   }, []);
 
-  const updateQuantity = useCallback((productId, delta) => {
+  const updateQuantity = useCallback((key, delta) => {
     setCart(prev => prev.map(i => {
-      if (i.product_id !== productId) return i;
+      if (i.key !== key) return i;
       const q = i.quantity + delta;
       return q <= 0 ? null : { ...i, quantity: q };
     }).filter(Boolean));

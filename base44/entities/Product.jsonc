@@ -35,6 +35,26 @@
     "is_featured": {
       "type": "boolean",
       "default": false
+    },
+    "gender": {
+      "type": "string",
+      "enum": [
+        "men",
+        "women",
+        "unisex"
+      ]
+    },
+    "sizes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "colors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [

@@ -7,7 +7,6 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import CartButton from '../components/store/CartButton';
 import FeaturedCard from '../components/store/FeaturedCard';
-import SaleCard from '../components/store/SaleCard';
 import { useCart } from '../components/store/CartContext';
 import { categoryRoutes } from '@/lib/storeCategories';
 import { base44 } from '@/api/base44Client';
@@ -59,8 +58,7 @@ export default function Store() {
     );
   }
 
-  const featured = products.find(p => p.is_featured);
-  const saleProduct = products.find(p => p.original_price && p.original_price > p.price);
+  const featured = products.find(p => p.is_featured) || products.find(p => p.original_price && p.original_price > p.price) || null;
 
   return (
     <PageContainer>
@@ -81,14 +79,6 @@ export default function Store() {
             <Sparkles className="w-4 h-4" /> Featured Product of the Week!
           </h2>
         </div>
-        {featured ? (
-          <FeaturedCard product={featured} onAdd={addToCart} />
-        ) : (
-          <div className="flex flex-col items-center py-8 gap-3">
-            <Package className="w-10 h-10 text-muted-foreground/40" />
-            <p className="text-xs text-muted-foreground font-heading uppercase tracking-wider">No featured product yet</p>
-          </div>
-        )}
 
         {/* SALE */}
         <motion.h2
@@ -100,12 +90,12 @@ export default function Store() {
           SALE
         </motion.h2>
 
-        {saleProduct ? (
-          <SaleCard product={saleProduct} onAdd={addToCart} />
+        {featured ? (
+          <FeaturedCard product={featured} onAdd={addToCart} />
         ) : (
           <div className="flex flex-col items-center py-8 gap-3">
             <Package className="w-10 h-10 text-muted-foreground/40" />
-            <p className="text-xs text-muted-foreground font-heading uppercase tracking-wider">No sale product available</p>
+            <p className="text-xs text-muted-foreground font-heading uppercase tracking-wider">No featured product yet</p>
           </div>
         )}
       </div>

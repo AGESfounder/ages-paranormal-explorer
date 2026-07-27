@@ -29,17 +29,17 @@ export default function CartDrawer() {
                   <p className="text-sm text-muted-foreground font-heading uppercase tracking-wider">Your cart is empty</p>
                 </div>
               ) : cart.map(item => (
-                <div key={item.product_id} className="flex items-center gap-3 p-3 rounded-xl border border-border/40 bg-secondary/20">
+                <div key={item.key} className="flex items-center gap-3 p-3 rounded-xl border border-border/40 bg-secondary/20">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
                     <p className="text-xs text-primary">${item.price.toFixed(2)}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => updateQuantity(item.product_id, -1)} className="p-1 rounded text-muted-foreground hover:text-foreground"><Minus className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => updateQuantity(item.key, -1)} className="p-1 rounded text-muted-foreground hover:text-foreground"><Minus className="w-3.5 h-3.5" /></button>
                     <span className="text-sm font-mono w-6 text-center">{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.product_id, 1)} className="p-1 rounded text-muted-foreground hover:text-foreground"><Plus className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => updateQuantity(item.key, 1)} className="p-1 rounded text-muted-foreground hover:text-foreground"><Plus className="w-3.5 h-3.5" /></button>
                   </div>
-                  <button onClick={() => removeFromCart(item.product_id)} className="p-1.5 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => removeFromCart(item.key)} className="p-1.5 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
                 </div>
               ))}
             </div>
