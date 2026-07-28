@@ -36,11 +36,23 @@ Deno.serve(async (req) => {
     form.append('mode', 'payment');
     form.append('success_url', `${origin}/store?success=true`);
     form.append('cancel_url', `${origin}/store`);
+    // Collect a US shipping address and charge a flat $5.00 shipping rate
+    form.append('shipping_address_collection[allowed_countries][0]', 'US');
+    form.append('shipping_rates[0][type]', 'fixed_amount');
+    form.append('shipping_rates[0][fixed_amount][currency]', 'usd');
+    form.append('shipping_rates[0][fixed_amount][amount]', '500');
+    form.append('shipping_rates[0][display_name]', 'Standard shipping');
+    form.append('shipping_rates[0][delivery_estimate][type]', 'fixed');
+    form.append('shipping_rates[0][delivery_estimate][maximum_unit]', 'day');
+    form.append('shipping_rates[0][delivery_estimate][maximum]', '5');
+    // Let Stripe calculate sales tax automatically from the shipping address
+    form.append('automatic_tax[enabled]', 'true');
     lineItems.forEach((li, i) => {
       form.append(`line_items[${i}][quantity]`, String(li.quantity));
       form.append(`line_items[${i}][price_data][currency]`, li.price_data.currency);
       form.append(`line_items[${i}][price_data][unit_amount]`, String(li.price_data.unit_amount));
       form.append(`line_items[${i}][price_data][product_data][name]`, li.price_data.product_data.name);
+      form.append(`line_items[${i}][tax_behavior]`, 'exclusive');
     });
 
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
