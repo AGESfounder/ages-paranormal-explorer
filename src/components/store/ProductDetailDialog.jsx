@@ -65,11 +65,11 @@ export default function ProductDetailDialog({ product, onClose, onAdd }) {
           )}
 
           {product.category === 'apparel' && product.gender && (
-            <p className="text-center text-xs text-muted-foreground uppercase tracking-wider">{genderLabels[product.gender] || product.gender}</p>
+            <p className="text-center text-[10px] text-muted-foreground uppercase tracking-wider">{genderLabels[product.gender] || product.gender}</p>
           )}
 
           {product.description && (
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{product.description}</p>
+            <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">{product.description}</p>
           )}
 
           <ApparelOptions product={product} onChange={setVariant} />

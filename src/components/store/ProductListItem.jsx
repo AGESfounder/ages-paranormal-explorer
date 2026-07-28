@@ -17,7 +17,7 @@ export default function ProductListItem({ product, onAdd, onOpenFocus, index }) 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }} className="flex gap-3 p-3 rounded-xl border border-border/40 bg-card/40">
       <div className="shrink-0 space-y-1">
-        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pictures/Videos</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pictures/Videos</p>
         <button type="button" onClick={() => onOpenFocus?.(product)} className="relative block w-20 h-20 rounded-lg bg-secondary/30 overflow-hidden">
           {images[0] ? (
             <img src={images[0]} alt={product.name} className="w-full h-full object-contain" />
@@ -38,7 +38,7 @@ export default function ProductListItem({ product, onAdd, onOpenFocus, index }) 
         {product.category === 'apparel' && product.gender && (
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{genderLabels[product.gender] || product.gender}</span>
         )}
-        {product.description && <p className="text-[11px] text-muted-foreground line-clamp-2">{product.description}</p>}
+        {product.description && <p className="text-xs text-muted-foreground line-clamp-2 leading-snug">{product.description}</p>}
         <ApparelOptions product={product} onChange={setVariant} />
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center gap-2">

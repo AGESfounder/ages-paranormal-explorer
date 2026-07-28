@@ -93,8 +93,8 @@ export default function Store() {
 
         {/* SALE */}
         <motion.h2
-          animate={{ scale: [1, 1.08, 1], opacity: [0.65, 1, 0.65] }}
-          transition={{ repeat: Infinity, duration: 1.4 }}
+          animate={{ scale: [1, 1.04, 1], opacity: [0.8, 1, 0.8] }}
+          transition={{ repeat: Infinity, duration: 2.6, ease: 'easeInOut' }}
           className="text-center font-display text-5xl text-green-400"
           style={{ textShadow: '0 0 16px rgba(74,222,128,0.6)' }}
         >

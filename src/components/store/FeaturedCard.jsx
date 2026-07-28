@@ -29,7 +29,7 @@ export default function FeaturedCard({ product, onAdd, onOpenFocus }) {
       )}
       <h3 className="font-heading text-lg text-foreground uppercase tracking-wide">{product.name}</h3>
       <div className="max-w-md mx-auto space-y-1 text-center">
-        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pictures/Video</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pictures/Video</p>
         <button type="button" onClick={() => onOpenFocus?.(product)} className="relative w-full h-56 bg-secondary/20 overflow-hidden rounded-xl flex items-center justify-center">
           {images[0] ? (
             <img src={images[0]} alt={product.name} className="w-full h-full object-contain" />
@@ -43,7 +43,7 @@ export default function FeaturedCard({ product, onAdd, onOpenFocus }) {
           )}
         </button>
       </div>
-      {product.description && <p className="text-sm text-muted-foreground max-w-md mx-auto">{product.description}</p>}
+      {product.description && <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">{product.description}</p>}
       <div className="flex items-center justify-center gap-3">
         <AddToCartButton onAdd={() => onAdd(product)} label="Add to Cart" flash size="md" />
         <StockBadge inStock={inStock} />

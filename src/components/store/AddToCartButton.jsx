@@ -7,8 +7,8 @@ export default function AddToCartButton({ onAdd, flash = false, label = 'Add to 
     <motion.button
       type="button"
       whileTap={{ scale: 0.95 }}
-      animate={flash ? { opacity: [0.7, 1, 0.7], scale: [1, 1.04, 1] } : {}}
-      transition={flash ? { repeat: Infinity, duration: 1.3 } : {}}
+      animate={flash ? { opacity: [0.85, 1, 0.85], scale: [1, 1.02, 1] } : {}}
+      transition={flash ? { repeat: Infinity, duration: 2.4, ease: 'easeInOut' } : {}}
       onClick={onAdd}
       disabled={disabled}
       className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-heading uppercase tracking-wider bg-primary text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors ${size === 'sm' ? 'text-[10px] px-2.5 py-1.5' : 'text-xs px-3 py-2'} ${className}`}
