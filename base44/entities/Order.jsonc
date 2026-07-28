@@ -56,6 +56,12 @@
     },
     "shipping_email": {
       "type": "string"
+    },
+    "shipping_cost": {
+      "type": "number"
+    },
+    "shipping_service": {
+      "type": "string"
     }
   },
   "required": [

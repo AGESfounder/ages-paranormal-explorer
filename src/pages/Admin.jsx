@@ -121,7 +121,7 @@ export default function Admin() {
   // --- Products ---
   const openAddProduct = () => {
     setEditingProduct('new');
-    setProductForm({ name: '', description: '', price: '', original_price: '', video_url: '', category: 'equipment', stock: 0, is_featured: false, gender: 'unisex', sizes_text: '', colors_text: '', images: [] });
+    setProductForm({ name: '', description: '', price: '', original_price: '', video_url: '', category: 'equipment', stock: 0, is_featured: false, gender: 'unisex', sizes_text: '', colors_text: '', images: [], weight_oz: '', length_in: '', width_in: '', height_in: '' });
   };
 
   const openEditProduct = (p) => {
@@ -132,13 +132,15 @@ export default function Admin() {
       category: p.category || 'equipment', stock: p.stock || 0, is_featured: p.is_featured || false,
       gender: p.gender || 'unisex', sizes_text: (p.sizes || []).join(', '), colors_text: (p.colors || []).join(', '),
       images: (p.images && p.images.length) ? p.images : (p.image_url ? [p.image_url] : []),
+      weight_oz: p.weight_oz ?? '', length_in: p.length_in ?? '', width_in: p.width_in ?? '', height_in: p.height_in ?? '',
     });
   };
 
   const saveProduct = async () => {
     setSaving(true);
-    const { sizes_text, colors_text, ...rest } = productForm;
-    const data = { ...rest, price: parseFloat(rest.price) || 0, stock: parseInt(rest.stock) || 0, original_price: rest.original_price ? parseFloat(rest.original_price) : null, is_featured: !!rest.is_featured, image_url: (rest.images && rest.images[0]) || null, images: rest.images || [], gender: rest.category === 'apparel' ? (rest.gender || 'unisex') : null, sizes: rest.category === 'apparel' && sizes_text ? sizes_text.split(',').map(s => s.trim()).filter(Boolean) : [], colors: rest.category === 'apparel' && colors_text ? colors_text.split(',').map(s => s.trim()).filter(Boolean) : [] };
+    const { sizes_text, colors_text, weight_oz, length_in, width_in, height_in, ...rest } = productForm;
+    const numOr = (v, d) => (v === '' || v === null || v === undefined || isNaN(parseFloat(v))) ? d : parseFloat(v);
+    const data = { ...rest, price: parseFloat(rest.price) || 0, stock: parseInt(rest.stock) || 0, original_price: rest.original_price ? parseFloat(rest.original_price) : null, is_featured: !!rest.is_featured, image_url: (rest.images && rest.images[0]) || null, images: rest.images || [], gender: rest.category === 'apparel' ? (rest.gender || 'unisex') : null, sizes: rest.category === 'apparel' && sizes_text ? sizes_text.split(',').map(s => s.trim()).filter(Boolean) : [], colors: rest.category === 'apparel' && colors_text ? colors_text.split(',').map(s => s.trim()).filter(Boolean) : [], weight_oz: numOr(weight_oz, 16), length_in: numOr(length_in, 10), width_in: numOr(width_in, 8), height_in: numOr(height_in, 6) };
     if (editingProduct === 'new') {
       const created = await base44.entities.Product.create(data);
       setProducts(prev => [created, ...prev]);
@@ -446,6 +448,15 @@ export default function Admin() {
                 <div><Label className="text-xs">Colors (comma separated)</Label><Input value={productForm.colors_text} onChange={e => setProductForm({ ...productForm, colors_text: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
               </div>
             )}
+            <div className="space-y-2 p-3 rounded-lg border border-border/40 bg-secondary/20">
+              <Label className="text-xs">Shipping specs (used for live carrier rates)</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-[10px] text-muted-foreground">Weight (oz)</Label><Input type="number" step="0.1" value={productForm.weight_oz} onChange={e => setProductForm({ ...productForm, weight_oz: e.target.value })} placeholder="16" className="bg-secondary/50 border-border/40 text-sm" /></div>
+                <div><Label className="text-[10px] text-muted-foreground">Length (in)</Label><Input type="number" step="0.1" value={productForm.length_in} onChange={e => setProductForm({ ...productForm, length_in: e.target.value })} placeholder="10" className="bg-secondary/50 border-border/40 text-sm" /></div>
+                <div><Label className="text-[10px] text-muted-foreground">Width (in)</Label><Input type="number" step="0.1" value={productForm.width_in} onChange={e => setProductForm({ ...productForm, width_in: e.target.value })} placeholder="8" className="bg-secondary/50 border-border/40 text-sm" /></div>
+                <div><Label className="text-[10px] text-muted-foreground">Height (in)</Label><Input type="number" step="0.1" value={productForm.height_in} onChange={e => setProductForm({ ...productForm, height_in: e.target.value })} placeholder="6" className="bg-secondary/50 border-border/40 text-sm" /></div>
+              </div>
+            </div>
             <MultiImageUpload label="Product Pictures" value={productForm.images || []} onChange={imgs => setProductForm({ ...productForm, images: imgs })} />
             <MediaUpload label="Product Video" accept="video/*" type="video" value={productForm.video_url} onChange={url => setProductForm({ ...productForm, video_url: url })} />
           </div>

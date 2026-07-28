@@ -62,10 +62,10 @@ Deno.serve(async (req) => {
           status: 'paid',
           shipping_name: cd.name || order.shipping_name || '',
           shipping_email: cd.email || order.shipping_email || '',
-          shipping_address: addr.line1 || '',
-          shipping_city: addr.city || '',
-          shipping_state: addr.state || '',
-          shipping_zip: addr.postal_code || '',
+          shipping_address: addr.line1 || order.shipping_address || '',
+          shipping_city: addr.city || order.shipping_city || '',
+          shipping_state: addr.state || order.shipping_state || '',
+          shipping_zip: addr.postal_code || order.shipping_zip || '',
         });
         console.log('Order marked paid:', session.id);
       } else {

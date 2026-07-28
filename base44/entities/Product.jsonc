@@ -61,6 +61,22 @@
       "items": {
         "type": "string"
       }
+    },
+    "weight_oz": {
+      "type": "number",
+      "default": 16
+    },
+    "length_in": {
+      "type": "number",
+      "default": 10
+    },
+    "width_in": {
+      "type": "number",
+      "default": 8
+    },
+    "height_in": {
+      "type": "number",
+      "default": 6
     }
   },
   "required": [
