@@ -6,6 +6,7 @@ import { getImages, getGallery } from '@/lib/productMedia';
 
 export default function FeaturedCard({ product, onAdd, onOpenFocus }) {
   const onSale = product.original_price && product.original_price > product.price;
+  const inStock = (product.stock ?? 0) > 0;
   const images = getImages(product);
   const gallery = getGallery(product);
 
@@ -26,8 +27,8 @@ export default function FeaturedCard({ product, onAdd, onOpenFocus }) {
         <p className="text-lg font-heading text-primary">${product.price?.toFixed(2)}</p>
       )}
       <h3 className="font-heading text-lg text-foreground uppercase tracking-wide">{product.name}</h3>
-      <div className="max-w-md mx-auto space-y-1 text-left">
-        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pictures/Videos</p>
+      <div className="max-w-md mx-auto space-y-1 text-center">
+        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pictures/Video</p>
         <button type="button" onClick={() => onOpenFocus?.(product)} className="relative w-full h-56 bg-secondary/20 overflow-hidden rounded-xl flex items-center justify-center">
           {images[0] ? (
             <img src={images[0]} alt={product.name} className="w-full h-full object-contain" />
@@ -42,6 +43,11 @@ export default function FeaturedCard({ product, onAdd, onOpenFocus }) {
         </button>
       </div>
       {product.description && <p className="text-sm text-muted-foreground max-w-md mx-auto">{product.description}</p>}
+      <div className="flex justify-center">
+        <span className={`text-[10px] font-heading uppercase tracking-wider px-3 py-1 rounded-full border ${inStock ? 'text-green-400 border-green-500/50 bg-green-500/20' : 'text-destructive border-destructive/50 bg-destructive/20'}`}>
+          {inStock ? 'In Stock' : 'Out of Stock'}
+        </span>
+      </div>
       <AddToCartButton onAdd={() => onAdd(product)} label="Add to Cart" flash size="md" />
     </motion.div>
   );
