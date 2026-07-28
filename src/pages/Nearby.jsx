@@ -209,13 +209,15 @@ Use real locations with documented paranormal history only.`,
     }
   };
 
-  useEffect(() => {
+  const requestLocation = () => {
     if (!navigator.geolocation) {
       setError('Geolocation not supported');
       setLocating(false);
       loadAllTours();
       return;
     }
+    setLocating(true);
+    setError('');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
@@ -225,8 +227,13 @@ Use real locations with documented paranormal history only.`,
         setError('Location access denied');
         setLocating(false);
         loadAllTours();
-      }
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
     );
+  };
+
+  useEffect(() => {
+    requestLocation();
   }, []);
 
   useEffect(() => {
@@ -352,6 +359,40 @@ Use real locations with documented paranormal history only.`,
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {!locating && !coords && (
+          <div className="space-y-2">
+            <p className="text-xs font-heading uppercase tracking-wider text-muted-foreground">Generate a Tour Near You</p>
+            <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-500/30 bg-amber-500/5">
+              <MapPin className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">Couldn't get your location. Enter a zip code to generate a tour nearby, or try again.</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                placeholder="Enter zip code"
+                className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                maxLength={5}
+              />
+              <button
+                onClick={generateTourForZip}
+                disabled={!!generatingRange || zipCode.length < 5}
+                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/80 disabled:opacity-40 text-primary-foreground font-heading text-xs uppercase tracking-wider transition-colors"
+              >
+                {generatingRange === 'Custom Zip Code' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
+              </button>
+            </div>
+            <button
+              onClick={requestLocation}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-border bg-card/40 text-foreground hover:bg-card/60 transition-colors"
+            >
+              <Navigation className="w-4 h-4 text-primary" />
+              <span className="text-xs font-heading uppercase tracking-wider">Try my location again</span>
+            </button>
           </div>
         )}
 
