@@ -43,12 +43,12 @@ export default function FeaturedCard({ product, onAdd, onOpenFocus }) {
         </button>
       </div>
       {product.description && <p className="text-sm text-muted-foreground max-w-md mx-auto">{product.description}</p>}
-      <div className="flex justify-center">
+      <div className="flex items-center justify-center gap-3">
+        <AddToCartButton onAdd={() => onAdd(product)} label="Add to Cart" flash size="md" />
         <span className={`text-[10px] font-heading uppercase tracking-wider px-3 py-1 rounded-full border ${inStock ? 'text-green-400 border-green-500/50 bg-green-500/20' : 'text-destructive border-destructive/50 bg-destructive/20'}`}>
           {inStock ? 'In Stock' : 'Out of Stock'}
         </span>
       </div>
-      <AddToCartButton onAdd={() => onAdd(product)} label="Add to Cart" flash size="md" />
     </motion.div>
   );
 }

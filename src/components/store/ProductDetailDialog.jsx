@@ -16,6 +16,7 @@ export default function ProductDetailDialog({ product, onClose, onAdd }) {
 
   if (!product) return null;
   const onSale = product.original_price && product.original_price > product.price;
+  const inStock = (product.stock ?? 0) > 0;
   const current = gallery[idx];
 
   return (
@@ -72,9 +73,14 @@ export default function ProductDetailDialog({ product, onClose, onAdd }) {
 
           <ApparelOptions product={product} onChange={setVariant} />
 
-          <Button onClick={() => { onAdd(product, variant || undefined); onClose(); }} className="w-full">
-            Add to Cart
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button onClick={() => { onAdd(product, variant || undefined); onClose(); }} className="flex-1">
+              Add to Cart
+            </Button>
+            <span className={`text-[10px] font-heading uppercase tracking-wider px-3 py-1 rounded-full border ${inStock ? 'text-green-400 border-green-500/50 bg-green-500/20' : 'text-destructive border-destructive/50 bg-destructive/20'}`}>
+              {inStock ? 'In Stock' : 'Out of Stock'}
+            </span>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
