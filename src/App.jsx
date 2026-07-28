@@ -73,6 +73,12 @@ const AuthenticatedApp = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
+      <Route element={<StoreLayout />}>
+        <Route path="/store" element={<Store />} />
+        <Route path="/store/devices" element={<StoreCategory category="equipment" />} />
+        <Route path="/store/apparel" element={<StoreCategory category="apparel" />} />
+        <Route path="/store/other" element={<StoreCategory category="other" />} />
+      </Route>
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         {/* Add your page Route elements here */}
         <Route path="/" element={<Home />} />
@@ -89,12 +95,6 @@ const AuthenticatedApp = () => {
         <Route path="/abroad" element={<AbroadTours />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<Admin />} />
-        <Route element={<StoreLayout />}>
-          <Route path="/store" element={<Store />} />
-          <Route path="/store/devices" element={<StoreCategory category="equipment" />} />
-          <Route path="/store/apparel" element={<StoreCategory category="apparel" />} />
-          <Route path="/store/other" element={<StoreCategory category="other" />} />
-        </Route>
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/community-map" element={<CommunityMap />} />
         <Route path="/evidence-dashboard" element={<EvidenceDashboard />} />
