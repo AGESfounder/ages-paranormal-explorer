@@ -17,12 +17,12 @@ export default function ProductListItem({ product, onAdd, onOpenFocus, index }) 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.03 }} className="flex gap-3 p-3 rounded-xl border border-border/40 bg-card/40">
       <div className="shrink-0 space-y-1">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pictures/Videos</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider">Pictures/Videos</p>
         <button type="button" onClick={() => onOpenFocus?.(product)} className="relative block w-20 h-20 rounded-lg bg-secondary/30 overflow-hidden">
           {images[0] ? (
             <img src={images[0]} alt={product.name} className="w-full h-full object-contain" />
           ) : (
-            <span className="flex items-center justify-center w-full h-full text-muted-foreground/40 text-[10px]">No image</span>
+            <span className="flex items-center justify-center w-full h-full text-muted-foreground/40 text-xs">No image</span>
           )}
           {gallery.length > 1 && (
             <span className="absolute bottom-0.5 right-0.5 bg-black/60 rounded-full p-0.5">
@@ -36,7 +36,7 @@ export default function ProductListItem({ product, onAdd, onOpenFocus, index }) 
           <p className="text-sm font-medium text-foreground hover:text-primary transition-colors">{product.name}</p>
         </button>
         {product.category === 'apparel' && product.gender && (
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{genderLabels[product.gender] || product.gender}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">{genderLabels[product.gender] || product.gender}</span>
         )}
         {product.description && <p className="text-xs text-muted-foreground line-clamp-2 leading-snug">{product.description}</p>}
         <ApparelOptions product={product} onChange={setVariant} />

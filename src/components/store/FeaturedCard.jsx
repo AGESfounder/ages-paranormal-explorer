@@ -29,7 +29,7 @@ export default function FeaturedCard({ product, onAdd, onOpenFocus }) {
       )}
       <h3 className="font-heading text-lg text-foreground uppercase tracking-wide">{product.name}</h3>
       <div className="max-w-md mx-auto space-y-1 text-center">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pictures/Video</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider">Pictures/Video</p>
         <button type="button" onClick={() => onOpenFocus?.(product)} className="relative w-full h-56 bg-secondary/20 overflow-hidden rounded-xl flex items-center justify-center">
           {images[0] ? (
             <img src={images[0]} alt={product.name} className="w-full h-full object-contain" />

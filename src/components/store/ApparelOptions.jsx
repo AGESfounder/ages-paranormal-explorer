@@ -22,7 +22,7 @@ export default function ApparelOptions({ product, onChange }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       <Select value={gender} onValueChange={setGender}>
-        <SelectTrigger className="h-7 w-auto min-w-[64px] px-2 text-[10px] gap-1 bg-secondary/50 border-border/40">
+        <SelectTrigger className="h-7 w-auto min-w-[64px] px-2 text-xs gap-1 bg-secondary/50 border-border/40">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -33,7 +33,7 @@ export default function ApparelOptions({ product, onChange }) {
       </Select>
       {sizes.length > 0 && (
         <Select value={size} onValueChange={setSize}>
-          <SelectTrigger className="h-7 w-auto min-w-[48px] px-2 text-[10px] gap-1 bg-secondary/50 border-border/40">
+          <SelectTrigger className="h-7 w-auto min-w-[48px] px-2 text-xs gap-1 bg-secondary/50 border-border/40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -43,7 +43,7 @@ export default function ApparelOptions({ product, onChange }) {
       )}
       {colors.length > 0 && (
         <Select value={color} onValueChange={setColor}>
-          <SelectTrigger className="h-7 w-auto min-w-[64px] px-2 text-[10px] gap-1 bg-secondary/50 border-border/40">
+          <SelectTrigger className="h-7 w-auto min-w-[64px] px-2 text-xs gap-1 bg-secondary/50 border-border/40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

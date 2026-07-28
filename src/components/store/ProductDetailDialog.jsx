@@ -25,7 +25,7 @@ export default function ProductDetailDialog({ product, onClose, onAdd }) {
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogTitle className="font-heading uppercase tracking-wide text-foreground">{product.name}</DialogTitle>
         <div className="space-y-3">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pictures/Videos</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Pictures/Videos</p>
           <div className="rounded-xl overflow-hidden bg-black h-64 flex items-center justify-center">
             {current?.type === 'video' ? (
               <video src={current.url} controls autoPlay className="w-full h-full object-contain" />
@@ -65,7 +65,7 @@ export default function ProductDetailDialog({ product, onClose, onAdd }) {
           )}
 
           {product.category === 'apparel' && product.gender && (
-            <p className="text-center text-[10px] text-muted-foreground uppercase tracking-wider">{genderLabels[product.gender] || product.gender}</p>
+            <p className="text-center text-xs text-muted-foreground uppercase tracking-wider">{genderLabels[product.gender] || product.gender}</p>
           )}
 
           {product.description && (

@@ -11,7 +11,7 @@ export default function AddToCartButton({ onAdd, flash = false, label = 'Add to 
       transition={flash ? { repeat: Infinity, duration: 2.4, ease: 'easeInOut' } : {}}
       onClick={onAdd}
       disabled={disabled}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-heading uppercase tracking-wider bg-primary text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors ${size === 'sm' ? 'text-[10px] px-2.5 py-1.5' : 'text-xs px-3 py-2'} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-heading uppercase tracking-wider bg-primary text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors ${size === 'sm' ? 'text-xs px-2.5 py-1.5' : 'text-xs px-3 py-2'} ${className}`}
     >
       <ShoppingCart className={size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
       {label}{flash ? '!' : ''}
