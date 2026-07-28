@@ -137,7 +137,7 @@ export default function Home() {
               transition={{ delay: 0.45, duration: 0.6 }}
               className="flex items-center justify-center"
             >
-              <Link to="/store" className="relative flex flex-col items-center group">
+              <a href="https://www.ebay.com/usr/carski" target="_blank" rel="noopener noreferrer" className="relative flex flex-col items-center group">
                 <motion.div
                   animate={{ 
                     filter: ['drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))', 'drop-shadow(0 0 24px hsl(199,89%,48%,0.9)) drop-shadow(0 0 40px hsl(270,40%,50%,0.7))', 'drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))']
@@ -166,7 +166,7 @@ export default function Home() {
                 {/* Crystal ball base */}
                 <div className="w-16 h-4 bg-gradient-to-b from-primary/40 to-primary/10 rounded-b-xl -mt-0.5 border-t border-primary/40 shadow-[0_4px_8px_hsl(199,89%,48%,0.15)]" />
                 <div className="w-20 h-1.5 bg-gradient-to-b from-primary/25 to-primary/5 rounded-b-lg -mt-px" />
-              </Link>
+              </a>
             </motion.div>
           </div>
 
