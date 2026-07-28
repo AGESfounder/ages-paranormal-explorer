@@ -22,8 +22,8 @@ export default function FeaturedCard({ product, onAdd }) {
       )}
       <h3 className="font-heading text-lg text-foreground uppercase tracking-wide">{product.name}</h3>
       {product.image_url && (
-        <div className="aspect-video bg-secondary/30 overflow-hidden rounded-xl max-w-md mx-auto">
-          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+        <div className="h-56 bg-secondary/20 overflow-hidden rounded-xl max-w-md mx-auto flex items-center justify-center">
+          <img src={product.image_url} alt={product.name} className="w-full h-full object-contain" />
         </div>
       )}
       {product.video_url && (

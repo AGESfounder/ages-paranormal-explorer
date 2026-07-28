@@ -23,9 +23,9 @@ export default function MediaUpload({ label, accept, value, onChange, type = 'im
       {value && (
         <div className="relative">
           {type === 'image' ? (
-            <img src={value} alt="" className="w-full h-24 object-cover rounded-md bg-secondary/30" />
+            <img src={value} alt="" className="w-full h-40 object-contain rounded-md bg-secondary/30" />
           ) : (
-            <video src={value} className="w-full h-24 object-cover rounded-md bg-black" controls />
+            <video src={value} className="w-full h-40 object-contain rounded-md bg-black" controls />
           )}
           <button type="button" onClick={() => onChange('')} className="absolute top-1 right-1 bg-black/70 rounded-full p-1">
             <X className="w-3 h-3 text-white" />

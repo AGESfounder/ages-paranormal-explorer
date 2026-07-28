@@ -85,7 +85,15 @@ export default function CreepyAmbience() {
 
   const toggle = () => (playing ? stop() : start());
 
-  useEffect(() => () => stop(), []);
+  useEffect(() => {
+    start();
+    const tryResume = () => {
+      if (ctxRef.current && ctxRef.current.state === 'suspended') ctxRef.current.resume();
+      setPlaying(true);
+    };
+    document.addEventListener('pointerdown', tryResume, { once: true });
+    return () => { document.removeEventListener('pointerdown', tryResume); stop(); };
+  }, []);
 
   return (
     <button
