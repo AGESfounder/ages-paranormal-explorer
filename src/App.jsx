@@ -28,9 +28,6 @@ import Nearby from '@/pages/Nearby';
 import AbroadTours from '@/pages/AbroadTours';
 import Settings from '@/pages/Settings';
 import Admin from '@/pages/Admin';
-import Store from '@/pages/Store';
-import StoreCategory from '@/pages/StoreCategory';
-import StoreLayout from '@/components/store/StoreLayout';
 import Leaderboard from '@/pages/Leaderboard';
 import CommunityMap from '@/pages/CommunityMap';
 import EvidenceDashboard from '@/pages/EvidenceDashboard';
@@ -73,12 +70,6 @@ const AuthenticatedApp = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
-      <Route element={<StoreLayout />}>
-        <Route path="/store" element={<Store />} />
-        <Route path="/store/devices" element={<StoreCategory category="equipment" />} />
-        <Route path="/store/apparel" element={<StoreCategory category="apparel" />} />
-        <Route path="/store/other" element={<StoreCategory category="other" />} />
-      </Route>
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         {/* Add your page Route elements here */}
         <Route path="/" element={<Home />} />
