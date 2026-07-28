@@ -137,7 +137,7 @@ export default function Home() {
               transition={{ delay: 0.45, duration: 0.6 }}
               className="flex items-center justify-center"
             >
-              <a href="https://www.ebay.com/usr/carski" target="_blank" rel="noopener noreferrer" className="relative flex flex-col items-center group">
+              <a href="https://www.ebay.com/usr/ages4u" target="_blank" rel="noopener noreferrer" className="relative flex flex-col items-center group">
                 <motion.div
                   animate={{ 
                     filter: ['drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))', 'drop-shadow(0 0 24px hsl(199,89%,48%,0.9)) drop-shadow(0 0 40px hsl(270,40%,50%,0.7))', 'drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))']
