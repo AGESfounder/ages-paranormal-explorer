@@ -7,6 +7,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import CartButton from '../components/store/CartButton';
 import FeaturedCard from '../components/store/FeaturedCard';
+import ProductDetailDialog from '../components/store/ProductDetailDialog';
 import { useCart } from '../components/store/CartContext';
 import { categoryRoutes } from '@/lib/storeCategories';
 import { base44 } from '@/api/base44Client';
@@ -16,6 +17,7 @@ export default function Store() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [orderPlaced, setOrderPlaced] = useState(false);
+  const [focusProduct, setFocusProduct] = useState(null);
   const { addToCart, clearCart } = useCart();
 
   useEffect(() => {
@@ -91,7 +93,7 @@ export default function Store() {
         </motion.h2>
 
         {featured ? (
-          <FeaturedCard product={featured} onAdd={addToCart} />
+          <FeaturedCard product={featured} onAdd={addToCart} onOpenFocus={setFocusProduct} />
         ) : (
           <div className="flex flex-col items-center py-8 gap-3">
             <Package className="w-10 h-10 text-muted-foreground/40" />
@@ -99,6 +101,7 @@ export default function Store() {
           </div>
         )}
       </div>
+      <ProductDetailDialog product={focusProduct} onClose={() => setFocusProduct(null)} onAdd={addToCart} />
       <NavBar />
     </PageContainer>
   );

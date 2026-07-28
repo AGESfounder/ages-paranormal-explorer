@@ -1,9 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { Maximize2 } from 'lucide-react';
 import AddToCartButton from './AddToCartButton';
+import { getImages, getGallery } from '@/lib/productMedia';
 
-export default function FeaturedCard({ product, onAdd }) {
+export default function FeaturedCard({ product, onAdd, onOpenFocus }) {
   const onSale = product.original_price && product.original_price > product.price;
+  const images = getImages(product);
+  const gallery = getGallery(product);
+
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-primary/30 bg-card/50 p-4 space-y-3 text-center">
       {onSale ? (
@@ -21,16 +26,21 @@ export default function FeaturedCard({ product, onAdd }) {
         <p className="text-lg font-heading text-primary">${product.price?.toFixed(2)}</p>
       )}
       <h3 className="font-heading text-lg text-foreground uppercase tracking-wide">{product.name}</h3>
-      {product.image_url && (
-        <div className="h-56 bg-secondary/20 overflow-hidden rounded-xl max-w-md mx-auto flex items-center justify-center">
-          <img src={product.image_url} alt={product.name} className="w-full h-full object-contain" />
-        </div>
-      )}
-      {product.video_url && (
-        <div className="max-w-md mx-auto rounded-xl overflow-hidden">
-          <video src={product.video_url} controls className="w-full max-h-64 bg-black" />
-        </div>
-      )}
+      <div className="max-w-md mx-auto space-y-1 text-left">
+        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Pictures/Videos</p>
+        <button type="button" onClick={() => onOpenFocus?.(product)} className="relative w-full h-56 bg-secondary/20 overflow-hidden rounded-xl flex items-center justify-center">
+          {images[0] ? (
+            <img src={images[0]} alt={product.name} className="w-full h-full object-contain" />
+          ) : (
+            <span className="text-muted-foreground/40 text-sm">No image</span>
+          )}
+          {gallery.length > 1 && (
+            <span className="absolute bottom-2 right-2 bg-black/60 rounded-full p-1.5">
+              <Maximize2 className="w-4 h-4 text-white" />
+            </span>
+          )}
+        </button>
+      </div>
       {product.description && <p className="text-sm text-muted-foreground max-w-md mx-auto">{product.description}</p>}
       <AddToCartButton onAdd={() => onAdd(product)} label="Add to Cart" flash size="md" />
     </motion.div>

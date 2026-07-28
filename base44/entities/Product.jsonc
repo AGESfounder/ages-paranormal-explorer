@@ -17,6 +17,12 @@
     "image_url": {
       "type": "string"
     },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "video_url": {
       "type": "string"
     },

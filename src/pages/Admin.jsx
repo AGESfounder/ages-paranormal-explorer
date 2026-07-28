@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import MediaUpload from '@/components/store/MediaUpload';
+import MultiImageUpload from '@/components/store/MultiImageUpload';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const categoryOptions = [
@@ -120,23 +121,24 @@ export default function Admin() {
   // --- Products ---
   const openAddProduct = () => {
     setEditingProduct('new');
-    setProductForm({ name: '', description: '', price: '', original_price: '', image_url: '', video_url: '', category: 'equipment', stock: 0, is_featured: false, gender: 'unisex', sizes_text: '', colors_text: '' });
+    setProductForm({ name: '', description: '', price: '', original_price: '', video_url: '', category: 'equipment', stock: 0, is_featured: false, gender: 'unisex', sizes_text: '', colors_text: '', images: [] });
   };
 
   const openEditProduct = (p) => {
     setEditingProduct(p.id);
     setProductForm({
       name: p.name || '', description: p.description || '', price: p.price || '',
-      original_price: p.original_price || '', image_url: p.image_url || '', video_url: p.video_url || '',
+      original_price: p.original_price || '', video_url: p.video_url || '',
       category: p.category || 'equipment', stock: p.stock || 0, is_featured: p.is_featured || false,
       gender: p.gender || 'unisex', sizes_text: (p.sizes || []).join(', '), colors_text: (p.colors || []).join(', '),
+      images: (p.images && p.images.length) ? p.images : (p.image_url ? [p.image_url] : []),
     });
   };
 
   const saveProduct = async () => {
     setSaving(true);
     const { sizes_text, colors_text, ...rest } = productForm;
-    const data = { ...rest, price: parseFloat(rest.price) || 0, stock: parseInt(rest.stock) || 0, original_price: rest.original_price ? parseFloat(rest.original_price) : null, is_featured: !!rest.is_featured, gender: rest.category === 'apparel' ? (rest.gender || 'unisex') : null, sizes: rest.category === 'apparel' && sizes_text ? sizes_text.split(',').map(s => s.trim()).filter(Boolean) : [], colors: rest.category === 'apparel' && colors_text ? colors_text.split(',').map(s => s.trim()).filter(Boolean) : [] };
+    const data = { ...rest, price: parseFloat(rest.price) || 0, stock: parseInt(rest.stock) || 0, original_price: rest.original_price ? parseFloat(rest.original_price) : null, is_featured: !!rest.is_featured, image_url: (rest.images && rest.images[0]) || null, images: rest.images || [], gender: rest.category === 'apparel' ? (rest.gender || 'unisex') : null, sizes: rest.category === 'apparel' && sizes_text ? sizes_text.split(',').map(s => s.trim()).filter(Boolean) : [], colors: rest.category === 'apparel' && colors_text ? colors_text.split(',').map(s => s.trim()).filter(Boolean) : [] };
     if (editingProduct === 'new') {
       const created = await base44.entities.Product.create(data);
       setProducts(prev => [created, ...prev]);
@@ -444,7 +446,7 @@ export default function Admin() {
                 <div><Label className="text-xs">Colors (comma separated)</Label><Input value={productForm.colors_text} onChange={e => setProductForm({ ...productForm, colors_text: e.target.value })} className="bg-secondary/50 border-border/40 text-sm" /></div>
               </div>
             )}
-            <MediaUpload label="Product Picture" accept="image/*" type="image" value={productForm.image_url} onChange={url => setProductForm({ ...productForm, image_url: url })} />
+            <MultiImageUpload label="Product Pictures" value={productForm.images || []} onChange={imgs => setProductForm({ ...productForm, images: imgs })} />
             <MediaUpload label="Product Video" accept="video/*" type="video" value={productForm.video_url} onChange={url => setProductForm({ ...productForm, video_url: url })} />
           </div>
           <DialogFooter>

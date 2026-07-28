@@ -5,6 +5,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import CartButton from '../components/store/CartButton';
 import ProductListItem from '../components/store/ProductListItem';
+import ProductDetailDialog from '../components/store/ProductDetailDialog';
 import { useCart } from '../components/store/CartContext';
 import { categoryLabels, isOtherCategory } from '@/lib/storeCategories';
 import { base44 } from '@/api/base44Client';
@@ -13,6 +14,7 @@ export default function StoreCategory({ category }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const { addToCart } = useCart();
+  const [focusProduct, setFocusProduct] = useState(null);
 
   useEffect(() => {
     base44.entities.Product.list().then(all => {
@@ -38,10 +40,11 @@ export default function StoreCategory({ category }) {
           </div>
         ) : (
           products.map((p, i) => (
-            <ProductListItem key={p.id} product={p} onAdd={addToCart} index={i} />
+            <ProductListItem key={p.id} product={p} onAdd={addToCart} onOpenFocus={setFocusProduct} index={i} />
           ))
         )}
       </div>
+      <ProductDetailDialog product={focusProduct} onClose={() => setFocusProduct(null)} onAdd={addToCart} />
       <NavBar />
     </PageContainer>
   );
