@@ -11,6 +11,7 @@ import ProductDetailDialog from '../components/store/ProductDetailDialog';
 import { useCart } from '../components/store/CartContext';
 import { categoryRoutes } from '@/lib/storeCategories';
 import { base44 } from '@/api/base44Client';
+import PullToRefresh from '@/components/PullToRefresh';
 import { Button } from '@/components/ui/button';
 
 export default function Store() {
@@ -20,9 +21,16 @@ export default function Store() {
   const [focusProduct, setFocusProduct] = useState(null);
   const { addToCart, clearCart } = useCart();
 
-  useEffect(() => {
-    base44.entities.Product.list().then(p => { setProducts(p); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
+  const loadProducts = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    try {
+      const p = await base44.entities.Product.list();
+      setProducts(p);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { loadProducts(); }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -65,6 +73,7 @@ export default function Store() {
   return (
     <PageContainer>
       <SectionHeader title="AGES Store" subtitle="Ghost Hunting Gear & Apparel" showBack rightAction={<CartButton />} />
+      <PullToRefresh onRefresh={() => loadProducts(false)}>
       <div className="px-4 pb-28 pt-3 space-y-6">
         {/* Category buttons */}
         <div className="grid grid-cols-3 gap-2">
@@ -101,6 +110,7 @@ export default function Store() {
           </div>
         )}
       </div>
+      </PullToRefresh>
       <ProductDetailDialog product={focusProduct} onClose={() => setFocusProduct(null)} onAdd={addToCart} />
       <NavBar />
     </PageContainer>

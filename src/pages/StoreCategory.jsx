@@ -9,6 +9,7 @@ import ProductDetailDialog from '../components/store/ProductDetailDialog';
 import { useCart } from '../components/store/CartContext';
 import { categoryLabels, isOtherCategory } from '@/lib/storeCategories';
 import { base44 } from '@/api/base44Client';
+import PullToRefresh from '@/components/PullToRefresh';
 
 export default function StoreCategory({ category }) {
   const [products, setProducts] = useState([]);
@@ -16,20 +17,25 @@ export default function StoreCategory({ category }) {
   const { addToCart } = useCart();
   const [focusProduct, setFocusProduct] = useState(null);
 
-  useEffect(() => {
-    base44.entities.Product.list().then(all => {
+  const loadProducts = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    try {
+      const all = await base44.entities.Product.list();
       const filtered = all.filter(p => category === 'other' ? isOtherCategory(p.category) : p.category === category);
       filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setProducts(filtered);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [category]);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { loadProducts(); }, [category]);
 
   const title = categoryLabels[category] || category;
 
   return (
     <PageContainer>
       <SectionHeader title={title} subtitle="Ghost Hunting Gear" showBack rightAction={<CartButton />} />
+      <PullToRefresh onRefresh={() => loadProducts(false)}>
       <div className="px-4 pb-28 pt-3 space-y-3">
         {loading ? (
           <div className="flex items-center justify-center h-[60vh]"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
@@ -44,6 +50,7 @@ export default function StoreCategory({ category }) {
           ))
         )}
       </div>
+      </PullToRefresh>
       <ProductDetailDialog product={focusProduct} onClose={() => setFocusProduct(null)} onAdd={addToCart} />
       <NavBar />
     </PageContainer>

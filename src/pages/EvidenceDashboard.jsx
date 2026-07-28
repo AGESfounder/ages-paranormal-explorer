@@ -7,6 +7,7 @@ import PageContainer from '@/components/PageContainer';
 import NavBar from '@/components/NavBar';
 import SectionHeader from '@/components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import PullToRefresh from '@/components/PullToRefresh';
 
 const CATEGORIES = [
   { key: 'EVP', label: 'EVP', icon: Waves, color: '#3b82f6' },
@@ -34,17 +35,17 @@ export default function EvidenceDashboard() {
   const [evidence, setEvidence] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const items = await base44.entities.Evidence.list('-created_date', 2000);
-        setEvidence(items);
-      } catch (e) {
-        console.error('Failed to load evidence', e);
-      }
-      setLoading(false);
-    })();
-  }, []);
+  const loadEvidence = async () => {
+    try {
+      const items = await base44.entities.Evidence.list('-created_date', 2000);
+      setEvidence(items);
+    } catch (e) {
+      console.error('Failed to load evidence', e);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadEvidence(); }, []);
 
   // Aggregate by location
   const byLocation = {};
@@ -78,6 +79,7 @@ export default function EvidenceDashboard() {
         subtitle="Summary by Location"
         showBack
       />
+      <PullToRefresh onRefresh={loadEvidence}>
       <div className="px-4 pb-28 pt-3 space-y-5">
         <Link to="/evidence" className="flex items-center gap-1.5 text-xs text-primary font-heading uppercase tracking-wider hover:text-primary/80 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Evidence Journal
@@ -181,6 +183,7 @@ export default function EvidenceDashboard() {
           </>
         )}
       </div>
+      </PullToRefresh>
       <NavBar />
     </PageContainer>
   );

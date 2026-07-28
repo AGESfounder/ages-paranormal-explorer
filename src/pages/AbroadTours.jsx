@@ -7,6 +7,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import ToursAbroadModal from '../components/ToursAbroadModal';
 import SwipeableTourCard from '../components/SwipeableTourCard';
+import PullToRefresh from '@/components/PullToRefresh';
 import { base44 } from '@/api/base44Client';
 
 export default function AbroadTours() {
@@ -14,8 +15,8 @@ export default function AbroadTours() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
-  const fetchTours = useCallback(async () => {
-    setLoading(true);
+  const fetchTours = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     const all = await base44.entities.Tour.filter({}, 'state');
     const abroad = all.filter(t => t.tags?.includes('abroad'));
     abroad.sort((a, b) => {
@@ -65,6 +66,7 @@ export default function AbroadTours() {
           </button>
         }
       />
+      <PullToRefresh onRefresh={() => fetchTours(false)}>
       <div className="px-4 pb-24">
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -119,6 +121,7 @@ export default function AbroadTours() {
           </div>
         )}
       </div>
+      </PullToRefresh>
       <ToursAbroadModal isOpen={showModal} onClose={() => { setShowModal(false); fetchTours(); }} />
       <NavBar />
     </PageContainer>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 
 const genderLabels = { men: "Men's", women: "Women's", unisex: 'Unisex' };
 
@@ -20,20 +21,35 @@ export default function ApparelOptions({ product, onChange }) {
 
   return (
     <div className="flex flex-wrap gap-1.5">
-      <select value={gender} onChange={e => setGender(e.target.value)} className="text-[10px] bg-secondary/50 border border-border/40 rounded px-1.5 py-1 text-foreground">
-        <option>Men's</option>
-        <option>Women's</option>
-        <option>Unisex</option>
-      </select>
+      <Select value={gender} onValueChange={setGender}>
+        <SelectTrigger className="h-7 w-auto min-w-[64px] px-2 text-[10px] gap-1 bg-secondary/50 border-border/40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="Men's">Men's</SelectItem>
+          <SelectItem value="Women's">Women's</SelectItem>
+          <SelectItem value="Unisex">Unisex</SelectItem>
+        </SelectContent>
+      </Select>
       {sizes.length > 0 && (
-        <select value={size} onChange={e => setSize(e.target.value)} className="text-[10px] bg-secondary/50 border border-border/40 rounded px-1.5 py-1 text-foreground">
-          {sizes.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <Select value={size} onValueChange={setSize}>
+          <SelectTrigger className="h-7 w-auto min-w-[48px] px-2 text-[10px] gap-1 bg-secondary/50 border-border/40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {sizes.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
       )}
       {colors.length > 0 && (
-        <select value={color} onChange={e => setColor(e.target.value)} className="text-[10px] bg-secondary/50 border border-border/40 rounded px-1.5 py-1 text-foreground">
-          {colors.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <Select value={color} onValueChange={setColor}>
+          <SelectTrigger className="h-7 w-auto min-w-[64px] px-2 text-[10px] gap-1 bg-secondary/50 border-border/40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {colors.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import PullToRefresh from '@/components/PullToRefresh';
 
 export default function Favorites() {
   const [favorites, setFavorites] = useState([]);
@@ -22,6 +23,7 @@ export default function Favorites() {
   return (
     <PageContainer>
       <SectionHeader title="Favorites" subtitle="Your Saved Tours" showBack />
+      <PullToRefresh onRefresh={loadFavorites}>
       <div className="px-4 pb-28 space-y-3 pt-3">
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 text-primary animate-spin" /></div>
@@ -47,6 +49,7 @@ export default function Favorites() {
           ))
         )}
       </div>
+      </PullToRefresh>
       <NavBar />
     </PageContainer>
   );

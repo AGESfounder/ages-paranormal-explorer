@@ -10,6 +10,7 @@ import BePatient from '@/components/BePatient';
 import { US_STATES } from '../lib/statesData';
 import { base44 } from '@/api/base44Client';
 import { generateLocationTour } from '@/lib/generateTour';
+import PullToRefresh from '@/components/PullToRefresh';
 
 export default function StateTours() {
   const { stateAbbr } = useParams();
@@ -118,6 +119,11 @@ Use real locations with documented paranormal history only.`,
     if (results.length > 0) setTours(prev => prev.map(t => t.id === tourId ? results[0] : t));
   };
 
+  const refreshTours = async () => {
+    const results = await base44.entities.Tour.filter({ state: stateName });
+    setTours(results.sort((a, b) => (a.city || '').localeCompare(b.city || '')));
+  };
+
   const handleDeleteTour = async (tourId) => {
     setTours(prev => prev.filter(t => t.id !== tourId));
     try {
@@ -197,6 +203,7 @@ Use real locations with documented paranormal history only.`,
   return (
     <PageContainer>
       <SectionHeader title={stateName} subtitle={`${tours.length} Paranormal Tours`} showBack />
+      <PullToRefresh onRefresh={refreshTours}>
       <div className="px-4 pb-28 space-y-3 pt-3">
         <button
           onClick={handleCreateNewTour}
@@ -262,6 +269,7 @@ Use real locations with documented paranormal history only.`,
           </motion.div>
         ))}
       </div>
+      </PullToRefresh>
       <NavBar />
     </PageContainer>
   );

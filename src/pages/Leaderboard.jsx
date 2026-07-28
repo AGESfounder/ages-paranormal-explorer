@@ -5,6 +5,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import PullToRefresh from '@/components/PullToRefresh';
 
 const RANK_STYLES = [
   'text-yellow-400 border-yellow-400/40 bg-yellow-400/10',
@@ -27,19 +28,21 @@ export default function Leaderboard() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    base44.functions.invoke('leaderboard', {})
-      .then(res => {
-        setLeaderboard(res.data?.leaderboard || []);
-        setCurrentUserId(res.data?.currentUserId || null);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const loadLeaderboard = async () => {
+    try {
+      const res = await base44.functions.invoke('leaderboard', {});
+      setLeaderboard(res.data?.leaderboard || []);
+      setCurrentUserId(res.data?.currentUserId || null);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { loadLeaderboard(); }, []);
 
   return (
     <PageContainer>
       <SectionHeader title="Leaderboard" subtitle="Top Ghost Investigators" showBack />
+      <PullToRefresh onRefresh={loadLeaderboard}>
       <div className="px-4 pb-28 pt-3">
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 text-primary animate-spin" /></div>
@@ -104,6 +107,7 @@ export default function Leaderboard() {
           </div>
         )}
       </div>
+      </PullToRefresh>
       <NavBar />
     </PageContainer>
   );
