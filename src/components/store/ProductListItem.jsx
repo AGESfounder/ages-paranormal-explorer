@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Maximize2 } from 'lucide-react';
 import AddToCartButton from './AddToCartButton';
+import StockBadge from './StockBadge';
 import ApparelOptions from './ApparelOptions';
 import { getImages, getGallery } from '@/lib/productMedia';
 
@@ -43,9 +44,7 @@ export default function ProductListItem({ product, onAdd, onOpenFocus, index }) 
           <div className="flex items-center gap-2">
             <span className="text-sm font-heading text-primary">${product.price?.toFixed(2)}</span>
             <AddToCartButton onAdd={() => onAdd(product, variant || undefined)} disabled={!inStock} />
-            <span className={`text-[10px] font-heading uppercase tracking-wider px-3 py-1 rounded-full border ${inStock ? 'text-green-400 border-green-500/50 bg-green-500/20' : 'text-destructive border-destructive/50 bg-destructive/20'}`}>
-              {inStock ? 'In Stock' : 'Out of Stock'}
-            </span>
+            <StockBadge inStock={inStock} />
           </div>
         </div>
       </div>

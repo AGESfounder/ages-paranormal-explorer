@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import ApparelOptions from './ApparelOptions';
+import StockBadge from './StockBadge';
 import { getGallery } from '@/lib/productMedia';
 
 const genderLabels = { men: "Men's", women: "Women's", unisex: 'Unisex' };
@@ -77,9 +78,7 @@ export default function ProductDetailDialog({ product, onClose, onAdd }) {
             <Button onClick={() => { onAdd(product, variant || undefined); onClose(); }} className="flex-1">
               Add to Cart
             </Button>
-            <span className={`text-[10px] font-heading uppercase tracking-wider px-3 py-1 rounded-full border ${inStock ? 'text-green-400 border-green-500/50 bg-green-500/20' : 'text-destructive border-destructive/50 bg-destructive/20'}`}>
-              {inStock ? 'In Stock' : 'Out of Stock'}
-            </span>
+            <StockBadge inStock={inStock} />
           </div>
         </div>
       </DialogContent>
