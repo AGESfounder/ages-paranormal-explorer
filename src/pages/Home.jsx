@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Radio, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, Square, Play } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import Tombstone from '../components/Tombstone';
+import LightningStrike from '../components/LightningStrike';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
 import HauntedLocations from '../components/HauntedLocations';
@@ -92,34 +93,9 @@ export default function Home() {
               className="flex items-center justify-center relative"
             >
               <Tombstone className="w-28 h-28" />
-              <motion.div className="absolute top-[-8px] right-[-2px] flex items-start justify-end pointer-events-none">
-                {/* Strike illumination burst */}
-                <motion.div
-                  className="absolute -inset-6 rounded-full blur-xl"
-                  style={{ background: 'radial-gradient(circle, hsla(199,100%,82%,0.9) 0%, hsla(199,90%,60%,0.2) 45%, transparent 70%)' }}
-                  animate={{ opacity: [0, 0, 0.85, 0.15, 0.7, 0, 0] }}
-                  transition={{ duration: 5, times: [0, 0.46, 0.5, 0.55, 0.6, 0.66, 1], repeat: Infinity, ease: 'easeOut' }}
-                />
-                {/* Elongated lightning bolt */}
-                <motion.svg
-                  width="14" height="32" viewBox="0 0 24 48" xmlns="http://www.w3.org/2000/svg"
-                  animate={{
-                    opacity: [0.35, 0.35, 1, 0.5, 1, 0.35, 0.35],
-                    filter: [
-                      'drop-shadow(0 0 2px hsl(199,100%,70%))',
-                      'drop-shadow(0 0 2px hsl(199,100%,70%))',
-                      'drop-shadow(0 0 12px hsl(199,100%,92%)) drop-shadow(0 0 20px hsl(199,100%,72%))',
-                      'drop-shadow(0 0 4px hsl(199,100%,82%))',
-                      'drop-shadow(0 0 12px hsl(199,100%,92%)) drop-shadow(0 0 20px hsl(199,100%,72%))',
-                      'drop-shadow(0 0 2px hsl(199,100%,70%))',
-                      'drop-shadow(0 0 2px hsl(199,100%,70%))',
-                    ],
-                  }}
-                  transition={{ duration: 5, times: [0, 0.46, 0.5, 0.55, 0.6, 0.66, 1], repeat: Infinity, ease: 'easeOut' }}
-                >
-                  <path d="M14 0 L4 27 L11 27 L8 48 L21 20 L13 20 Z" fill="hsl(199,100%,82%)" stroke="hsl(199,100%,96%)" strokeWidth="1" strokeLinejoin="round" />
-                </motion.svg>
-              </motion.div>
+              <LightningStrike className="top-[-10px] right-[2px]" angle={16} delay={0} />
+              <LightningStrike className="top-[-12px] left-[-6px]" angle={-16} delay={1.7} width={12} height={28} />
+              <LightningStrike className="top-[16px] right-[20px]" angle={24} delay={3.4} width={11} height={24} />
             </motion.div>
 
             {/* Bottom Left: Acrostic Poem */}
