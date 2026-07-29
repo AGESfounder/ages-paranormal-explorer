@@ -135,7 +135,7 @@ export default function HauntedLocations() {
   const [creatingId, setCreatingId] = useState(null);
   const [narratingId, setNarratingId] = useState(null);
   const navigate = useNavigate();
-  const { narrate, stop, isSpeaking, isGenerating, unlock } = useGhostVoice();
+  const { narrate, stop, isSpeaking, isGenerating } = useGhostVoice();
 
   useEffect(() => {
     if (!isSpeaking && !isGenerating) setNarratingId(null);
@@ -143,7 +143,7 @@ export default function HauntedLocations() {
 
   const handleNarrate = (loc) => {
     if (narratingId === loc.id) { stop(); setNarratingId(null); }
-    else { unlock(); setNarratingId(loc.id); narrate(loc.overview || loc.name, { voice: 'storm' }); }
+    else { setNarratingId(loc.id); narrate(loc.overview || loc.name, { voice: 'storm' }); }
   };
 
   const buildLocations = async (lat, lon) => {

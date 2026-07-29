@@ -13,7 +13,6 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import TabNavigationProvider from '@/components/TabNavigationProvider';
-import { HauntedAudioProvider } from '@/lib/HauntedAudioContext';
 import { Navigate } from 'react-router-dom';
 // Add page imports here
 import Home from '@/pages/Home';
@@ -61,7 +60,6 @@ const AuthenticatedApp = () => {
 
   // Render the main app
   return (
-    <HauntedAudioProvider>
     <TabNavigationProvider>
     <AnimatePresence mode="wait">
     <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
@@ -97,7 +95,6 @@ const AuthenticatedApp = () => {
     </motion.div>
     </AnimatePresence>
     </TabNavigationProvider>
-    </HauntedAudioProvider>
   );
 };
 

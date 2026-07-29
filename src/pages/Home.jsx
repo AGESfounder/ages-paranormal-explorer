@@ -63,7 +63,7 @@ export default function Home() {
             SGT
           </h1>
           <p className="mt-2 font-heading text-sm tracking-[0.25em] uppercase text-primary/80 drop-shadow-[0_0_10px_hsl(199,89%,48%,0.3)]">
-            <span className="font-bold text-primary">S</span>elf <span className="font-bold text-primary">G</span>uided <span className="font-bold text-primary">T</span>ours
+            Self Guided Tours
           </p>
         </motion.div>
 
@@ -145,16 +145,16 @@ export default function Home() {
             >
               <div className="space-y-1">
                 <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                  <span className="text-primary font-bold text-lg drop-shadow-[0_0_8px_hsl(199,89%,48%,0.6)]">A</span>ccessible
+                  <span className="text-primary font-bold text-base">A</span>ccessible
                   </p>
                 <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                  <span className="text-primary font-bold text-lg drop-shadow-[0_0_8px_hsl(199,89%,48%,0.6)]">G</span>host
+                  <span className="text-primary font-bold text-base">G</span>host
                 </p>
                 <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                  <span className="text-primary font-bold text-lg drop-shadow-[0_0_8px_hsl(199,89%,48%,0.6)]">E</span>xploration
+                  <span className="text-primary font-bold text-base">E</span>xploration
                 </p>
                 <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                  <span className="text-primary font-bold text-lg drop-shadow-[0_0_8px_hsl(199,89%,48%,0.6)]">S</span>olutions
+                  <span className="text-primary font-bold text-base">S</span>olutions
                 </p>
               </div>
             </motion.div>

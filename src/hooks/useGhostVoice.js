@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { getSharedAudioContext } from '@/lib/sharedAudioContext';
 
 export default function useGhostVoice() {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -21,6 +20,7 @@ export default function useGhostVoice() {
         audioRef.current = null;
       }
       if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
+      if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} audioCtxRef.current = null; }
     };
   }, []);
 
@@ -62,8 +62,7 @@ export default function useGhostVoice() {
 
   const startEerieBackground = () => {
     try {
-      const ctx = getSharedAudioContext();
-      if (!ctx) return;
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
       ctxRef.current = ctx;
       const masterGain = ctx.createGain();
       masterGain.gain.value = 0.20;
@@ -92,7 +91,10 @@ export default function useGhostVoice() {
       try { gainRef.current.disconnect(); } catch (e) {}
       gainRef.current = null;
     }
-    ctxRef.current = null;
+    if (ctxRef.current) {
+      ctxRef.current.close().catch(() => {});
+      ctxRef.current = null;
+    }
   };
 
   const sanitizeText = (text) => {
@@ -104,17 +106,17 @@ export default function useGhostVoice() {
   // can actually play on iOS.
   const unlock = useCallback(() => {
     try {
-      const ctx = getSharedAudioContext();
-      if (ctx) {
-        audioCtxRef.current = ctx;
-        ctx.resume();
-        try { if (!recordDestRef.current) recordDestRef.current = ctx.createMediaStreamDestination(); } catch {}
-        const buf = ctx.createBuffer(1, 1, 8000);
-        const s = ctx.createBufferSource();
-        s.buffer = buf;
-        s.connect(ctx.destination);
-        s.start();
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
       }
+      audioCtxRef.current.resume();
+      const ctx = audioCtxRef.current;
+      try { if (!recordDestRef.current) recordDestRef.current = ctx.createMediaStreamDestination(); } catch {}
+      const buf = ctx.createBuffer(1, 1, 8000);
+      const s = ctx.createBufferSource();
+      s.buffer = buf;
+      s.connect(ctx.destination);
+      s.start();
     } catch {}
     try {
       const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
@@ -158,9 +160,8 @@ export default function useGhostVoice() {
           srcRef.current = sNode;
           setIsGenerating(false);
           setIsSpeaking(true);
-          sNode.onended = () => { setIsSpeaking(false); stopEerieBackground(); srcRef.current = null; window.dispatchEvent(new CustomEvent('ages-audio-stop')); };
+          sNode.onended = () => { setIsSpeaking(false); stopEerieBackground(); srcRef.current = null; };
           sNode.start();
-          window.dispatchEvent(new CustomEvent('ages-audio-start'));
           return;
         } catch {}
       }
@@ -179,22 +180,18 @@ export default function useGhostVoice() {
         setIsSpeaking(false);
         stopEerieBackground();
         audioRef.current = null;
-        window.dispatchEvent(new CustomEvent('ages-audio-stop'));
       };
       audio.onerror = () => {
         setIsSpeaking(false);
         stopEerieBackground();
         audioRef.current = null;
-        window.dispatchEvent(new CustomEvent('ages-audio-stop'));
       };
 
       await audio.play();
-      window.dispatchEvent(new CustomEvent('ages-audio-start'));
     } catch (err) {
       setIsGenerating(false);
       setIsSpeaking(false);
       stopEerieBackground();
-      window.dispatchEvent(new CustomEvent('ages-audio-stop'));
     }
   }, [isSpeaking, isGenerating]);
 
@@ -208,7 +205,6 @@ export default function useGhostVoice() {
     stopEerieBackground();
     setIsSpeaking(false);
     setIsGenerating(false);
-    window.dispatchEvent(new CustomEvent('ages-audio-stop'));
   }, []);
 
   const narrate = useCallback((text, opts = {}) => {

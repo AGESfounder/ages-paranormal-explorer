@@ -9,12 +9,11 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
-import { useHauntedAudio } from '@/lib/HauntedAudioContext';
 import { getBlockedUsers, unblockUser } from '@/lib/userBlocks';
 
 const defaultSettings = {
-  backgroundMusic: true,
-  musicVolume: 40,
+  backgroundMusic: false,
+  musicVolume: 50,
   narrationVolume: 80,
   darkMode: true,
   offlineDownloads: false,
@@ -25,7 +24,6 @@ const defaultSettings = {
 export default function Settings() {
   const [settings, setSettings] = useState(defaultSettings);
   const [loaded, setLoaded] = useState(false);
-  const haunt = useHauntedAudio();
 
   useEffect(() => {
     loadSettings();
@@ -108,12 +106,7 @@ export default function Settings() {
               <p className="text-sm text-foreground">Background Music</p>
               <p className="text-[10px] text-muted-foreground">Haunted music box atmosphere</p>
             </div>
-            <Switch checked={settings.backgroundMusic} onCheckedChange={(v) => {
-              const next = { ...settings, backgroundMusic: v, backgroundMusicConfigured: true };
-              setSettings(next);
-              haunt.setEnabledLive(v);
-              base44.auth.updateMe({ settings: JSON.stringify(next) }).catch(() => {});
-            }} />
+            <Switch checked={settings.backgroundMusic} onCheckedChange={() => toggle('backgroundMusic')} />
           </div>
           <div className="px-3 pb-3">
             <p className="text-[10px] text-muted-foreground mb-1">Narration Volume</p>
@@ -121,7 +114,7 @@ export default function Settings() {
           </div>
           <div className="px-3 pb-3">
             <p className="text-[10px] text-muted-foreground mb-1">Music Volume</p>
-            <input type="range" min="0" max="100" value={settings.musicVolume} onChange={e => { const v = Number(e.target.value); updateSetting('musicVolume', v); haunt.setVolumeLive(v / 100); }} className="w-full accent-primary" />
+            <input type="range" min="0" max="100" value={settings.musicVolume} onChange={e => updateSetting('musicVolume', Number(e.target.value))} className="w-full accent-primary" />
           </div>
         </div>
 
