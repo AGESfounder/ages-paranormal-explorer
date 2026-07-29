@@ -6,7 +6,7 @@ const HauntedAudioContext = createContext(null);
 export const useHauntedAudio = () => useContext(HauntedAudioContext);
 
 const DEFAULT_ENABLED = true;
-const DEFAULT_VOLUME = 0.4;
+const DEFAULT_VOLUME = 0.5;
 
 // Procedural haunted ambient drone (Web Audio): low detuned oscillators, a slow
 // swell LFO, and filtered wind noise. Loops forever, ducks while other audio or
@@ -74,7 +74,7 @@ export function HauntedAudioProvider({ children }) {
     lp.connect(duck);
 
     const droneGain = ctx.createGain();
-    droneGain.gain.value = 0.22;
+    droneGain.gain.value = 0.3;
     droneGain.connect(lp);
     [110, 130.8, 164.8].forEach((f, i) => {
       const o = ctx.createOscillator();
@@ -123,22 +123,23 @@ export function HauntedAudioProvider({ children }) {
 
     builtRef.current = true;
     try { ctx.resume().catch(() => {}); } catch {}
+    // Best-effort autoplay: retry shortly after load in case sticky activation arrives
+    setTimeout(() => { try { ctxRef.current && ctxRef.current.resume().catch(() => {}); } catch {} }, 800);
   }, []);
 
-  // Build the graph once authenticated & enabled
+  // Build the graph once enabled (plays for all visitors, logged in or not)
   useEffect(() => {
-    if (isAuthenticated && enabled && !builtRef.current) build();
-  }, [isAuthenticated, enabled, build]);
+    if (enabled && !builtRef.current) build();
+  }, [enabled, build]);
 
   // Resume the (suspended) context on the first user gesture and fade in
   useEffect(() => {
-    if (!isAuthenticated) return;
     const onGesture = () => {
       const ctx = ctxRef.current;
       if (!ctx) return;
       if (ctx.state === 'suspended') ctx.resume();
       if (masterRef.current && enabledRef.current) {
-        masterRef.current.gain.setTargetAtTime(volumeRef.current, ctx.currentTime, 1.0);
+        masterRef.current.gain.setTargetAtTime(volumeRef.current, ctx.currentTime, 0.3);
       }
     };
     window.addEventListener('pointerdown', onGesture);
@@ -149,7 +150,7 @@ export function HauntedAudioProvider({ children }) {
       window.removeEventListener('keydown', onGesture);
       window.removeEventListener('touchstart', onGesture);
     };
-  }, [isAuthenticated]);
+  }, []);
 
   // Master gain follows enabled + volume (also after the graph is built)
   useEffect(() => {
@@ -160,7 +161,6 @@ export function HauntedAudioProvider({ children }) {
 
   // Ducking: media elements, MediaRecorder, ghost-voice narration
   useEffect(() => {
-    if (!isAuthenticated) return;
     const onPlay = (e) => {
       const el = e.target;
       if (el && (el.tagName === 'AUDIO' || el.tagName === 'VIDEO') && !el.muted && el.volume !== 0) {
@@ -210,7 +210,7 @@ export function HauntedAudioProvider({ children }) {
       window.removeEventListener('ages-audio-start', onVoiceStart);
       window.removeEventListener('ages-audio-stop', onVoiceStop);
     };
-  }, [isAuthenticated, recomputeDuck]);
+  }, [recomputeDuck]);
 
   // Close context on unmount
   useEffect(() => () => {
