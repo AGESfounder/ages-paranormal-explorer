@@ -133,22 +133,34 @@ export default function Home() {
             >
               <a href="https://www.ebay.com/usr/ages4u" target="_blank" rel="noopener noreferrer" className="relative flex flex-col items-center group">
                 <motion.div
-                  animate={{ 
+                  animate={{
                     filter: ['drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))', 'drop-shadow(0 0 24px hsl(199,89%,48%,0.9)) drop-shadow(0 0 40px hsl(270,40%,50%,0.7))', 'drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))']
                   }}
                   transition={{ duration: 2.5, repeat: Infinity }}
-                  className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/25 via-primary/8 to-accent/25 border-2 border-primary/50 flex items-center justify-center relative overflow-hidden group-hover:border-primary group-hover:scale-105 transition-all duration-300"
+                  className="w-24 h-24 rounded-full relative overflow-hidden group-hover:scale-105 transition-transform duration-300"
+                  style={{
+                    background: 'radial-gradient(circle at 32% 28%, hsla(199,90%,85%,0.85) 0%, hsla(199,80%,60%,0.35) 14%, hsla(210,60%,30%,0.55) 45%, hsla(268,45%,22%,0.85) 78%, hsla(222,55%,12%,1) 100%)',
+                    boxShadow: 'inset 0 0 18px hsla(199,90%,70%,0.45), inset 0 6px 14px hsla(199,90%,90%,0.5), inset 0 -14px 22px hsla(268,50%,10%,0.8)'
+                  }}
                 >
-                  {/* Inner glow */}
-                  <div className="absolute inset-2 rounded-full bg-gradient-to-b from-white/15 via-transparent to-transparent" />
+                  {/* Swirling inner mist */}
                   <motion.div
-                    animate={{ opacity: [0.3, 0.8, 0.3] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute inset-0 rounded-full bg-primary/15 blur-md"
+                    className="absolute inset-0 rounded-full blur-md"
+                    style={{ background: 'radial-gradient(ellipse at 60% 65%, hsla(199,90%,60%,0.5) 0%, transparent 55%), radial-gradient(ellipse at 35% 70%, hsla(270,55%,55%,0.4) 0%, transparent 50%)' }}
+                    animate={{ rotate: [0, 360], scale: [1, 1.08, 1] }}
+                    transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
                   />
+                  {/* Glass specular highlight */}
+                  <div
+                    className="absolute rounded-full"
+                    style={{ top: '10%', left: '16%', width: '34%', height: '26%', background: 'radial-gradient(ellipse at center, hsla(0,0%,100%,0.95) 0%, hsla(199,90%,90%,0.4) 45%, transparent 75%)', filter: 'blur(1px)' }}
+                  />
+                  <div className="absolute rounded-full bg-white/70" style={{ top: '14%', left: '24%', width: '8%', height: '7%', filter: 'blur(0.5px)' }} />
+                  {/* Bottom rim reflection */}
+                  <div className="absolute inset-x-3 bottom-1 h-3 rounded-full" style={{ background: 'linear-gradient(to top, hsla(199,90%,75%,0.4), transparent)' }} />
                   {/* Glowing STORE text */}
                   <motion.span
-                    animate={{ 
+                    animate={{
                       textShadow: ['0 0 10px hsl(199,89%,48%,0.6)', '0 0 20px hsl(199,89%,48%,1)', '0 0 10px hsl(199,89%,48%,0.6)']
                     }}
                     transition={{ duration: 2, repeat: Infinity }}
@@ -157,9 +169,11 @@ export default function Home() {
                     STORE
                   </motion.span>
                 </motion.div>
-                {/* Crystal ball base */}
-                <div className="w-16 h-4 bg-gradient-to-b from-primary/40 to-primary/10 rounded-b-xl -mt-0.5 border-t border-primary/40 shadow-[0_4px_8px_hsl(199,89%,48%,0.15)]" />
-                <div className="w-20 h-1.5 bg-gradient-to-b from-primary/25 to-primary/5 rounded-b-lg -mt-px" />
+                {/* Crystal ball stand */}
+                <div className="relative flex flex-col items-center -mt-1">
+                  <div className="w-7 h-3 rounded-b-md" style={{ background: 'linear-gradient(to bottom, hsl(199,40%,45%), hsl(222,40%,20%))', boxShadow: '0 1px 2px hsla(0,0%,0%,0.6)' }} />
+                  <div className="w-16 h-2 rounded-md -mt-px" style={{ background: 'linear-gradient(to bottom, hsl(199,45%,50%), hsl(222,50%,14%))', boxShadow: '0 2px 6px hsla(0,0%,0%,0.5)' }} />
+                </div>
               </a>
             </motion.div>
           </div>
