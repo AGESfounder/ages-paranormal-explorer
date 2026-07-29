@@ -19,7 +19,7 @@ function writeStr(view, offset, str) {
 
 function buildHauntedWavUrl() {
   const sampleRate = 22050;
-  const duration = 16; // seconds — drone frequencies are integer #cycles over
+  const duration = 18; // seconds — drone frequencies are integer #cycles over
                       // this duration so the loop joins seamlessly.
   const total = sampleRate * duration;
   const numCh = 1;
@@ -42,30 +42,39 @@ function buildHauntedWavUrl() {
   writeStr(view, 36, 'data');
   view.setUint32(40, dataSize, true);
 
-  // Dark tritone drone (A2 + D#2 — the "diabolus in musica") with a slow swell.
+  // Dark tritone drone (A2 + D#2 — the "diabolus in musica") + sub-octave, with
+  // a slow swell.
   const drone = [
-    { f: 110, amp: 0.06 },   // 1760 cycles
-    { f: 155, amp: 0.035 },  // 2480 cycles  (tritone above 110)
+    { f: 110, amp: 0.05 },   // 1980 cycles
+    { f: 155, amp: 0.03 },   // 2790 cycles  (tritone above 110)
+    { f: 220, amp: 0.02 },   // 3960 cycles  (octave for depth)
   ];
-  const tremolo = 0.5; // Hz → 8 cycles over 16s
+  const tremolo = 0.5; // Hz → 9 cycles over 18s
 
-  // Slow, descending, dissonant phrase in a low register — emphasises the
-  // tritone (A–D#) and the minor 2nd, and ends unresolved for an uneasy feel.
+  // Haunting music-box phrase in A harmonic minor — slow, descending, with the
+  // augmented-2nd (F–G#) colour, a tritone, and an unresolved ending.
   const melody = [
-    { t: 0.5,  f: 220.00 },   // A3
-    { t: 2.5,  f: 311.13 },   // D#4  (tritone)
-    { t: 4.5,  f: 220.00 },   // A3
-    { t: 6.5,  f: 246.94 },   // B3   (minor 2nd)
-    { t: 8.5,  f: 311.13 },   // D#4  (tritone)
-    { t: 10.5, f: 261.63 },   // C4   (minor 3rd)
-    { t: 12.5, f: 220.00 },   // A3
-    { t: 14.5, f: 311.13 },   // D#4  (ends on the tritone — unresolved)
+    { t: 0.4,  f: 220.00 },   // A3
+    { t: 1.7,  f: 261.63 },   // C4
+    { t: 3.0,  f: 329.63 },   // E4
+    { t: 4.3,  f: 349.23 },   // F4
+    { t: 5.6,  f: 329.63 },   // E4
+    { t: 6.9,  f: 261.63 },   // C4
+    { t: 8.2,  f: 220.00 },   // A3
+    { t: 9.5,  f: 246.94 },   // B3   (minor 2nd)
+    { t: 10.8, f: 220.00 },   // A3
+    { t: 12.1, f: 349.23 },   // F4
+    { t: 13.4, f: 311.13 },   // D#4  (tritone)
+    { t: 14.7, f: 329.63 },   // E4
+    { t: 16.0, f: 220.00 },   // A3   (ends open / unresolved)
   ];
-  const bellAmp = 0.20;
-  const echoAmp = 0.09;
+  const bellAmp = 0.16;
+  const harmAmp = 0.08;   // a fifth below — soft organ harmony
+  const echoAmp = 0.07;   // octave below — depth
   const attack = 0.01;
-  const bellDecay = 0.20;   // ~1.4s to near-silence
-  const echoDecay = 0.20;
+  const bellDecay = 0.217;  // ~1.5s
+  const harmDecay = 0.26;   // ~1.8s
+  const echoDecay = 0.217;
 
   const env = (dt, decay) => {
     if (dt < 0) return 0;
@@ -81,15 +90,21 @@ function buildHauntedWavUrl() {
     for (const d of drone) s += d.amp * Math.sin(2 * Math.PI * d.f * t) * tr;
     for (const n of melody) {
       const dt = t - n.t;
-      if (dt < 0 || dt > 2.0) continue;
+      if (dt < 0 || dt > 2.2) continue;
+      // Music-box bell: fundamental + 4 harmonics + a detuned partial for wobble.
       const e = env(dt, bellDecay);
       if (e > 0.0005) {
         const ph = 2 * Math.PI * n.f * t;
-        // Bell timbre + a slightly detuned partial for an uneasy wobble.
         s += bellAmp * e * (
-          Math.sin(ph) + 0.3 * Math.sin(2 * ph) + 0.15 * Math.sin(3 * ph) + 0.5 * Math.sin(2 * Math.PI * n.f * 1.004 * t)
+          Math.sin(ph) + 0.4 * Math.sin(2 * ph) + 0.25 * Math.sin(3 * ph) +
+          0.15 * Math.sin(4 * ph) + 0.1 * Math.sin(5 * ph) +
+          0.4 * Math.sin(2 * Math.PI * n.f * 1.004 * t)
         );
       }
+      // Soft harmony a fifth below (open, medieval/haunting).
+      const eh = env(dt, harmDecay);
+      if (eh > 0.0005) s += harmAmp * eh * Math.sin(2 * Math.PI * (n.f / 1.498) * t);
+      // Octave echo for depth.
       const e2 = env(dt, echoDecay);
       if (e2 > 0.0005) s += echoAmp * e2 * Math.sin(2 * Math.PI * (n.f / 2) * t);
     }
@@ -136,7 +151,7 @@ export default function HauntedMusic() {
       if (!a) return;
       const { enabled, volume } = getMusicSettings();
       const shouldPlay = enabled && !isAudioBusy() && !document.hidden;
-      a.volume = shouldPlay ? (volume / 100) * 0.8 : 0;
+      a.volume = shouldPlay ? (volume / 100) * 0.9 : 0;
       if (shouldPlay && a.paused) a.play().catch(() => {});
       else if (!shouldPlay && !a.paused) a.pause();
     };
@@ -159,10 +174,14 @@ export default function HauntedMusic() {
 
     const unsubBusy = onAudioBusyChange(applyVolume);
     const unsubMusic = onMusicSettingsChange(applyVolume);
+    // Safety net: keep the player's volume in sync with the live settings even
+    // if a settings-change event is missed.
+    const poll = setInterval(applyVolume, 400);
 
     return () => {
       unsubBusy && unsubBusy();
       unsubMusic && unsubMusic();
+      clearInterval(poll);
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('touchstart', unlock);
       window.removeEventListener('keydown', unlock);

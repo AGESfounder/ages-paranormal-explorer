@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
+import { audioAcquire, audioRelease, getMusicSettings } from '@/lib/hauntedAudio';
 
 export default function useGhostVoice() {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -67,10 +67,12 @@ export default function useGhostVoice() {
 
   const startEerieBackground = () => {
     try {
+      const { enabled, volume } = getMusicSettings();
+      if (!enabled) return; // respect the Background Music toggle
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       ctxRef.current = ctx;
       const masterGain = ctx.createGain();
-      masterGain.gain.value = 0.20;
+      masterGain.gain.value = (volume / 100) * 0.20;
       masterGain.connect(ctx.destination);
       gainRef.current = masterGain;
 
