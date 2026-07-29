@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Ghost, Navigation, Search, Loader2, Clock, DollarSign, MapPin, X, ChevronDown, Sparkles, Volume2, Square } from 'lucide-react';
+import { Navigation, Search, Loader2, Clock, DollarSign, MapPin, X, ChevronDown, Sparkles, Volume2, Square } from 'lucide-react';
+import HauntedHouse from './icons/HauntedHouse';
 import { base44 } from '@/api/base44Client';
 import { generateLocationTour } from '@/lib/generateTour';
 import useGhostVoice from '../hooks/useGhostVoice';
@@ -419,7 +420,7 @@ export default function HauntedLocations() {
     >
       <div className="rounded-xl border border-accent/30 bg-accent/5 overflow-hidden">
         <div className="p-3 flex items-center gap-2 border-b border-accent/20">
-          <Ghost className="w-4 h-4 text-accent" />
+          <HauntedHouse className="w-4 h-4 text-accent" />
           <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Haunted Locations</p>
           <span className="ml-auto text-[9px] text-muted-foreground font-heading uppercase tracking-wider">Within 30 mi</span>
         </div>

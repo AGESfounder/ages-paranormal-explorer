@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Radio, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, Square, Play } from 'lucide-react';
+import { Navigation, Heart, BookOpen, Wrench, Settings, Radio, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, Square, Play } from 'lucide-react';
+import USMap from '../components/icons/USMap';
 import PageContainer from '../components/PageContainer';
 import Tombstone from '../components/Tombstone';
 import LightningStrike from '../components/LightningStrike';
@@ -248,7 +249,7 @@ export default function Home() {
             className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border/50 bg-card/40 backdrop-blur-sm hover:border-primary/40 hover:bg-card/60 hover:shadow-[0_0_20px_hsl(199,89%,48%,0.08)] transition-all duration-300 group"
           >
             <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-              <Map className="w-6 h-6 text-primary group-hover:drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)] transition-all" />
+              <USMap className="w-6 h-6 text-primary group-hover:drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)] transition-all" />
             </div>
             <div className="text-center">
               <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Explore States</p>
