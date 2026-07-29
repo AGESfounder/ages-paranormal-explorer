@@ -15,6 +15,9 @@ export default function NavBar() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/90 backdrop-blur-xl border-t border-border">
+      <p className="text-center text-[8px] font-heading tracking-wider uppercase text-primary whitespace-nowrap pt-1.5 drop-shadow-[0_0_8px_hsl(199,89%,65%,0.8)]">
+        Explore Past Existence &amp; It's Connection to Today's Enigma.
+      </p>
       <div className="flex items-center justify-around px-2 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
         {navItems.map((item) => {
           const isActive = activeTab === item.key;

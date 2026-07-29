@@ -366,14 +366,6 @@ export default function Home() {
           </motion.div>
         )}
 
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="mt-8 text-[10px] font-heading tracking-widest uppercase text-muted-foreground/60 text-center whitespace-nowrap"
-        >
-          Explore Past Existence &amp; It's Connection to Today's Enigma.
-        </motion.p>
       </div>
       <CustomTourModal isOpen={showCustomTour} onClose={() => setShowCustomTour(false)} />
       <NavBar />
