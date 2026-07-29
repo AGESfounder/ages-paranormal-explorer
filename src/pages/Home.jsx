@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, Ghost, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, Square, Play } from 'lucide-react';
+import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, Square, Play } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
+import HauntedHouse from '../components/HauntedHouse';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
 import HauntedLocations from '../components/HauntedLocations';
@@ -90,14 +91,7 @@ export default function Home() {
               transition={{ delay: 0.2, duration: 0.6 }}
               className="flex items-center justify-center relative"
             >
-              <motion.div
-                animate={{ 
-                  filter: ['drop-shadow(0 0 12px hsl(199,89%,48%,0.3))', 'drop-shadow(0 0 24px hsl(199,89%,48%,0.6))', 'drop-shadow(0 0 12px hsl(199,89%,48%,0.3))']
-                }}
-                transition={{ duration: 3, repeat: Infinity }}
-              >
-                <Ghost className="w-20 h-20 text-primary" />
-              </motion.div>
+              <HauntedHouse className="w-20 h-20" />
               <motion.div
                 className="absolute top-0 right-0"
                 animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
