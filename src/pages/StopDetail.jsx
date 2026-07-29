@@ -36,7 +36,7 @@ export default function StopDetail() {
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
-  const { isSpeaking, isGenerating, narrate } = useGhostVoice();
+  const { isSpeaking, isGenerating, narrate, unlock } = useGhostVoice();
 
   // Lazily enrich a stop the first time it is viewed. Tour creation stores only
   // lightweight summaries, so the full rich historical/paranormal detail and
@@ -162,7 +162,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         showBack
         onBack={() => navigate(`/tour/${stop.tour_id}`)}
         rightAction={
-          <button onClick={() => narrate(stop.narration_text || stop.paranormal_info)} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
+          <button onClick={() => { unlock(); narrate(stop.narration_text || stop.paranormal_info); }} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
             {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
         }

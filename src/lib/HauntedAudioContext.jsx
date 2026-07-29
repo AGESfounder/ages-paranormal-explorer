@@ -125,20 +125,25 @@ export function HauntedAudioProvider({ children }) {
     setTimeout(() => { try { ctxRef.current && ctxRef.current.resume().catch(() => {}); } catch {} }, 800);
   }, []);
 
-  // Build the graph once enabled (plays for all visitors, logged in or not)
+  // Build the graph when enabled is toggled on. The ambient is also built on the
+  // first user gesture (see below) — we do NOT build on mount so a suspended
+  // AudioContext never sits on the page competing with narration playback.
+  const didMountRef = useRef(false);
   useEffect(() => {
+    if (!didMountRef.current) { didMountRef.current = true; return; }
     if (enabled && !builtRef.current) build();
+    if (!enabled && ctxRef.current) { try { ctxRef.current.suspend(); } catch {} }
   }, [enabled, build]);
 
   // Resume the (suspended) context on the first user gesture and fade in
   useEffect(() => {
     const onGesture = () => {
+      if (!builtRef.current && enabledRef.current) build();
       const ctx = ctxRef.current;
       if (!ctx) return;
       if (ctx.state === 'suspended') ctx.resume();
       if (masterRef.current && enabledRef.current) {
         masterRef.current.gain.setTargetAtTime(volumeRef.current, ctx.currentTime, 0.3);
-        if (chimeRef.current) chimeRef.current();
       }
     };
     window.addEventListener('pointerdown', onGesture);

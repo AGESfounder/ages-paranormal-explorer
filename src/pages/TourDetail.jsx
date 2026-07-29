@@ -87,7 +87,7 @@ export default function TourDetail() {
   const [conclusionRead, setConclusionRead] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [completingTour, setCompletingTour] = useState(false);
-  const { isSpeaking, isGenerating, narrate } = useGhostVoice();
+  const { isSpeaking, isGenerating, narrate, unlock } = useGhostVoice();
 
   const totalDistance = useMemo(() => {
     if (stops.length < 2) return 0;
@@ -344,7 +344,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
           </div>
           <div className="flex items-start justify-between gap-3">
             <p className="text-log text-sm text-foreground/80 leading-relaxed">{tour.description}</p>
-            <button onClick={() => narrate(tour.description)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+            <button onClick={() => { unlock(); narrate(tour.description); }} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
               {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
             </button>
           </div>
@@ -355,7 +355,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
           <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-primary">Introduction</h3>
-              <button onClick={() => narrate(tour.introduction)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+              <button onClick={() => { unlock(); narrate(tour.introduction); }} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
                 {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate</>}
               </button>
             </div>
