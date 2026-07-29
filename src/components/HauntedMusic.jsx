@@ -37,7 +37,7 @@ export default function HauntedMusic() {
     const buildSoundscape = (ctx, master) => {
       // Low drone — two detuned sines through a lowpass, with a slow swell LFO.
       const droneGain = ctx.createGain();
-      droneGain.gain.value = 0.12;
+      droneGain.gain.value = 0.4;
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
       lp.frequency.value = 420;
@@ -57,7 +57,7 @@ export default function HauntedMusic() {
       const d = buf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
-      const windGain = ctx.createGain(); windGain.gain.value = 0.05;
+      const windGain = ctx.createGain(); windGain.gain.value = 0.2;
       const bp = ctx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 600; bp.Q.value = 0.7;
       noise.connect(bp); bp.connect(windGain); windGain.connect(master);
       noise.start();
@@ -73,7 +73,7 @@ export default function HauntedMusic() {
           const osc = ctx.createOscillator(); const g = ctx.createGain();
           osc.type = 'sine'; osc.frequency.value = f;
           g.gain.setValueAtTime(0, ctx.currentTime);
-          g.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 0.05);
+          g.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.05);
           g.gain.exponentialRampToValueAtTime(0.0008, ctx.currentTime + 2.2);
           osc.connect(g); g.connect(master);
           osc.start(); osc.stop(ctx.currentTime + 2.3);
@@ -100,7 +100,7 @@ export default function HauntedMusic() {
     const applyGain = () => {
       if (!masterRef.current || !ctxRef.current) return;
       const { enabled, volume } = getMusicSettings();
-      const target = enabled && !isAudioBusy() ? (volume / 100) * 0.3 : 0;
+      const target = enabled && !isAudioBusy() ? (volume / 100) * 0.5 : 0;
       try {
         masterRef.current.gain.cancelScheduledValues(ctxRef.current.currentTime);
         masterRef.current.gain.setTargetAtTime(target, ctxRef.current.currentTime, 0.4);
