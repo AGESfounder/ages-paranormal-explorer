@@ -46,9 +46,9 @@ export default function Tombstone({ className = '' }) {
 
         {/* Glowing text */}
         <text
-          x="50"
+          x="30"
           y="50"
-          textAnchor="middle"
+          textAnchor="start"
           fontFamily="'Germania One', cursive"
           fontSize="15"
           fill="hsl(199,100%,72%)"
@@ -57,9 +57,9 @@ export default function Tombstone({ className = '' }) {
           Energy
         </text>
         <text
-          x="50"
+          x="30"
           y="70"
-          textAnchor="middle"
+          textAnchor="start"
           fontFamily="'Germania One', cursive"
           fontSize="15"
           fill="hsl(199,100%,72%)"
@@ -68,9 +68,9 @@ export default function Tombstone({ className = '' }) {
           Never
         </text>
         <text
-          x="50"
+          x="30"
           y="90"
-          textAnchor="middle"
+          textAnchor="start"
           fontFamily="'Germania One', cursive"
           fontSize="15"
           fill="hsl(199,100%,72%)"
