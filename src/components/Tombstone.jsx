@@ -38,6 +38,10 @@ export default function Tombstone({ className = '' }) {
             <stop offset="0%" stopColor="hsl(222,32%,24%)" />
             <stop offset="100%" stopColor="hsl(222,42%,11%)" />
           </linearGradient>
+          <linearGradient id="baseSide" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="hsl(222,30%,20%)" />
+            <stop offset="100%" stopColor="hsl(222,44%,8%)" />
+          </linearGradient>
           <radialGradient id="stoneSheen" cx="0.34" cy="0.22" r="0.85">
             <stop offset="0%" stopColor="hsla(205,45%,78%,0.4)" />
             <stop offset="55%" stopColor="hsla(205,45%,78%,0)" />
@@ -51,10 +55,12 @@ export default function Tombstone({ className = '' }) {
         {/* Soft ground shadow */}
         <ellipse cx="50" cy="120" rx="42" ry="6.5" fill="url(#groundShadow)" />
 
-        {/* Base slab — top face (3D) */}
-        <path d="M18 112 L26 106 L84 106 L90 112 Z" fill="url(#baseTop)" stroke="hsl(199,70%,42%)" strokeWidth="0.5" opacity="0.9" />
+        {/* Base slab — top face (3D, matches tombstone tilt: depth +6,+6) */}
+        <path d="M18 106 L84 106 L90 112 L24 112 Z" fill="url(#baseTop)" stroke="hsl(199,70%,42%)" strokeWidth="0.5" opacity="0.9" />
+        {/* Base slab — right side face (3D depth) */}
+        <path d="M84 106 L90 112 L90 124 L84 118 Z" fill="url(#baseSide)" stroke="hsl(199,70%,42%)" strokeWidth="0.5" opacity="0.9" />
         {/* Base slab — front face */}
-        <path d="M18 112 L18 119 L90 119 L90 112 Z" fill="url(#baseFront)" stroke="hsl(199,70%,42%)" strokeWidth="0.5" opacity="0.9" />
+        <path d="M18 106 L84 106 L84 118 L18 118 Z" fill="url(#baseFront)" stroke="hsl(199,70%,42%)" strokeWidth="0.5" opacity="0.9" />
 
         {/* Tombstone top cap (rounded thickness, 3D) */}
         <path d="M50 18 Q78 18 78 44 L84 50 Q84 24 56 24 Z" fill="url(#stoneCap)" stroke="hsl(199,70%,42%)" strokeWidth="0.5" opacity="0.92" />

@@ -162,10 +162,11 @@ export default function Home() {
                     STORE
                   </motion.span>
                 </div>
-                {/* Crystal ball stand */}
+                {/* Crystal ball stand — three tiers */}
                 <div className="relative flex flex-col items-center -mt-1">
-                  <div className="w-7 h-3 rounded-b-md" style={{ background: 'linear-gradient(to bottom, hsl(199,40%,45%), hsl(222,40%,20%))', boxShadow: '0 1px 2px hsla(0,0%,0%,0.6)' }} />
-                  <div className="w-16 h-2 rounded-md -mt-px" style={{ background: 'linear-gradient(to bottom, hsl(199,45%,50%), hsl(222,50%,14%))', boxShadow: '0 2px 6px hsla(0,0%,0%,0.5)' }} />
+                  <div className="w-8 h-2.5 rounded-b-md" style={{ background: 'linear-gradient(to bottom, hsl(199,42%,48%), hsl(222,42%,22%))', boxShadow: '0 1px 2px hsla(0,0%,0%,0.6)' }} />
+                  <div className="w-12 h-2 -mt-px" style={{ background: 'linear-gradient(to bottom, hsl(199,45%,50%), hsl(222,48%,16%))', boxShadow: '0 1px 3px hsla(0,0%,0%,0.55)' }} />
+                  <div className="w-16 h-2.5 rounded-md -mt-px" style={{ background: 'linear-gradient(to bottom, hsl(199,45%,52%), hsl(222,50%,14%))', boxShadow: '0 2px 6px hsla(0,0%,0%,0.5)' }} />
                 </div>
               </a>
             </motion.div>
