@@ -94,7 +94,7 @@ export default function Home() {
             >
               <Tombstone className="w-28 h-28" />
               <LightningStrike className="top-[-10px] right-[2px]" angle={16} delay={0} />
-              <LightningStrike className="top-[-12px] left-[6px]" angle={8} delay={1.7} width={12} height={28} />
+              <LightningStrike className="top-[-10px] left-[30px]" angle={-30} delay={1.7} width={12} height={30} />
               <LightningStrike className="top-[16px] right-[20px]" angle={24} delay={3.4} width={11} height={24} />
             </motion.div>
 
