@@ -36,24 +36,31 @@ export default function GhostBackground() {
         style={{ background: 'radial-gradient(ellipse at center, transparent 40%, hsla(222,47%,4%,0.85) 100%)' }}
       />
 
-      {/* Drifting fog bands */}
+      {/* Drifting fog bands — horizontal + vertical drift for visible movement */}
       <motion.div
-        className="absolute inset-x-0 top-1/4 h-1/3 blur-xl"
-        style={{ background: 'radial-gradient(ellipse at 30% 50%, hsla(200,30%,85%,0.10) 0%, transparent 65%)' }}
-        animate={{ x: ['-10%', '15%', '-10%'], opacity: [0.5, 0.8, 0.5] }}
-        transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute inset-x-[-25%] top-[16%] h-1/3 blur-2xl"
+        style={{ background: 'radial-gradient(ellipse at 30% 50%, hsla(200,30%,86%,0.13) 0%, transparent 65%)' }}
+        animate={{ x: ['-18%', '22%', '-18%'], y: [0, 14, 0], opacity: [0.4, 0.85, 0.4] }}
+        transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
       />
       <motion.div
-        className="absolute inset-x-0 top-1/2 h-1/3 blur-2xl"
-        style={{ background: 'radial-gradient(ellipse at 70% 50%, hsla(205,25%,80%,0.09) 0%, transparent 70%)' }}
-        animate={{ x: ['10%', '-15%', '10%'], opacity: [0.4, 0.7, 0.4] }}
-        transition={{ duration: 36, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute inset-x-[-25%] top-[42%] h-1/3 blur-3xl"
+        style={{ background: 'radial-gradient(ellipse at 70% 50%, hsla(205,25%,80%,0.11) 0%, transparent 70%)' }}
+        animate={{ x: ['20%', '-24%', '20%'], y: [0, -16, 0], opacity: [0.35, 0.75, 0.35] }}
+        transition={{ duration: 30, repeat: Infinity, ease: 'easeInOut' }}
       />
       <motion.div
-        className="absolute inset-x-0 bottom-0 h-1/3 blur-xl"
-        style={{ background: 'radial-gradient(ellipse at 40% 60%, hsla(195,35%,88%,0.08) 0%, transparent 70%)' }}
-        animate={{ x: ['-15%', '10%', '-15%'], opacity: [0.5, 0.75, 0.5] }}
-        transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute inset-x-[-25%] bottom-[10%] h-1/3 blur-2xl"
+        style={{ background: 'radial-gradient(ellipse at 40% 60%, hsla(195,35%,88%,0.11) 0%, transparent 70%)' }}
+        animate={{ x: ['-22%', '18%', '-22%'], y: [0, 12, 0], opacity: [0.4, 0.8, 0.4] }}
+        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      {/* Low rolling ground mist */}
+      <motion.div
+        className="absolute inset-x-[-25%] bottom-0 h-1/4 blur-xl"
+        style={{ background: 'radial-gradient(ellipse at 50% 100%, hsla(200,30%,86%,0.15) 0%, transparent 70%)' }}
+        animate={{ x: ['-28%', '28%', '-28%'], opacity: [0.3, 0.65, 0.3] }}
+        transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
       />
 
       {/* Ambient color glows */}
