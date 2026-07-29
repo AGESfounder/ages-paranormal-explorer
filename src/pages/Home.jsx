@@ -86,47 +86,11 @@ export default function Home() {
               </h1>
             </motion.div>
 
-            {/* Top Right: Ghost + Zap */}
+            {/* Top Right: Crystal Ball STORE Button */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
-              className="flex items-center justify-center relative"
-            >
-              <Tombstone className="w-28 h-28" />
-              <LightningStrike className="top-[-10px] right-[2px]" angle={16} delay={0} />
-              <LightningStrike className="top-[-10px] left-[30px]" angle={-30} delay={1.7} width={12} height={30} />
-              <LightningStrike className="top-[16px] right-[20px]" angle={24} delay={3.4} width={11} height={24} />
-            </motion.div>
-
-            {/* Bottom Left: Acrostic Poem */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.35, duration: 0.6 }}
-              className="flex items-center justify-center"
-            >
-              <div className="space-y-1">
-                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                  <span className="text-primary font-bold text-base">A</span>ccessible
-                  </p>
-                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                  <span className="text-primary font-bold text-base">G</span>host
-                </p>
-                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                  <span className="text-primary font-bold text-base">E</span>xploration
-                </p>
-                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
-                  <span className="text-primary font-bold text-base">S</span>olutions
-                </p>
-              </div>
-            </motion.div>
-
-            {/* Bottom Right: Crystal Ball STORE Button */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.45, duration: 0.6 }}
               className="flex items-center justify-center"
             >
               <a href="https://www.ebay.com/usr/ages4u" target="_blank" rel="noopener noreferrer" className="relative flex flex-col items-center group focus:outline-none focus-visible:outline-none">
@@ -170,6 +134,42 @@ export default function Home() {
                   <div className="w-16 h-2.5 rounded-md -mt-px" style={{ background: 'linear-gradient(to bottom, hsl(199,45%,52%), hsl(222,50%,14%))', boxShadow: '0 2px 6px hsla(0,0%,0%,0.5)' }} />
                 </div>
               </a>
+            </motion.div>
+
+            {/* Bottom Left: Acrostic Poem */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35, duration: 0.6 }}
+              className="flex items-center justify-center"
+            >
+              <div className="space-y-1">
+                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                  <span className="text-primary font-bold text-base">A</span>ccessible
+                  </p>
+                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                  <span className="text-primary font-bold text-base">G</span>host
+                </p>
+                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                  <span className="text-primary font-bold text-base">E</span>xploration
+                </p>
+                <p className="text-sm font-heading tracking-[0.25em] uppercase text-primary/80">
+                  <span className="text-primary font-bold text-base">S</span>olutions
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Bottom Right: Ghost + Lightning */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.45, duration: 0.6 }}
+              className="flex items-center justify-center relative"
+            >
+              <Tombstone className="w-28 h-28" />
+              <LightningStrike className="top-[-10px] right-[2px]" angle={16} delay={0} />
+              <LightningStrike className="top-[-10px] left-[30px]" angle={-30} delay={1.7} width={12} height={30} />
+              <LightningStrike className="top-[16px] right-[20px]" angle={24} delay={3.4} width={11} height={24} />
             </motion.div>
           </div>
 
