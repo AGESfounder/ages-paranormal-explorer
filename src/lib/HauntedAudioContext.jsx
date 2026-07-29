@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { base44 } from '@/api/base44Client';
+import { getSharedAudioContext } from '@/lib/sharedAudioContext';
 
 const HauntedAudioContext = createContext(null);
 export const useHauntedAudio = () => useContext(HauntedAudioContext);
@@ -56,9 +57,8 @@ export function HauntedAudioProvider({ children }) {
 
   const build = useCallback(() => {
     if (builtRef.current) return;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    const ctx = new AC();
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
     ctxRef.current = ctx;
 
     const master = ctx.createGain();
@@ -120,9 +120,6 @@ export function HauntedAudioProvider({ children }) {
     melodyTimerRef.current = setTimeout(scheduleChime, 1200);
 
     builtRef.current = true;
-    try { ctx.resume().catch(() => {}); } catch {}
-    // Best-effort autoplay: retry shortly after load in case sticky activation arrives
-    setTimeout(() => { try { ctxRef.current && ctxRef.current.resume().catch(() => {}); } catch {} }, 800);
   }, []);
 
   // Build the graph when enabled is toggled on. The ambient is also built on the
@@ -216,10 +213,10 @@ export function HauntedAudioProvider({ children }) {
     };
   }, [recomputeDuck]);
 
-  // Close context on unmount
+  // Disconnect nodes on unmount (context is shared — never close it)
   useEffect(() => () => {
     if (melodyTimerRef.current) clearTimeout(melodyTimerRef.current);
-    if (ctxRef.current) { try { ctxRef.current.close(); } catch {} }
+    if (masterRef.current) { try { masterRef.current.disconnect(); } catch {} }
   }, []);
 
   const setEnabledLive = useCallback((on) => setEnabled(!!on), []);
