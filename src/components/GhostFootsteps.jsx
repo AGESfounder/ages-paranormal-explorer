@@ -1,14 +1,16 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-// A trail of shoe-sole footprints walking across the top of each page.
+// A trail of shoe-sole footprints walking across the top of a page or header.
 // The blue glow passes slowly from step to step, left to right.
+// `top` values are in px so the prints sit correctly in both a full viewport
+// (GhostBackground) and a short sticky SectionHeader.
 const STEPS = [
-  { left: 4, top: 8, size: 22, rotate: -4 },
-  { left: 24, top: 13, size: 24, rotate: 3 },
-  { left: 44, top: 6, size: 26, rotate: -3 },
-  { left: 64, top: 12, size: 24, rotate: 4 },
-  { left: 92, top: 8, size: 22, rotate: -2 },
+  { left: 4, top: 14, size: 22, rotate: -4 },
+  { left: 24, top: 18, size: 24, rotate: 3 },
+  { left: 44, top: 11, size: 26, rotate: -3 },
+  { left: 64, top: 17, size: 24, rotate: 4 },
+  { left: 92, top: 13, size: 22, rotate: -2 },
 ];
 
 const CYCLE = 7; // seconds for the full glow cycle
@@ -22,7 +24,7 @@ function Footprint({ left, top, size, rotate, index }) {
   return (
     <motion.div
       className="absolute"
-      style={{ left: `${left}%`, top: `${top}%`, width: size, height: size * 0.5 }}
+      style={{ left: `${left}%`, top: `${top}px`, width: size, height: size * 0.5 }}
       initial={{ opacity: 0.14 }}
       animate={{
         opacity: [0.14, 0.14, 1, 0.14, 0.14],
@@ -51,7 +53,7 @@ function Footprint({ left, top, size, rotate, index }) {
 export default function GhostFootsteps() {
   return (
     <div
-      className="absolute top-0 left-0 w-full h-[18%] pointer-events-none"
+      className="absolute top-0 left-0 w-full h-full pointer-events-none"
       style={{ filter: 'drop-shadow(0 0 8px hsl(199,89%,55%,1)) drop-shadow(0 0 16px hsl(199,89%,60%,0.8))' }}
     >
       {STEPS.map((s, i) => (
