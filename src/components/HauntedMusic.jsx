@@ -8,10 +8,9 @@ import {
   isAudioBusy,
 } from '@/lib/hauntedAudio';
 
-// Build a seamless-looping haunted ambient drone as a WAV blob URL and play it
-// through a native <audio loop> element — the most reliable cross-browser way to
-// play background audio (play() on a user tap always works). Ducks to silence
-// while narration or any recording is active. Volume follows Settings.
+// Build a seamless-looping haunted music-box melody as a WAV blob URL and play
+// it through a native <audio loop> element. Ducks (pauses) while narration or
+// any recording is active. Volume follows Settings.
 
 function writeStr(view, offset, str) {
   for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
@@ -19,8 +18,8 @@ function writeStr(view, offset, str) {
 
 function buildHauntedWavUrl() {
   const sampleRate = 22050;
-  const duration = 6; // seconds — every frequency is an integer # of cycles over
-                      // this duration, so the loop is click-free.
+  const duration = 14; // seconds — drone frequencies are integer #cycles over
+                      // this duration so the loop is click-free.
   const total = sampleRate * duration;
   const numCh = 1;
   const bytesPerSample = 2;
@@ -41,20 +40,60 @@ function buildHauntedWavUrl() {
   view.setUint16(34, bytesPerSample * 8, true);
   writeStr(view, 36, 'data');
   view.setUint32(40, dataSize, true);
-  // Partials (freq*duration all integer) + slow tremolo for an eerie swell.
-  const partials = [
-    { f: 130, amp: 0.42 },
-    { f: 196, amp: 0.22 },
-    { f: 261, amp: 0.13 },
-    { f: 392, amp: 0.07 },
+
+  // Soft drone underneath (integer cycles over the loop for a seamless join).
+  const drone = [
+    { f: 110, amp: 0.06 },   // 1540 cycles
+    { f: 165, amp: 0.03 },   // 2310 cycles
   ];
-  const tremolo = 0.5; // Hz → 3 cycles over 6s
+  const tremolo = 0.5; // Hz → 7 cycles over 14s
+
+  // Haunting A-minor music-box phrase. Each note is a bell (fundamental + 2nd/3rd
+  // harmonics) with an exponential decay, plus a quiet octave-below organ echo.
+  const melody = [
+    { t: 0.3,  f: 440.00 },   // A4
+    { t: 1.5,  f: 523.25 },   // C5
+    { t: 2.7,  f: 659.25 },   // E5
+    { t: 3.9,  f: 587.33 },   // D5
+    { t: 5.1,  f: 523.25 },   // C5
+    { t: 6.3,  f: 440.00 },   // A4
+    { t: 7.5,  f: 392.00 },   // G4
+    { t: 8.7,  f: 440.00 },   // A4
+    { t: 9.9,  f: 523.25 },   // C5
+    { t: 11.1, f: 659.25 },   // E5
+    { t: 12.3, f: 440.00 },   // A4
+  ];
+  const bellAmp = 0.22;
+  const echoAmp = 0.10;
+  const attack = 0.01;
+  const bellDecay = 0.17;   // exp time const → ~1.2s to near-silence
+  const echoDecay = 0.22;   // longer echo
+
+  const env = (dt, decay) => {
+    if (dt < 0) return 0;
+    if (dt < attack) return dt / attack;
+    return Math.exp(-(dt - attack) / decay);
+  };
+
   let off = 44;
   for (let i = 0; i < total; i++) {
     const t = i / sampleRate;
     let s = 0;
-    for (const p of partials) s += p.amp * Math.sin(2 * Math.PI * p.f * t);
-    s *= 0.75 + 0.25 * Math.sin(2 * Math.PI * tremolo * t);
+    // Drone with slow tremolo.
+    const tr = 0.8 + 0.2 * Math.sin(2 * Math.PI * tremolo * t);
+    for (const d of drone) s += d.amp * Math.sin(2 * Math.PI * d.f * t) * tr;
+    // Melody bells + octave echo.
+    for (const n of melody) {
+      const dt = t - n.t;
+      if (dt < 0 || dt > 2.0) continue;
+      const e = env(dt, bellDecay);
+      if (e > 0.0005) {
+        const ph = 2 * Math.PI * n.f * t;
+        s += bellAmp * e * (Math.sin(ph) + 0.4 * Math.sin(2 * ph) + 0.2 * Math.sin(3 * ph));
+      }
+      const e2 = env(dt, echoDecay);
+      if (e2 > 0.0005) s += echoAmp * e2 * Math.sin(2 * Math.PI * (n.f / 2) * t);
+    }
     const v = Math.max(-1, Math.min(1, s));
     view.setInt16(off, v * 32767, true);
     off += 2;
@@ -86,11 +125,15 @@ export default function HauntedMusic() {
     audio.preload = 'auto';
     audioRef.current = audio;
 
+    // Pause/play + volume in one place so the Settings toggle is obvious.
     const applyVolume = () => {
-      if (!audioRef.current) return;
+      const a = audioRef.current;
+      if (!a) return;
       const { enabled, volume } = getMusicSettings();
-      const target = enabled && !isAudioBusy() ? (volume / 100) * 0.6 : 0;
-      audioRef.current.volume = target;
+      const shouldPlay = enabled && !isAudioBusy();
+      a.volume = shouldPlay ? (volume / 100) * 0.6 : 0;
+      if (shouldPlay && a.paused) a.play().catch(() => {});
+      else if (!shouldPlay && !a.paused) a.pause();
     };
 
     // Browsers require a user gesture to start audio — play on first tap.
