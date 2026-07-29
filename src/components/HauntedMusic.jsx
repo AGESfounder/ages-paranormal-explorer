@@ -8,18 +8,65 @@ import {
   isAudioBusy,
 } from '@/lib/hauntedAudio';
 
-// Generative haunted ambient soundscape (low drone + drifting wind + occasional
-// eerie chimes) that loops forever. Ducks to silence while narration or any
-// recording is active. Volume follows the Settings > Music Volume control.
+// Build a seamless-looping haunted ambient drone as a WAV blob URL and play it
+// through a native <audio loop> element — the most reliable cross-browser way to
+// play background audio (play() on a user tap always works). Ducks to silence
+// while narration or any recording is active. Volume follows Settings.
+
+function writeStr(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+
+function buildHauntedWavUrl() {
+  const sampleRate = 22050;
+  const duration = 6; // seconds — every frequency is an integer # of cycles over
+                      // this duration, so the loop is click-free.
+  const total = sampleRate * duration;
+  const numCh = 1;
+  const bytesPerSample = 2;
+  const blockAlign = numCh * bytesPerSample;
+  const dataSize = total * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  writeStr(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(view, 8, 'WAVE');
+  writeStr(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numCh, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bytesPerSample * 8, true);
+  writeStr(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+  // Partials (freq*duration all integer) + slow tremolo for an eerie swell.
+  const partials = [
+    { f: 130, amp: 0.42 },
+    { f: 196, amp: 0.22 },
+    { f: 261, amp: 0.13 },
+    { f: 392, amp: 0.07 },
+  ];
+  const tremolo = 0.5; // Hz → 3 cycles over 6s
+  let off = 44;
+  for (let i = 0; i < total; i++) {
+    const t = i / sampleRate;
+    let s = 0;
+    for (const p of partials) s += p.amp * Math.sin(2 * Math.PI * p.f * t);
+    s *= 0.75 + 0.25 * Math.sin(2 * Math.PI * tremolo * t);
+    const v = Math.max(-1, Math.min(1, s));
+    view.setInt16(off, v * 32767, true);
+    off += 2;
+  }
+  return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+}
+
 export default function HauntedMusic() {
-  const ctxRef = useRef(null);
-  const masterRef = useRef(null);
-  const chimeTimerRef = useRef(null);
+  const audioRef = useRef(null);
+  const urlRef = useRef(null);
 
   useEffect(() => {
-    let unsubBusy;
-    let unsubMusic;
-
     // Seed the live store from persisted user settings.
     base44.auth.me().then((u) => {
       try {
@@ -33,106 +80,30 @@ export default function HauntedMusic() {
       } catch {}
     }).catch(() => {});
 
-    const buildSoundscape = (ctx, master) => {
-      // Low drone — two detuned sines through a lowpass, with a slow swell LFO.
-      // Frequencies kept above ~120Hz so they're audible on phone/laptop speakers.
-      const droneGain = ctx.createGain();
-      droneGain.gain.value = 0.5;
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 900;
-      lp.Q.value = 1;
-      droneGain.connect(lp);
-      lp.connect(master);
-      const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = 130.81;
-      const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = 196.22;
-      o1.connect(droneGain); o2.connect(droneGain);
-      o1.start(); o2.start();
-      const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.06;
-      const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.08;
-      lfo.connect(lfoGain); lfoGain.connect(droneGain.gain); lfo.start();
+    urlRef.current = buildHauntedWavUrl();
+    const audio = new Audio(urlRef.current);
+    audio.loop = true;
+    audio.preload = 'auto';
+    audioRef.current = audio;
 
-      // Wind — looping filtered noise with a slowly sweeping cutoff.
-      const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-      const noise = ctx.createBufferSource(); noise.buffer = buf; noise.loop = true;
-      const windGain = ctx.createGain(); windGain.gain.value = 0.3;
-      const bp = ctx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 1000; bp.Q.value = 0.7;
-      noise.connect(bp); bp.connect(windGain); windGain.connect(master);
-      noise.start();
-      const windLfo = ctx.createOscillator(); windLfo.type = 'sine'; windLfo.frequency.value = 0.03;
-      const windLfoGain = ctx.createGain(); windLfoGain.gain.value = 400;
-      windLfo.connect(windLfoGain); windLfoGain.connect(bp.frequency); windLfo.start();
-
-      // Eerie chimes — soft pentatonic tones at random intervals.
-      const scheduleChime = () => {
-        const notes = [261.63, 329.63, 392.0, 523.25, 587.33];
-        const f = notes[Math.floor(Math.random() * notes.length)];
-        try {
-          const osc = ctx.createOscillator(); const g = ctx.createGain();
-          osc.type = 'sine'; osc.frequency.value = f;
-          g.gain.setValueAtTime(0, ctx.currentTime);
-          g.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-          g.gain.exponentialRampToValueAtTime(0.0008, ctx.currentTime + 2.6);
-          osc.connect(g); g.connect(master);
-          osc.start(); osc.stop(ctx.currentTime + 2.7);
-        } catch {}
-        chimeTimerRef.current = setTimeout(scheduleChime, 3500 + Math.random() * 6000);
-      };
-      chimeTimerRef.current = setTimeout(scheduleChime, 2500);
-    };
-
-    // Only commit the refs once the full soundscape is built — if building
-    // throws, the next tap retries from scratch instead of staying silent.
-    const ensureContext = () => {
-      if (ctxRef.current && masterRef.current) return ctxRef.current;
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const master = ctx.createGain();
-        master.gain.value = 0;
-        master.connect(ctx.destination);
-        buildSoundscape(ctx, master);
-        ctxRef.current = ctx;
-        masterRef.current = master;
-        return ctx;
-      } catch { return null; }
-    };
-
-    const applyGain = () => {
-      if (!masterRef.current || !ctxRef.current) return;
+    const applyVolume = () => {
+      if (!audioRef.current) return;
       const { enabled, volume } = getMusicSettings();
       const target = enabled && !isAudioBusy() ? (volume / 100) * 0.6 : 0;
-      try {
-        const t = ctxRef.current.currentTime;
-        masterRef.current.gain.cancelScheduledValues(t);
-        masterRef.current.gain.setValueAtTime(masterRef.current.gain.value, t);
-        masterRef.current.gain.linearRampToValueAtTime(target, t + 0.3);
-      } catch {}
+      audioRef.current.volume = target;
     };
 
-    // Browsers require a user gesture to start audio. Retry on EVERY
-    // interaction so a missed/failed first gesture doesn't silence the music.
-    // The silent buffer + resume mirrors the proven narration unlock path.
+    // Browsers require a user gesture to start audio — play on first tap.
     const unlock = () => {
-      const ctx = ensureContext();
-      if (!ctx) return;
-      try { ctx.resume(); } catch {}
-      try {
-        const buf = ctx.createBuffer(1, 1, 8000);
-        const s = ctx.createBufferSource();
-        s.buffer = buf;
-        s.connect(ctx.destination);
-        s.start();
-      } catch {}
-      applyGain();
+      if (!audioRef.current) return;
+      audioRef.current.play().then(applyVolume).catch(() => {});
     };
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('touchstart', unlock);
     window.addEventListener('keydown', unlock);
 
-    unsubBusy = onAudioBusyChange(applyGain);
-    unsubMusic = onMusicSettingsChange(applyGain);
+    const unsubBusy = onAudioBusyChange(applyVolume);
+    const unsubMusic = onMusicSettingsChange(applyVolume);
 
     return () => {
       unsubBusy && unsubBusy();
@@ -140,8 +111,8 @@ export default function HauntedMusic() {
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('touchstart', unlock);
       window.removeEventListener('keydown', unlock);
-      if (chimeTimerRef.current) clearTimeout(chimeTimerRef.current);
-      if (ctxRef.current) { try { ctxRef.current.close(); } catch {} ctxRef.current = null; masterRef.current = null; }
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null; }
     };
   }, []);
 
