@@ -1,27 +1,26 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-// A sparse winding trail of glowing electric-blue footsteps near the top of each page.
-const FOOTPRINTS = [
-  { x: 12, y: 6, r: -8, s: 1 },
-  { x: 18, y: 9, r: 4, s: 0.95 },
-  { x: 14, y: 13, r: -6, s: 0.9 },
-  { x: 20, y: 17, r: 5, s: 0.85 },
-  { x: 80, y: 7, r: 6, s: 0.95 },
-  { x: 86, y: 11, r: -5, s: 0.9 },
-  { x: 82, y: 15, r: 7, s: 0.85 },
-];
+// A horizontal row of footsteps across the top of each page.
+// Each footprint glows in sequence from left to right.
+const COUNT = 7;
+const STEP = 100 / (COUNT + 1);
 
-function Footprint({ x, y, r, s, delay }) {
+function Footprint({ index }) {
+  const x = STEP * (index + 1);
+  const y = 12 + (index % 2 === 0 ? 0 : 3);
+  const total = 5; // seconds for full cycle
+  const delay = (total / COUNT) * index;
+
   return (
     <motion.g
-      transform={`translate(${x} ${y}) rotate(${r}) scale(${s})`}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: [0.15, 0.5, 0.15] }}
-      transition={{ duration: 3.5, repeat: Infinity, delay }}
+      transform={`translate(${x} ${y})`}
+      initial={{ opacity: 0.15 }}
+      animate={{ opacity: [0.15, 0.85, 0.15] }}
+      transition={{ duration: total / COUNT, repeat: Infinity, delay, ease: 'easeInOut' }}
     >
-      <ellipse cx="-2" cy="0" rx="1.6" ry="3" fill="hsl(199,89%,60%)" />
-      <ellipse cx="2" cy="2.4" rx="1.6" ry="3" fill="hsl(199,89%,60%)" />
+      <ellipse cx="-2.2" cy="0" rx="2" ry="3.5" fill="hsl(199,89%,62%)" />
+      <ellipse cx="2.2" cy="2.6" rx="2" ry="3.5" fill="hsl(199,89%,62%)" />
     </motion.g>
   );
 }
@@ -29,13 +28,13 @@ function Footprint({ x, y, r, s, delay }) {
 export default function GhostFootsteps() {
   return (
     <svg
-      viewBox="0 0 100 30"
+      viewBox="0 0 100 24"
       preserveAspectRatio="none"
-      className="absolute top-0 left-0 w-full h-[30%]"
-      style={{ filter: 'drop-shadow(0 0 3px hsl(199,89%,48%,0.6))' }}
+      className="absolute top-0 left-0 w-full h-[24%]"
+      style={{ filter: 'drop-shadow(0 0 4px hsl(199,89%,48%,0.7))' }}
     >
-      {FOOTPRINTS.map((f, i) => (
-        <Footprint key={i} {...f} delay={i * 0.4} />
+      {Array.from({ length: COUNT }).map((_, i) => (
+        <Footprint key={i} index={i} />
       ))}
     </svg>
   );

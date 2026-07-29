@@ -91,7 +91,7 @@ export default function Home() {
               transition={{ delay: 0.2, duration: 0.6 }}
               className="flex items-center justify-center relative"
             >
-              <Tombstone className="w-20 h-20" />
+              <Tombstone className="w-28 h-28" />
               <motion.div
                 className="absolute top-0 right-0"
                 animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}

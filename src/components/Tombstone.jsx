@@ -47,12 +47,12 @@ export default function Tombstone({ className = '' }) {
         {/* Glowing text */}
         <text
           x="50"
-          y="58"
+          y="54"
           textAnchor="middle"
           fontFamily="'Germania One', cursive"
-          fontSize="11"
-          fill="hsl(199,100%,70%)"
-          style={{ filter: 'drop-shadow(0 0 4px hsl(199,89%,48%,0.9))' }}
+          fontSize="15"
+          fill="hsl(199,100%,72%)"
+          style={{ filter: 'drop-shadow(0 0 5px hsl(199,89%,48%,1))' }}
         >
           Energy
         </text>
@@ -61,20 +61,20 @@ export default function Tombstone({ className = '' }) {
           y="74"
           textAnchor="middle"
           fontFamily="'Germania One', cursive"
-          fontSize="11"
-          fill="hsl(199,100%,70%)"
-          style={{ filter: 'drop-shadow(0 0 4px hsl(199,89%,48%,0.9))' }}
+          fontSize="15"
+          fill="hsl(199,100%,72%)"
+          style={{ filter: 'drop-shadow(0 0 5px hsl(199,89%,48%,1))' }}
         >
           Never
         </text>
         <text
           x="50"
-          y="90"
+          y="94"
           textAnchor="middle"
           fontFamily="'Germania One', cursive"
-          fontSize="11"
-          fill="hsl(199,100%,70%)"
-          style={{ filter: 'drop-shadow(0 0 4px hsl(199,89%,48%,0.9))' }}
+          fontSize="15"
+          fill="hsl(199,100%,72%)"
+          style={{ filter: 'drop-shadow(0 0 5px hsl(199,89%,48%,1))' }}
         >
           Dies…
         </text>
