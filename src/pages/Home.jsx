@@ -132,11 +132,7 @@ export default function Home() {
               className="flex items-center justify-center"
             >
               <a href="https://www.ebay.com/usr/ages4u" target="_blank" rel="noopener noreferrer" className="relative flex flex-col items-center group focus:outline-none focus-visible:outline-none">
-                <motion.div
-                  animate={{
-                    filter: ['drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))', 'drop-shadow(0 0 24px hsl(199,89%,48%,0.9)) drop-shadow(0 0 40px hsl(270,40%,50%,0.7))', 'drop-shadow(0 0 14px hsl(199,89%,48%,0.6)) drop-shadow(0 0 28px hsl(270,40%,50%,0.4))']
-                  }}
-                  transition={{ duration: 2.5, repeat: Infinity }}
+                <div
                   className="w-24 h-24 rounded-full relative overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-300"
                   style={{
                     background: 'radial-gradient(circle at 32% 28%, hsla(199,90%,85%,0.85) 0%, hsla(199,80%,60%,0.35) 14%, hsla(210,60%,30%,0.55) 45%, hsla(268,45%,22%,0.85) 78%, hsla(222,55%,12%,1) 100%)',
@@ -168,7 +164,7 @@ export default function Home() {
                   >
                     STORE
                   </motion.span>
-                </motion.div>
+                </div>
                 {/* Crystal ball stand */}
                 <div className="relative flex flex-col items-center -mt-1">
                   <div className="w-7 h-3 rounded-b-md" style={{ background: 'linear-gradient(to bottom, hsl(199,40%,45%), hsl(222,40%,20%))', boxShadow: '0 1px 2px hsla(0,0%,0%,0.6)' }} />
