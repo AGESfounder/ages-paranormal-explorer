@@ -108,7 +108,12 @@ export default function Settings() {
               <p className="text-sm text-foreground">Background Music</p>
               <p className="text-[10px] text-muted-foreground">Haunted music box atmosphere</p>
             </div>
-            <Switch checked={settings.backgroundMusic} onCheckedChange={(v) => { updateSetting('backgroundMusic', v); haunt.setEnabledLive(v); }} />
+            <Switch checked={settings.backgroundMusic} onCheckedChange={(v) => {
+              const next = { ...settings, backgroundMusic: v, backgroundMusicConfigured: true };
+              setSettings(next);
+              haunt.setEnabledLive(v);
+              base44.auth.updateMe({ settings: JSON.stringify(next) }).catch(() => {});
+            }} />
           </div>
           <div className="px-3 pb-3">
             <p className="text-[10px] text-muted-foreground mb-1">Narration Volume</p>

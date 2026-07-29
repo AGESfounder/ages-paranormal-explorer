@@ -37,7 +37,8 @@ export function HauntedAudioProvider({ children }) {
         const u = await base44.auth.me();
         if (!active || !u) return;
         const s = u.settings ? (typeof u.settings === 'string' ? JSON.parse(u.settings) : u.settings) : {};
-        setEnabled(s.backgroundMusic !== undefined ? !!s.backgroundMusic : DEFAULT_ENABLED);
+        // Default ON for everyone until the user explicitly toggles it (backgroundMusicConfigured).
+        setEnabled(s.backgroundMusicConfigured ? !!s.backgroundMusic : DEFAULT_ENABLED);
         setVolume(typeof s.musicVolume === 'number' ? s.musicVolume / 100 : DEFAULT_VOLUME);
       } catch {}
     })();
@@ -73,9 +74,9 @@ export function HauntedAudioProvider({ children }) {
     lp.connect(duck);
 
     const droneGain = ctx.createGain();
-    droneGain.gain.value = 0.16;
+    droneGain.gain.value = 0.22;
     droneGain.connect(lp);
-    [55, 55.5, 82.5].forEach((f, i) => {
+    [110, 130.8, 164.8].forEach((f, i) => {
       const o = ctx.createOscillator();
       o.type = i === 2 ? 'triangle' : 'sine';
       o.frequency.value = f;
@@ -121,6 +122,7 @@ export function HauntedAudioProvider({ children }) {
     nlfo.start();
 
     builtRef.current = true;
+    try { ctx.resume().catch(() => {}); } catch {}
   }, []);
 
   // Build the graph once authenticated & enabled
