@@ -78,7 +78,7 @@ export default function Home() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
-              className="flex items-center justify-center"
+              className="flex items-center justify-center pt-12"
             >
               <h1 className="font-display text-5xl text-primary tracking-wider drop-shadow-[0_0_20px_hsl(199,89%,48%,0.4)] leading-none">
                 AGES
