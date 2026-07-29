@@ -133,6 +133,8 @@ export default function HauntedMusic() {
           setMusicSettings({
             enabled: s.backgroundMusic !== undefined ? s.backgroundMusic : true,
             volume: s.musicVolume !== undefined ? s.musicVolume : 50,
+            hauntedEnabled: s.hauntedMusic !== undefined ? s.hauntedMusic : true,
+            hauntedVolume: s.hauntedMusicVolume !== undefined ? s.hauntedMusicVolume : 50,
           });
         }
       } catch {}
@@ -140,6 +142,7 @@ export default function HauntedMusic() {
 
     currentUrl = buildHauntedWavUrl();
     const audio = new Audio(currentUrl);
+    audio._hauntedMusic = true; // don't let the play-patch acquire the busy bus against itself
     audio.loop = true;
     audio.preload = 'auto';
     currentAudio = audio;
@@ -149,9 +152,9 @@ export default function HauntedMusic() {
     const applyVolume = () => {
       const a = audioRef.current;
       if (!a) return;
-      const { enabled, volume } = getMusicSettings();
-      const shouldPlay = enabled && !isAudioBusy() && !document.hidden;
-      a.volume = shouldPlay ? (volume / 100) * 0.9 : 0;
+      const { hauntedEnabled, hauntedVolume } = getMusicSettings();
+      const shouldPlay = hauntedEnabled && !isAudioBusy() && !document.hidden;
+      a.volume = shouldPlay ? (hauntedVolume / 100) * 0.9 : 0;
       if (shouldPlay && a.paused) a.play().catch(() => {});
       else if (!shouldPlay && !a.paused) a.pause();
     };

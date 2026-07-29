@@ -16,6 +16,8 @@ const defaultSettings = {
   backgroundMusic: true,
   musicVolume: 50,
   narrationVolume: 80,
+  hauntedMusic: true,
+  hauntedMusicVolume: 50,
   darkMode: true,
   offlineDownloads: false,
   locationTracking: true,
@@ -37,10 +39,20 @@ export default function Settings() {
       if (user?.settings) {
         const saved = typeof user.settings === 'string' ? JSON.parse(user.settings) : user.settings;
         setSettings({ ...defaultSettings, ...saved, isAdmin });
-        setMusicSettings({ enabled: saved.backgroundMusic ?? defaultSettings.backgroundMusic, volume: saved.musicVolume ?? defaultSettings.musicVolume });
+        setMusicSettings({
+          enabled: saved.backgroundMusic ?? defaultSettings.backgroundMusic,
+          volume: saved.musicVolume ?? defaultSettings.musicVolume,
+          hauntedEnabled: saved.hauntedMusic ?? defaultSettings.hauntedMusic,
+          hauntedVolume: saved.hauntedMusicVolume ?? defaultSettings.hauntedMusicVolume,
+        });
       } else {
         setSettings(prev => ({ ...prev, isAdmin }));
-        setMusicSettings({ enabled: defaultSettings.backgroundMusic, volume: defaultSettings.musicVolume });
+        setMusicSettings({
+          enabled: defaultSettings.backgroundMusic,
+          volume: defaultSettings.musicVolume,
+          hauntedEnabled: defaultSettings.hauntedMusic,
+          hauntedVolume: defaultSettings.hauntedMusicVolume,
+        });
       }
     } catch (e) { /* use defaults */ }
     setLoaded(true);
@@ -51,6 +63,8 @@ export default function Settings() {
     setSettings(updated);
     if (key === 'backgroundMusic') setMusicSettings({ enabled: value });
     if (key === 'musicVolume') setMusicSettings({ volume: value });
+    if (key === 'hauntedMusic') setMusicSettings({ hauntedEnabled: value });
+    if (key === 'hauntedMusicVolume') setMusicSettings({ hauntedVolume: value });
     try {
       await base44.auth.updateMe({ settings: JSON.stringify(updated) });
     } catch (e) { /* silently fail */ }
@@ -108,18 +122,29 @@ export default function Settings() {
           </div>
           <div className="p-3 flex items-center justify-between">
             <div>
-              <p className="text-sm text-foreground">Background Music</p>
-              <p className="text-[10px] text-muted-foreground">Haunted music box atmosphere</p>
+              <p className="text-sm text-foreground">Narration Music</p>
+              <p className="text-[10px] text-muted-foreground">Chimes during voice narration</p>
             </div>
             <Switch checked={settings.backgroundMusic} onCheckedChange={() => toggle('backgroundMusic')} />
           </div>
           <div className="px-3 pb-3">
-            <p className="text-[10px] text-muted-foreground mb-1">Narration Volume</p>
-            <input type="range" min="0" max="100" value={settings.narrationVolume} onChange={e => updateSetting('narrationVolume', Number(e.target.value))} className="w-full accent-primary" />
+            <p className="text-[10px] text-muted-foreground mb-1">Narration Music Volume</p>
+            <input type="range" min="0" max="100" value={settings.musicVolume} onChange={e => updateSetting('musicVolume', Number(e.target.value))} className="w-full accent-primary" />
           </div>
           <div className="px-3 pb-3">
-            <p className="text-[10px] text-muted-foreground mb-1">Music Volume</p>
-            <input type="range" min="0" max="100" value={settings.musicVolume} onChange={e => updateSetting('musicVolume', Number(e.target.value))} className="w-full accent-primary" />
+            <p className="text-[10px] text-muted-foreground mb-1">Narration Voice Volume</p>
+            <input type="range" min="0" max="100" value={settings.narrationVolume} onChange={e => updateSetting('narrationVolume', Number(e.target.value))} className="w-full accent-primary" />
+          </div>
+          <div className="p-3 flex items-center justify-between border-t border-border/30">
+            <div>
+              <p className="text-sm text-foreground">Haunted Ambience</p>
+              <p className="text-[10px] text-muted-foreground">Background haunted music box</p>
+            </div>
+            <Switch checked={settings.hauntedMusic} onCheckedChange={() => toggle('hauntedMusic')} />
+          </div>
+          <div className="px-3 pb-3">
+            <p className="text-[10px] text-muted-foreground mb-1">Haunted Ambience Volume</p>
+            <input type="range" min="0" max="100" value={settings.hauntedMusicVolume} onChange={e => updateSetting('hauntedMusicVolume', Number(e.target.value))} className="w-full accent-primary" />
           </div>
         </div>
 

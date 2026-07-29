@@ -29,7 +29,7 @@ function notifyBusy() {
   busyListeners.forEach((l) => l(b));
 }
 
-let musicState = { enabled: true, volume: 50 };
+let musicState = { enabled: true, volume: 50, hauntedEnabled: true, hauntedVolume: 50 };
 const musicListeners = new Set();
 export function getMusicSettings() {
   return musicState;
@@ -65,4 +65,30 @@ if (typeof window !== 'undefined' && window.MediaRecorder && !window.MediaRecord
     return _start.apply(this, args);
   };
   window.MediaRecorder.__hauntedPatched = true;
+}
+
+// Patch HTMLMediaElement playback so any other audio/video (e.g. an evidence
+// recording played in the journal) signals the busy bus — the haunted ambience
+// pauses while it plays and resumes when it stops. The haunted player marks its
+// own element with _hauntedMusic so it doesn't acquire against itself.
+if (typeof window !== 'undefined' && window.HTMLMediaElement && !HTMLMediaElement.prototype.__hauntedPatched) {
+  const _play = HTMLMediaElement.prototype.play;
+  const playing = new WeakSet();
+  HTMLMediaElement.prototype.play = function (...args) {
+    if (!this._hauntedMusic && !playing.has(this)) {
+      playing.add(this);
+      try { audioAcquire(); } catch {}
+      const releaseOnce = () => {
+        if (playing.has(this)) {
+          playing.delete(this);
+          try { audioRelease(); } catch {}
+        }
+      };
+      try { this.addEventListener('pause', releaseOnce, { once: true }); } catch {}
+      try { this.addEventListener('ended', releaseOnce, { once: true }); } catch {}
+      try { this.addEventListener('error', releaseOnce, { once: true }); } catch {}
+    }
+    return _play.apply(this, args);
+  };
+  HTMLMediaElement.prototype.__hauntedPatched = true;
 }

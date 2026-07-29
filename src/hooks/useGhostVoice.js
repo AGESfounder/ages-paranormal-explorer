@@ -41,7 +41,7 @@ export default function useGhostVoice() {
       osc.type = 'sine';
       osc.frequency.value = freq;
       oscGain.gain.setValueAtTime(0, ctx.currentTime);
-      oscGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.05);
+      oscGain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.05);
       oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
       osc.connect(oscGain);
       oscGain.connect(masterGain);
@@ -54,7 +54,7 @@ export default function useGhostVoice() {
       osc2.type = 'sine';
       osc2.frequency.value = freq * 1.01; // slight detune
       osc2Gain.gain.setValueAtTime(0, ctx.currentTime);
-      osc2Gain.gain.linearRampToValueAtTime(0.03, ctx.currentTime + 0.03);
+      osc2Gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.03);
       osc2Gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
       osc2.connect(osc2Gain);
       osc2Gain.connect(masterGain);
@@ -72,7 +72,7 @@ export default function useGhostVoice() {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       ctxRef.current = ctx;
       const masterGain = ctx.createGain();
-      masterGain.gain.value = (volume / 100) * 0.20;
+      masterGain.gain.value = (volume / 100) * 0.6;
       masterGain.connect(ctx.destination);
       gainRef.current = masterGain;
 
@@ -127,6 +127,7 @@ export default function useGhostVoice() {
     } catch {}
     try {
       const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
+      a._hauntedMusic = true; // silent unlock buffer — don't pause the ambience
       a.volume = 0;
       a.play().then(() => a.pause()).catch(() => {});
     } catch {}
