@@ -26,7 +26,7 @@ const SECTIONS = [
   },
   {
     h: 'Purchases',
-    p: 'Physical merchandise sold in the store is processed by Base44 Payments. App Store terms and applicable law govern your purchases. Digital subscriptions, if offered, are billed through the platform (Apple App Store / Google Play).',
+    p: 'AGES does not offer in-app purchases. The Store button links to our external online shop (hosted on eBay), where all product purchases are completed outside the App. Payments, shipping, returns, and disputes for merchandise are handled by that external marketplace under its own terms; AGES is not a party to those transactions. No digital subscriptions are sold within the App.',
   },
   {
     h: 'Account Termination',

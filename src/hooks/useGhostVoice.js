@@ -160,8 +160,9 @@ export default function useGhostVoice() {
           srcRef.current = sNode;
           setIsGenerating(false);
           setIsSpeaking(true);
-          sNode.onended = () => { setIsSpeaking(false); stopEerieBackground(); srcRef.current = null; };
+          sNode.onended = () => { setIsSpeaking(false); stopEerieBackground(); srcRef.current = null; window.dispatchEvent(new CustomEvent('ages-audio-stop')); };
           sNode.start();
+          window.dispatchEvent(new CustomEvent('ages-audio-start'));
           return;
         } catch {}
       }
@@ -180,18 +181,22 @@ export default function useGhostVoice() {
         setIsSpeaking(false);
         stopEerieBackground();
         audioRef.current = null;
+        window.dispatchEvent(new CustomEvent('ages-audio-stop'));
       };
       audio.onerror = () => {
         setIsSpeaking(false);
         stopEerieBackground();
         audioRef.current = null;
+        window.dispatchEvent(new CustomEvent('ages-audio-stop'));
       };
 
       await audio.play();
+      window.dispatchEvent(new CustomEvent('ages-audio-start'));
     } catch (err) {
       setIsGenerating(false);
       setIsSpeaking(false);
       stopEerieBackground();
+      window.dispatchEvent(new CustomEvent('ages-audio-stop'));
     }
   }, [isSpeaking, isGenerating]);
 
@@ -205,6 +210,7 @@ export default function useGhostVoice() {
     stopEerieBackground();
     setIsSpeaking(false);
     setIsGenerating(false);
+    window.dispatchEvent(new CustomEvent('ages-audio-stop'));
   }, []);
 
   const narrate = useCallback((text, opts = {}) => {
