@@ -23,6 +23,8 @@ export function HauntedAudioProvider({ children }) {
   const mediaEls = useRef(new Set());
   const recCount = useRef(0);
   const voiceCount = useRef(0);
+  const melodyTimerRef = useRef(null);
+  const chimeRef = useRef(null);
   const enabledRef = useRef(enabled);
   const volumeRef = useRef(volume);
   useEffect(() => { enabledRef.current = enabled; }, [enabled]);
@@ -68,58 +70,54 @@ export function HauntedAudioProvider({ children }) {
     masterRef.current = master;
     duckRef.current = duck;
 
+    // Low drone (atmosphere)
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 700;
+    lp.frequency.value = 900;
     lp.connect(duck);
-
     const droneGain = ctx.createGain();
-    droneGain.gain.value = 0.3;
+    droneGain.gain.value = 0.18;
     droneGain.connect(lp);
-    [110, 130.8, 164.8].forEach((f, i) => {
+    [146.8, 174.6, 220].forEach((f) => {
       const o = ctx.createOscillator();
-      o.type = i === 2 ? 'triangle' : 'sine';
+      o.type = 'sine';
       o.frequency.value = f;
-      const g = ctx.createGain();
-      g.gain.value = i === 2 ? 0.5 : 1;
-      o.connect(g);
-      g.connect(droneGain);
+      o.connect(droneGain);
       o.start();
     });
-
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
     lfo.frequency.value = 0.06;
     const lfoG = ctx.createGain();
-    lfoG.gain.value = 0.05;
+    lfoG.gain.value = 0.04;
     lfo.connect(lfoG);
     lfoG.connect(droneGain.gain);
     lfo.start();
 
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const noise = ctx.createBufferSource();
-    noise.buffer = buf;
-    noise.loop = true;
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 380;
-    bp.Q.value = 0.6;
-    const nGain = ctx.createGain();
-    nGain.gain.value = 0.012;
-    noise.connect(bp);
-    bp.connect(nGain);
-    nGain.connect(duck);
-    noise.start();
-    const nlfo = ctx.createOscillator();
-    nlfo.type = 'sine';
-    nlfo.frequency.value = 0.08;
-    const nlfoG = ctx.createGain();
-    nlfoG.gain.value = 0.008;
-    nlfo.connect(nlfoG);
-    nlfoG.connect(nGain.gain);
-    nlfo.start();
+    // Sparse pentatonic chime melody (haunted bells) — clearly audible
+    const scale = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33];
+    const playChime = () => {
+      try {
+        const freq = scale[Math.floor(Math.random() * scale.length)];
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        g.gain.setValueAtTime(0, ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0.14, ctx.currentTime + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.4);
+        osc.connect(g);
+        g.connect(duck);
+        osc.start();
+        osc.stop(ctx.currentTime + 2.5);
+      } catch {}
+    };
+    chimeRef.current = playChime;
+    const scheduleChime = () => {
+      playChime();
+      melodyTimerRef.current = setTimeout(scheduleChime, 2500 + Math.random() * 3500);
+    };
+    melodyTimerRef.current = setTimeout(scheduleChime, 1200);
 
     builtRef.current = true;
     try { ctx.resume().catch(() => {}); } catch {}
@@ -140,6 +138,7 @@ export function HauntedAudioProvider({ children }) {
       if (ctx.state === 'suspended') ctx.resume();
       if (masterRef.current && enabledRef.current) {
         masterRef.current.gain.setTargetAtTime(volumeRef.current, ctx.currentTime, 0.3);
+        if (chimeRef.current) chimeRef.current();
       }
     };
     window.addEventListener('pointerdown', onGesture);
@@ -214,6 +213,7 @@ export function HauntedAudioProvider({ children }) {
 
   // Close context on unmount
   useEffect(() => () => {
+    if (melodyTimerRef.current) clearTimeout(melodyTimerRef.current);
     if (ctxRef.current) { try { ctxRef.current.close(); } catch {} }
   }, []);
 
