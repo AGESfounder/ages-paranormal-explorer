@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X, Medal, Globe, CalendarDays, Flame, Map } from 'lucide-react';
+import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X, Medal, Globe, CalendarDays, Flame } from 'lucide-react';
+import USMap from '../components/icons/USMap';
 import { Link } from 'react-router-dom';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
@@ -11,7 +12,7 @@ const achievements = [
   { id: 'first',    name: 'First Investigation', desc: 'Complete your first investigation',           icon: Ghost       },
   { id: '10_inv',   name: 'Seasoned Explorer',   desc: 'Complete 10 investigations',                  icon: Shield      },
   { id: '50_inv',   name: 'Master Investigator', desc: 'Complete 50 investigations',                  icon: Trophy      },
-  { id: 'all50',    name: 'All 50 States',        desc: 'Investigate in every U.S. state',             icon: Map         },
+  { id: 'all50',    name: 'All 50 States',        desc: 'Investigate in every U.S. state',             icon: USMap         },
   { id: 'abroad',   name: 'Toured Abroad',        desc: 'Complete an international ghost tour',        icon: Globe       },
   { id: '12for12',  name: '12 for 12',            desc: 'Complete at least 1 tour every month for a year', icon: CalendarDays },
   { id: 'streak5',  name: 'On Fire',              desc: 'Investigate 5 locations in a single month',  icon: Flame       },
