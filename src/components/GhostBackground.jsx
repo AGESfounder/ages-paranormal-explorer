@@ -26,11 +26,11 @@ export default function GhostBackground() {
 
       {/* Foggy moonlit cemetery scene (kept dim so content stays readable) */}
       <div
-        className="absolute inset-0 bg-cover bg-center opacity-20"
+        className="absolute inset-0 bg-cover bg-center opacity-35"
         style={{ backgroundImage: `url(${CEMETERY_IMG})` }}
       />
       {/* Fade the scene into the page background so it reads as atmosphere, not a photo */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/40 to-background" />
+      <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/20 to-background/80" />
       <div
         className="absolute inset-0"
         style={{ background: 'radial-gradient(ellipse at center, transparent 40%, hsla(222,47%,4%,0.85) 100%)' }}
