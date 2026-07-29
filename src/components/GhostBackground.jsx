@@ -26,7 +26,7 @@ export default function GhostBackground() {
       <AnimatePresence>
         {lightning && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.15 }} exit={{ opacity: 0 }} transition={{ duration: 0.05 }} className="absolute inset-0 bg-cyan-glow" />}
       </AnimatePresence>
-      <div className="absolute inset-0 opacity-60">
+      <div className="absolute inset-0">
         <GhostFootsteps />
       </div>
       <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at center, transparent 30%, hsla(222,47%,4%,0.8) 100%)' }} />

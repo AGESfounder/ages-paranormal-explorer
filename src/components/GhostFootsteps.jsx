@@ -23,8 +23,11 @@ function Footprint({ left, top, size, rotate, index }) {
     <motion.div
       className="absolute"
       style={{ left: `${left}%`, top: `${top}%`, width: size, height: size * 0.5 }}
-      initial={{ opacity: 0.12 }}
-      animate={{ opacity: [0.12, 0.12, 0.95, 0.12, 0.12] }}
+      initial={{ opacity: 0.14 }}
+      animate={{
+        opacity: [0.14, 0.14, 1, 0.14, 0.14],
+        scale: [1, 1, 1.25, 1, 1],
+      }}
       transition={{
         duration: CYCLE,
         repeat: Infinity,
@@ -39,7 +42,7 @@ function Footprint({ left, top, size, rotate, index }) {
       }}
     >
       <svg viewBox="-8 -4 16 8" width="100%" height="100%" style={{ transform: `rotate(${rotate}deg)` }}>
-        <path d={SHOE_PATH} fill="hsl(199,89%,62%)" />
+        <path d={SHOE_PATH} fill="hsl(199,100%,70%)" />
       </svg>
     </motion.div>
   );
@@ -49,7 +52,7 @@ export default function GhostFootsteps() {
   return (
     <div
       className="absolute top-0 left-0 w-full h-[18%] pointer-events-none"
-      style={{ filter: 'drop-shadow(0 0 5px hsl(199,89%,48%,0.85))' }}
+      style={{ filter: 'drop-shadow(0 0 8px hsl(199,89%,55%,1)) drop-shadow(0 0 16px hsl(199,89%,60%,0.8))' }}
     >
       {STEPS.map((s, i) => (
         <Footprint key={i} {...s} index={i} />
