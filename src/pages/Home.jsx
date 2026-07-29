@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Map, Navigation, Heart, BookOpen, Wrench, Settings, Zap, Radio, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, Square, Play } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
-import HauntedHouse from '../components/HauntedHouse';
+import Tombstone from '../components/Tombstone';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
 import HauntedLocations from '../components/HauntedLocations';
@@ -91,7 +91,7 @@ export default function Home() {
               transition={{ delay: 0.2, duration: 0.6 }}
               className="flex items-center justify-center relative"
             >
-              <HauntedHouse className="w-20 h-20" />
+              <Tombstone className="w-20 h-20" />
               <motion.div
                 className="absolute top-0 right-0"
                 animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}

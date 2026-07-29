@@ -1,22 +1,15 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-// A winding trail of glowing electric-blue footsteps used as ambient background decor.
-// Rendered inside GhostBackground so it appears subtly across all pages.
+// A sparse winding trail of glowing electric-blue footsteps near the top of each page.
 const FOOTPRINTS = [
-  { x: 8, y: 16, r: -8, s: 1 },
-  { x: 14, y: 26, r: 6, s: 0.95 },
-  { x: 10, y: 38, r: -4, s: 0.9 },
-  { x: 18, y: 50, r: 8, s: 0.85 },
-  { x: 12, y: 62, r: -6, s: 0.8 },
-  { x: 20, y: 74, r: 5, s: 0.75 },
-  { x: 16, y: 86, r: -3, s: 0.7 },
-  { x: 82, y: 20, r: 6, s: 0.95 },
-  { x: 88, y: 32, r: -5, s: 0.9 },
-  { x: 84, y: 44, r: 7, s: 0.85 },
-  { x: 90, y: 56, r: -4, s: 0.8 },
-  { x: 84, y: 68, r: 6, s: 0.75 },
-  { x: 88, y: 80, r: -7, s: 0.7 },
+  { x: 12, y: 6, r: -8, s: 1 },
+  { x: 18, y: 9, r: 4, s: 0.95 },
+  { x: 14, y: 13, r: -6, s: 0.9 },
+  { x: 20, y: 17, r: 5, s: 0.85 },
+  { x: 80, y: 7, r: 6, s: 0.95 },
+  { x: 86, y: 11, r: -5, s: 0.9 },
+  { x: 82, y: 15, r: 7, s: 0.85 },
 ];
 
 function Footprint({ x, y, r, s, delay }) {
@@ -27,9 +20,7 @@ function Footprint({ x, y, r, s, delay }) {
       animate={{ opacity: [0.15, 0.5, 0.15] }}
       transition={{ duration: 3.5, repeat: Infinity, delay }}
     >
-      {/* Left foot */}
       <ellipse cx="-2" cy="0" rx="1.6" ry="3" fill="hsl(199,89%,60%)" />
-      {/* Right foot */}
       <ellipse cx="2" cy="2.4" rx="1.6" ry="3" fill="hsl(199,89%,60%)" />
     </motion.g>
   );
@@ -38,9 +29,9 @@ function Footprint({ x, y, r, s, delay }) {
 export default function GhostFootsteps() {
   return (
     <svg
-      viewBox="0 0 100 100"
+      viewBox="0 0 100 30"
       preserveAspectRatio="none"
-      className="absolute inset-0 w-full h-full"
+      className="absolute top-0 left-0 w-full h-[30%]"
       style={{ filter: 'drop-shadow(0 0 3px hsl(199,89%,48%,0.6))' }}
     >
       {FOOTPRINTS.map((f, i) => (
