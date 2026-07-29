@@ -113,6 +113,18 @@
   h1, h2, h3, h4, h5, h6, .font-heading, .font-display {
     text-shadow: 0 0 10px hsl(199 89% 48% / 0.22), 0 0 22px hsl(199 89% 48% / 0.10);
   }
+
+  /* 3D extruded pop for hero display text (SGT / AGES) */
+  .text-3d-pop {
+    text-shadow:
+      1px 1px 0 hsl(199 89% 44%),
+      2px 2px 0 hsl(199 89% 38%),
+      3px 3px 0 hsl(199 89% 32%),
+      4px 4px 0 hsl(199 89% 26%),
+      5px 5px 0 hsl(199 89% 20%),
+      6px 6px 0 hsl(199 89% 14%),
+      7px 7px 18px hsl(199 89% 48% / 0.55);
+  }
 }
 
 /* Leaflet dark popup styling */

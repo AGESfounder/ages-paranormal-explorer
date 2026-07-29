@@ -59,7 +59,7 @@ export default function Home() {
           transition={{ duration: 0.6 }}
           className="w-full pt-[max(2.5rem,env(safe-area-inset-top))] pb-4 px-6 text-center"
         >
-          <h1 className="font-display text-4xl text-primary tracking-[0.2em] drop-shadow-[0_0_18px_hsl(199,89%,48%,0.5)] leading-none">
+          <h1 className="font-display text-4xl text-primary tracking-[0.2em] text-3d-pop leading-none">
             SGT
           </h1>
           <p className="mt-2 font-heading text-sm tracking-[0.25em] uppercase text-primary/80 drop-shadow-[0_0_10px_hsl(199,89%,48%,0.3)]">
@@ -81,7 +81,7 @@ export default function Home() {
               transition={{ delay: 0.2, duration: 0.6 }}
               className="flex items-center justify-center pt-12"
             >
-              <h1 className="font-display text-5xl text-primary tracking-wider drop-shadow-[0_0_20px_hsl(199,89%,48%,0.4)] leading-none">
+              <h1 className="font-display text-5xl text-primary tracking-wider text-3d-pop leading-none">
                 AGES
               </h1>
             </motion.div>
