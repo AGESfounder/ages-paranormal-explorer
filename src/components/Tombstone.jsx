@@ -47,7 +47,7 @@ export default function Tombstone({ className = '' }) {
         {/* Glowing text */}
         <text
           x="50"
-          y="54"
+          y="50"
           textAnchor="middle"
           fontFamily="'Germania One', cursive"
           fontSize="15"
@@ -58,7 +58,7 @@ export default function Tombstone({ className = '' }) {
         </text>
         <text
           x="50"
-          y="74"
+          y="70"
           textAnchor="middle"
           fontFamily="'Germania One', cursive"
           fontSize="15"
@@ -69,7 +69,7 @@ export default function Tombstone({ className = '' }) {
         </text>
         <text
           x="50"
-          y="94"
+          y="90"
           textAnchor="middle"
           fontFamily="'Germania One', cursive"
           fontSize="15"
