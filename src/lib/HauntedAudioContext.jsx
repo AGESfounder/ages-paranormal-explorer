@@ -23,6 +23,10 @@ export function HauntedAudioProvider({ children }) {
   const mediaEls = useRef(new Set());
   const recCount = useRef(0);
   const voiceCount = useRef(0);
+  const enabledRef = useRef(enabled);
+  const volumeRef = useRef(volume);
+  useEffect(() => { enabledRef.current = enabled; }, [enabled]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
 
   // Initialize enabled/volume from saved user settings
   useEffect(() => {
@@ -124,12 +128,16 @@ export function HauntedAudioProvider({ children }) {
     if (isAuthenticated && enabled && !builtRef.current) build();
   }, [isAuthenticated, enabled, build]);
 
-  // Resume the (suspended) context on the first user gesture
+  // Resume the (suspended) context on the first user gesture and fade in
   useEffect(() => {
-    if (!isAuthenticated || !enabled) return;
+    if (!isAuthenticated) return;
     const onGesture = () => {
       const ctx = ctxRef.current;
-      if (ctx && ctx.state === 'suspended') ctx.resume();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      if (masterRef.current && enabledRef.current) {
+        masterRef.current.gain.setTargetAtTime(volumeRef.current, ctx.currentTime, 1.0);
+      }
     };
     window.addEventListener('pointerdown', onGesture);
     window.addEventListener('keydown', onGesture);
@@ -139,14 +147,14 @@ export function HauntedAudioProvider({ children }) {
       window.removeEventListener('keydown', onGesture);
       window.removeEventListener('touchstart', onGesture);
     };
-  }, [isAuthenticated, enabled]);
+  }, [isAuthenticated]);
 
-  // Master gain follows enabled + volume
+  // Master gain follows enabled + volume (also after the graph is built)
   useEffect(() => {
     const ctx = ctxRef.current;
     if (!ctx || !masterRef.current) return;
     masterRef.current.gain.setTargetAtTime(enabled ? volume : 0, ctx.currentTime, 0.5);
-  }, [enabled, volume]);
+  }, [isAuthenticated, enabled, volume]);
 
   // Ducking: media elements, MediaRecorder, ghost-voice narration
   useEffect(() => {

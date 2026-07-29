@@ -26,7 +26,7 @@ const SECTIONS = [
   },
   {
     h: 'Purchases',
-    p: 'AGES does not offer in-app purchases. The Store button links to our external online shop (hosted on eBay), where all product purchases are completed outside the App. Payments, shipping, returns, and disputes for merchandise are handled by that external marketplace under its own terms; AGES is not a party to those transactions. No digital subscriptions are sold within the App.',
+    p: 'AGES does not process product sales within the App. The Store button links to our external online shop (hosted on eBay), where all product purchases are completed outside the App. Payments, shipping, returns, and disputes for merchandise are handled by that external marketplace under its own terms; AGES is not a party to those transactions. Digital subscriptions or in-app purchases, if offered, are billed through the platform (Apple App Store / Google Play) and governed by their terms.',
   },
   {
     h: 'Account Termination',
