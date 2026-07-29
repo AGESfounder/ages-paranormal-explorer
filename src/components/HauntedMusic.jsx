@@ -148,8 +148,32 @@ export default function HauntedMusic() {
     audio._hauntedMusic = true; // don't let the busy-bus listeners acquire against itself
     audio.loop = true;
     audio.preload = 'auto';
+    audio.volume = 0; // silent until the gain node takes over
     window.__hauntedAudioEl = audio;
     audioRef.current = audio;
+
+    // Route through a Web Audio GainNode for reliable volume control — the
+    // element's .volume property can be unreliable, but a gain node gives
+    // precise, immediate control. Created lazily on the first user gesture
+    // (browsers require a gesture to start an AudioContext).
+    let audioCtx = null;
+    let gainNode = null;
+    let mediaSrc = null;
+    const setupWebAudio = () => {
+      if (audioCtx) return;
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        gainNode = audioCtx.createGain();
+        const { hauntedEnabled, hauntedVolume } = getMusicSettings();
+        const shouldPlay = hauntedEnabled && !isAudioBusy() && !document.hidden;
+        gainNode.gain.value = shouldPlay ? hauntedVolume / 100 : 0;
+        mediaSrc = audioCtx.createMediaElementSource(audio);
+        mediaSrc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+      } catch (e) {
+        audioCtx = null; gainNode = null; mediaSrc = null;
+      }
+    };
 
     // Pause/play + volume in one place so the Settings toggle is obvious.
     const applyVolume = () => {
@@ -157,7 +181,13 @@ export default function HauntedMusic() {
       if (!a) return;
       const { hauntedEnabled, hauntedVolume } = getMusicSettings();
       const shouldPlay = hauntedEnabled && !isAudioBusy() && !document.hidden;
-      a.volume = shouldPlay ? (hauntedVolume / 100) * 0.9 : 0;
+      const vol = shouldPlay ? hauntedVolume / 100 : 0;
+      if (gainNode) {
+        a.volume = 1; // element at full; the gain node controls the level
+        gainNode.gain.value = vol;
+      } else {
+        a.volume = vol * 0.9; // fallback before Web Audio is set up
+      }
       if (shouldPlay && a.paused) a.play().catch(() => {});
       else if (!shouldPlay && !a.paused) a.pause();
     };
@@ -165,6 +195,8 @@ export default function HauntedMusic() {
     // Browsers require a user gesture to start audio — play on first tap.
     const unlock = () => {
       if (!audioRef.current) return;
+      setupWebAudio();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
       audioRef.current.play().then(applyVolume).catch(() => {});
     };
     // Stop playback when the app is backgrounded / closed.
@@ -194,6 +226,9 @@ export default function HauntedMusic() {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', onVisibility);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (mediaSrc) { try { mediaSrc.disconnect(); } catch {} }
+      if (gainNode) { try { gainNode.disconnect(); } catch {} }
+      if (audioCtx) { try { audioCtx.close(); } catch {} }
       if (window.__hauntedAudioEl === audio) window.__hauntedAudioEl = null;
       if (window.__hauntedAudioUrl) { try { URL.revokeObjectURL(window.__hauntedAudioUrl); } catch {} window.__hauntedAudioUrl = null; }
     };
