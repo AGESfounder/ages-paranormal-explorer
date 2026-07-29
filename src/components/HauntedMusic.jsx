@@ -19,7 +19,6 @@ export default function HauntedMusic() {
   useEffect(() => {
     let unsubBusy;
     let unsubMusic;
-    let unlocked = false;
 
     // Seed the live store from persisted user settings.
     base44.auth.me().then((u) => {
@@ -83,16 +82,18 @@ export default function HauntedMusic() {
       chimeTimerRef.current = setTimeout(scheduleChime, 4000);
     };
 
+    // Only commit the refs once the full soundscape is built — if building
+    // throws, the next tap retries from scratch instead of staying silent.
     const ensureContext = () => {
-      if (ctxRef.current) return ctxRef.current;
+      if (ctxRef.current && masterRef.current) return ctxRef.current;
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        ctxRef.current = ctx;
         const master = ctx.createGain();
         master.gain.value = 0;
         master.connect(ctx.destination);
-        masterRef.current = master;
         buildSoundscape(ctx, master);
+        ctxRef.current = ctx;
+        masterRef.current = master;
         return ctx;
       } catch { return null; }
     };
@@ -102,23 +103,20 @@ export default function HauntedMusic() {
       const { enabled, volume } = getMusicSettings();
       const target = enabled && !isAudioBusy() ? (volume / 100) * 0.5 : 0;
       try {
-        masterRef.current.gain.cancelScheduledValues(ctxRef.current.currentTime);
-        masterRef.current.gain.setTargetAtTime(target, ctxRef.current.currentTime, 0.4);
+        const t = ctxRef.current.currentTime;
+        masterRef.current.gain.cancelScheduledValues(t);
+        masterRef.current.gain.setValueAtTime(masterRef.current.gain.value, t);
+        masterRef.current.gain.linearRampToValueAtTime(target, t + 0.3);
       } catch {}
     };
 
-    // Browsers require a user gesture to start audio — resume on first interaction.
+    // Browsers require a user gesture to start audio. Retry on EVERY
+    // interaction so a missed/failed first gesture doesn't silence the music.
     const unlock = () => {
-      if (unlocked) return;
-      unlocked = true;
       const ctx = ensureContext();
-      if (ctx) {
-        if (ctx.state === 'suspended') ctx.resume().then(applyGain).catch(() => {});
-        else applyGain();
-      }
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('touchstart', unlock);
-      window.removeEventListener('keydown', unlock);
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume().then(applyGain).catch(() => {});
+      else applyGain();
     };
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('touchstart', unlock);
