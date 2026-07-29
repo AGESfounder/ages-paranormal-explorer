@@ -154,3 +154,20 @@
   color: hsl(215 20% 40%) !important;
   font-size: 9px !important;
 }
+
+/* Subtle tap feedback for interactive elements (additive, no layout change) */
+@layer base {
+  a:active, button:active:not(:disabled), [role="button"]:active {
+    transform: scale(0.97);
+  }
+}
+
+/* Respect users' reduced-motion preference (disables looping animations) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
