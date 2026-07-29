@@ -67,28 +67,32 @@ if (typeof window !== 'undefined' && window.MediaRecorder && !window.MediaRecord
   window.MediaRecorder.__hauntedPatched = true;
 }
 
-// Patch HTMLMediaElement playback so any other audio/video (e.g. an evidence
+// Document-level capture listeners: any <audio>/<video> (e.g. an evidence
 // recording played in the journal) signals the busy bus — the haunted ambience
-// pauses while it plays and resumes when it stops. The haunted player marks its
-// own element with _hauntedMusic so it doesn't acquire against itself.
-if (typeof window !== 'undefined' && window.HTMLMediaElement && !HTMLMediaElement.prototype.__hauntedPatched) {
-  const _play = HTMLMediaElement.prototype.play;
-  const playing = new WeakSet();
-  HTMLMediaElement.prototype.play = function (...args) {
-    if (!this._hauntedMusic && !playing.has(this)) {
-      playing.add(this);
+// pauses while it plays and resumes when it stops. Using the capture phase
+// catches native-controls play buttons that may bypass a prototype patch.
+// The haunted player's own element is marked _hauntedMusic and skipped.
+if (typeof window !== 'undefined' && !window.__hauntedMediaDelegated) {
+  const playingMedia = new WeakSet();
+  const onPlay = (e) => {
+    const el = e.target;
+    if (!el || el._hauntedMusic || !(el instanceof HTMLMediaElement)) return;
+    if (!playingMedia.has(el)) {
+      playingMedia.add(el);
       try { audioAcquire(); } catch {}
-      const releaseOnce = () => {
-        if (playing.has(this)) {
-          playing.delete(this);
-          try { audioRelease(); } catch {}
-        }
-      };
-      try { this.addEventListener('pause', releaseOnce, { once: true }); } catch {}
-      try { this.addEventListener('ended', releaseOnce, { once: true }); } catch {}
-      try { this.addEventListener('error', releaseOnce, { once: true }); } catch {}
     }
-    return _play.apply(this, args);
   };
-  HTMLMediaElement.prototype.__hauntedPatched = true;
+  const onStop = (e) => {
+    const el = e.target;
+    if (!el || el._hauntedMusic || !(el instanceof HTMLMediaElement)) return;
+    if (playingMedia.has(el)) {
+      playingMedia.delete(el);
+      try { audioRelease(); } catch {}
+    }
+  };
+  document.addEventListener('play', onPlay, true);
+  document.addEventListener('pause', onStop, true);
+  document.addEventListener('ended', onStop, true);
+  document.addEventListener('error', onStop, true);
+  window.__hauntedMediaDelegated = true;
 }

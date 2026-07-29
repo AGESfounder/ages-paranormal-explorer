@@ -8,10 +8,10 @@ import {
   isAudioBusy,
 } from '@/lib/hauntedAudio';
 
-// Module-level singleton: guarantees only one audio element ever exists, even
-// across hot-reloads (a stale player from a previous mount is paused first).
-let currentAudio = null;
-let currentUrl = null;
+// Window-level singleton: survives HMR module re-evaluation so a stale player
+// from a previous mount is paused first (module-level vars reset on HMR).
+function getStaleAudio() { return window.__hauntedAudioEl || null; }
+function getStaleUrl() { return window.__hauntedAudioUrl || null; }
 
 function writeStr(view, offset, str) {
   for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
@@ -120,10 +120,12 @@ export default function HauntedMusic() {
 
   useEffect(() => {
     // Pause + discard any stale player left over from a previous mount/HMR.
-    if (currentAudio) { try { currentAudio.pause(); } catch {} }
-    if (currentUrl) { try { URL.revokeObjectURL(currentUrl); } catch {} }
-    currentAudio = null;
-    currentUrl = null;
+    const staleAudio = getStaleAudio();
+    if (staleAudio) { try { staleAudio.pause(); } catch {} }
+    const staleUrl = getStaleUrl();
+    if (staleUrl) { try { URL.revokeObjectURL(staleUrl); } catch {} }
+    window.__hauntedAudioEl = null;
+    window.__hauntedAudioUrl = null;
 
     // Seed the live store from persisted user settings.
     base44.auth.me().then((u) => {
@@ -140,17 +142,18 @@ export default function HauntedMusic() {
       } catch {}
     }).catch(() => {});
 
-    currentUrl = buildHauntedWavUrl();
-    const audio = new Audio(currentUrl);
-    audio._hauntedMusic = true; // don't let the play-patch acquire the busy bus against itself
+    const wavUrl = buildHauntedWavUrl();
+    window.__hauntedAudioUrl = wavUrl;
+    const audio = new Audio(wavUrl);
+    audio._hauntedMusic = true; // don't let the busy-bus listeners acquire against itself
     audio.loop = true;
     audio.preload = 'auto';
-    currentAudio = audio;
+    window.__hauntedAudioEl = audio;
     audioRef.current = audio;
 
     // Pause/play + volume in one place so the Settings toggle is obvious.
     const applyVolume = () => {
-      const a = audioRef.current;
+      const a = audioRef.current || window.__hauntedAudioEl;
       if (!a) return;
       const { hauntedEnabled, hauntedVolume } = getMusicSettings();
       const shouldPlay = hauntedEnabled && !isAudioBusy() && !document.hidden;
@@ -191,8 +194,8 @@ export default function HauntedMusic() {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', onVisibility);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-      if (currentAudio === audio) currentAudio = null;
-      if (currentUrl) { try { URL.revokeObjectURL(currentUrl); } catch {} currentUrl = null; }
+      if (window.__hauntedAudioEl === audio) window.__hauntedAudioEl = null;
+      if (window.__hauntedAudioUrl) { try { URL.revokeObjectURL(window.__hauntedAudioUrl); } catch {} window.__hauntedAudioUrl = null; }
     };
   }, []);
 
