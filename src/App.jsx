@@ -33,9 +33,10 @@ import CommunityMap from '@/pages/CommunityMap';
 import EvidenceDashboard from '@/pages/EvidenceDashboard';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
+import HauntedMusic from '@/components/HauntedMusic';
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
   const location = useLocation();
 
   // Show loading spinner while checking app public settings or auth
@@ -61,6 +62,7 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <TabNavigationProvider>
+    {isAuthenticated && <HauntedMusic />}
     <AnimatePresence mode="wait">
     <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
     <Routes location={location}>

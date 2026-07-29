@@ -10,9 +10,10 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import { getBlockedUsers, unblockUser } from '@/lib/userBlocks';
+import { setMusicSettings } from '@/lib/hauntedAudio';
 
 const defaultSettings = {
-  backgroundMusic: false,
+  backgroundMusic: true,
   musicVolume: 50,
   narrationVolume: 80,
   darkMode: true,
@@ -36,8 +37,10 @@ export default function Settings() {
       if (user?.settings) {
         const saved = typeof user.settings === 'string' ? JSON.parse(user.settings) : user.settings;
         setSettings({ ...defaultSettings, ...saved, isAdmin });
+        setMusicSettings({ enabled: saved.backgroundMusic ?? defaultSettings.backgroundMusic, volume: saved.musicVolume ?? defaultSettings.musicVolume });
       } else {
         setSettings(prev => ({ ...prev, isAdmin }));
+        setMusicSettings({ enabled: defaultSettings.backgroundMusic, volume: defaultSettings.musicVolume });
       }
     } catch (e) { /* use defaults */ }
     setLoaded(true);
@@ -46,6 +49,8 @@ export default function Settings() {
   const updateSetting = async (key, value) => {
     const updated = { ...settings, [key]: value };
     setSettings(updated);
+    if (key === 'backgroundMusic') setMusicSettings({ enabled: value });
+    if (key === 'musicVolume') setMusicSettings({ volume: value });
     try {
       await base44.auth.updateMe({ settings: JSON.stringify(updated) });
     } catch (e) { /* silently fail */ }

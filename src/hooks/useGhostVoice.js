@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 
 export default function useGhostVoice() {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -11,6 +12,7 @@ export default function useGhostVoice() {
   const audioCtxRef = useRef(null);
   const srcRef = useRef(null);
   const recordDestRef = useRef(null);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -23,6 +25,9 @@ export default function useGhostVoice() {
       if (audioCtxRef.current) { try { audioCtxRef.current.close(); } catch {} audioCtxRef.current = null; }
     };
   }, []);
+
+  const acquireNarration = () => { if (!busyRef.current) { audioAcquire(); busyRef.current = true; } };
+  const releaseNarration = () => { if (busyRef.current) { audioRelease(); busyRef.current = false; } };
 
   const playChime = (ctx, masterGain) => {
     try {
@@ -133,6 +138,7 @@ export default function useGhostVoice() {
       audioRef.current = null;
     }
     stopEerieBackground();
+    releaseNarration();
     setIsSpeaking(false);
     setIsGenerating(true);
     try {
@@ -160,7 +166,8 @@ export default function useGhostVoice() {
           srcRef.current = sNode;
           setIsGenerating(false);
           setIsSpeaking(true);
-          sNode.onended = () => { setIsSpeaking(false); stopEerieBackground(); srcRef.current = null; };
+          acquireNarration();
+          sNode.onended = () => { setIsSpeaking(false); stopEerieBackground(); releaseNarration(); srcRef.current = null; };
           sNode.start();
           return;
         } catch {}
@@ -175,15 +182,18 @@ export default function useGhostVoice() {
       }
       setIsGenerating(false);
       setIsSpeaking(true);
+      acquireNarration();
 
       audio.onended = () => {
         setIsSpeaking(false);
         stopEerieBackground();
+        releaseNarration();
         audioRef.current = null;
       };
       audio.onerror = () => {
         setIsSpeaking(false);
         stopEerieBackground();
+        releaseNarration();
         audioRef.current = null;
       };
 
@@ -192,6 +202,7 @@ export default function useGhostVoice() {
       setIsGenerating(false);
       setIsSpeaking(false);
       stopEerieBackground();
+      releaseNarration();
     }
   }, [isSpeaking, isGenerating]);
 
@@ -203,6 +214,7 @@ export default function useGhostVoice() {
     }
     if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
     stopEerieBackground();
+    releaseNarration();
     setIsSpeaking(false);
     setIsGenerating(false);
   }, []);

@@ -26,7 +26,7 @@ const SECTIONS = [
   },
   {
     h: 'Purchases',
-    p: 'Physical merchandise sold in the store is processed by Base44 Payments. App Store terms and applicable law govern your purchases. Digital subscriptions, if offered, are billed through the platform (Apple App Store / Google Play).',
+    p: 'The App does not include an in-app store. Product merchandise is offered through external, out-of-app storefronts (such as our eBay store); those purchases are completed directly with the seller and governed by that storefront\'s terms and applicable law. Digital subscriptions, if offered, are billed through the platform (Apple App Store / Google Play) and governed by Apple\'s and Google\'s respective terms and applicable law.',
   },
   {
     h: 'Account Termination',
