@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Heart, RefreshCw, Trash2, Loader2, Download, CheckCircle2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { isTourOffline, saveTourOffline, removeTourOffline } from '@/lib/offlineTours';
+import { toast } from '@/components/ui/use-toast';
 
 const BUTTON_WIDTH = 60;
 const SWIPE_THRESHOLD = 50;
@@ -14,6 +15,7 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
   const [isFavorite, setIsFavorite] = useState(false);
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const swiping = useRef(false);
@@ -21,6 +23,7 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
   useEffect(() => {
     base44.entities.Favorite.filter({ tour_id: tour.id }).then(favs => setIsFavorite(favs.length > 0));
     setIsDownloaded(isTourOffline(tour.id));
+    base44.auth.me().then(u => setIsAdmin(u?.role === 'admin')).catch(() => {});
   }, [tour.id]);
 
   const reset = () => { setSwipeX(0); setIsOpen(false); };
@@ -171,6 +174,14 @@ Critically verify pricing, hours of operation, and public accessibility after 7 
   const handleDelete = async (e) => {
     e.stopPropagation();
     reset();
+    if (!isAdmin) {
+      toast({
+        title: "Admin Access Required",
+        description: "Only administrators can delete tours.",
+        variant: "destructive",
+      });
+      return;
+    }
     setActionLoading('delete');
     try {
       const favs = await base44.entities.Favorite.filter({ tour_id: tour.id });
