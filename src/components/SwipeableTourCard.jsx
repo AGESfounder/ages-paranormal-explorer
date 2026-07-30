@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Heart, RefreshCw, Trash2, Loader2, Download, CheckCircle2 } from 'lucide-react';
+import { Heart, Plus, Trash2, Loader2, Download, CheckCircle2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { isTourOffline, saveTourOffline, removeTourOffline } from '@/lib/offlineTours';
+import { addTourStops } from '@/lib/addTourStops';
 import { toast } from '@/components/ui/use-toast';
 
 const BUTTON_WIDTH = 60;
@@ -91,83 +92,37 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
     setActionLoading(null);
   };
 
-  const handleRefresh = async (e) => {
+  const handleAddStops = async (e) => {
     e.stopPropagation();
     reset();
-    setActionLoading('refresh');
+    setActionLoading('addStops');
     try {
-      const stops = await base44.entities.TourStop.filter({ tour_id: tour.id });
-      for (const s of stops) await base44.entities.TourStop.delete(s.id);
-
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Refresh and update this paranormal tour near ${tour.city}, ${tour.state}. Keep the same general location area and theme, but update all details, pricing, and hours of operation to be current and accurate. Include:
-- title: a creative, spooky tour name
-- city: the town/city where the tour starts
-- state: "${tour.state}"
-- tour_type: "walking", "driving", or "mixed" — walking stops come first, driving stops last
-- description: 2-3 compelling sentences about the tour's haunted locations
-- introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "A.G.E.S. (Affordable Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
-- conclusion: closing paragraph ending with "Thank you for exploring with A.G.E.S. — Affordable Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
-- difficulty: "easy", "moderate", or "challenging"
-- estimated_duration: e.g. "2-3 hours"
-- total_distance: e.g. "1.5 miles"
-- start_location_name, start_latitude, start_longitude (real coordinates near ${tour.city}, ${tour.state})
-- tags: array of relevant tags
-- safety_info: important safety notes
-- best_time: "Dusk to midnight"
-ROUTING & ACCESS RULES — FOLLOW EXACTLY:
-
-1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. Arrange stops in the most efficient order possible — shortest total route wins.
-
-2. WALKING TOURS: Walking tours form a logical loop — stops start and end near the same point with no crisscrossing. Route proceeds in an efficient circle so investigators return to their starting point.
-
-3. DRIVING-ONLY TOURS: Stops follow a logical linear progression — each stop advances in a single direction with no doubling back. Minimize total driving distance.
-
-4. MIXED TOURS: The tour can start by driving to a parking area near a walking cluster, then walking stops form a logical loop (≤0.33 miles between stops, returning to that parking area). Remaining driving stops continue in a linear progression. Use this pattern when it makes the most logical sense — drive to where the walking cluster is, walk the loop, then drive to remaining stops. Minimize both walking and driving distances.
-
-5. PUBLIC ACCESS AFTER 7 PM: ALL locations must be publicly accessible after 7 PM. Ghost hunts occur at night. Do NOT use locations that close before 7 PM, have locked gates, or prohibit nighttime access (e.g. national battlefields, state parks closing at sunset, gated cemeteries, museums closing at 5 PM). At minimum, investigators must be able to be outside the building after 7 PM. Verify nighttime access for every location.
-
-6. MOST POPULAR STOPS: Include the most popular, most talked-about paranormal hotspots — the locations where paranormal activity and ghosts have been observed, recorded, and discussed most. Prioritize locations with the richest documented paranormal history and famous ghost sightings. Do NOT include obscure or unknown locations.
-
-Critically verify pricing, hours of operation, and public accessibility after 7 PM for all locations. Use real locations with documented paranormal history only.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            tours: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  city: { type: "string" },
-                  tour_type: { type: "string" },
-                  description: { type: "string" },
-                  introduction: { type: "string" },
-                  conclusion: { type: "string" },
-                  difficulty: { type: "string" },
-                  estimated_duration: { type: "string" },
-                  total_distance: { type: "string" },
-                  start_location_name: { type: "string" },
-                  start_latitude: { type: "number" },
-                  start_longitude: { type: "number" },
-                  tags: { type: "array", items: { type: "string" } },
-                  safety_info: { type: "string" },
-                  best_time: { type: "string" }
-                }
-              }
-            }
-          }
-        },
-        model: "gemini_3_flash",
-        add_context_from_internet: true
-      });
-
-      const tourData = result.tours?.[0];
-      if (tourData) {
-        await base44.entities.Tour.update(tour.id, { ...tourData, state: tour.state });
+      const result = await addTourStops(tour);
+      if (result.reason === 'max') {
+        toast({
+          title: 'Maximum Stops Reached',
+          description: 'This tour already has the maximum of 12 stops.',
+          variant: 'destructive',
+        });
+      } else if (result.added > 0) {
+        if (onRefresh) onRefresh(tour.id);
+        toast({
+          title: 'Stops Added',
+          description: `${result.added} new stop${result.added > 1 ? 's' : ''} added to the tour.`,
+        });
+      } else {
+        toast({
+          title: 'No New Stops Added',
+          description: 'Could not generate additional stops at this time. Please try again.',
+        });
       }
-      if (onRefresh) onRefresh(tour.id);
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      toast({
+        title: 'Failed to Add Stops',
+        description: e?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    }
     setActionLoading(null);
   };
 
@@ -203,12 +158,12 @@ Critically verify pricing, hours of operation, and public accessibility after 7 
           <span className="text-[8px] font-heading uppercase tracking-wider">Fav</span>
         </button>
         <button
-          onClick={handleRefresh}
+          onClick={handleAddStops}
           disabled={!!actionLoading}
           className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-amber-500/30 text-white/60 disabled:opacity-30"
         >
-          {actionLoading === 'refresh' ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-          <span className="text-[8px] font-heading uppercase tracking-wider">Refresh</span>
+          {actionLoading === 'addStops' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+          <span className="text-[8px] font-heading uppercase tracking-wider">Add Stops</span>
         </button>
         <button
           onClick={handleDownload}
