@@ -16,6 +16,20 @@ export async function generateLocationTour(destination, state, coords) {
   const dest = destination.trim();
   const useCoords = coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
 
+  // DUPLICATE GUARD: If a tour already exists for this destination (matching
+  // city or title, case-insensitive), return it instead of creating a
+  // duplicate. This prevents credit waste and catalog clutter.
+  const normalizedState = normalizeStateName(state);
+  const destLower = dest.toLowerCase();
+  const existingTours = await base44.entities.Tour.filter({ state: normalizedState });
+  const existing = existingTours.find((t) => {
+    const cityMatch = (t.city || '').toLowerCase().trim() === destLower;
+    const titleMatch = (t.title || '').toLowerCase().includes(destLower);
+    const destInTitle = destLower.includes((t.title || '').toLowerCase().trim()) && (t.title || '').trim().length > 3;
+    return cityMatch || titleMatch || destInTitle;
+  });
+  if (existing) return existing;
+
   // Creation generates a LIGHTWEIGHT tour + stop skeletons. Full rich
   // historical/paranormal detail and notable people are generated lazily,
   // per stop, when a user opens that stop (see StopDetail.ensureRichContent).
@@ -145,11 +159,22 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
   const newTour = await base44.entities.Tour.create(tourData);
 
   const stopsIn = Array.isArray(result.stops) ? result.stops : [];
-  const validStops = stopsIn.map((s, i) => ({
+  const allValidStops = stopsIn.map((s, i) => ({
     s,
     name: (s && typeof s.name === 'string' && s.name.trim()) ? s.name : `${dest} Stop ${i + 1}`,
     stop_number: (s && typeof s.stop_number === 'number') ? s.stop_number : i + 1,
   }));
+
+  // DEDUP GUARD: Remove duplicate stops by name (case-insensitive). The LLM
+  // occasionally returns the same location twice — keep the first occurrence.
+  const seenStopNames = new Set();
+  const validStops = [];
+  for (const item of allValidStops) {
+    const key = item.name.toLowerCase().trim();
+    if (seenStopNames.has(key)) continue;
+    seenStopNames.add(key);
+    validStops.push(item);
+  }
 
   if (validStops.length > 0) {
     try {

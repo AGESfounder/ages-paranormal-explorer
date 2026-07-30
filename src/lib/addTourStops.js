@@ -143,12 +143,31 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
     if (newByInsertAfter[num]) ordered.push(...newByInsertAfter[num]);
   }
 
+  // DEDUP GUARD: Remove duplicate stops by name (case-insensitive). If a new
+  // stop duplicates an existing one, drop the new one and delete it from the DB.
+  const seenNames = new Set();
+  const dedupedOrdered = [];
+  const orphanedNewIds = [];
+  for (const s of ordered) {
+    const key = (s.name || '').toLowerCase().trim();
+    if (!key || !seenNames.has(key)) {
+      if (key) seenNames.add(key);
+      dedupedOrdered.push(s);
+    } else {
+      if (createdStops.find((c) => c.id === s.id)) orphanedNewIds.push(s.id);
+    }
+  }
+  for (const id of orphanedNewIds) {
+    await base44.entities.TourStop.delete(id);
+  }
+
   // Cap at MAX_STOPS and renumber.
-  const finalOrdered = ordered.slice(0, MAX_STOPS);
+  const finalOrdered = dedupedOrdered.slice(0, MAX_STOPS);
+  const actualAdded = newStops.length - orphanedNewIds.length;
   const updates = finalOrdered.map((s, i) => ({ id: s.id, stop_number: i + 1 }));
   if (updates.length > 0) {
     await base44.entities.TourStop.bulkUpdate(updates);
   }
 
-  return { added: newStops.length, capped: existingStops.length + newStops.length > MAX_STOPS };
+  return { added: actualAdded, capped: existingStops.length + newStops.length > MAX_STOPS };
 }

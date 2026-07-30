@@ -152,8 +152,10 @@ Use real locations with documented paranormal history only.`,
     setError('');
     try {
       const existingCities = tours.map(t => t.city).filter(Boolean);
+      const existingTitles = tours.map(t => t.title).filter(Boolean);
+      const existingList = [...existingCities, ...existingTitles].filter((v, i, a) => v && a.indexOf(v) === i);
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Suggest ONE real haunted area, city, town, or landmark in ${stateName}, USA that has well-documented paranormal history and is NOT already covered by this list of locations: ${existingCities.length ? existingCities.join(', ') : 'none yet'}. Pick a genuinely different area from any listed. Use current web search to verify it is real and has documented paranormal activity.`,
+        prompt: `Suggest ONE real haunted area, city, town, or landmark in ${stateName}, USA that has well-documented paranormal history and is NOT already covered by this list of existing tours and locations: ${existingList.length ? existingList.join(', ') : 'none yet'}. Pick a genuinely different area from any listed — do NOT suggest a location that overlaps with or is near any listed location. Use current web search to verify it is real and has documented paranormal activity.`,
         response_json_schema: {
           type: "object",
           properties: {
