@@ -60,7 +60,7 @@ export default function Home() {
           className="w-full pt-[max(2.5rem,env(safe-area-inset-top))] pb-4 px-6 text-center"
         >
           <h1 className="font-display text-4xl text-primary tracking-[0.2em] text-3d-pop leading-none">
-            SGT
+            EXPLORER
           </h1>
           <p className="mt-2 font-heading text-sm tracking-[0.25em] uppercase text-primary/80 drop-shadow-[0_0_10px_hsl(199,89%,48%,0.3)]">
             <span className="font-bold text-primary drop-shadow-[0_0_14px_hsl(199,89%,65%,1)]">S</span>elf <span className="font-bold text-primary drop-shadow-[0_0_14px_hsl(199,89%,65%,1)]">G</span>uided <span className="font-bold text-primary drop-shadow-[0_0_14px_hsl(199,89%,65%,1)]">T</span>ours
