@@ -12,22 +12,26 @@ function normalizeStateName(state) {
   return s;
 }
 
-export async function generateLocationTour(destination, state, coords) {
-  const dest = destination.trim();
-  const useCoords = coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
-
-  // DUPLICATE GUARD: If a tour already exists for this destination (matching
-  // city or title, case-insensitive), return it instead of creating a
-  // duplicate. This prevents credit waste and catalog clutter.
+export async function findExistingTour(destination, state) {
   const normalizedState = normalizeStateName(state);
-  const destLower = dest.toLowerCase();
+  const destLower = destination.trim().toLowerCase();
   const existingTours = await base44.entities.Tour.filter({ state: normalizedState });
-  const existing = existingTours.find((t) => {
+  return existingTours.find((t) => {
     const cityMatch = (t.city || '').toLowerCase().trim() === destLower;
     const titleMatch = (t.title || '').toLowerCase().includes(destLower);
     const destInTitle = destLower.includes((t.title || '').toLowerCase().trim()) && (t.title || '').trim().length > 3;
     return cityMatch || titleMatch || destInTitle;
-  });
+  }) || null;
+}
+
+export async function generateLocationTour(destination, state, coords) {
+  const dest = destination.trim();
+  const useCoords = coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
+
+  // DUPLICATE GUARD: If a tour already exists for this destination, return it
+  // instead of creating a duplicate. Callers should use findExistingTour()
+  // before calling generateLocationTour to present the user with a choice.
+  const existing = await findExistingTour(dest, state);
   if (existing) return existing;
 
   // Creation generates a LIGHTWEIGHT tour + stop skeletons. Full rich

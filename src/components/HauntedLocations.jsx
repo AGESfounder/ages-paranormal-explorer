@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Navigation, Search, Loader2, Clock, DollarSign, MapPin, X, ChevronDown, Sparkles, Volume2, Square } from 'lucide-react';
 import HauntedHouse from './icons/HauntedHouse';
 import { base44 } from '@/api/base44Client';
-import { generateLocationTour } from '@/lib/generateTour';
+import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
+import ExistingTourDialog from '@/components/ExistingTourDialog';
 import useGhostVoice from '../hooks/useGhostVoice';
 import BePatient from '@/components/BePatient';
 
@@ -134,6 +135,7 @@ export default function HauntedLocations() {
   const [expandedOverviews, setExpandedOverviews] = useState({});
   const [creatingId, setCreatingId] = useState(null);
   const [narratingId, setNarratingId] = useState(null);
+  const [existingTour, setExistingTour] = useState(null);
   const navigate = useNavigate();
   const { narrate, stop, isSpeaking, isGenerating } = useGhostVoice();
 
@@ -398,6 +400,12 @@ export default function HauntedLocations() {
     setError('');
     setCreatingId(loc.id);
     try {
+      const existing = await findExistingTour(loc.createName, loc.createState);
+      if (existing) {
+        setExistingTour(existing);
+        setCreatingId(null);
+        return;
+      }
       const newTour = await generateLocationTour(
         loc.createName,
         loc.createState,
@@ -610,6 +618,7 @@ export default function HauntedLocations() {
           </div>
         )}
       </div>
+      <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
     </motion.div>
   );
 }

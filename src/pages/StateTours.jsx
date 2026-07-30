@@ -9,7 +9,8 @@ import SwipeableTourCard from '../components/SwipeableTourCard';
 import BePatient from '@/components/BePatient';
 import { US_STATES } from '../lib/statesData';
 import { base44 } from '@/api/base44Client';
-import { generateLocationTour } from '@/lib/generateTour';
+import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
+import ExistingTourDialog from '@/components/ExistingTourDialog';
 import PullToRefresh from '@/components/PullToRefresh';
 
 export default function StateTours() {
@@ -20,6 +21,7 @@ export default function StateTours() {
   const [generating, setGenerating] = useState(false);
   const [creatingNew, setCreatingNew] = useState(false);
   const [error, setError] = useState('');
+  const [existingTour, setExistingTour] = useState(null);
 
   const stateName = US_STATES.find(s => s.abbr === stateAbbr)?.name || stateAbbr;
 
@@ -168,6 +170,12 @@ Use real locations with documented paranormal history only.`,
       });
       const dest = result?.name?.trim();
       if (!dest) throw new Error('Could not find a new haunted area. Please try again.');
+      const existing = await findExistingTour(dest, stateName);
+      if (existing) {
+        setExistingTour(existing);
+        setCreatingNew(false);
+        return;
+      }
       const newTour = await generateLocationTour(dest, stateName);
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
@@ -294,6 +302,7 @@ Use real locations with documented paranormal history only.`,
         ))}
       </div>
       </PullToRefresh>
+      <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
       <NavBar />
     </PageContainer>
   );

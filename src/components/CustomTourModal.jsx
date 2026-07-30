@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Loader2, Ghost, MapPin, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { US_STATES } from '../lib/statesData';
-import { generateLocationTour } from '@/lib/generateTour';
+import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
+import ExistingTourDialog from '@/components/ExistingTourDialog';
 import DrawerSelect from '@/components/DrawerSelect';
 
 export default function CustomTourModal({ isOpen, onClose }) {
@@ -11,6 +12,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
   const [state, setState] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [existingTour, setExistingTour] = useState(null);
   const navigate = useNavigate();
 
   const handleGenerate = async () => {
@@ -23,6 +25,12 @@ export default function CustomTourModal({ isOpen, onClose }) {
     setLoading(true);
 
     try {
+      const existing = await findExistingTour(dest, state);
+      if (existing) {
+        setExistingTour(existing);
+        setLoading(false);
+        return;
+      }
       const newTour = await generateLocationTour(destination, state);
       onClose();
       setDestination('');
@@ -36,6 +44,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
   };
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -126,5 +135,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
         </motion.div>
       )}
     </AnimatePresence>
+    <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
+    </>
   );
 }
