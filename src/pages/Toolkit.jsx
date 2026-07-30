@@ -115,11 +115,8 @@ export default function Toolkit() {
     }
   }, [activeTool, guideDetail]);
 
-  useEffect(() => {
-    if (activeTool?.type === 'weather') {
-      autoFetchWeather();
-    }
-  }, [activeTool]);
+  // Weather is now fetched only when the user explicitly presses the
+  // "Get My Location" button — no auto-fire on tool open (saves credits).
 
   const stopRadioAudio = () => {
     if (noiseNodeRef.current) {
@@ -613,9 +610,13 @@ export default function Toolkit() {
                 </div>
               </>
             ) : (
-              <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-center">
-                <Cloud className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">Allow location access for automatic weather</p>
+              <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-center space-y-3">
+                <Cloud className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+                <p className="text-xs text-muted-foreground">Press the button below to fetch your local weather</p>
+                <button onClick={autoFetchWeather} disabled={weatherLoading} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-50">
+                  {weatherLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <MapPin className="w-3.5 h-3.5" />}
+                  {weatherLoading ? 'Fetching...' : 'Get My Location Weather'}
+                </button>
               </div>
             )}
             <div className="flex gap-2">

@@ -23,6 +23,13 @@ export default function StateTours() {
 
   const stateName = US_STATES.find(s => s.abbr === stateAbbr)?.name || stateAbbr;
 
+  // Sort tours: ranked tours first (1, 2, 3), then unranked by city name.
+  const sortByRank = (a, b) => {
+    const ra = a.rank ?? 999, rb = b.rank ?? 999;
+    if (ra !== rb) return ra - rb;
+    return (a.city || '').localeCompare(b.city || '');
+  };
+
   useEffect(() => {
     loadTours();
   }, [stateAbbr]);
@@ -34,7 +41,7 @@ export default function StateTours() {
     if (results.length === 0) {
       await generateTours();
     } else {
-      setTours(results.sort((a, b) => (a.city || '').localeCompare(b.city || '')));
+      setTours(results.sort(sortByRank));
       setLoading(false);
     }
   };
@@ -45,7 +52,8 @@ export default function StateTours() {
     setError('');
     try {
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Generate exactly 5 paranormal tours for ${stateName}, USA. Each at a real haunted location. Mix walking, driving, and "mixed" (walking + driving) tours. For mixed tours, walking stops come first in the route, driving stops last. Include:
+        prompt: `Generate exactly 3 paranormal tours for ${stateName}, USA — the TOP 3 most active haunted locations in the state. Rank them by documented paranormal activity level: #1 is the MOST active/well-known, #2 is the second most active, #3 is the third. Each at a real haunted location. Mix walking, driving, and "mixed" (walking + driving) tours. For mixed tours, walking stops come first in the route, driving stops last. Include:
+- rank: 1, 2, or 3 (1 = most active)
 - title, city, tour_type ("walking", "driving", or "mixed"), description (2-3 sentences)
 - introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "A.G.E.S. (Accessible Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
 - conclusion: closing paragraph ending with "Thank you for exploring with A.G.E.S. — Accessible Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
@@ -74,6 +82,7 @@ Use real locations with documented paranormal history only.`,
               items: {
                 type: "object",
                 properties: {
+                  rank: { type: "number" },
                   title: { type: "string" },
                   city: { type: "string" },
                   tour_type: { type: "string" },
@@ -103,7 +112,7 @@ Use real locations with documented paranormal history only.`,
         const saved = await base44.entities.Tour.create({ ...tour, state: stateName });
         created.push(saved);
       }
-      created.sort((a, b) => (a.city || '').localeCompare(b.city || ''));
+      created.sort(sortByRank);
       setTours(created);
       setGenerating(false);
       setLoading(false);
@@ -121,7 +130,7 @@ Use real locations with documented paranormal history only.`,
 
   const refreshTours = async () => {
     const results = await base44.entities.Tour.filter({ state: stateName });
-    setTours(results.sort((a, b) => (a.city || '').localeCompare(b.city || '')));
+    setTours(results.sort(sortByRank));
   };
 
   const handleDeleteTour = async (tourId) => {
@@ -230,9 +239,22 @@ Use real locations with documented paranormal history only.`,
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-heading text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
-                    {tour.title}
-                  </h3>
+                  <div className="flex items-center gap-2 mb-1">
+                    {tour.rank && tour.rank <= 3 && (
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-heading uppercase tracking-wider font-bold whitespace-nowrap ${
+                        tour.rank === 1
+                          ? 'bg-primary/20 text-primary border border-primary/40 shadow-[0_0_8px_hsl(199,89%,48%,0.3)]'
+                          : tour.rank === 2
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                          : 'bg-orange-600/20 text-orange-400 border border-orange-600/40'
+                      }`}>
+                        {tour.rank === 1 ? '#1 Most Active' : `#${tour.rank}`}
+                      </span>
+                    )}
+                    <h3 className="font-heading text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                      {tour.title}
+                    </h3>
+                  </div>
                   <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                     <MapPin className="w-3 h-3" /> {tour.city}
                   </p>

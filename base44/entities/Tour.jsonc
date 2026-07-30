@@ -76,6 +76,10 @@
     "user_reordered": {
       "type": "boolean",
       "default": false
+    },
+    "rank": {
+      "type": "number",
+      "description": "State ranking: 1 = #1 Most Active, 2 = #2, 3 = #3. Null/undefined for unranked tours."
     }
   },
   "required": [
