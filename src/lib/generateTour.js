@@ -17,10 +17,13 @@ export async function findExistingTour(destination, state) {
   const destLower = destination.trim().toLowerCase();
   const existingTours = await base44.entities.Tour.filter({ state: normalizedState });
   return existingTours.find((t) => {
-    const cityMatch = (t.city || '').toLowerCase().trim() === destLower;
+    // Match on TITLE only — multiple tours in the same city are valid
+    // (e.g., a landmark-specific tour vs. a city walking tour that
+    // includes that landmark as one stop). Only flag a true duplicate
+    // when the destination matches the tour's actual name/title.
     const titleMatch = (t.title || '').toLowerCase().includes(destLower);
     const destInTitle = destLower.includes((t.title || '').toLowerCase().trim()) && (t.title || '').trim().length > 3;
-    return cityMatch || titleMatch || destInTitle;
+    return titleMatch || destInTitle;
   }) || null;
 }
 
