@@ -53,8 +53,8 @@ Each new stop needs:
 - famous_people: string
 - narration_text: 4-6 sentences of dramatic, immersive narration
 - travel_method: "walking" or "driving"
-- hours_of_operation: string
-- entry_fee: string
+- hours_of_operation: ALWAYS provide the location's public access hours (never leave blank; use "Exterior accessible 24/7" if freely accessible at all hours)
+- entry_fee: ALWAYS provide the admission cost (never leave blank; use "Free" if no charge)
 
 Output ONLY a valid JSON object with a "new_stops" array.`;
 

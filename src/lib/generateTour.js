@@ -115,8 +115,8 @@ PLUS a "stops" array (${category === 'cold_spot' ? '1-4 stops' : '8-10 stops'}) 
 - image_url: empty string
 - narration_text: 4-6 sentences of dramatic, immersive storytelling narration in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking to fellow investigators about what awaits them. Include vivid sensory details and specific ghost stories.
 - travel_method: "walking" or "driving" (per the tour type; for mixed tours, "walking" for walking stops and "driving" for driving stops)
-- hours_of_operation: e.g. "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday"
-- entry_fee: e.g. "$25 for day tour, $45 for overnight investigation"
+- hours_of_operation: ALWAYS provide this — never leave blank. State the location's public access hours (e.g. "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday", "Open daily 9am-5pm"). If freely accessible at all hours, state "Exterior accessible 24/7" explicitly.
+- entry_fee: ALWAYS provide this — never leave blank. State the admission cost (e.g. "$25 for day tour, $45 for overnight investigation", "Free, donations welcome"). If completely free, state "Free".
 
 Use real locations and real coordinates for "${dest}". Keep every historical_info and paranormal_info field BRIEF (2-3 sentences) — the full rich detail is generated later.
 

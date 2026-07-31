@@ -169,8 +169,8 @@ Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand 
 - estimated_investigation_time: "10 minutes" / "15 minutes" / "20 minutes"
 - construction_date, famous_people
 - narration_text: 4-6 sentences of dramatic, immersive storytelling narration in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking to fellow investigators about what awaits them. Include vivid sensory details and specific ghost stories.
-- hours_of_operation: if the location has restricted public hours, note them (e.g. "Open to public daily 9am-5pm", "Grounds open dawn to dusk, building closed after 4pm"). Leave empty if publicly accessible 24/7.
-- entry_fee: if there is an admission charge, note the cost (e.g. "$10 adults, $5 children", "Free, donations welcome"). Leave empty if completely free.
+- hours_of_operation: ALWAYS provide this — never leave blank. State the location's public access hours (e.g. "Open to public daily 9am-5pm", "Grounds open dawn to dusk, building closed after 4pm", "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday"). If the exterior is freely accessible at all hours, state "Exterior accessible 24/7" explicitly.
+- entry_fee: ALWAYS provide this — never leave blank. State the admission cost (e.g. "$10 adults, $5 children", "Free, donations welcome", "$25 for day tour, $45 for overnight investigation"). If completely free, state "Free" or "Free, donations welcome".
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
