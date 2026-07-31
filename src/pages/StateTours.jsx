@@ -179,7 +179,7 @@ Use real locations with documented paranormal history only.`,
   // Picks a real haunted area in this state that has NO existing tour yet, then
   // generates a brand-new tour there. Keeps the state's catalogue growing into
   // untouched paranormal territory instead of re-covering the same cities.
-  const handleCreateNewTour = async (category) => {
+  const handleCreateNewTour = async (category, accessType) => {
     setCreatingNew(true);
     setError('');
     try {
@@ -200,13 +200,13 @@ Use real locations with documented paranormal history only.`,
       });
       const dest = result?.name?.trim();
       if (!dest) throw new Error('Could not find a new haunted area. Please try again.');
-      const existing = await findExistingTour(dest, stateName, category);
+      const existing = await findExistingTour(dest, stateName, category, accessType);
       if (existing) {
         setExistingTour(existing);
         setCreatingNew(false);
         return;
       }
-      const newTour = await generateLocationTour(dest, stateName, undefined, category);
+      const newTour = await generateLocationTour(dest, stateName, undefined, category, accessType);
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
       setError(e?.message || 'Failed to create a new tour. Please try again.');
@@ -283,7 +283,7 @@ Use real locations with documented paranormal history only.`,
       <TourCategoryDialog
         isOpen={showCategoryDialog}
         onClose={() => setShowCategoryDialog(false)}
-        onSelect={(category) => { setShowCategoryDialog(false); handleCreateNewTour(category); }}
+        onSelect={(category, accessType) => { setShowCategoryDialog(false); handleCreateNewTour(category, accessType); }}
         destination={stateName}
       />
       <NavBar />

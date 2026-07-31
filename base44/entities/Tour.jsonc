@@ -16,6 +16,14 @@
       ],
       "description": "Tour category: property (enum value 'landmark') = single property with all stops on the same site, area = various properties in a local area with no repeat stops, road_trip = 8-10 stops with 5+ miles between most stops, ship = haunted ship or vessel with all stops on the same vessel, cold_spot = a very short tour with 1-4 stops at a single haunted location or tiny cluster"
     },
+    "access_type": {
+      "type": "string",
+      "enum": [
+        "exterior_only",
+        "exterior_interior"
+      ],
+      "description": "Access classification for cold_spot and landmark (property) tours: exterior_only = tour covers only exterior/grounds/perimeter (free 24/7 access), exterior_interior = tour covers both interior and exterior areas (may require paid admission). Null/undefined for area/road_trip/ship tours. An exterior-only tour and an exterior/interior tour of the same location are different tours (not duplicates)."
+    },
     "state": {
       "type": "string"
     },

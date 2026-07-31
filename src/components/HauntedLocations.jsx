@@ -137,6 +137,7 @@ export default function HauntedLocations() {
   const [creatingId, setCreatingId] = useState(null);
   const [narratingId, setNarratingId] = useState(null);
   const [existingTour, setExistingTour] = useState(null);
+  const [createAccessType, setCreateAccessType] = useState('exterior_interior');
   const navigate = useNavigate();
   const { narrate, stop, isSpeaking, isGenerating } = useGhostVoice();
 
@@ -416,8 +417,10 @@ export default function HauntedLocations() {
   const handleCreateTour = async (loc) => {
     setError('');
     setCreatingId(loc.id);
+    const isProp = loc.tourCategory === 'cold_spot' || loc.tourCategory === 'landmark';
+    const accessType = isProp ? createAccessType : undefined;
     try {
-      const existing = await findExistingTour(loc.createName, loc.createState, loc.createCategory || 'landmark');
+      const existing = await findExistingTour(loc.createName, loc.createState, loc.createCategory || 'landmark', accessType);
       if (existing) {
         setExistingTour(existing);
         setCreatingId(null);
@@ -427,7 +430,8 @@ export default function HauntedLocations() {
         loc.createName,
         loc.createState,
         loc.lat != null && loc.lng != null ? { lat: loc.lat, lng: loc.lng } : undefined,
-        loc.createCategory || 'landmark'
+        loc.createCategory || 'landmark',
+        accessType
       );
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
@@ -611,6 +615,22 @@ export default function HauntedLocations() {
                               </button>
                             ) : (
                               <>
+                                {(loc.tourCategory === 'cold_spot' || loc.tourCategory === 'landmark') && (
+                                  <div className="mt-2 flex gap-2">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setCreateAccessType('exterior_interior'); }}
+                                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${createAccessType === 'exterior_interior' ? 'border-primary bg-primary/15 text-primary' : 'border-border/40 bg-card/40 text-muted-foreground'}`}
+                                    >
+                                      Ext + Int
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setCreateAccessType('exterior_only'); }}
+                                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${createAccessType === 'exterior_only' ? 'border-cyan-glow bg-cyan-glow/15 text-cyan-glow' : 'border-border/40 bg-card/40 text-muted-foreground'}`}
+                                    >
+                                      Exterior Only
+                                    </button>
+                                  </div>
+                                )}
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleCreateTour(loc); }}
                                   disabled={creatingId === loc.id}

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { addTourStops } from '@/lib/addTourStops';
 import { toast } from '@/components/ui/use-toast';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
+import AccessTypeBadge from '@/components/AccessTypeBadge';
 
 export default function ExistingTourDialog({ tour, onClose }) {
   const [addingStops, setAddingStops] = useState(false);
@@ -80,6 +81,7 @@ export default function ExistingTourDialog({ tour, onClose }) {
                   <MapPin className="w-3 h-3" /> {tour.city}, {tour.state}
                 </p>
                 <TourCategoryBadge category={tour.tour_category} />
+                <AccessTypeBadge accessType={tour.access_type} />
               </div>
             </div>
 

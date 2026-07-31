@@ -12,10 +12,11 @@ function normalizeStateName(state) {
   return s;
 }
 
-export async function findExistingTour(destination, state, category) {
+export async function findExistingTour(destination, state, category, accessType) {
   const normalizedState = normalizeStateName(state);
   const destLower = destination.trim().toLowerCase();
   const existingTours = await base44.entities.Tour.filter({ state: normalizedState });
+  const normAccess = (t) => (t === 'exterior_only' ? 'exterior_only' : 'exterior_interior');
   return existingTours.find((t) => {
     // COLD SPOT REDUNDANCY RULE:
     // - Creating a Cold Spot: only block if an existing COLD SPOT tour matches
@@ -27,6 +28,15 @@ export async function findExistingTour(destination, state, category) {
     if (category === 'cold_spot' && t.tour_category !== 'cold_spot') return false;
     if (category && category !== 'cold_spot' && t.tour_category === 'cold_spot') return false;
 
+    // ACCESS TYPE DIFFERENTIATION: For cold_spot and landmark tours, an
+    // exterior-only tour and an exterior/interior tour of the same location
+    // are different tours. Only match if access_types are the same. Treat
+    // null/undefined as 'exterior_interior' (the default/full tour) so
+    // existing tours (pre-access-type) don't block new exterior-only tours.
+    if ((category === 'cold_spot' || category === 'landmark') && accessType) {
+      if (normAccess(accessType) !== normAccess(t.access_type)) return false;
+    }
+
     // Match on TITLE only — multiple tours in the same city are valid
     // (e.g., a landmark-specific tour vs. a city walking tour that
     // includes that landmark as one stop). Only flag a true duplicate
@@ -37,7 +47,7 @@ export async function findExistingTour(destination, state, category) {
   }) || null;
 }
 
-export async function generateLocationTour(destination, state, coords, category = 'landmark') {
+export async function generateLocationTour(destination, state, coords, category = 'landmark', accessType) {
   const dest = destination.trim();
   const useCoords = coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
 
@@ -47,7 +57,7 @@ export async function generateLocationTour(destination, state, coords, category 
   // Pass the category so the Cold Spot redundancy rule is enforced (see
   // findExistingTour): Cold Spots only block other Cold Spots; non-Cold-Spots
   // ignore existing Cold Spots.
-  const existing = await findExistingTour(dest, state, category);
+  const existing = await findExistingTour(dest, state, category, accessType);
   if (existing) return existing;
 
   // Creation generates a LIGHTWEIGHT tour + stop skeletons. Full rich
@@ -64,9 +74,15 @@ export async function generateLocationTour(destination, state, coords, category 
     ? `This is a SHIP tour — a haunted ship or vessel. ALL stops must be specific decks, cabins, rooms, or areas within or on the vessel. All stops share the same vessel. Set tour_type to "walking". Generate 8-10 stops.`
     : `This is a ROAD TRIP tour — driving between most locations with a higher total mileage. There MUST be considerable driving between stops — at least 5 miles between consecutive stops. Combine different locations and areas into one driving tour. Set tour_type to "driving" or "mixed". Each stop is a different haunted location or area spread across a wider geographic region, each with its own real street address and GPS coordinates. Generate 8-10 stops.`;
 
+  const accessTypeText = (category === 'cold_spot' || category === 'landmark') && accessType === 'exterior_only'
+    ? `\n\nACCESS TYPE: EXTERIOR ONLY — This tour covers ONLY the exterior of the property: grounds, perimeter, outside walls, courtyards, and outdoor areas. All stops must be locations accessible from the OUTSIDE without entering the building or paying for interior admission. However, the historical_info, paranormal_info, and narration_text for each stop SHOULD include stories and events from the interior — the tour focuses on exterior access, but the storytelling covers the full haunted history including interior events, ghost sightings inside, and notable interior rooms. The key difference is that investigators visit the EXTERIOR of each stop area, not the interior.`
+    : (category === 'cold_spot' || category === 'landmark') && accessType === 'exterior_interior'
+    ? `\n\nACCESS TYPE: EXTERIOR AND INTERIOR — This tour covers both the exterior and interior of the property. Stops can include interior rooms, halls, basements, wings, AND exterior grounds, courtyards, and perimeter areas. Include stops that require interior access and paid admission where applicable. This is the full property investigation experience.`
+    : '';
+
   const prompt = `Generate a paranormal ghost hunting tour for the haunted destination "${dest}" in ${state}.
 
-${categoryText}
+${categoryText}${accessTypeText}
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
@@ -197,6 +213,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
     const tourData = {
       title: raw.title || `${dest} Paranormal Investigation`,
       tour_category: correctedCategory,
+      access_type: (correctedCategory === 'cold_spot' || correctedCategory === 'landmark') ? (accessType || 'exterior_interior') : '',
       state: normalizeStateName(state),
       city: raw.city || '',
       tour_type: normEnum(raw.tour_type, ['walking', 'driving', 'mixed'], 'walking'),

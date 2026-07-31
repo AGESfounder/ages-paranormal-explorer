@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, Footprints } from 'lucide-react';
+import { DollarSign, Footprints, Eye, DoorOpen } from 'lucide-react';
 
 function normalizeFee(fee) {
   return (fee || '').trim().toLowerCase();
@@ -35,10 +35,19 @@ export default function TourAccessInfo({ tour, stops }) {
   const exteriorHours = hasFreePerimeter ? extractExteriorHours(freeExteriorStops[0].hours_of_operation) : '';
   const entryCost = hasFreePerimeter ? (freeExteriorStops[0].entry_fee || '') : '';
 
-  if (!hasCommonFee && !hasFreePerimeter) return null;
+  if (!hasCommonFee && !hasFreePerimeter && !tour.access_type) return null;
 
   return (
     <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
+      {tour.access_type && (
+        <div className="flex items-center gap-2">
+          {tour.access_type === 'exterior_only' ? <Eye className="w-3.5 h-3.5 text-cyan-glow shrink-0" /> : <DoorOpen className="w-3.5 h-3.5 text-primary shrink-0" />}
+          <p className="text-xs">
+            <span className="font-heading uppercase tracking-wider text-primary text-[10px]">Access: </span>
+            <span className="text-foreground/80">{tour.access_type === 'exterior_only' ? 'Exterior Only — grounds and perimeter' : 'Exterior & Interior — full property access'}</span>
+          </p>
+        </div>
+      )}
       {hasCommonFee && commonFee && (
         <div className="flex items-center gap-2">
           <DollarSign className="w-3.5 h-3.5 text-green-400 shrink-0" />

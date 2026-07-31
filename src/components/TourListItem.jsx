@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Clock, Footprints, Car } from 'lucide-react';
 import TourCategoryBadge from './TourCategoryBadge';
+import AccessTypeBadge from './AccessTypeBadge';
 
 const RANK_STYLES = {
   1: 'bg-primary/15 text-primary border-b border-primary/20',
@@ -38,7 +39,10 @@ export default function TourListItem({ tour, distance }) {
             <span className="text-xs text-muted-foreground flex items-center gap-1 min-w-0">
               <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate">{tour.city}, {tour.state}</span>
             </span>
-            <TourCategoryBadge category={tour.tour_category} />
+            <div className="flex items-center gap-1 shrink-0">
+              <TourCategoryBadge category={tour.tour_category} />
+              <AccessTypeBadge accessType={tour.access_type} />
+            </div>
             <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0 capitalize">
               {tour.tour_type === 'walking' ? <Footprints className="w-3 h-3" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3 h-3" /><Car className="w-2.5 h-2.5" /></> : <Car className="w-3 h-3" />}
               {tour.tour_type === 'mixed' ? 'Walk + Drive' : tour.tour_type}

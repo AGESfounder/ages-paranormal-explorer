@@ -2,17 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Ghost } from 'lucide-react';
 import TourCategoryPicker from './TourCategoryPicker';
+import AccessTypePicker from './AccessTypePicker';
 
 export default function TourCategoryDialog({ isOpen, onClose, onSelect, destination }) {
   const [category, setCategory] = useState('');
+  const [accessType, setAccessType] = useState('exterior_interior');
 
   useEffect(() => {
-    if (!isOpen) setCategory('');
+    if (!isOpen) { setCategory(''); setAccessType('exterior_interior'); }
   }, [isOpen]);
 
   const handleGenerate = () => {
     if (!category) return;
-    onSelect(category);
+    onSelect(category, accessType);
   };
 
   return (
@@ -54,6 +56,13 @@ export default function TourCategoryDialog({ isOpen, onClose, onSelect, destinat
             </p>
 
             <TourCategoryPicker value={category} onChange={setCategory} />
+
+            {(category === 'cold_spot' || category === 'landmark') && (
+              <>
+                <p className="text-xs text-muted-foreground mt-3 mb-2 leading-relaxed">Choose access type for this property:</p>
+                <AccessTypePicker value={accessType} onChange={setAccessType} />
+              </>
+            )}
 
             <button
               onClick={handleGenerate}

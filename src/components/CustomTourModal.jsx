@@ -7,6 +7,7 @@ import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import DrawerSelect from '@/components/DrawerSelect';
 import TourCategoryPicker from '@/components/TourCategoryPicker';
+import AccessTypePicker from '@/components/AccessTypePicker';
 
 export default function CustomTourModal({ isOpen, onClose }) {
   const [destination, setDestination] = useState('');
@@ -15,6 +16,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
   const [error, setError] = useState('');
   const [existingTour, setExistingTour] = useState(null);
   const [category, setCategory] = useState('');
+  const [accessType, setAccessType] = useState('exterior_interior');
   const navigate = useNavigate();
 
   const handleGenerate = async () => {
@@ -31,17 +33,18 @@ export default function CustomTourModal({ isOpen, onClose }) {
     setLoading(true);
 
     try {
-      const existing = await findExistingTour(dest, state);
+      const existing = await findExistingTour(dest, state, category, accessType);
       if (existing) {
         setExistingTour(existing);
         setLoading(false);
         return;
       }
-      const newTour = await generateLocationTour(destination, state, undefined, category);
+      const newTour = await generateLocationTour(destination, state, undefined, category, accessType);
       onClose();
       setDestination('');
       setState('');
       setCategory('');
+      setAccessType('exterior_interior');
       navigate(`/tour/${newTour.id}`);
     } catch (err) {
       console.error('Custom tour generation failed', err);
@@ -118,6 +121,15 @@ export default function CustomTourModal({ isOpen, onClose }) {
                 </label>
                 <TourCategoryPicker value={category} onChange={setCategory} />
               </div>
+
+              {(category === 'cold_spot' || category === 'landmark') && (
+                <div>
+                  <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Access Type
+                  </label>
+                  <AccessTypePicker value={accessType} onChange={setAccessType} />
+                </div>
+              )}
 
               {error && (
                 <p className="text-xs text-red-400 text-center">{error}</p>
