@@ -49,8 +49,8 @@ Include:
 - state: full state name
 - tour_type: "walking", "driving", or "mixed"
 - description: 2-3 compelling sentences about the tour's haunted locations
-- introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "A.G.E.S. (Accessible Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
-- conclusion: closing paragraph ending with "Thank you for exploring with A.G.E.S. — Accessible Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
+- introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "AGES (Accessible Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
+- conclusion: closing paragraph ending with "Thank you for exploring with AGES — Accessible Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
 - difficulty: "easy", "moderate", or "challenging"
 - estimated_duration: e.g. "2-3 hours"
 - total_distance: e.g. "1.5 miles"
@@ -156,8 +156,8 @@ Include:
 - state: full state name
 - tour_type: "walking", "driving", or "mixed"
 - description: 2-3 compelling sentences about the tour's haunted locations
-- introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "A.G.E.S. (Accessible Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
-- conclusion: closing paragraph ending with "Thank you for exploring with A.G.E.S. — Accessible Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
+- introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "AGES (Accessible Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
+- conclusion: closing paragraph ending with "Thank you for exploring with AGES — Accessible Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
 - difficulty: "easy", "moderate", or "challenging"
 - estimated_duration: e.g. "2-3 hours"
 - total_distance: e.g. "1.5 miles"
