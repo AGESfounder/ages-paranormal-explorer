@@ -514,7 +514,7 @@ export default function HauntedLocations() {
         {results && results.length > 0 && (
           <div className="px-3 pb-3">
             <p className="text-[10px] text-muted-foreground mb-2 font-heading uppercase tracking-wider">
-              {results.length} property{results.length === 1 ? '' : 's'} — {originLabel}
+              {results.length} exploration{results.length === 1 ? '' : 's'} — {originLabel}
             </p>
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {results.map((loc, i) => {
