@@ -48,7 +48,8 @@ export default function CustomTourModal({ isOpen, onClose }) {
       navigate(`/tour/${newTour.id}`);
     } catch (err) {
       console.error('Custom tour generation failed', err);
-      setError('Failed to generate tour. Please try again.');
+      const msg = err?.message || String(err);
+      setError(msg || 'Failed to generate tour. Please try again.');
     }
     setLoading(false);
   };
