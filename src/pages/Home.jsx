@@ -15,8 +15,8 @@ const menuItems = [
   { label: 'Favorites', icon: Heart, path: '/favorites', desc: 'Saved Tours' },
   { label: 'Evidence Journal', icon: BookOpen, path: '/evidence', desc: 'Your Findings' },
   { label: 'Investigation Toolkit', icon: Wrench, path: '/toolkit', desc: 'Ghost Hunting Tools' },
-  { label: 'Dashboard', icon: Sparkles, path: '/dashboard', desc: 'Subscription & Energy' },
   { label: 'Settings', icon: Settings, path: '/settings', desc: 'App Preferences' },
+  { label: 'Dashboard', icon: Sparkles, path: '/dashboard', desc: 'Subscription & Energy', featured: true },
 ];
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
@@ -318,15 +318,20 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + i * 0.08, duration: 0.4 }}
+              className={item.featured ? 'col-span-2' : ''}
             >
               <Link
                 to={item.path}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border/50 bg-card/40 backdrop-blur-sm hover:border-primary/40 hover:bg-card/60 hover:shadow-[0_0_20px_hsl(199,89%,48%,0.08)] transition-all duration-300 group"
+                className={`flex gap-3 p-4 rounded-xl border transition-all duration-300 group ${
+                  item.featured
+                    ? 'items-center border-primary/40 bg-primary/10 hover:border-primary/60 hover:bg-primary/15 hover:shadow-[0_0_24px_hsl(199,89%,48%,0.15)]'
+                    : 'flex-col items-center border-border/50 bg-card/40 backdrop-blur-sm hover:border-primary/40 hover:bg-card/60 hover:shadow-[0_0_20px_hsl(199,89%,48%,0.08)]'
+                }`}
               >
-                <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <div className={`p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors ${item.featured ? 'shrink-0' : ''}`}>
                   <item.icon className="w-6 h-6 text-primary group-hover:drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)] transition-all" />
                 </div>
-                <div className="text-center">
+                <div className={item.featured ? 'text-left' : 'text-center'}>
                   <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">{item.label}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{item.desc}</p>
                 </div>
