@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Navigation, Heart, BookOpen, Wrench, Settings, Radio, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, Square, Play } from 'lucide-react';
+import { Navigation, Heart, BookOpen, Wrench, Settings, Radio, FileText, Image, Video, ClipboardList, Building2, Sparkles, Globe, Square, Play, ArrowRight } from 'lucide-react';
 import USMap from '../components/icons/USMap';
 import PageContainer from '../components/PageContainer';
 import Tombstone from '../components/Tombstone';
@@ -62,8 +62,16 @@ export default function Home() {
           <h1 className="font-display text-4xl text-primary tracking-[0.2em] text-3d-pop leading-none">
             EXPLORER
           </h1>
-          <p className="mt-2 font-heading text-sm tracking-[0.25em] uppercase text-primary/80 drop-shadow-[0_0_10px_hsl(199,89%,48%,0.3)]">
-            <span className="font-bold text-primary drop-shadow-[0_0_14px_hsl(199,89%,65%,1)]">S</span>elf <span className="font-bold text-primary drop-shadow-[0_0_14px_hsl(199,89%,65%,1)]">G</span>uided <span className="font-bold text-primary drop-shadow-[0_0_14px_hsl(199,89%,65%,1)]">T</span>ours
+          <p className="mt-2 font-heading text-sm tracking-[0.25em] uppercase text-primary/80 drop-shadow-[0_0_10px_hsl(199,89%,48%,0.3)] flex items-center justify-center gap-2 flex-wrap">
+            <span>Discover</span>
+            <ArrowRight className="w-3.5 h-3.5 text-primary/60" />
+            <span>Explore</span>
+            <ArrowRight className="w-3.5 h-3.5 text-primary/60" />
+            <span>Investigate</span>
+            <ArrowRight className="w-3.5 h-3.5 text-primary/60" />
+            <span>Document</span>
+            <ArrowRight className="w-3.5 h-3.5 text-primary/60" />
+            <span>Share</span>
           </p>
         </motion.div>
 
