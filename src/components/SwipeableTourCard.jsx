@@ -155,7 +155,7 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
           className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-red-500/30 text-white/60 disabled:opacity-30"
         >
           {actionLoading === 'favorite' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Heart className={`w-5 h-5 ${isFavorite ? 'fill-white' : ''}`} />}
-          <span className="text-[8px] font-heading uppercase tracking-wider">Fav</span>
+          <span className="text-[11px] font-heading uppercase tracking-wider">Fav</span>
         </button>
         <button
           onClick={handleAddStops}
@@ -163,7 +163,7 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
           className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-amber-500/30 text-white/60 disabled:opacity-30"
         >
           {actionLoading === 'addStops' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-          <span className="text-[8px] font-heading uppercase tracking-wider">Add Stops</span>
+          <span className="text-[11px] font-heading uppercase tracking-wider">Add Stops</span>
         </button>
         <button
           onClick={handleDownload}
@@ -171,7 +171,7 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
           className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-primary/30 text-white/60 disabled:opacity-30"
         >
           {actionLoading === 'download' ? <Loader2 className="w-5 h-5 animate-spin" /> : isDownloaded ? <CheckCircle2 className="w-5 h-5" /> : <Download className="w-5 h-5" />}
-          <span className="text-[8px] font-heading uppercase tracking-wider">{isDownloaded ? 'Saved' : 'Download'}</span>
+          <span className="text-[11px] font-heading uppercase tracking-wider">{isDownloaded ? 'Saved' : 'Download'}</span>
         </button>
         <button
           onClick={handleDelete}
@@ -179,7 +179,7 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
           className="w-[60px] flex flex-col items-center justify-center gap-0.5 bg-destructive/30 text-white/60 disabled:opacity-30"
         >
           {actionLoading === 'delete' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
-          <span className="text-[8px] font-heading uppercase tracking-wider">Delete</span>
+          <span className="text-[11px] font-heading uppercase tracking-wider">Delete</span>
         </button>
       </div>
 

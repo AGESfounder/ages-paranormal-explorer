@@ -43,7 +43,7 @@ export default function TourAccessInfo({ tour, stops }) {
         <div className="flex items-center gap-2">
           {tour.access_type === 'exterior_only' ? <Eye className="w-3.5 h-3.5 text-cyan-glow shrink-0" /> : <DoorOpen className="w-3.5 h-3.5 text-primary shrink-0" />}
           <p className="text-xs">
-            <span className="font-heading uppercase tracking-wider text-primary text-[10px]">Access: </span>
+            <span className="font-heading uppercase tracking-wider text-primary text-[11px]">Access: </span>
             <span className="text-foreground/80">{tour.access_type === 'exterior_only' ? 'Exterior Only — grounds and perimeter' : 'Exterior & Interior — full property access'}</span>
           </p>
         </div>
@@ -52,7 +52,7 @@ export default function TourAccessInfo({ tour, stops }) {
         <div className="flex items-center gap-2">
           <DollarSign className="w-3.5 h-3.5 text-green-400 shrink-0" />
           <p className="text-xs">
-            <span className="font-heading uppercase tracking-wider text-primary text-[10px]">Common Entry Fee: </span>
+            <span className="font-heading uppercase tracking-wider text-primary text-[11px]">Common Entry Fee: </span>
             <span className="text-foreground/80">{commonFee}</span>
           </p>
         </div>
@@ -61,7 +61,7 @@ export default function TourAccessInfo({ tour, stops }) {
         <div className="flex items-start gap-2">
           <Footprints className="w-3.5 h-3.5 text-cyan-glow shrink-0 mt-0.5" />
           <p className="text-xs">
-            <span className="font-heading uppercase tracking-wider text-cyan-glow text-[10px]">Free Perimeter Access: </span>
+            <span className="font-heading uppercase tracking-wider text-cyan-glow text-[11px]">Free Perimeter Access: </span>
             <span className="text-foreground/80">
               Walk the exterior{exteriorHours ? ` ${exteriorHours}` : ''} at no cost
               {entryCost && entryCost.toLowerCase() !== 'free' && ` · Cost to enter: ${entryCost}`}
