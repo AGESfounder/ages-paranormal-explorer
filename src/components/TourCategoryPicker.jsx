@@ -2,7 +2,7 @@ import React from 'react';
 import { Building2, MapPinned, Route } from 'lucide-react';
 
 const CATEGORIES = [
-  { value: 'landmark', label: 'Landmark', icon: Building2, description: 'One specific property — stops within the same site' },
+  { value: 'landmark', label: 'Property', icon: Building2, description: 'One specific property — stops within the same site' },
   { value: 'area', label: 'Area', icon: MapPinned, description: 'Walking or close driving — different locations, 1-3 miles' },
   { value: 'road_trip', label: 'Road Trip', icon: Route, description: 'Driving across a wider region — 8+ stops, higher mileage' },
 ];

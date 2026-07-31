@@ -360,7 +360,7 @@ export default function HauntedLocations() {
       const locs = [...local, ...discovered];
       setOriginLabel(label);
       setResults(locs);
-      if (locs.length === 0) setError('No haunted landmarks found within 30 miles. Try a different zip code, or use Nearby Tours to generate one.');
+      if (locs.length === 0) setError('No haunted properties found within 30 miles. Try a different zip code, or use Nearby Tours to generate one.');
     } catch (e) {
       setError('Could not load locations. Please try again.');
     }
@@ -432,7 +432,7 @@ export default function HauntedLocations() {
       <div className="rounded-xl border border-accent/30 bg-accent/5 overflow-hidden">
         <div className="p-3 flex items-center gap-2 border-b border-accent/20">
           <HauntedHouse className="w-4 h-4 text-accent" />
-          <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Haunted Landmarks</p>
+          <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Haunted Properties</p>
           <span className="ml-auto text-[9px] text-muted-foreground font-heading uppercase tracking-wider">Within 30 mi</span>
         </div>
 
@@ -499,7 +499,7 @@ export default function HauntedLocations() {
         {results && results.length > 0 && (
           <div className="px-3 pb-3">
             <p className="text-[10px] text-muted-foreground mb-2 font-heading uppercase tracking-wider">
-              {results.length} landmark{results.length === 1 ? '' : 's'} — {originLabel}
+              {results.length} property{results.length === 1 ? '' : 's'} — {originLabel}
             </p>
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {results.map((loc, i) => {
@@ -602,7 +602,7 @@ export default function HauntedLocations() {
                                   className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-60"
                                 >
                                   {creatingId === loc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                  {creatingId === loc.id ? 'Creating Landmark…' : 'Create Landmark Tour'}
+                                  {creatingId === loc.id ? 'Creating Property…' : 'Create Property Tour'}
                                 </button>
                                 {creatingId === loc.id && (
                                   <div className="mt-2 flex justify-center"><BePatient /></div>

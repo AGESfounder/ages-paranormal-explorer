@@ -12,7 +12,7 @@
         "area",
         "road_trip"
       ],
-      "description": "Tour category: landmark = single property with stops on the same site, area = walking or close driving across different locations in a local area, road_trip = driving tour across a wider region with 8+ stops"
+      "description": "Tour category: property (enum value 'landmark') = single property with stops on the same site, area = walking or close driving across different locations in a local area, road_trip = driving tour across a wider region with 8+ stops"
     },
     "state": {
       "type": "string"

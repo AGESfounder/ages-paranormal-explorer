@@ -1,7 +1,7 @@
 import React from 'react';
 import { Building2, MapPin, Car } from 'lucide-react';
 
-const LABELS = { landmark: 'Landmark', area: 'Area', road_trip: 'Road Trip' };
+const LABELS = { landmark: 'Property', area: 'Area', road_trip: 'Road Trip' };
 const ICONS = { landmark: Building2, area: MapPin, road_trip: Car };
 const STYLES = {
   landmark: 'bg-primary/20 text-primary border border-primary/40',
