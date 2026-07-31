@@ -82,7 +82,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
               </div>
               <div>
                 <h2 className="font-heading text-base font-semibold text-foreground">Custom Tour</h2>
-                <p className="text-[10px] text-muted-foreground font-heading uppercase tracking-wider">Haunted Destinations</p>
+                <p className="text-[10px] text-muted-foreground font-heading uppercase tracking-wider">Bring Visions to Life</p>
               </div>
             </div>
 

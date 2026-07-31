@@ -319,7 +319,7 @@ Use real locations with documented paranormal history only.`,
 
   return (
     <PageContainer>
-      <SectionHeader title="Nearby Tours" subtitle={coords ? 'Sorted by distance' : 'Recent tours'} showBack />
+      <SectionHeader title="Existing Tours" subtitle={coords ? 'Sorted by distance' : 'Recent tours'} showBack />
       <PullToRefresh onRefresh={refreshNearby}>
       <div className="px-4 pb-28 space-y-3 pt-3">
 
