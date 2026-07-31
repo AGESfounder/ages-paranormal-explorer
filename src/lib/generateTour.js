@@ -109,22 +109,6 @@ BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Explorat
 
 Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a PROPERTY tour, every stop uses these same coordinates (areas within one site). For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
 
-  // Robust multi-attempt generation: web search first, then a no-web fallback
-  // using the model's training knowledge. The lightweight payload makes either
-  // attempt fast enough to avoid timeouts.
-  let result = null;
-  try {
-    result = await callJson(prompt, { useWeb: true });
-  } catch (e) { console.error('Tour generation (web) failed:', e); }
-  if (!result || !result.stops || result.stops.length === 0) {
-    try {
-      result = await callJson(prompt, { useWeb: false });
-    } catch (e) { console.error('Tour generation (no-web) failed:', e); }
-  }
-  if (!result || !result.stops || result.stops.length === 0) {
-    throw new Error('Could not generate this tour after several attempts. Please try again.');
-  }
-
   // Coerce LLM output into the exact types/enums the schema expects. The LLM
   // often returns capitalized enums ("Moderate", "Walking") or tags as a string,
   // which fail schema validation and cause Tour.create / TourStop.bulkCreate to
@@ -139,101 +123,136 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
     return null;
   };
   const toStrArr = (v) => Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()) : [];
-  // The LLM often returns string fields as arrays (e.g. safety_info: ["note 1", "note 2"]),
-  // which fail schema validation. Coerce to a single string.
   const toStr = (v) => {
     if (Array.isArray(v)) return v.filter((x) => typeof x === 'string' && x.trim()).join('\n\n');
     if (typeof v === 'string') return v;
     if (v == null) return '';
     return String(v);
   };
-
-  const stopsIn = Array.isArray(result.stops) ? result.stops : [];
-  const allValidStops = stopsIn.map((s, i) => ({
-    s,
-    name: (s && typeof s.name === 'string' && s.name.trim()) ? s.name : `${dest} Stop ${i + 1}`,
-    stop_number: (s && typeof s.stop_number === 'number') ? s.stop_number : i + 1,
-  }));
-
-  // DEDUP GUARD: Remove duplicate stops by name OR address (case-insensitive).
-  // The LLM occasionally returns the same location twice with slightly
-  // different names (e.g. "The Powel House" vs "Powel House") — keep the first
-  // occurrence. For area tours, also catch same-address duplicates.
   const normalizeAddr = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-  const seenStopNames = new Set();
-  const seenStopAddrs = new Set();
-  const validStops = [];
-  for (const item of allValidStops) {
-    const nameKey = item.name.toLowerCase().trim();
-    const addrKey = normalizeAddr(item.s?.address);
-    if (seenStopNames.has(nameKey)) continue;
-    if (addrKey && seenStopAddrs.has(addrKey)) continue;
-    if (nameKey) seenStopNames.add(nameKey);
-    if (addrKey) seenStopAddrs.add(addrKey);
-    validStops.push(item);
-  }
 
-  // CATEGORY CORRECTION: If all stops share the same street address, this is
-  // a single-property tour regardless of the category the user/LLM chose.
-  // Force it to "landmark" (property) to prevent miscategorization (e.g.
-  // Pennhurst Asylum generated as "area" when all stops are on the grounds).
-  let correctedCategory = category;
-  if (validStops.length >= 2 && correctedCategory !== 'ship') {
-    const addrs = validStops.map((v) => normalizeAddr(v.s?.address)).filter(Boolean);
-    if (addrs.length >= 2 && addrs.every((a) => a === addrs[0])) {
-      correctedCategory = 'landmark';
+  // MINIMUM STOP ENFORCEMENT — prevents low-quality tours (e.g. 1-stop tours)
+  // from being created. The LLM sometimes returns too few stops; we retry up to
+  // 3 attempts and reject if the minimum still isn't met.
+  const MIN_STOPS_FOR = (cat) => cat === 'road_trip' ? 6 : 4;
+
+  // Process a raw LLM result into normalized tour data + stop records.
+  const processResult = (raw) => {
+    if (!raw || !raw.stops || raw.stops.length === 0) return null;
+    const stopsIn = Array.isArray(raw.stops) ? raw.stops : [];
+    const allValidStops = stopsIn.map((s, i) => ({
+      s,
+      name: (s && typeof s.name === 'string' && s.name.trim()) ? s.name : `${dest} Stop ${i + 1}`,
+      stop_number: (s && typeof s.stop_number === 'number') ? s.stop_number : i + 1,
+    }));
+
+    // DEDUP GUARD: Remove duplicate stops by name OR address (case-insensitive).
+    const seenStopNames = new Set();
+    const seenStopAddrs = new Set();
+    const validStops = [];
+    for (const item of allValidStops) {
+      const nameKey = item.name.toLowerCase().trim();
+      const addrKey = normalizeAddr(item.s?.address);
+      if (seenStopNames.has(nameKey)) continue;
+      if (addrKey && seenStopAddrs.has(addrKey)) continue;
+      if (nameKey) seenStopNames.add(nameKey);
+      if (addrKey) seenStopAddrs.add(addrKey);
+      validStops.push(item);
     }
-  }
 
-  const tourData = {
-    title: result.title || `${dest} Paranormal Investigation`,
-    tour_category: correctedCategory,
-    state: normalizeStateName(state),
-    city: result.city || '',
-    tour_type: normEnum(result.tour_type, ['walking', 'driving', 'mixed'], 'walking'),
-    description: toStr(result.description),
-    introduction: toStr(result.introduction),
-    conclusion: toStr(result.conclusion),
-    difficulty: normEnum(result.difficulty, ['easy', 'moderate', 'challenging'], 'moderate'),
-    estimated_duration: toStr(result.estimated_duration),
-    total_distance: toStr(result.total_distance),
-    start_location_name: toStr(result.start_location_name),
-    start_latitude: useCoords ? coords.lat : toNum(result.start_latitude),
-    start_longitude: useCoords ? coords.lng : toNum(result.start_longitude),
-    image_url: toStr(result.image_url),
-    tags: toStrArr(result.tags),
-    safety_info: toStr(result.safety_info),
-    best_time: toStr(result.best_time),
+    // CATEGORY CORRECTION: If all stops share the same street address, force
+    // to "landmark" (property) to prevent miscategorization.
+    let correctedCategory = category;
+    if (validStops.length >= 2 && correctedCategory !== 'ship') {
+      const addrs = validStops.map((v) => normalizeAddr(v.s?.address)).filter(Boolean);
+      if (addrs.length >= 2 && addrs.every((a) => a === addrs[0])) {
+        correctedCategory = 'landmark';
+      }
+    }
+
+    const tourData = {
+      title: raw.title || `${dest} Paranormal Investigation`,
+      tour_category: correctedCategory,
+      state: normalizeStateName(state),
+      city: raw.city || '',
+      tour_type: normEnum(raw.tour_type, ['walking', 'driving', 'mixed'], 'walking'),
+      description: toStr(raw.description),
+      introduction: toStr(raw.introduction),
+      conclusion: toStr(raw.conclusion),
+      difficulty: normEnum(raw.difficulty, ['easy', 'moderate', 'challenging'], 'moderate'),
+      estimated_duration: toStr(raw.estimated_duration),
+      total_distance: toStr(raw.total_distance),
+      start_location_name: toStr(raw.start_location_name),
+      start_latitude: useCoords ? coords.lat : toNum(raw.start_latitude),
+      start_longitude: useCoords ? coords.lng : toNum(raw.start_longitude),
+      image_url: toStr(raw.image_url),
+      tags: toStrArr(raw.tags),
+      safety_info: toStr(raw.safety_info),
+      best_time: toStr(raw.best_time),
+    };
+
+    const stopRecords = validStops.map(({ s, name, stop_number }) => ({
+      stop_number,
+      name,
+      latitude: useCoords ? coords.lat : toNum(s.latitude),
+      longitude: useCoords ? coords.lng : toNum(s.longitude),
+      address: toStr(s.address),
+      historical_info: toStr(s.historical_info),
+      paranormal_info: toStr(s.paranormal_info),
+      investigation_suggestions: toStrArr(s.investigation_suggestions),
+      estimated_investigation_time: toStr(s.estimated_investigation_time),
+      construction_date: toStr(s.construction_date),
+      famous_people: toStr(s.famous_people),
+      image_url: toStr(s.image_url),
+      narration_text: toStr(s.narration_text),
+      travel_method: normEnum(s.travel_method, ['walking', 'driving'], 'walking'),
+      hours_of_operation: toStr(s.hours_of_operation),
+      entry_fee: toStr(s.entry_fee),
+    }));
+
+    return { tourData, stopRecords, correctedCategory, validStops };
   };
 
-  const newTour = await base44.entities.Tour.create(tourData);
+  // Robust multi-attempt generation: web, then no-web fallback, then a web retry
+  // if the minimum stop count isn't met. The lightweight payload makes each
+  // attempt fast enough to avoid timeouts.
+  const tryCall = async (useWeb) => {
+    try { return await callJson(prompt, { useWeb }); }
+    catch (e) { console.error('Tour generation failed:', e); return null; }
+  };
 
-  if (validStops.length > 0) {
-    try {
-      const stopRecords = validStops.map(({ s, name, stop_number }) => ({
-        tour_id: newTour.id,
-        stop_number,
-        name,
-        latitude: useCoords ? coords.lat : toNum(s.latitude),
-        longitude: useCoords ? coords.lng : toNum(s.longitude),
-        address: toStr(s.address),
-        historical_info: toStr(s.historical_info),
-        paranormal_info: toStr(s.paranormal_info),
-        investigation_suggestions: toStrArr(s.investigation_suggestions),
-        estimated_investigation_time: toStr(s.estimated_investigation_time),
-        construction_date: toStr(s.construction_date),
-        famous_people: toStr(s.famous_people),
-        image_url: toStr(s.image_url),
-        narration_text: toStr(s.narration_text),
-        travel_method: normEnum(s.travel_method, ['walking', 'driving'], 'walking'),
-        hours_of_operation: toStr(s.hours_of_operation),
-        entry_fee: toStr(s.entry_fee),
-      }));
-      await base44.entities.TourStop.bulkCreate(stopRecords);
-    } catch (e) {
-      // Stop creation failure must not block the tour; TourDetail backfills stops.
-      console.error('Stop creation failed (tour still created):', e);
-    }
+  let processed = null;
+  const attemptOrder = [true, false, true]; // web, no-web, web
+  for (let i = 0; i < attemptOrder.length; i++) {
+    const raw = await tryCall(attemptOrder[i]);
+    const p = processResult(raw);
+    if (!p) continue;
+    if (!processed) processed = p; // keep first valid result as fallback
+    const min = MIN_STOPS_FOR(p.correctedCategory);
+    if (p.validStops.length >= min) { processed = p; break; }
+    console.warn(`Attempt ${i + 1}: only ${p.validStops.length} stops (min ${min}), retrying...`);
+  }
+
+  if (!processed || processed.validStops.length === 0) {
+    throw new Error('Could not generate this tour after several attempts. Please try again.');
+  }
+
+  const minStops = MIN_STOPS_FOR(processed.correctedCategory);
+  if (processed.validStops.length < minStops) {
+    throw new Error(
+      `This location generated only ${processed.validStops.length} stop${processed.validStops.length === 1 ? '' : 's'} ` +
+      `(minimum ${minStops} required). Please try again or try a different location.`
+    );
+  }
+
+  const newTour = await base44.entities.Tour.create(processed.tourData);
+
+  try {
+    const stopRecords = processed.stopRecords.map((r) => ({ ...r, tour_id: newTour.id }));
+    await base44.entities.TourStop.bulkCreate(stopRecords);
+  } catch (e) {
+    // Stop creation failure must not block the tour; TourDetail backfills stops.
+    console.error('Stop creation failed (tour still created):', e);
   }
 
   return newTour;

@@ -154,7 +154,7 @@ export default function HauntedLocations() {
       base44.entities.Tour.list('-created_date', 500),
       base44.entities.TourStop.list('-created_date', 500),
     ]);
-    const tours = allTours.filter(t => t.tour_category === 'landmark');
+    const tours = allTours.filter(t => t.tour_category === 'landmark' || t.tour_category === 'area');
     const tourMap = {};
     tours.forEach(t => { tourMap[t.id] = t; });
     const byTour = {};
@@ -187,6 +187,7 @@ export default function HauntedLocations() {
       if (!tour) continue;
       const ts = byTour[tid];
       if (singleDest[tid]) continue;
+      if (tour.tour_category === 'area') continue; // area tours shown as tour cards below
 
       clusterStops(ts, 0.15).forEach(cluster => {
         const rep = representative(cluster);
@@ -201,6 +202,7 @@ export default function HauntedLocations() {
         locations.push({
           id: `stop-${rep.id}`,
           kind: 'stop',
+          tourCategory: 'landmark',
           name: rep.name,
           address: rep.address || '',
           lat: clat,
@@ -216,12 +218,14 @@ export default function HauntedLocations() {
       });
     }
 
-    // Single-destination dedicated tours: one "Go to Existing Tour" card each,
-    // unless a stop card already links to them (avoids duplicate cards).
+    // Single-destination landmark tours AND area tours: one "Go to Existing
+    // Tour" card each, unless a stop card already links to them (avoids
+    // duplicate cards). Area tours are always shown as tour-level cards (not
+    // individual stops) since they cover multiple properties in an area.
     for (const tid of Object.keys(byTour)) {
-      if (!singleDest[tid]) continue;
       const tour = tourMap[tid];
       if (!tour || representedTours.has(tour.id)) continue;
+      if (!singleDest[tid] && tour.tour_category !== 'area') continue;
       const ts = byTour[tid];
       const clat = ts.reduce((a, s) => a + s.latitude, 0) / ts.length;
       const clon = ts.reduce((a, s) => a + s.longitude, 0) / ts.length;
@@ -231,6 +235,7 @@ export default function HauntedLocations() {
       locations.push({
         id: `tour-${tour.id}`,
         kind: 'tour',
+        tourCategory: tour.tour_category,
         name: tour.title,
         address: ts[0].address || '',
         lat: clat,
@@ -256,6 +261,7 @@ export default function HauntedLocations() {
       locations.push({
         id: `tour-${tour.id}`,
         kind: 'tour',
+        tourCategory: tour.tour_category,
         name: tour.title,
         address: '',
         lat: tour.start_latitude,
@@ -282,7 +288,7 @@ export default function HauntedLocations() {
   const discoverLocations = async (lat, lon, label) => {
     try {
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Find real haunted locations with documented paranormal history within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return up to 8 of the most notable, publicly accessible haunted locations that can be visited or approached after 7 PM. For each location provide: name, address (street address if known, otherwise the city), city, state (full state name), latitude, longitude (real GPS coordinates), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
+        prompt: `Find real haunted locations and haunted areas within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return up to 12 results — a mix of individual haunted properties (single buildings/sites like asylums, hotels, cemeteries, prisons) and haunted areas (cities, towns, or neighborhoods known for multiple haunted locations). Aim for roughly 50% properties and 50% areas. For each result provide: name, type ("property" for a single building/site, "area" for a city/town/neighborhood with multiple hauntings), address (street address for properties, or the city name for areas), city, state (full state name), latitude, longitude (real GPS coordinates — for areas use the center of the area), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
         add_context_from_internet: true,
         model: 'gemini_3_flash',
         response_json_schema: {
@@ -294,6 +300,7 @@ export default function HauntedLocations() {
                 type: 'object',
                 properties: {
                   name: { type: 'string' },
+                  type: { type: 'string' },
                   address: { type: 'string' },
                   city: { type: 'string' },
                   state: { type: 'string' },
@@ -314,21 +321,26 @@ export default function HauntedLocations() {
       // discovered location is genuinely new and gets a "Create Tour" button.
       return (result.locations || [])
         .filter((l) => l.latitude && l.longitude)
-        .map((l, i) => ({
-          id: `discovered-${i}`,
-          kind: 'discovered',
-          name: l.name,
-          address: l.address || '',
-          lat: l.latitude,
-          lng: l.longitude,
-          dist: haversineDistance(lat, lon, l.latitude, l.longitude),
-          overview: l.overview || '',
-          hours: l.hours || '',
-          fee: l.fee || '',
-          city: l.city || '',
-          createName: l.name,
-          createState: l.state || '',
-        }))
+        .map((l, i) => {
+          const isArea = (l.type || 'property') === 'area';
+          return {
+            id: `discovered-${i}`,
+            kind: 'discovered',
+            tourCategory: isArea ? 'area' : 'landmark',
+            name: l.name,
+            address: l.address || '',
+            lat: l.latitude,
+            lng: l.longitude,
+            dist: haversineDistance(lat, lon, l.latitude, l.longitude),
+            overview: l.overview || '',
+            hours: l.hours || '',
+            fee: l.fee || '',
+            city: l.city || '',
+            createName: l.name,
+            createState: l.state || '',
+            createCategory: isArea ? 'area' : 'landmark',
+          };
+        })
         .filter((l) => l.dist <= 30)
         .sort((a, b) => a.dist - b.dist);
     } catch (e) {
@@ -357,7 +369,9 @@ export default function HauntedLocations() {
         seen.push(d);
         return true;
       });
-      const locs = [...local, ...discovered];
+      // Merge local + discovered into ONE distance-sorted list (not two
+      // separate ordered lists concatenated).
+      const locs = [...local, ...discovered].sort((a, b) => a.dist - b.dist);
       setOriginLabel(label);
       setResults(locs);
       if (locs.length === 0) setError('No haunted properties found within 30 miles. Try a different zip code, or use Nearby Tours to generate one.');
@@ -412,7 +426,7 @@ export default function HauntedLocations() {
         loc.createName,
         loc.createState,
         loc.lat != null && loc.lng != null ? { lat: loc.lat, lng: loc.lng } : undefined,
-        'landmark'
+        loc.createCategory || 'landmark'
       );
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
@@ -513,7 +527,7 @@ export default function HauntedLocations() {
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-xs font-medium text-foreground leading-snug flex items-center gap-1">
                           {i + 1}. {loc.name}
-                          <TourCategoryBadge category="landmark" />
+                          <TourCategoryBadge category={loc.tourCategory || 'landmark'} />
                         </p>
                         <div className="flex items-center gap-1 shrink-0">
                           <span className="text-[10px] text-primary font-heading">{loc.dist.toFixed(1)} mi</span>
@@ -602,7 +616,7 @@ export default function HauntedLocations() {
                                   className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-60"
                                 >
                                   {creatingId === loc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                  {creatingId === loc.id ? 'Creating Property…' : 'Create Property Tour'}
+                                  {creatingId === loc.id ? `Creating ${loc.tourCategory === 'area' ? 'Area' : 'Property'}…` : `Create ${loc.tourCategory === 'area' ? 'Area' : 'Property'} Tour`}
                                 </button>
                                 {creatingId === loc.id && (
                                   <div className="mt-2 flex justify-center"><BePatient /></div>
