@@ -178,14 +178,21 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
     stop_number: (s && typeof s.stop_number === 'number') ? s.stop_number : i + 1,
   }));
 
-  // DEDUP GUARD: Remove duplicate stops by name (case-insensitive). The LLM
-  // occasionally returns the same location twice — keep the first occurrence.
+  // DEDUP GUARD: Remove duplicate stops by name OR address (case-insensitive).
+  // The LLM occasionally returns the same location twice with slightly
+  // different names (e.g. "The Powel House" vs "Powel House") — keep the first
+  // occurrence. For area tours, also catch same-address duplicates.
+  const normalizeAddr = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
   const seenStopNames = new Set();
+  const seenStopAddrs = new Set();
   const validStops = [];
   for (const item of allValidStops) {
-    const key = item.name.toLowerCase().trim();
-    if (seenStopNames.has(key)) continue;
-    seenStopNames.add(key);
+    const nameKey = item.name.toLowerCase().trim();
+    const addrKey = normalizeAddr(item.s?.address);
+    if (seenStopNames.has(nameKey)) continue;
+    if (addrKey && seenStopAddrs.has(addrKey)) continue;
+    if (nameKey) seenStopNames.add(nameKey);
+    if (addrKey) seenStopAddrs.add(addrKey);
     validStops.push(item);
   }
 

@@ -143,15 +143,21 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
     if (newByInsertAfter[num]) ordered.push(...newByInsertAfter[num]);
   }
 
-  // DEDUP GUARD: Remove duplicate stops by name (case-insensitive). If a new
-  // stop duplicates an existing one, drop the new one and delete it from the DB.
+  // DEDUP GUARD: Remove duplicate stops by name OR address (case-insensitive).
+  // If a new stop duplicates an existing one by name or address, drop the new
+  // one and delete it from the DB.
+  const normalizeAddr = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
   const seenNames = new Set();
+  const seenAddrs = new Set();
   const dedupedOrdered = [];
   const orphanedNewIds = [];
   for (const s of ordered) {
-    const key = (s.name || '').toLowerCase().trim();
-    if (!key || !seenNames.has(key)) {
-      if (key) seenNames.add(key);
+    const nameKey = (s.name || '').toLowerCase().trim();
+    const addrKey = normalizeAddr(s.address);
+    const isDup = (nameKey && seenNames.has(nameKey)) || (addrKey && seenAddrs.has(addrKey));
+    if (!isDup) {
+      if (nameKey) seenNames.add(nameKey);
+      if (addrKey) seenAddrs.add(addrKey);
       dedupedOrdered.push(s);
     } else {
       if (createdStops.find((c) => c.id === s.id)) orphanedNewIds.push(s.id);
