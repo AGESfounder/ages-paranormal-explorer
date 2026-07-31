@@ -143,9 +143,11 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
     if (newByInsertAfter[num]) ordered.push(...newByInsertAfter[num]);
   }
 
-  // DEDUP GUARD: Remove duplicate stops by name OR address (case-insensitive).
-  // If a new stop duplicates an existing one by name or address, drop the new
-  // one and delete it from the DB.
+  // DEDUP GUARD: Remove duplicate stops by name (always) and by address
+  // (only for area/road_trip tours, where each stop should have a unique
+  // address). For landmark/cold_spot/ship tours, all stops share the same
+  // address, so address dedup would discard valid new stops.
+  const dedupByAddr = tour.tour_category === 'area' || tour.tour_category === 'road_trip';
   const normalizeAddr = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
   const seenNames = new Set();
   const seenAddrs = new Set();
@@ -154,10 +156,10 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
   for (const s of ordered) {
     const nameKey = (s.name || '').toLowerCase().trim();
     const addrKey = normalizeAddr(s.address);
-    const isDup = (nameKey && seenNames.has(nameKey)) || (addrKey && seenAddrs.has(addrKey));
+    const isDup = (nameKey && seenNames.has(nameKey)) || (dedupByAddr && addrKey && seenAddrs.has(addrKey));
     if (!isDup) {
       if (nameKey) seenNames.add(nameKey);
-      if (addrKey) seenAddrs.add(addrKey);
+      if (dedupByAddr && addrKey) seenAddrs.add(addrKey);
       dedupedOrdered.push(s);
     } else {
       if (createdStops.find((c) => c.id === s.id)) orphanedNewIds.push(s.id);
