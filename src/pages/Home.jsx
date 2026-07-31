@@ -9,6 +9,7 @@ import LightningStrike from '../components/LightningStrike';
 import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
 import HauntedLocations from '../components/HauntedLocations';
+import DashboardEnergyPreview from '../components/DashboardEnergyPreview';
 import { base44 } from '@/api/base44Client';
 
 const menuItems = [
@@ -331,10 +332,11 @@ export default function Home() {
                 <div className={`p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors ${item.featured ? 'shrink-0' : ''}`}>
                   <item.icon className="w-6 h-6 text-primary group-hover:drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)] transition-all" />
                 </div>
-                <div className={item.featured ? 'text-left' : 'text-center'}>
+                <div className={item.featured ? 'text-left flex-1' : 'text-center'}>
                   <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">{item.label}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{item.desc}</p>
                 </div>
+                {item.featured && <DashboardEnergyPreview user={user} />}
               </Link>
             </motion.div>
           ))}
