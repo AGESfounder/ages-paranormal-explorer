@@ -1,0 +1,86 @@
+{
+  "name": "Base44Purchase",
+  "type": "object",
+  "properties": {
+    "checkoutSessionId": {
+      "type": "string",
+      "description": "Wix checkout session ID. The ONLY link from a payment back to the buyer."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "paid",
+        "failed"
+      ],
+      "default": "pending"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "Logged-in user's email at checkout time (from auth session, not Wix checkout form)"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "Logged-in user's Base44 ID at checkout time"
+    },
+    "product_type": {
+      "type": "string",
+      "enum": [
+        "subscription",
+        "one_time",
+        "aura_bundle"
+      ]
+    },
+    "product_id": {
+      "type": "string",
+      "description": "Product identifier: explorer_monthly, explorer_annual, investigator_monthly, investigator_annual, trailblazer, flicker, apparition, haunting, spectral"
+    },
+    "product_name": {
+      "type": "string",
+      "description": "Display name of the product"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Price paid in USD"
+    },
+    "subscription_id": {
+      "type": "string",
+      "description": "Wix subscription contract ID. Stored on order_approved webhook. Used to match cancel/expire webhooks."
+    }
+  },
+  "required": [
+    "checkoutSessionId",
+    "status",
+    "product_type",
+    "product_id"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -15,6 +15,61 @@
     "blocked_users": {
       "type": "string",
       "description": "JSON-encoded list of blocked user ids"
+    },
+    "plan": {
+      "type": "string",
+      "enum": [
+        "observer",
+        "explorer",
+        "investigator",
+        "trailblazer"
+      ],
+      "default": "observer",
+      "description": "Current access level. observer = free, explorer = standard, investigator = premium, trailblazer = 3-year elite"
+    },
+    "manifestation_energy": {
+      "type": "number",
+      "default": 0,
+      "description": "Monthly Manifestation Energy for AI tour/stop generation (InvokeLLM). Resets monthly."
+    },
+    "narration_energy": {
+      "type": "number",
+      "default": 0,
+      "description": "Monthly Narration Energy for text-to-speech (GenerateSpeech). Resets monthly."
+    },
+    "energy_reset_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO datetime when monthly energy resets to full allocation"
+    },
+    "aura_manifestation_energy": {
+      "type": "number",
+      "default": 0,
+      "description": "Rollover Manifestation Energy from Aura Bundle purchases. Does not reset monthly."
+    },
+    "aura_narration_energy": {
+      "type": "number",
+      "default": 0,
+      "description": "Rollover Narration Energy from Aura Bundle purchases. Does not reset monthly."
+    },
+    "subscription_id": {
+      "type": "string",
+      "description": "Wix subscription contract ID. Used to match cancel/expire webhooks."
+    },
+    "subscription_status": {
+      "type": "string",
+      "enum": [
+        "none",
+        "active",
+        "canceled",
+        "expired"
+      ],
+      "default": "none"
+    },
+    "plan_expiration_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the current plan expires. For Trailblazer (3-year), this is 3 years from purchase. For subscriptions, updated on renewal."
     }
   },
   "required": [

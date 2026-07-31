@@ -34,6 +34,8 @@ import EvidenceDashboard from '@/pages/EvidenceDashboard';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
 import HauntedMusic from '@/components/HauntedMusic';
+import Dashboard from '@/pages/Dashboard';
+import ThankYou from '@/pages/ThankYou';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
@@ -72,9 +74,11 @@ const AuthenticatedApp = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/ThankYou" element={<ThankYou />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         {/* Add your page Route elements here */}
         <Route path="/" element={<Home />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/states" element={<States />} />
         <Route path="/states/:stateAbbr" element={<StateTours />} />
         <Route path="/tour/:tourId" element={<TourDetail />} />
