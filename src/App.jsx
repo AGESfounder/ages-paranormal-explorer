@@ -25,7 +25,6 @@ import Favorites from '@/pages/Favorites';
 import Profile from '@/pages/Profile';
 import Toolkit from '@/pages/Toolkit';
 import Nearby from '@/pages/Nearby';
-import NearbyLandmarks from '@/pages/NearbyLandmarks';
 import AbroadTours from '@/pages/AbroadTours';
 import Settings from '@/pages/Settings';
 import Admin from '@/pages/Admin';
@@ -86,7 +85,6 @@ const AuthenticatedApp = () => {
         <Route path="/profile" element={<Profile />} />
         <Route path="/toolkit" element={<Toolkit />} />
         <Route path="/nearby" element={<Nearby />} />
-        <Route path="/nearby-landmarks" element={<NearbyLandmarks />} />
         <Route path="/abroad" element={<AbroadTours />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<Admin />} />

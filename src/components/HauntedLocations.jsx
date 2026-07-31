@@ -6,7 +6,7 @@ import HauntedHouse from './icons/HauntedHouse';
 import { base44 } from '@/api/base44Client';
 import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
-import TourCategoryDialog from '@/components/TourCategoryDialog';
+import TourCategoryBadge from '@/components/TourCategoryBadge';
 import useGhostVoice from '../hooks/useGhostVoice';
 import BePatient from '@/components/BePatient';
 
@@ -137,7 +137,6 @@ export default function HauntedLocations() {
   const [creatingId, setCreatingId] = useState(null);
   const [narratingId, setNarratingId] = useState(null);
   const [existingTour, setExistingTour] = useState(null);
-  const [categoryDialogLoc, setCategoryDialogLoc] = useState(null);
   const navigate = useNavigate();
   const { narrate, stop, isSpeaking, isGenerating } = useGhostVoice();
 
@@ -151,10 +150,11 @@ export default function HauntedLocations() {
   };
 
   const buildLocations = async (lat, lon) => {
-    const [tours, stops] = await Promise.all([
+    const [allTours, stops] = await Promise.all([
       base44.entities.Tour.list('-created_date', 500),
       base44.entities.TourStop.list('-created_date', 500),
     ]);
+    const tours = allTours.filter(t => t.tour_category === 'landmark');
     const tourMap = {};
     tours.forEach(t => { tourMap[t.id] = t; });
     const byTour = {};
@@ -360,7 +360,7 @@ export default function HauntedLocations() {
       const locs = [...local, ...discovered];
       setOriginLabel(label);
       setResults(locs);
-      if (locs.length === 0) setError('No haunted locations found within 30 miles. Try a different zip code, or use Nearby Tours to generate one.');
+      if (locs.length === 0) setError('No haunted landmarks found within 30 miles. Try a different zip code, or use Nearby Tours to generate one.');
     } catch (e) {
       setError('Could not load locations. Please try again.');
     }
@@ -398,10 +398,9 @@ export default function HauntedLocations() {
     }
   };
 
-  const handleCreateTour = async (loc, category) => {
+  const handleCreateTour = async (loc) => {
     setError('');
     setCreatingId(loc.id);
-    setCategoryDialogLoc(null);
     try {
       const existing = await findExistingTour(loc.createName, loc.createState);
       if (existing) {
@@ -413,7 +412,7 @@ export default function HauntedLocations() {
         loc.createName,
         loc.createState,
         loc.lat != null && loc.lng != null ? { lat: loc.lat, lng: loc.lng } : undefined,
-        category
+        'landmark'
       );
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
@@ -433,7 +432,7 @@ export default function HauntedLocations() {
       <div className="rounded-xl border border-accent/30 bg-accent/5 overflow-hidden">
         <div className="p-3 flex items-center gap-2 border-b border-accent/20">
           <HauntedHouse className="w-4 h-4 text-accent" />
-          <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Haunted Locations</p>
+          <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Haunted Landmarks</p>
           <span className="ml-auto text-[9px] text-muted-foreground font-heading uppercase tracking-wider">Within 30 mi</span>
         </div>
 
@@ -500,7 +499,7 @@ export default function HauntedLocations() {
         {results && results.length > 0 && (
           <div className="px-3 pb-3">
             <p className="text-[10px] text-muted-foreground mb-2 font-heading uppercase tracking-wider">
-              {results.length} location{results.length === 1 ? '' : 's'} — {originLabel}
+              {results.length} landmark{results.length === 1 ? '' : 's'} — {originLabel}
             </p>
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {results.map((loc, i) => {
@@ -514,8 +513,7 @@ export default function HauntedLocations() {
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-xs font-medium text-foreground leading-snug flex items-center gap-1">
                           {i + 1}. {loc.name}
-                          {loc.kind === 'tour' && <span className="text-[8px] text-accent font-heading uppercase">Landmark</span>}
-                          {loc.kind === 'discovered' && <span className="text-[8px] text-cyan-glow font-heading uppercase">Web</span>}
+                          <TourCategoryBadge category="landmark" />
                         </p>
                         <div className="flex items-center gap-1 shrink-0">
                           <span className="text-[10px] text-primary font-heading">{loc.dist.toFixed(1)} mi</span>
@@ -599,12 +597,12 @@ export default function HauntedLocations() {
                             ) : (
                               <>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); setCategoryDialogLoc(loc); }}
+                                  onClick={(e) => { e.stopPropagation(); handleCreateTour(loc); }}
                                   disabled={creatingId === loc.id}
                                   className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-60"
                                 >
                                   {creatingId === loc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                  {creatingId === loc.id ? 'Creating Tour…' : 'Create Tour of This Location'}
+                                  {creatingId === loc.id ? 'Creating Landmark…' : 'Create Landmark Tour'}
                                 </button>
                                 {creatingId === loc.id && (
                                   <div className="mt-2 flex justify-center"><BePatient /></div>
@@ -623,12 +621,6 @@ export default function HauntedLocations() {
         )}
       </div>
       <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
-      <TourCategoryDialog
-        isOpen={!!categoryDialogLoc}
-        onClose={() => setCategoryDialogLoc(null)}
-        onSelect={(category) => categoryDialogLoc && handleCreateTour(categoryDialogLoc, category)}
-        destination={categoryDialogLoc?.createName || ''}
-      />
     </motion.div>
   );
 }
