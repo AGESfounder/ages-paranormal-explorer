@@ -1,5 +1,6 @@
 import React from 'react';
-import { Printer } from 'lucide-react';
+import { Printer, Download } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 
 // ===== DATA (mirrors src/lib/plans.js + base44/shared/plans.js) =====
 const PLANS = [
@@ -115,6 +116,90 @@ const scenarios = [
 
 const today = new Date('2026-07-31').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
+function downloadPDF() {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const M = 40;
+  let y = 50;
+  const lh = 14;
+
+  const heading = (text, size = 14) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(size); doc.text(text, M, y); y += size + 6; };
+  const para = (text, size = 9) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(size); const lines = doc.splitTextToSize(text, W - M * 2); lines.forEach(l => { if (y > 780) { doc.addPage(); y = 50; } doc.text(l, M, y); y += lh; }); y += 2; };
+  const table = (headers, rows, colWidths) => {
+    const startX = M;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+    let x = startX;
+    headers.forEach((h, i) => { doc.text(h, x, y); x += colWidths[i]; });
+    y += 4; doc.setLineWidth(0.5); doc.line(M, y, W - M, y); y += 10;
+    doc.setFont('helvetica', 'normal');
+    rows.forEach(row => {
+      if (y > 770) { doc.addPage(); y = 50; }
+      x = startX;
+      row.forEach((cell, i) => { doc.text(String(cell), x, y); x += colWidths[i]; });
+      y += lh;
+    });
+    y += 8;
+  };
+
+  // Title
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+  doc.text('AGES Subscription Plan & Profit Analysis', M, y); y += 22;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+  doc.text(`Generated ${today}`, M, y); y += 20;
+
+  heading('1. Subscription Tiers');
+  table(['Plan', 'Price', 'Billing', 'Man. E', 'Narr. E'],
+    PLANS.map(p => [p.name, p.price, p.billing, p.manE, p.narE]),
+    [70, 50, 160, 60, 60]);
+
+  heading('2. Aura Bundles');
+  table(['Bundle', 'Energy', 'Price', '$/Energy'],
+    AURA_BUNDLES.map(b => [b.name, b.energy, b.price, '$' + (parseFloat(b.price.replace('$', '')) / b.energy).toFixed(4)]),
+    [80, 60, 50, 70]);
+
+  heading('3. Cost Assumptions');
+  para(`Manifestation Energy: 1 unit = 1 InvokeLLM call (Automatic) ~ ${CREDITS_PER_MANIFESTATION} integration credits`);
+  para(`Narration Energy: 1 unit = 1 GenerateSpeech credit (1 credit / 50 chars)`);
+  para(`Platform cost: $${COST_PER_CREDIT.toFixed(4)}/credit (Builder/Pro: $40-80/mo / 10k-20k credits)`);
+  para(`Payment processing: ${(PAYMENT_FEE_PCT * 100).toFixed(1)}% + $${PAYMENT_FEE_FLAT.toFixed(2)} per transaction`);
+  para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
+
+  heading('4. Per-Plan Profit - Monthly, 100% Utilization');
+  table(['Plan', 'Price', 'Credits', 'Platform', 'Fee', 'Cost', 'Profit', 'Margin'],
+    monthlyAnalysis.map(r => ['$' + r.price.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.pf.toFixed(2), '$' + r.totalCost.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']).map((r, i) => [monthlyAnalysis[i].plan, ...r]),
+    [65, 45, 50, 55, 45, 55, 55, 55, 50]);
+
+  heading('5. Trailblazer - 3-Year ($199.99)');
+  table(['Utilization', 'Credits', 'Platform', 'Fee', 'Cost', 'Profit', 'Margin'],
+    [['100%', trailblazerAnalysis.credits.toLocaleString(), '$' + trailblazerAnalysis.platformCost.toFixed(2), '$' + trailblazerAnalysis.pf.toFixed(2), '$' + trailblazerAnalysis.totalCost.toFixed(2), '$' + trailblazerAnalysis.profit.toFixed(2), trailblazerAnalysis.margin.toFixed(1) + '%'],
+     ['50%', trailblazer50.credits.toLocaleString(), '$' + trailblazer50.platformCost.toFixed(2), '$' + trailblazer50.pf.toFixed(2), '$' + trailblazer50.totalCost.toFixed(2), '$' + trailblazer50.profit.toFixed(2), trailblazer50.margin.toFixed(1) + '%']],
+    [65, 65, 55, 45, 55, 55, 50]);
+
+  heading('6. Aura Bundle Profit - 100% Utilization');
+  table(['Bundle', 'Price', 'Credits', 'Platform', 'Fee', 'Profit', 'Margin'],
+    bundleAnalysis.map(r => [r.name, '$' + r.priceNum.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.pf.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
+    [65, 45, 45, 55, 45, 55, 50]);
+
+  heading('7. Revenue Scenarios (Monthly, 70% Utilization)');
+  table(['Scenario', 'Explorer', 'Investigator', 'Trailblazer', 'Total Rev', 'Total Cost', 'Profit', 'Margin'],
+    scenarios.map(s => [s.label, '$' + s.explorerRev.toFixed(0), '$' + s.investigatorRev.toFixed(0), '$' + s.trailblazerRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
+    [90, 60, 65, 65, 60, 60, 55, 50]);
+
+  heading('8. Key Takeaways');
+  para('Explorer is the volume driver - 66% margin at full utilization, higher when energy goes unused.');
+  para('Investigator delivers 52% margin at max use; higher price absorbs the larger energy allotment.');
+  para('Trailblazer breaks near-even at 100% utilization but ~51% margin at realistic (50%) usage. 300-slot cap protects credits.');
+  para('Aura Bundles are high-margin at $3.99+; Flicker ($0.99) is thin due to fixed payment fees.');
+  para('Annual plans improve cash flow and reduce per-transaction fee burden.');
+  para('Risk: users who max out narration energy monthly are costliest. Cache generated audio (replay saved URLs) to avoid repeat TTS charges.');
+
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
+  if (y > 760) { doc.addPage(); y = 50; }
+  doc.text('AGES - Accessible Ghost Exploration Solutions  |  Confidential  |  ' + today, M, y + 20);
+
+  doc.save('AGES-Plan-Analysis.pdf');
+}
+
 const th = 'text-left py-2 px-3 font-heading uppercase text-[11px] tracking-wider text-muted-foreground border-b border-border';
 const td = 'py-2 px-3 text-sm border-b border-border/50';
 const num = 'text-right tabular-nums';
@@ -141,12 +226,20 @@ export default function PlanAnalysis() {
             <h1 className="font-heading text-2xl font-bold text-foreground">AGES Subscription Plan &amp; Profit Analysis</h1>
             <p className="text-sm text-muted-foreground mt-1">Generated {today}</p>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px]"
-          >
-            <Printer className="w-4 h-4" /> Print / Save PDF
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={downloadPDF}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px]"
+            >
+              <Download className="w-4 h-4" /> Download PDF
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-card text-foreground font-heading text-sm uppercase tracking-wider hover:bg-card/60 transition-colors min-h-[44px]"
+            >
+              <Printer className="w-4 h-4" /> Print
+            </button>
+          </div>
         </div>
         <div className="hidden print:block mb-6">
           <h1 className="font-heading text-2xl font-bold print-text">AGES Subscription Plan &amp; Profit Analysis</h1>
