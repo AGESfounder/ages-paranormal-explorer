@@ -3,7 +3,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GhostFootsteps from './GhostFootsteps';
 
-export default function SectionHeader({ title, subtitle, showBack = false, onBack, rightAction }) {
+export default function SectionHeader({ title, subtitle, showBack = false, onBack, rightAction, badge }) {
   const navigate = useNavigate();
 
   return (
@@ -17,7 +17,10 @@ export default function SectionHeader({ title, subtitle, showBack = false, onBac
             </button>
           )}
           <div>
-            <h1 className="font-heading text-base font-semibold tracking-wide text-foreground uppercase">{title}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-heading text-base font-semibold tracking-wide text-foreground uppercase">{title}</h1>
+              {badge}
+            </div>
             {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
         </div>

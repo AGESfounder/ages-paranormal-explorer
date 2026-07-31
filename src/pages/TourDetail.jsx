@@ -324,6 +324,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         title={tour.title}
         subtitle={`${tour.city}, ${tour.state}`}
         showBack
+        badge={<TourCategoryBadge category={tour.tour_category} />}
         rightAction={
           <button onClick={toggleFavorite} className="p-2">
             <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`} />
@@ -334,7 +335,6 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
       <div className="px-4 pb-28 space-y-4 pt-3">
         <div className="p-4 rounded-xl border border-border/40 bg-card/40 space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
-            <TourCategoryBadge category={tour.tour_category} />
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3.5 h-3.5" /><Car className="w-3 h-3" /></> : <Car className="w-3.5 h-3.5" />}
               {tour.tour_type === 'mixed' ? 'Walking + Driving' : tour.tour_type}

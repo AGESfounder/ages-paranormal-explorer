@@ -1,12 +1,13 @@
 import React from 'react';
-import { Building2, MapPin, Car } from 'lucide-react';
+import { Building2, MapPin, Car, Ship } from 'lucide-react';
 
-const LABELS = { landmark: 'Property', area: 'Area', road_trip: 'Road Trip' };
-const ICONS = { landmark: Building2, area: MapPin, road_trip: Car };
+const LABELS = { landmark: 'Property', area: 'Area', road_trip: 'Road Trip', ship: 'Ship' };
+const ICONS = { landmark: Building2, area: MapPin, road_trip: Car, ship: Ship };
 const STYLES = {
   landmark: 'bg-primary/20 text-primary border border-primary/40',
   area: 'bg-accent/20 text-accent-foreground border border-accent/40',
   road_trip: 'bg-amber-500/20 text-amber-400 border border-amber-500/40',
+  ship: 'bg-cyan-glow/20 text-cyan-glow border border-cyan-glow/40',
 };
 
 export default function TourCategoryBadge({ category, className = '', showIcon = true }) {

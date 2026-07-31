@@ -210,7 +210,7 @@ Use real locations and real paranormal history for "${dest}". Verify hours, pric
 
       const tourData = {
         title: result.title,
-        tour_category: 'landmark',
+        tour_category: locType === 'Ship' ? 'ship' : 'landmark',
         state: loc,
         location_type: locType,
         city: result.city,
