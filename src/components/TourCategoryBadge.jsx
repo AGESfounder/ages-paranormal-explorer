@@ -15,7 +15,7 @@ export default function TourCategoryBadge({ category, className = '', showIcon =
   if (!category || !LABELS[category]) return null;
   const Icon = ICONS[category];
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-heading font-bold uppercase tracking-wider whitespace-nowrap ${STYLES[category]} ${className}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-heading font-bold uppercase tracking-wider whitespace-nowrap ${STYLES[category]} ${className}`}>
       {showIcon && <Icon className="w-3 h-3" />}
       {LABELS[category]}
     </span>

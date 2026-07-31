@@ -12,7 +12,7 @@ export default function SectionHeader({ title, subtitle, showBack = false, onBac
       <div className="relative z-10 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {showBack && (
-            <button onClick={onBack || (() => navigate(-1))} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={onBack || (() => navigate(-1))} aria-label="Go back" className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors">
               <ChevronLeft className="w-5 h-5" />
             </button>
           )}

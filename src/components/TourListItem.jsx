@@ -22,7 +22,7 @@ export default function TourListItem({ tour, distance }) {
     <Link to={`/tour/${tour.id}`} className="block group">
       <div className="rounded-xl border border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden hover:border-primary/40 hover:bg-card/60 transition-all duration-300">
         {tour.rank && tour.rank <= 3 && (
-          <div className={`px-4 py-1.5 text-center font-heading text-[10px] uppercase tracking-wider font-bold ${RANK_STYLES[tour.rank]}`}>
+          <div className={`px-4 py-1.5 text-center font-heading text-[11px] uppercase tracking-wider font-bold ${RANK_STYLES[tour.rank]}`}>
             #{tour.rank} Most Active
           </div>
         )}
@@ -50,17 +50,17 @@ export default function TourListItem({ tour, distance }) {
           {/* Two line summary */}
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{tour.description}</p>
           {/* Duration | Distance | Difficulty | Access Type */}
-          <div className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground">
+          <div className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {tour.estimated_duration || '—'}</span>
             <span className="flex items-center gap-1"><Footprints className="w-3 h-3" /> {tour.total_distance || '—'}</span>
             <span className={`font-heading uppercase tracking-wider font-bold ${DIFFICULTY_STYLES[tour.difficulty] || ''}`}>{tour.difficulty || '—'}</span>
-            <AccessTypeBadge accessType={tour.access_type} className="text-[9px] px-1.5 py-0" />
+            <AccessTypeBadge accessType={tour.access_type} className="text-[11px] px-1.5 py-0" />
           </div>
           {/* 3 descriptors */}
           {tour.tags?.length > 0 && (
             <div className="grid grid-cols-3 gap-1.5">
               {tour.tags.slice(0, 3).map((tag, i) => (
-                <span key={tag} className={`px-1.5 py-0.5 text-[11px] rounded bg-primary/10 text-primary font-heading tracking-wider capitalize truncate ${i === 0 ? 'text-left' : i === 1 ? 'text-center' : 'text-right'}`}>{tag}</span>
+                <span key={tag} className={`px-1.5 py-0.5 text-xs rounded bg-primary/10 text-primary font-heading tracking-wider capitalize truncate ${i === 0 ? 'text-left' : i === 1 ? 'text-center' : 'text-right'}`}>{tag}</span>
               ))}
             </div>
           )}
