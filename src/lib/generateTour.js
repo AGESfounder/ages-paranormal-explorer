@@ -148,29 +148,6 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
     return String(v);
   };
 
-  const tourData = {
-    title: result.title || `${dest} Paranormal Investigation`,
-    tour_category: category,
-    state: normalizeStateName(state),
-    city: result.city || '',
-    tour_type: normEnum(result.tour_type, ['walking', 'driving', 'mixed'], 'walking'),
-    description: toStr(result.description),
-    introduction: toStr(result.introduction),
-    conclusion: toStr(result.conclusion),
-    difficulty: normEnum(result.difficulty, ['easy', 'moderate', 'challenging'], 'moderate'),
-    estimated_duration: toStr(result.estimated_duration),
-    total_distance: toStr(result.total_distance),
-    start_location_name: toStr(result.start_location_name),
-    start_latitude: useCoords ? coords.lat : toNum(result.start_latitude),
-    start_longitude: useCoords ? coords.lng : toNum(result.start_longitude),
-    image_url: toStr(result.image_url),
-    tags: toStrArr(result.tags),
-    safety_info: toStr(result.safety_info),
-    best_time: toStr(result.best_time),
-  };
-
-  const newTour = await base44.entities.Tour.create(tourData);
-
   const stopsIn = Array.isArray(result.stops) ? result.stops : [];
   const allValidStops = stopsIn.map((s, i) => ({
     s,
@@ -195,6 +172,41 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
     if (addrKey) seenStopAddrs.add(addrKey);
     validStops.push(item);
   }
+
+  // CATEGORY CORRECTION: If all stops share the same street address, this is
+  // a single-property tour regardless of the category the user/LLM chose.
+  // Force it to "landmark" (property) to prevent miscategorization (e.g.
+  // Pennhurst Asylum generated as "area" when all stops are on the grounds).
+  let correctedCategory = category;
+  if (validStops.length >= 2 && correctedCategory !== 'ship') {
+    const addrs = validStops.map((v) => normalizeAddr(v.s?.address)).filter(Boolean);
+    if (addrs.length >= 2 && addrs.every((a) => a === addrs[0])) {
+      correctedCategory = 'landmark';
+    }
+  }
+
+  const tourData = {
+    title: result.title || `${dest} Paranormal Investigation`,
+    tour_category: correctedCategory,
+    state: normalizeStateName(state),
+    city: result.city || '',
+    tour_type: normEnum(result.tour_type, ['walking', 'driving', 'mixed'], 'walking'),
+    description: toStr(result.description),
+    introduction: toStr(result.introduction),
+    conclusion: toStr(result.conclusion),
+    difficulty: normEnum(result.difficulty, ['easy', 'moderate', 'challenging'], 'moderate'),
+    estimated_duration: toStr(result.estimated_duration),
+    total_distance: toStr(result.total_distance),
+    start_location_name: toStr(result.start_location_name),
+    start_latitude: useCoords ? coords.lat : toNum(result.start_latitude),
+    start_longitude: useCoords ? coords.lng : toNum(result.start_longitude),
+    image_url: toStr(result.image_url),
+    tags: toStrArr(result.tags),
+    safety_info: toStr(result.safety_info),
+    best_time: toStr(result.best_time),
+  };
+
+  const newTour = await base44.entities.Tour.create(tourData);
 
   if (validStops.length > 0) {
     try {
