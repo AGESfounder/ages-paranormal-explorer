@@ -154,7 +154,7 @@ export default function HauntedLocations() {
       base44.entities.Tour.list('-created_date', 500),
       base44.entities.TourStop.list('-created_date', 500),
     ]);
-    const tours = allTours.filter(t => t.tour_category === 'landmark' || t.tour_category === 'area');
+    const tours = allTours.filter(t => ['landmark', 'area', 'road_trip', 'ship', 'cold_spot'].includes(t.tour_category));
     const tourMap = {};
     tours.forEach(t => { tourMap[t.id] = t; });
     const byTour = {};
@@ -187,7 +187,7 @@ export default function HauntedLocations() {
       if (!tour) continue;
       const ts = byTour[tid];
       if (singleDest[tid]) continue;
-      if (tour.tour_category === 'area') continue; // area tours shown as tour cards below
+      if (tour.tour_category !== 'landmark') continue; // only landmark multi-stop tours show individual stops; all others shown as tour cards below
 
       clusterStops(ts, 0.15).forEach(cluster => {
         const rep = representative(cluster);
@@ -225,7 +225,7 @@ export default function HauntedLocations() {
     for (const tid of Object.keys(byTour)) {
       const tour = tourMap[tid];
       if (!tour || representedTours.has(tour.id)) continue;
-      if (!singleDest[tid] && tour.tour_category !== 'area') continue;
+      if (!singleDest[tid] && tour.tour_category === 'landmark') continue;
       const ts = byTour[tid];
       const clat = ts.reduce((a, s) => a + s.latitude, 0) / ts.length;
       const clon = ts.reduce((a, s) => a + s.longitude, 0) / ts.length;
@@ -288,7 +288,7 @@ export default function HauntedLocations() {
   const discoverLocations = async (lat, lon, label) => {
     try {
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Find real haunted locations and haunted areas within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return up to 12 results — a mix of individual haunted properties (single buildings/sites like asylums, hotels, cemeteries, prisons) and haunted areas (cities, towns, or neighborhoods known for multiple haunted locations). Aim for roughly 50% properties and 50% areas. For each result provide: name, type ("property" for a single building/site, "area" for a city/town/neighborhood with multiple hauntings), address (street address for properties, or the city name for areas), city, state (full state name), latitude, longitude (real GPS coordinates — for areas use the center of the area), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
+        prompt: `Find real haunted locations and haunted areas within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return up to 10 results with this category mix: ~30% cold spots (single haunted locations with only 1-4 stops, like a single haunted house, bridge, or small cemetery — locations that don't have enough distinct areas for a full tour), ~30% properties (single haunted properties with multiple stops/areas on the same site, like an asylum, hotel, or prison), ~30% areas (cities, towns, or neighborhoods known for multiple haunted locations), ~10% road trips (wider driving routes with stops 5+ miles apart). For each result provide: name, type ("cold_spot", "property", "area", or "road_trip"), address (street address for properties/cold spots, or the city name for areas/road trips), city, state (full state name), latitude, longitude (real GPS coordinates — for areas/road trips use the center of the area), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
         add_context_from_internet: true,
         model: 'gemini_3_flash',
         response_json_schema: {
@@ -322,11 +322,12 @@ export default function HauntedLocations() {
       return (result.locations || [])
         .filter((l) => l.latitude && l.longitude)
         .map((l, i) => {
-          const isArea = (l.type || 'property') === 'area';
+          const typeMap = { cold_spot: 'cold_spot', property: 'landmark', area: 'area', road_trip: 'road_trip' };
+          const cat = typeMap[l.type] || 'landmark';
           return {
             id: `discovered-${i}`,
             kind: 'discovered',
-            tourCategory: isArea ? 'area' : 'landmark',
+            tourCategory: cat,
             name: l.name,
             address: l.address || '',
             lat: l.latitude,
@@ -338,7 +339,7 @@ export default function HauntedLocations() {
             city: l.city || '',
             createName: l.name,
             createState: l.state || '',
-            createCategory: isArea ? 'area' : 'landmark',
+            createCategory: cat,
           };
         })
         .filter((l) => l.dist <= 30)
@@ -616,7 +617,7 @@ export default function HauntedLocations() {
                                   className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-60"
                                 >
                                   {creatingId === loc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                  {creatingId === loc.id ? `Creating ${loc.tourCategory === 'area' ? 'Area' : 'Property'}…` : `Create ${loc.tourCategory === 'area' ? 'Area' : 'Property'} Tour`}
+                                  {creatingId === loc.id ? `Creating ${loc.tourCategory === 'cold_spot' ? 'Cold Spot' : loc.tourCategory === 'area' ? 'Area' : loc.tourCategory === 'road_trip' ? 'Road Trip' : 'Property'}…` : `Create ${loc.tourCategory === 'cold_spot' ? 'Cold Spot' : loc.tourCategory === 'area' ? 'Area' : loc.tourCategory === 'road_trip' ? 'Road Trip' : 'Property'} Tour`}
                                 </button>
                                 {creatingId === loc.id && (
                                   <div className="mt-2 flex justify-center"><BePatient /></div>

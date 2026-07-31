@@ -11,9 +11,10 @@
         "landmark",
         "area",
         "road_trip",
-        "ship"
+        "ship",
+        "cold_spot"
       ],
-      "description": "Tour category: property (enum value 'landmark') = single property with all stops on the same site, area = various properties in a local area with no repeat stops, road_trip = 8-10 stops with 5+ miles between most stops, ship = haunted ship or vessel with all stops on the same vessel"
+      "description": "Tour category: property (enum value 'landmark') = single property with all stops on the same site, area = various properties in a local area with no repeat stops, road_trip = 8-10 stops with 5+ miles between most stops, ship = haunted ship or vessel with all stops on the same vessel, cold_spot = a very short tour with 1-4 stops at a single haunted location or tiny cluster"
     },
     "state": {
       "type": "string"

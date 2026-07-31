@@ -1,7 +1,8 @@
 import React from 'react';
-import { Building2, MapPinned, Route, Ship } from 'lucide-react';
+import { Building2, MapPinned, Route, Ship, Snowflake } from 'lucide-react';
 
 const CATEGORIES = [
+  { value: 'cold_spot', label: 'Cold Spot', icon: Snowflake, description: 'A short tour with 1-4 stops — a single haunted location or small cluster' },
   { value: 'landmark', label: 'Property', icon: Building2, description: 'One specific property — all stops on the same site' },
   { value: 'area', label: 'Area', icon: MapPinned, description: 'Various properties in a local area — no repeat stops' },
   { value: 'road_trip', label: 'Road Trip', icon: Route, description: 'Extensive distance — 5+ miles between most stops, 8-10 stops' },

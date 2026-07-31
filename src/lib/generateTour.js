@@ -41,13 +41,15 @@ export async function generateLocationTour(destination, state, coords, category 
   // historical/paranormal detail and notable people are generated lazily,
   // per stop, when a user opens that stop (see StopDetail.ensureRichContent).
   // This keeps creation fast and reliable (no oversized AI call / timeout).
-  const categoryText = category === 'landmark'
-    ? `This is a LOCATION/PROPERTY tour — one specific haunted property (e.g. an asylum, hotel, bridge, cemetery, museum, prison, battlefield, furnace, mansion). ALL stops must be specific areas, rooms, buildings, wings, or sections within or on the grounds of that one location, and all stops share the same street address. Set tour_type to "walking". Generate 6-8 stops.`
+  const categoryText = category === 'cold_spot'
+    ? `This is a COLD SPOT tour — a very short tour with only 1-4 stops at a single haunted location or a tiny cluster of nearby locations. This is for locations that don't have enough distinct areas for a full tour but are still worth investigating. ALL stops must be specific areas, rooms, or sections within or near the location. Set tour_type to "walking". Generate 1-4 stops.`
+    : category === 'landmark'
+    ? `This is a LOCATION/PROPERTY tour — one specific haunted property (e.g. an asylum, hotel, bridge, cemetery, museum, prison, battlefield, furnace, mansion). ALL stops must be specific areas, rooms, buildings, wings, or sections within or on the grounds of that one location, and all stops share the same street address. Set tour_type to "walking". Generate 8-10 stops.`
     : category === 'area'
-    ? `This is an AREA tour — a city, town, or local area where walking or close driving is required. Different locations/properties are the stops. Plan for 1-3 miles of walking, a little more if nearby driving is needed. Set tour_type to "walking" or "mixed". Each stop is a different haunted location with its own real street address and its own real GPS coordinates, spread across the area. Generate 6-8 stops.`
+    ? `This is an AREA tour — a city, town, or local area where walking or close driving is required. Different locations/properties are the stops. Plan for 1-3 miles of walking, a little more if nearby driving is needed. Set tour_type to "walking" or "mixed". Each stop is a different haunted location with its own real street address and its own real GPS coordinates, spread across the area. Generate 8-10 stops.`
     : category === 'ship'
-    ? `This is a SHIP tour — a haunted ship or vessel. ALL stops must be specific decks, cabins, rooms, or areas within or on the vessel. All stops share the same vessel. Set tour_type to "walking". Generate 6-8 stops.`
-    : `This is a ROAD TRIP tour — driving between most locations with a higher total mileage. There MUST be considerable driving between stops — at least 5 miles between consecutive stops. Combine different locations and areas into one driving tour. Set tour_type to "driving" or "mixed". Each stop is a different haunted location or area spread across a wider geographic region, each with its own real street address and GPS coordinates. Generate at least 8 stops.`;
+    ? `This is a SHIP tour — a haunted ship or vessel. ALL stops must be specific decks, cabins, rooms, or areas within or on the vessel. All stops share the same vessel. Set tour_type to "walking". Generate 8-10 stops.`
+    : `This is a ROAD TRIP tour — driving between most locations with a higher total mileage. There MUST be considerable driving between stops — at least 5 miles between consecutive stops. Combine different locations and areas into one driving tour. Set tour_type to "driving" or "mixed". Each stop is a different haunted location or area spread across a wider geographic region, each with its own real street address and GPS coordinates. Generate 8-10 stops.`;
 
   const prompt = `Generate a paranormal ghost hunting tour for the haunted destination "${dest}" in ${state}.
 
@@ -85,7 +87,7 @@ Return a JSON object with:
 - safety_info: 2-3 practical safety notes for this specific location
 - best_time: best season/time for investigating
 
-PLUS a "stops" array (${category === 'road_trip' ? '8-12 stops' : '6-8 stops'}) — each a LIGHTWEIGHT skeleton (full detail is generated later, so keep these fields brief):
+PLUS a "stops" array (${category === 'cold_spot' ? '1-4 stops' : '8-10 stops'}) — each a LIGHTWEIGHT skeleton (full detail is generated later, so keep these fields brief):
 - stop_number: starting from 1
 - name: for a PROPERTY tour, a specific area/building/room within the location; for AREA or ROAD TRIP tours, the name of that distinct haunted location
 - latitude: real coordinates (number) — for a PROPERTY tour all stops share the destination's coordinates (areas within one site); for AREA or ROAD TRIP tours each stop has its OWN distinct coordinates
@@ -107,7 +109,7 @@ Use real locations and real coordinates for "${dest}". Keep every historical_inf
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
 
-Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a PROPERTY tour, every stop uses these same coordinates (areas within one site). For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
+Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a PROPERTY or COLD SPOT tour, every stop uses these same coordinates (areas within one site). For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
 
   // Coerce LLM output into the exact types/enums the schema expects. The LLM
   // often returns capitalized enums ("Moderate", "Walking") or tags as a string,
@@ -134,7 +136,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
   // MINIMUM STOP ENFORCEMENT — prevents low-quality tours (e.g. 1-stop tours)
   // from being created. The LLM sometimes returns too few stops; we retry up to
   // 3 attempts and reject if the minimum still isn't met.
-  const MIN_STOPS_FOR = (cat) => cat === 'road_trip' ? 6 : 4;
+  const MIN_STOPS_FOR = (cat) => cat === 'cold_spot' ? 1 : 5;
 
   // Process a raw LLM result into normalized tour data + stop records.
   const processResult = (raw) => {

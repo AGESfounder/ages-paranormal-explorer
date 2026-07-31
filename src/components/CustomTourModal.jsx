@@ -142,7 +142,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
               </button>
 
               <p className="text-[10px] text-muted-foreground/60 text-center">
-                Choose Property for a specific property, Area for a city or town, or Road Trip for a wider driving tour across a region.
+                Choose Cold Spot for a short 1-4 stop tour, Property for a specific property, Area for a city or town, or Road Trip for a wider driving tour across a region.
               </p>
             </div>
           </motion.div>
