@@ -9,6 +9,7 @@ import SwipeableTourCard from '../components/SwipeableTourCard';
 import { base44 } from '@/api/base44Client';
 import PullToRefresh from '@/components/PullToRefresh';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
+import TourListItem from '@/components/TourListItem';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import { findExistingTour } from '@/lib/generateTour';
 
@@ -439,24 +440,8 @@ Use real locations with documented paranormal history only.`,
           visibleTours.map((tour, i) => (
             <motion.div key={tour.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
               <SwipeableTourCard tour={tour} onRefresh={handleRefreshTour} onDelete={handleDeleteTour}>
-              <Link to={`/tour/${tour.id}`} className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card/40 hover:border-primary/40 hover:bg-card/50 transition-all group">
-                <div className="p-2.5 rounded-lg bg-primary/10">
-                  <Navigation className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-bold text-foreground truncate group-hover:text-primary transition-colors">{tour.title}</p>
-                    <TourCategoryBadge category={tour.tour_category} />
-                  </div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="w-2.5 h-2.5" /> {tour.city}, {tour.state}
-                  </p>
-                </div>
-                {tour.distance !== undefined && tour.distance < Infinity && (
-                  <span className="text-xs text-primary font-heading tracking-wide">{Math.round(tour.distance)} mi</span>
-                )}
-              </Link>
-            </SwipeableTourCard>
+                <TourListItem tour={tour} distance={tour.distance} />
+              </SwipeableTourCard>
             </motion.div>
           ))
         )}

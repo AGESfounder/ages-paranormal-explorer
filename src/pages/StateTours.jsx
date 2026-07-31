@@ -13,6 +13,7 @@ import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import TourCategoryDialog from '@/components/TourCategoryDialog';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
+import TourListItem from '@/components/TourListItem';
 import PullToRefresh from '@/components/PullToRefresh';
 
 export default function StateTours() {
@@ -246,61 +247,7 @@ Use real locations with documented paranormal history only.`,
             transition={{ delay: i * 0.1 }}
           >
             <SwipeableTourCard tour={tour} onRefresh={handleRefreshTour} onDelete={handleDeleteTour}>
-            <Link
-              to={`/tour/${tour.id}`}
-              className="block p-4 rounded-xl border border-border/40 bg-card/40 backdrop-blur-sm hover:border-primary/40 hover:bg-card/60 transition-all duration-300 group"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    {tour.rank && tour.rank <= 3 && (
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-heading uppercase tracking-wider font-bold whitespace-nowrap ${
-                        tour.rank === 1
-                          ? 'bg-primary/20 text-primary border border-primary/40 shadow-[0_0_8px_hsl(199,89%,48%,0.3)]'
-                          : tour.rank === 2
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                          : 'bg-orange-600/20 text-orange-400 border border-orange-600/40'
-                      }`}>
-                        {tour.rank === 1 ? '#1 Most Active' : `#${tour.rank}`}
-                      </span>
-                    )}
-                    <TourCategoryBadge category={tour.tour_category} />
-                    <h3 className="font-heading text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
-                      {tour.title}
-                    </h3>
-                  </div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                    <MapPin className="w-3 h-3" /> {tour.city}
-                  </p>
-                </div>
-                <div className={`px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider ${
-                  tour.tour_type === 'walking' 
-                    ? 'bg-primary/10 text-primary border border-primary/20' 
-                    : tour.tour_type === 'mixed'
-                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                    : 'bg-accent/10 text-accent-foreground border border-accent/20'
-                }`}>
-                  {tour.tour_type === 'walking' ? <Footprints className="w-3 h-3 inline mr-1" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3 h-3 inline mr-0.5" /><Car className="w-2.5 h-2.5 inline mr-1" /></> : <Car className="w-3 h-3 inline mr-1" />}
-                  {tour.tour_type === 'mixed' ? 'Walk + Drive' : tour.tour_type}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2 mb-3">{tour.description}</p>
-              <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {tour.estimated_duration}</span>
-                <span className="flex items-center gap-1"><Footprints className="w-3 h-3" /> {tour.total_distance}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-heading tracking-wider ${
-                  tour.difficulty === 'easy' ? 'bg-green-500/10 text-green-400' :
-                  tour.difficulty === 'moderate' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-red-400'
-                }`}>{tour.difficulty}</span>
-              </div>
-              {tour.tags?.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2.5">
-                  {tour.tags.slice(0, 3).map(tag => (
-                    <span key={tag} className="px-1.5 py-0.5 text-[9px] rounded bg-secondary/50 text-muted-foreground font-heading tracking-wider">{tag}</span>
-                  ))}
-                </div>
-              )}
-            </Link>
+              <TourListItem tour={tour} />
             </SwipeableTourCard>
           </motion.div>
         ))}

@@ -8,6 +8,7 @@ import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import PullToRefresh from '@/components/PullToRefresh';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
+import TourListItem from '@/components/TourListItem';
 
 export default function Favorites() {
   const [favorites, setFavorites] = useState([]);
@@ -22,7 +23,8 @@ export default function Favorites() {
       const allTours = await base44.entities.Tour.list('-created_date', 500);
       const tourMap = {};
       allTours.forEach(t => { tourMap[t.id] = t; });
-      setFavorites(data.map(f => ({ ...f, tour_category: tourMap[f.tour_id]?.tour_category })));
+      const enriched = data.map(f => ({ ...f, tour: tourMap[f.tour_id] })).filter(f => f.tour);
+      setFavorites(enriched);
     } else {
       setFavorites(data);
     }
@@ -45,18 +47,7 @@ export default function Favorites() {
         ) : (
           favorites.map((fav, i) => (
             <motion.div key={fav.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-              <Link to={`/tour/${fav.tour_id}`} className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card/40 hover:border-primary/40 hover:bg-card/50 transition-all duration-300 group">
-                <div className="p-2.5 rounded-lg bg-red-500/10"><Heart className="w-5 h-5 fill-red-500 text-red-500" /></div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{fav.tour_title}</p>
-                    <TourCategoryBadge category={fav.tour_category} />
-                  </div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="w-2.5 h-2.5" /> {fav.city}, {fav.state}
-                  </p>
-                </div>
-              </Link>
+              <TourListItem tour={fav.tour} />
             </motion.div>
           ))
         )}
