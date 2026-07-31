@@ -24,7 +24,6 @@ function hasFreeExterior(hours) {
 
 export default function TourAccessInfo({ tour, stops }) {
   if (!tour || !stops || stops.length === 0) return null;
-  if (tour.tour_category !== 'cold_spot' && tour.tour_category !== 'landmark') return null;
 
   const fees = stops.map(s => normalizeFee(s.entry_fee)).filter(Boolean);
   const uniqueFees = [...new Set(fees)];
