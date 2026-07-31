@@ -15,6 +15,7 @@ const menuItems = [
   { label: 'Favorites', icon: Heart, path: '/favorites', desc: 'Saved Tours' },
   { label: 'Evidence Journal', icon: BookOpen, path: '/evidence', desc: 'Your Findings' },
   { label: 'Investigation Toolkit', icon: Wrench, path: '/toolkit', desc: 'Ghost Hunting Tools' },
+  { label: 'Dashboard', icon: Sparkles, path: '/dashboard', desc: 'Subscription & Energy' },
   { label: 'Settings', icon: Settings, path: '/settings', desc: 'App Preferences' },
 ];
 
