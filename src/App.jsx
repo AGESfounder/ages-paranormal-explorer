@@ -36,6 +36,7 @@ import TermsOfService from '@/pages/TermsOfService';
 import HauntedMusic from '@/components/HauntedMusic';
 import Dashboard from '@/pages/Dashboard';
 import ThankYou from '@/pages/ThankYou';
+import PlanAnalysis from '@/pages/PlanAnalysis';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
@@ -75,6 +76,7 @@ const AuthenticatedApp = () => {
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/ThankYou" element={<ThankYou />} />
+      <Route path="/plan-analysis" element={<PlanAnalysis />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         {/* Add your page Route elements here */}
         <Route path="/" element={<Home />} />
