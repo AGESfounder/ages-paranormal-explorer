@@ -10,16 +10,19 @@ export default function DashboardEnergyPreview({ user }) {
   // Observer — flashing "no energy" warning
   if (isObserver) {
     return (
-      <motion.div
-        animate={{ opacity: [0.4, 1, 0.4] }}
-        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-500/15 border border-red-500/40 shrink-0"
-      >
-        <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-        <span className="text-[10px] font-heading uppercase tracking-wider text-red-400 whitespace-nowrap">
-          No Energy
-        </span>
-      </motion.div>
+      <div className="flex flex-col gap-1 shrink-0 items-end">
+        <span className="text-[9px] font-heading uppercase tracking-wider text-muted-foreground/70">Energy</span>
+        <motion.div
+          animate={{ opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-500/15 border border-red-500/40"
+        >
+          <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+          <span className="text-[10px] font-heading uppercase tracking-wider text-red-400 whitespace-nowrap">
+            No Energy
+          </span>
+        </motion.div>
+      </div>
     );
   }
 
@@ -37,6 +40,7 @@ export default function DashboardEnergyPreview({ user }) {
 
   return (
     <div className="flex flex-col gap-1.5 shrink-0 min-w-[88px]">
+      <span className="text-[9px] font-heading uppercase tracking-wider text-muted-foreground/70 text-right">Energy</span>
       {/* Manifestation bar */}
       <div className="flex items-center gap-1.5">
         <Sparkles className="w-3 h-3 text-primary shrink-0" />
