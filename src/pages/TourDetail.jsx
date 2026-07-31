@@ -12,6 +12,7 @@ import { base44 } from '@/api/base44Client';
 import { getOfflineTour } from '@/lib/offlineTours';
 import { callJson } from '@/lib/llmJson';
 import BePatient from '@/components/BePatient';
+import TourCategoryBadge from '@/components/TourCategoryBadge';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -333,15 +334,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
       <div className="px-4 pb-28 space-y-4 pt-3">
         <div className="p-4 rounded-xl border border-border/40 bg-card/40 space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
-            {tour.tour_category && (
-              <span className={`px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider ${
-                tour.tour_category === 'landmark' ? 'bg-primary/10 text-primary border border-primary/20' :
-                tour.tour_category === 'area' ? 'bg-accent/10 text-accent-foreground border border-accent/20' :
-                'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-              }`}>
-                {tour.tour_category === 'landmark' ? 'Landmark' : tour.tour_category === 'area' ? 'Area' : 'Road Trip'}
-              </span>
-            )}
+            <TourCategoryBadge category={tour.tour_category} />
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3.5 h-3.5" /><Car className="w-3 h-3" /></> : <Car className="w-3.5 h-3.5" />}
               {tour.tour_type === 'mixed' ? 'Walking + Driving' : tour.tour_type}

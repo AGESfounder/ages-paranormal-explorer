@@ -12,6 +12,7 @@ import { base44 } from '@/api/base44Client';
 import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import TourCategoryDialog from '@/components/TourCategoryDialog';
+import TourCategoryBadge from '@/components/TourCategoryBadge';
 import PullToRefresh from '@/components/PullToRefresh';
 
 export default function StateTours() {
@@ -263,15 +264,7 @@ Use real locations with documented paranormal history only.`,
                         {tour.rank === 1 ? '#1 Most Active' : `#${tour.rank}`}
                       </span>
                     )}
-                    {tour.tour_category && (
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-heading uppercase tracking-wider whitespace-nowrap ${
-                        tour.tour_category === 'landmark' ? 'bg-primary/10 text-primary border border-primary/20' :
-                        tour.tour_category === 'area' ? 'bg-accent/10 text-accent-foreground border border-accent/20' :
-                        'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                      }`}>
-                        {tour.tour_category === 'landmark' ? 'Landmark' : tour.tour_category === 'area' ? 'Area' : 'Road Trip'}
-                      </span>
-                    )}
+                    <TourCategoryBadge category={tour.tour_category} />
                     <h3 className="font-heading text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
                       {tour.title}
                     </h3>

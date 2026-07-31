@@ -4,6 +4,7 @@ import { X, MapPin, Eye, Plus, Loader2, Ghost } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { addTourStops } from '@/lib/addTourStops';
 import { toast } from '@/components/ui/use-toast';
+import TourCategoryBadge from '@/components/TourCategoryBadge';
 
 export default function ExistingTourDialog({ tour, onClose }) {
   const [addingStops, setAddingStops] = useState(false);
@@ -78,15 +79,7 @@ export default function ExistingTourDialog({ tour, onClose }) {
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <MapPin className="w-3 h-3" /> {tour.city}, {tour.state}
                 </p>
-                {tour.tour_category && (
-                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-heading uppercase tracking-wider ${
-                    tour.tour_category === 'landmark' ? 'bg-primary/10 text-primary border border-primary/20' :
-                    tour.tour_category === 'area' ? 'bg-accent/10 text-accent-foreground border border-accent/20' :
-                    'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                  }`}>
-                    {tour.tour_category === 'landmark' ? 'Landmark' : tour.tour_category === 'area' ? 'Area' : 'Road Trip'}
-                  </span>
-                )}
+                <TourCategoryBadge category={tour.tour_category} />
               </div>
             </div>
 
