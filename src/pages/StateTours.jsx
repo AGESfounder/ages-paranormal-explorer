@@ -123,6 +123,22 @@ Use real locations with documented paranormal history only.`,
         add_context_from_internet: true
       });
 
+      // PROGRAMMATIC SAFETY NET: The LLM sometimes miscategorizes city/town/
+      // district tours as "landmark" (property) despite the prompt rules. If
+      // the title clearly refers to a city, town, downtown, old town, village,
+      // or ghost walk — and doesn't name a specific property type — reclassify
+      // to "area". Conservative: only catches obvious cases.
+      const strongAreaRe = /\b(downtown|old town|ghost walk|village|settlement)\b/i;
+      const cityTownRe = /\b(city|town)\b/i;
+      const propertyRe = /\b(house|hotel|asylum|prison|penitentiary|jail|gaol|cemetery|graveyard|manor|castle|inn|tavern|bridge|furnace|mill|church|hospital|school|theater|theatre|museum|library|fort|battlefield|plantation|estate|hall|saloon|restaurant|eatery|resort|ship|vessel|lighthouse|station|academy|seminary|barracks|armory)\b/i;
+      for (const tour of result.tours || []) {
+        if (tour.tour_category !== 'landmark') continue;
+        const title = tour.title || '';
+        if (strongAreaRe.test(title) || (cityTownRe.test(title) && !propertyRe.test(title))) {
+          tour.tour_category = 'area';
+        }
+      }
+
       const created = [];
       for (const tour of result.tours || []) {
         const saved = await base44.entities.Tour.create({ ...tour, state: stateName });

@@ -184,6 +184,15 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
         correctedCategory = 'landmark';
       }
     }
+    // REVERSE CORRECTION: If categorized as "landmark" (property) but the stops
+    // span multiple distinct street addresses, it's actually an area tour —
+    // reclassify to "area" to prevent city/town tours being tagged as property.
+    if (validStops.length >= 3 && correctedCategory === 'landmark') {
+      const addrs = validStops.map((v) => normalizeAddr(v.s?.address)).filter(Boolean);
+      if (addrs.length >= 3 && new Set(addrs).size >= 3) {
+        correctedCategory = 'area';
+      }
+    }
 
     const tourData = {
       title: raw.title || `${dest} Paranormal Investigation`,
