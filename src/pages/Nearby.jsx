@@ -8,6 +8,10 @@ import SectionHeader from '../components/SectionHeader';
 import SwipeableTourCard from '../components/SwipeableTourCard';
 import { base44 } from '@/api/base44Client';
 import PullToRefresh from '@/components/PullToRefresh';
+import TourCategoryDialog from '@/components/TourCategoryDialog';
+import TourCategoryBadge from '@/components/TourCategoryBadge';
+import ExistingTourDialog from '@/components/ExistingTourDialog';
+import { findExistingTour } from '@/lib/generateTour';
 
 export default function Nearby() {
   const navigate = useNavigate();
@@ -17,6 +21,10 @@ export default function Nearby() {
   const [coords, setCoords] = useState(null);
   const [error, setError] = useState('');
   const [generatingRange, setGeneratingRange] = useState(null);
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [pendingRange, setPendingRange] = useState(null);
+  const [pendingZip, setPendingZip] = useState(null);
+  const [existingTour, setExistingTour] = useState(null);
 
   const [zipCode, setZipCode] = useState('');
   const [zipMode, setZipMode] = useState(false);
@@ -28,15 +36,17 @@ export default function Nearby() {
   ];
   const [selectedRange, setSelectedRange] = useState(distanceRanges[0]);
 
-  const generateTourForRange = async (range) => {
+  const generateTourForRange = async (range, category) => {
     if (!coords || generatingRange) return;
     setGeneratingRange(range.label);
     try {
       const result = await base44.integrations.Core.InvokeLLM({
         prompt: `Generate exactly 1 paranormal tour with a start location ${range.min}-${range.max} miles from these coordinates: (${coords.lat}, ${coords.lng}). The tour's start_latitude and start_longitude MUST place it ${range.min}-${range.max} miles away — pick a real town or city in that distance band.
+Tour category: ${category} — ${category === 'landmark' ? 'one specific property, all stops on the same site, walking tour' : category === 'area' ? 'walking or close driving, different locations 1-3 miles apart' : 'driving tour with 5+ miles between stops, wider region'}.
 
 Include:
 - title: a creative, spooky tour name
+- tour_category: "${category}"
 - city: the town/city where the tour starts
 - state: full state name
 - tour_type: "walking", "driving", or "mixed"
@@ -75,6 +85,7 @@ Use real locations with documented paranormal history only.`,
                 type: "object",
                 properties: {
                   title: { type: "string" },
+                  tour_category: { type: "string" },
                   city: { type: "string" },
                   state: { type: "string" },
                   tour_type: { type: "string" },
@@ -101,7 +112,13 @@ Use real locations with documented paranormal history only.`,
 
       const tourData = result.tours?.[0];
       if (!tourData) throw new Error('No tour generated');
-      const saved = await base44.entities.Tour.create(tourData);
+      const existing = await findExistingTour(tourData.title, tourData.state);
+      if (existing) {
+        setExistingTour(existing);
+        setGeneratingRange(null);
+        return;
+      }
+      const saved = await base44.entities.Tour.create({ ...tourData, tour_category: category });
       setGeneratingRange(null);
       navigate(`/tour/${saved.id}`);
     } catch (err) {
@@ -110,13 +127,13 @@ Use real locations with documented paranormal history only.`,
     }
   };
 
-  const generateTourForZip = async () => {
-    if (!zipCode.trim() || generatingRange || zipCode.length < 5) return;
+  const generateTourForZip = async (zipCodeParam, category) => {
+    if (!zipCodeParam || !zipCodeParam.trim() || zipCodeParam.length < 5) return;
     setGeneratingRange('Custom Zip Code');
     try {
       let zipLat, zipLon, zipLabel;
       try {
-        const resp = await fetch(`https://api.zippopotam.us/us/${zipCode.trim()}`);
+        const resp = await fetch(`https://api.zippopotam.us/us/${zipCodeParam.trim()}`);
         if (!resp.ok) throw new Error('not found');
         const data = await resp.json();
         const place = data.places?.[0];
@@ -130,10 +147,12 @@ Use real locations with documented paranormal history only.`,
         return;
       }
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Generate exactly 1 paranormal tour within a 30-mile radius of ${zipLabel} (latitude ${zipLat}, longitude ${zipLon}, zip code ${zipCode.trim()}). Find a real haunted location within 30 miles of these coordinates.
+        prompt: `Generate exactly 1 paranormal tour within a 30-mile radius of ${zipLabel} (latitude ${zipLat}, longitude ${zipLon}, zip code ${zipCodeParam.trim()}). Find a real haunted location within 30 miles of these coordinates.
+Tour category: ${category} — ${category === 'landmark' ? 'one specific property, all stops on the same site, walking tour' : category === 'area' ? 'walking or close driving, different locations 1-3 miles apart' : 'driving tour with 5+ miles between stops, wider region'}.
 
 Include:
 - title: a creative, spooky tour name
+- tour_category: "${category}"
 - city: the town/city where the tour starts
 - state: full state name
 - tour_type: "walking", "driving", or "mixed"
@@ -172,6 +191,7 @@ Use real locations with documented paranormal history only.`,
                 type: "object",
                 properties: {
                   title: { type: "string" },
+                  tour_category: { type: "string" },
                   city: { type: "string" },
                   state: { type: "string" },
                   tour_type: { type: "string" },
@@ -198,10 +218,17 @@ Use real locations with documented paranormal history only.`,
 
       const tourData = result.tours?.[0];
       if (!tourData) throw new Error('No tour generated');
-      const saved = await base44.entities.Tour.create(tourData);
+      const existing = await findExistingTour(tourData.title, tourData.state);
+      if (existing) {
+        setExistingTour(existing);
+        setGeneratingRange(null);
+        return;
+      }
+      const saved = await base44.entities.Tour.create({ ...tourData, tour_category: category });
       setGeneratingRange(null);
       setZipCode('');
       setZipMode(false);
+      setPendingZip(null);
       navigate(`/tour/${saved.id}`);
     } catch (err) {
       setGeneratingRange(null);
@@ -333,7 +360,7 @@ Use real locations with documented paranormal history only.`,
               </button>
             </div>
             <button
-              onClick={() => generateTourForRange(selectedRange)}
+              onClick={() => { setPendingRange(selectedRange); setShowCategoryDialog(true); }}
               disabled={!!generatingRange || !selectedRange}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-xs uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-50"
             >
@@ -351,7 +378,7 @@ Use real locations with documented paranormal history only.`,
                   maxLength={5}
                 />
                 <button
-                  onClick={generateTourForZip}
+                  onClick={() => { setPendingZip(zipCode); setShowCategoryDialog(true); }}
                   disabled={!!generatingRange || zipCode.length < 5}
                   className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/80 disabled:opacity-40 text-primary-foreground font-heading text-xs uppercase tracking-wider transition-colors"
                 >
@@ -379,7 +406,7 @@ Use real locations with documented paranormal history only.`,
                 maxLength={5}
               />
               <button
-                onClick={generateTourForZip}
+                onClick={() => { setPendingZip(zipCode); setShowCategoryDialog(true); }}
                 disabled={!!generatingRange || zipCode.length < 5}
                 className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/80 disabled:opacity-40 text-primary-foreground font-heading text-xs uppercase tracking-wider transition-colors"
               >
@@ -420,7 +447,10 @@ Use real locations with documented paranormal history only.`,
                   <Navigation className="w-5 h-5 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-foreground truncate group-hover:text-primary transition-colors">{tour.title}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-bold text-foreground truncate group-hover:text-primary transition-colors">{tour.title}</p>
+                    <TourCategoryBadge category={tour.tour_category} />
+                  </div>
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
                     <MapPin className="w-2.5 h-2.5" /> {tour.city}, {tour.state}
                   </p>
@@ -435,6 +465,22 @@ Use real locations with documented paranormal history only.`,
         )}
       </div>
       </PullToRefresh>
+      <TourCategoryDialog
+        isOpen={showCategoryDialog}
+        onClose={() => { setShowCategoryDialog(false); setPendingRange(null); setPendingZip(null); }}
+        onSelect={(category) => {
+          setShowCategoryDialog(false);
+          if (pendingRange) {
+            generateTourForRange(pendingRange, category);
+            setPendingRange(null);
+          } else if (pendingZip) {
+            generateTourForZip(pendingZip, category);
+            setPendingZip(null);
+          }
+        }}
+        destination={pendingRange ? `${pendingRange.label} from your location` : 'Custom Zip Code'}
+      />
+      <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
       <NavBar />
     </PageContainer>
   );

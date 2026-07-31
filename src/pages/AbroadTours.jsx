@@ -8,6 +8,7 @@ import SectionHeader from '../components/SectionHeader';
 import ToursAbroadModal from '../components/ToursAbroadModal';
 import SwipeableTourCard from '../components/SwipeableTourCard';
 import PullToRefresh from '@/components/PullToRefresh';
+import TourCategoryBadge from '@/components/TourCategoryBadge';
 import { base44 } from '@/api/base44Client';
 
 export default function AbroadTours() {
@@ -102,7 +103,10 @@ export default function AbroadTours() {
                       <Link to={`/tour/${tour.id}`} className="block p-4 rounded-xl border border-border/50 bg-card/40 hover:border-primary/30 hover:bg-card/60 transition-all duration-300">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <h3 className="font-heading text-sm font-semibold text-foreground truncate">{tour.title}</h3>
+                            <div className="flex items-center gap-1.5">
+                              <h3 className="font-heading text-sm font-semibold text-foreground truncate">{tour.title}</h3>
+                              <TourCategoryBadge category={tour.tour_category} />
+                            </div>
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tour.description}</p>
                           </div>
                           <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
