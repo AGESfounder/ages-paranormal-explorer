@@ -1,0 +1,66 @@
+import React from 'react';
+import { DollarSign, Footprints } from 'lucide-react';
+
+function normalizeFee(fee) {
+  return (fee || '').trim().toLowerCase();
+}
+
+function extractExteriorHours(hours) {
+  if (!hours) return '';
+  let m = hours.match(/exterior accessible\s+([^,;]+)/i);
+  if (m) return m[1].trim();
+  m = hours.match(/grounds open\s+([^,;]+)/i);
+  if (m) return m[1].trim();
+  m = hours.match(/perimeter\s+([^,;]+)/i);
+  if (m) return m[1].trim();
+  return '';
+}
+
+function hasFreeExterior(hours) {
+  if (!hours) return false;
+  const h = hours.toLowerCase();
+  return h.includes('exterior accessible') || h.includes('grounds open') || h.includes('perimeter');
+}
+
+export default function TourAccessInfo({ tour, stops }) {
+  if (!tour || !stops || stops.length === 0) return null;
+  if (tour.tour_category !== 'cold_spot' && tour.tour_category !== 'landmark') return null;
+
+  const fees = stops.map(s => normalizeFee(s.entry_fee)).filter(Boolean);
+  const uniqueFees = [...new Set(fees)];
+  const hasCommonFee = uniqueFees.length === 1;
+  const commonFee = hasCommonFee ? stops.find(s => s.entry_fee)?.entry_fee : null;
+
+  const freeExteriorStops = stops.filter(s => hasFreeExterior(s.hours_of_operation));
+  const hasFreePerimeter = freeExteriorStops.length > 0;
+  const exteriorHours = hasFreePerimeter ? extractExteriorHours(freeExteriorStops[0].hours_of_operation) : '';
+  const entryCost = hasFreePerimeter ? (freeExteriorStops[0].entry_fee || '') : '';
+
+  if (!hasCommonFee && !hasFreePerimeter) return null;
+
+  return (
+    <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
+      {hasCommonFee && commonFee && (
+        <div className="flex items-center gap-2">
+          <DollarSign className="w-3.5 h-3.5 text-green-400 shrink-0" />
+          <p className="text-xs">
+            <span className="font-heading uppercase tracking-wider text-primary text-[10px]">Common Entry Fee: </span>
+            <span className="text-foreground/80">{commonFee}</span>
+          </p>
+        </div>
+      )}
+      {hasFreePerimeter && (
+        <div className="flex items-start gap-2">
+          <Footprints className="w-3.5 h-3.5 text-cyan-glow shrink-0 mt-0.5" />
+          <p className="text-xs">
+            <span className="font-heading uppercase tracking-wider text-cyan-glow text-[10px]">Free Perimeter Access: </span>
+            <span className="text-foreground/80">
+              Walk the exterior{exteriorHours ? ` ${exteriorHours}` : ''} at no cost
+              {entryCost && entryCost.toLowerCase() !== 'free' && ` · Cost to enter: ${entryCost}`}
+            </span>
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

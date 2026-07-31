@@ -13,6 +13,7 @@ import { getOfflineTour } from '@/lib/offlineTours';
 import { callJson } from '@/lib/llmJson';
 import BePatient from '@/components/BePatient';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
+import TourAccessInfo from '@/components/TourAccessInfo';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -352,6 +353,8 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
           </div>
           {tour.best_time && <p className="text-xs text-primary flex items-center gap-1"><Zap className="w-3 h-3" /> Best time: {tour.best_time}</p>}
         </div>
+
+        <TourAccessInfo tour={tour} stops={stops} />
 
         {tour.introduction && (
           <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
