@@ -41,7 +41,6 @@ export default function TourListItem({ tour, distance }) {
             </span>
             <div className="flex items-center gap-1 shrink-0">
               <TourCategoryBadge category={tour.tour_category} />
-              <AccessTypeBadge accessType={tour.access_type} />
             </div>
             <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0 capitalize">
               {tour.tour_type === 'walking' ? <Footprints className="w-3 h-3" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3 h-3" /><Car className="w-2.5 h-2.5" /></> : <Car className="w-3 h-3" />}
@@ -50,11 +49,12 @@ export default function TourListItem({ tour, distance }) {
           </div>
           {/* Two line summary */}
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{tour.description}</p>
-          {/* Duration | Distance (centered) | Difficulty */}
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+          {/* Duration | Distance | Difficulty | Access Type */}
+          <div className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground">
             <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {tour.estimated_duration || '—'}</span>
             <span className="flex items-center gap-1"><Footprints className="w-3 h-3" /> {tour.total_distance || '—'}</span>
             <span className={`font-heading uppercase tracking-wider font-bold ${DIFFICULTY_STYLES[tour.difficulty] || ''}`}>{tour.difficulty || '—'}</span>
+            <AccessTypeBadge accessType={tour.access_type} className="text-[9px] px-1.5 py-0" />
           </div>
           {/* 3 descriptors */}
           {tour.tags?.length > 0 && (
