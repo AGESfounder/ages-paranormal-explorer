@@ -447,7 +447,7 @@ export default function HauntedLocations() {
       <div className="rounded-xl border border-accent/30 bg-accent/5 overflow-hidden">
         <div className="p-3 flex items-center gap-2 border-b border-accent/20">
           <HauntedHouse className="w-4 h-4 text-accent" />
-          <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Haunted Properties</p>
+          <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Haunted Explorations</p>
           <span className="ml-auto text-[9px] text-muted-foreground font-heading uppercase tracking-wider">Within 30 mi</span>
         </div>
 

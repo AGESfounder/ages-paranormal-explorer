@@ -272,7 +272,7 @@ export default function Home() {
               <Navigation className="w-6 h-6 text-primary group-hover:drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)] transition-all" />
             </div>
             <div className="text-center">
-              <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Nearby Tours</p>
+              <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Existing Tours</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">Tours Near You</p>
             </div>
           </Link>
@@ -293,7 +293,7 @@ export default function Home() {
             </div>
             <div className="text-center">
               <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Custom Tour</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Haunted Destinations</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Bring Visions to Life</p>
             </div>
           </button>
           <Link
