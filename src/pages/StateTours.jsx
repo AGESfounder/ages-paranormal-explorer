@@ -174,7 +174,7 @@ Use real locations with documented paranormal history only.`,
       });
       const dest = result?.name?.trim();
       if (!dest) throw new Error('Could not find a new haunted area. Please try again.');
-      const existing = await findExistingTour(dest, stateName);
+      const existing = await findExistingTour(dest, stateName, category);
       if (existing) {
         setExistingTour(existing);
         setCreatingNew(false);

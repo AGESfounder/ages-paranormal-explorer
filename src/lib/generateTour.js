@@ -12,11 +12,21 @@ function normalizeStateName(state) {
   return s;
 }
 
-export async function findExistingTour(destination, state) {
+export async function findExistingTour(destination, state, category) {
   const normalizedState = normalizeStateName(state);
   const destLower = destination.trim().toLowerCase();
   const existingTours = await base44.entities.Tour.filter({ state: normalizedState });
   return existingTours.find((t) => {
+    // COLD SPOT REDUNDANCY RULE:
+    // - Creating a Cold Spot: only block if an existing COLD SPOT tour matches
+    //   the destination. A Cold Spot can be created for a location that already
+    //   has a Property/Area/Road Trip tour (different product, fewer stops).
+    // - Creating a non-Cold-Spot: existing Cold Spot tours do NOT block creation,
+    //   because a Cold Spot location is allowed to be included as a stop in
+    //   Area/Road Trip tours. Only match against non-cold-spot tours.
+    if (category === 'cold_spot' && t.tour_category !== 'cold_spot') return false;
+    if (category && category !== 'cold_spot' && t.tour_category === 'cold_spot') return false;
+
     // Match on TITLE only — multiple tours in the same city are valid
     // (e.g., a landmark-specific tour vs. a city walking tour that
     // includes that landmark as one stop). Only flag a true duplicate
@@ -34,7 +44,10 @@ export async function generateLocationTour(destination, state, coords, category 
   // DUPLICATE GUARD: If a tour already exists for this destination, return it
   // instead of creating a duplicate. Callers should use findExistingTour()
   // before calling generateLocationTour to present the user with a choice.
-  const existing = await findExistingTour(dest, state);
+  // Pass the category so the Cold Spot redundancy rule is enforced (see
+  // findExistingTour): Cold Spots only block other Cold Spots; non-Cold-Spots
+  // ignore existing Cold Spots.
+  const existing = await findExistingTour(dest, state, category);
   if (existing) return existing;
 
   // Creation generates a LIGHTWEIGHT tour + stop skeletons. Full rich

@@ -417,7 +417,7 @@ export default function HauntedLocations() {
     setError('');
     setCreatingId(loc.id);
     try {
-      const existing = await findExistingTour(loc.createName, loc.createState);
+      const existing = await findExistingTour(loc.createName, loc.createState, loc.createCategory || 'landmark');
       if (existing) {
         setExistingTour(existing);
         setCreatingId(null);
