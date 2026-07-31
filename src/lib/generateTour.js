@@ -27,7 +27,7 @@ export async function findExistingTour(destination, state) {
   }) || null;
 }
 
-export async function generateLocationTour(destination, state, coords) {
+export async function generateLocationTour(destination, state, coords, category = 'landmark') {
   const dest = destination.trim();
   const useCoords = coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
 
@@ -41,13 +41,15 @@ export async function generateLocationTour(destination, state, coords) {
   // historical/paranormal detail and notable people are generated lazily,
   // per stop, when a user opens that stop (see StopDetail.ensureRichContent).
   // This keeps creation fast and reliable (no oversized AI call / timeout).
+  const categoryText = category === 'landmark'
+    ? `This is a LOCATION/LANDMARK tour — one specific haunted property (e.g. an asylum, hotel, bridge, cemetery, museum, prison, battlefield, furnace, mansion). ALL stops must be specific areas, rooms, buildings, wings, or sections within or on the grounds of that one location, and all stops share the same street address. Set tour_type to "walking". Generate 6-8 stops.`
+    : category === 'area'
+    ? `This is an AREA tour — a city, town, or local area where walking or close driving is required. Different locations/properties are the stops. Plan for 1-3 miles of walking, a little more if nearby driving is needed. Set tour_type to "walking" or "mixed". Each stop is a different haunted location with its own real street address and its own real GPS coordinates, spread across the area. Generate 6-8 stops.`
+    : `This is a ROAD TRIP tour — driving between most locations with a higher total mileage. Combine different locations and areas into one driving tour. Set tour_type to "driving" or "mixed". Each stop is a different haunted location or area spread across a wider geographic region, each with its own real street address and GPS coordinates. Generate at least 8 stops.`;
+
   const prompt = `Generate a paranormal ghost hunting tour for the haunted destination "${dest}" in ${state}.
 
-First, decide whether "${dest}" is a REGION or a SINGLE LANDMARK:
-
-(A) REGION — a broad geographic area that spans multiple distinct locations (e.g. "Finger Lakes", "Hudson Valley", "Catskill Mountains", "Amish Country", "Poconos", "Delaware Water Gap", a county, a downtown district, a lakes region, a coastline). For a REGION: create stops at 6-8 DIFFERENT real haunted locations spread across the area — each stop has its OWN real street address and its OWN real GPS coordinates. Do NOT cluster all stops at one site; spread them across the region. Set tour_type to "driving" or "mixed" (use "walking" only if the region has a tight walkable cluster). The title should reflect the region (e.g. "Finger Lakes Paranormal Investigation").
-
-(B) SINGLE LANDMARK — one specific property or site (e.g. an asylum, hotel, bridge, cemetery, museum, prison, battlefield, furnace, mansion). For a SINGLE LANDMARK: ALL stops must be specific areas, rooms, buildings, wings, or sections within or on the grounds of that one location, and all stops share the same street address. Set tour_type to "walking". Example (for Pennhurst Asylum): Administration Building, Devon Building, Quaker Building, Tunnels, Patient Wards, Basement, Infirmary, Morgue, Museum, Exterior Grounds — every stop belongs to the same destination.
+${categoryText}
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
@@ -63,9 +65,10 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
 Return a JSON object with:
 - title: a creative, spooky tour name for "${dest}"
+- tour_category: "${category}"
 - state: "${state}"
-- city: the primary city or area where "${dest}" is located (for a region, the main city/area)
-- tour_type: "walking", "driving", or "mixed" (per the REGION/SINGLE LANDMARK rules above)
+- city: the primary city or area where "${dest}" is located
+- tour_type: "walking", "driving", or "mixed" (per the category rules above)
 - description: 4-6 detailed sentences about the destination's haunted history, founding, and why it's notorious
 - introduction: 2-3 rich paragraphs setting the scene for investigators — the atmosphere, what to expect, and the location's dark legacy
 - conclusion: 2-3 paragraphs wrapping up the investigation and reflecting on what was explored
@@ -80,12 +83,12 @@ Return a JSON object with:
 - safety_info: 2-3 practical safety notes for this specific location
 - best_time: best season/time for investigating
 
-PLUS a "stops" array (6-8 stops) — each a LIGHTWEIGHT skeleton (full detail is generated later, so keep these fields brief):
+PLUS a "stops" array (${category === 'road_trip' ? '8-12 stops' : '6-8 stops'}) — each a LIGHTWEIGHT skeleton (full detail is generated later, so keep these fields brief):
 - stop_number: starting from 1
-- name: for a SINGLE LANDMARK, a specific area/building/room within the location; for a REGION, the name of that distinct haunted location
-- latitude: real coordinates (number) — for a SINGLE LANDMARK all stops share the destination's coordinates (areas within one site); for a REGION each stop has its OWN distinct coordinates
+- name: for a LANDMARK tour, a specific area/building/room within the location; for AREA or ROAD TRIP tours, the name of that distinct haunted location
+- latitude: real coordinates (number) — for a LANDMARK tour all stops share the destination's coordinates (areas within one site); for AREA or ROAD TRIP tours each stop has its OWN distinct coordinates
 - longitude: real coordinates (number)
-- address: for a SINGLE LANDMARK, the full street address of "${dest}" (same for all stops); for a REGION, each stop's own real street address
+- address: for a LANDMARK tour, the full street address of "${dest}" (same for all stops); for AREA or ROAD TRIP tours, each stop's own real street address
 - historical_info: 2-3 sentences summarizing the key history (construction dates, notable figures, major events). Brief summary only.
 - paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
 - investigation_suggestions: 3-5 specific items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
@@ -102,7 +105,7 @@ Use real locations and real coordinates for "${dest}". Keep every historical_inf
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
 
-Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a SINGLE LANDMARK, every stop uses these same coordinates (areas within one site). For a REGION, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
+Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a LANDMARK tour, every stop uses these same coordinates (areas within one site). For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
 
   // Robust multi-attempt generation: web search first, then a no-web fallback
   // using the model's training knowledge. The lightweight payload makes either
@@ -145,6 +148,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
 
   const tourData = {
     title: result.title || `${dest} Paranormal Investigation`,
+    tour_category: category,
     state: normalizeStateName(state),
     city: result.city || '',
     tour_type: normEnum(result.tour_type, ['walking', 'driving', 'mixed'], 'walking'),

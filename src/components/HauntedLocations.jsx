@@ -6,6 +6,7 @@ import HauntedHouse from './icons/HauntedHouse';
 import { base44 } from '@/api/base44Client';
 import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
+import TourCategoryDialog from '@/components/TourCategoryDialog';
 import useGhostVoice from '../hooks/useGhostVoice';
 import BePatient from '@/components/BePatient';
 
@@ -136,6 +137,7 @@ export default function HauntedLocations() {
   const [creatingId, setCreatingId] = useState(null);
   const [narratingId, setNarratingId] = useState(null);
   const [existingTour, setExistingTour] = useState(null);
+  const [categoryDialogLoc, setCategoryDialogLoc] = useState(null);
   const navigate = useNavigate();
   const { narrate, stop, isSpeaking, isGenerating } = useGhostVoice();
 
@@ -396,9 +398,10 @@ export default function HauntedLocations() {
     }
   };
 
-  const handleCreateTour = async (loc) => {
+  const handleCreateTour = async (loc, category) => {
     setError('');
     setCreatingId(loc.id);
+    setCategoryDialogLoc(null);
     try {
       const existing = await findExistingTour(loc.createName, loc.createState);
       if (existing) {
@@ -409,7 +412,8 @@ export default function HauntedLocations() {
       const newTour = await generateLocationTour(
         loc.createName,
         loc.createState,
-        loc.lat != null && loc.lng != null ? { lat: loc.lat, lng: loc.lng } : undefined
+        loc.lat != null && loc.lng != null ? { lat: loc.lat, lng: loc.lng } : undefined,
+        category
       );
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
@@ -595,7 +599,7 @@ export default function HauntedLocations() {
                             ) : (
                               <>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleCreateTour(loc); }}
+                                  onClick={(e) => { e.stopPropagation(); setCategoryDialogLoc(loc); }}
                                   disabled={creatingId === loc.id}
                                   className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-60"
                                 >
@@ -619,6 +623,12 @@ export default function HauntedLocations() {
         )}
       </div>
       <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
+      <TourCategoryDialog
+        isOpen={!!categoryDialogLoc}
+        onClose={() => setCategoryDialogLoc(null)}
+        onSelect={(category) => categoryDialogLoc && handleCreateTour(categoryDialogLoc, category)}
+        destination={categoryDialogLoc?.createName || ''}
+      />
     </motion.div>
   );
 }

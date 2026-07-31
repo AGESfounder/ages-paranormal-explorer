@@ -74,9 +74,20 @@ export default function ExistingTourDialog({ tour, onClose }) {
 
             <div className="rounded-lg border border-border/40 bg-card/40 p-3 mb-4">
               <h3 className="font-heading text-sm font-bold text-foreground truncate">{tour.title}</h3>
-              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                <MapPin className="w-3 h-3" /> {tour.city}, {tour.state}
-              </p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <MapPin className="w-3 h-3" /> {tour.city}, {tour.state}
+                </p>
+                {tour.tour_category && (
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-heading uppercase tracking-wider ${
+                    tour.tour_category === 'landmark' ? 'bg-primary/10 text-primary border border-primary/20' :
+                    tour.tour_category === 'area' ? 'bg-accent/10 text-accent-foreground border border-accent/20' :
+                    'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                  }`}>
+                    {tour.tour_category === 'landmark' ? 'Landmark' : tour.tour_category === 'area' ? 'Area' : 'Road Trip'}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">

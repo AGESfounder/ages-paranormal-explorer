@@ -11,6 +11,7 @@ import { US_STATES } from '../lib/statesData';
 import { base44 } from '@/api/base44Client';
 import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
+import TourCategoryDialog from '@/components/TourCategoryDialog';
 import PullToRefresh from '@/components/PullToRefresh';
 
 export default function StateTours() {
@@ -22,6 +23,7 @@ export default function StateTours() {
   const [creatingNew, setCreatingNew] = useState(false);
   const [error, setError] = useState('');
   const [existingTour, setExistingTour] = useState(null);
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
 
   const stateName = US_STATES.find(s => s.abbr === stateAbbr)?.name || stateAbbr;
 
@@ -149,7 +151,7 @@ Use real locations with documented paranormal history only.`,
   // Picks a real haunted area in this state that has NO existing tour yet, then
   // generates a brand-new tour there. Keeps the state's catalogue growing into
   // untouched paranormal territory instead of re-covering the same cities.
-  const handleCreateNewTour = async () => {
+  const handleCreateNewTour = async (category) => {
     setCreatingNew(true);
     setError('');
     try {
@@ -176,7 +178,7 @@ Use real locations with documented paranormal history only.`,
         setCreatingNew(false);
         return;
       }
-      const newTour = await generateLocationTour(dest, stateName);
+      const newTour = await generateLocationTour(dest, stateName, undefined, category);
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
       setError(e?.message || 'Failed to create a new tour. Please try again.');
@@ -225,7 +227,7 @@ Use real locations with documented paranormal history only.`,
       <PullToRefresh onRefresh={refreshTours}>
       <div className="px-4 pb-28 space-y-3 pt-3">
         <button
-          onClick={handleCreateNewTour}
+          onClick={() => setShowCategoryDialog(true)}
           disabled={creatingNew}
           className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-primary/30 bg-primary/10 text-primary font-heading text-sm uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-60"
         >
@@ -259,6 +261,15 @@ Use real locations with documented paranormal history only.`,
                           : 'bg-orange-600/20 text-orange-400 border border-orange-600/40'
                       }`}>
                         {tour.rank === 1 ? '#1 Most Active' : `#${tour.rank}`}
+                      </span>
+                    )}
+                    {tour.tour_category && (
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-heading uppercase tracking-wider whitespace-nowrap ${
+                        tour.tour_category === 'landmark' ? 'bg-primary/10 text-primary border border-primary/20' :
+                        tour.tour_category === 'area' ? 'bg-accent/10 text-accent-foreground border border-accent/20' :
+                        'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      }`}>
+                        {tour.tour_category === 'landmark' ? 'Landmark' : tour.tour_category === 'area' ? 'Area' : 'Road Trip'}
                       </span>
                     )}
                     <h3 className="font-heading text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
@@ -303,6 +314,12 @@ Use real locations with documented paranormal history only.`,
       </div>
       </PullToRefresh>
       <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
+      <TourCategoryDialog
+        isOpen={showCategoryDialog}
+        onClose={() => setShowCategoryDialog(false)}
+        onSelect={(category) => { setShowCategoryDialog(false); handleCreateNewTour(category); }}
+        destination={stateName}
+      />
       <NavBar />
     </PageContainer>
   );

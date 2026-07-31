@@ -6,6 +6,7 @@ import { US_STATES } from '../lib/statesData';
 import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import DrawerSelect from '@/components/DrawerSelect';
+import TourCategoryPicker from '@/components/TourCategoryPicker';
 
 export default function CustomTourModal({ isOpen, onClose }) {
   const [destination, setDestination] = useState('');
@@ -13,12 +14,17 @@ export default function CustomTourModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [existingTour, setExistingTour] = useState(null);
+  const [category, setCategory] = useState('');
   const navigate = useNavigate();
 
   const handleGenerate = async () => {
     const dest = destination.trim();
     if (!dest || !state) {
       setError('Please fill in both fields.');
+      return;
+    }
+    if (!category) {
+      setError('Please select a tour type.');
       return;
     }
     setError('');
@@ -31,10 +37,11 @@ export default function CustomTourModal({ isOpen, onClose }) {
         setLoading(false);
         return;
       }
-      const newTour = await generateLocationTour(destination, state);
+      const newTour = await generateLocationTour(destination, state, undefined, category);
       onClose();
       setDestination('');
       setState('');
+      setCategory('');
       navigate(`/tour/${newTour.id}`);
     } catch (err) {
       console.error('Custom tour generation failed', err);
@@ -105,6 +112,13 @@ export default function CustomTourModal({ isOpen, onClose }) {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
+                  Tour Type
+                </label>
+                <TourCategoryPicker value={category} onChange={setCategory} />
+              </div>
+
               {error && (
                 <p className="text-xs text-red-400 text-center">{error}</p>
               )}
@@ -128,7 +142,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
               </button>
 
               <p className="text-[10px] text-muted-foreground/60 text-center">
-                Creates a custom tour — a single-location tour (stops within one haunted site) for landmarks like an asylum or hotel, or a regional tour (stops spread across a broader area) for areas like Finger Lakes or Hudson Valley.
+                Choose Landmark for a specific property, Area for a city or town, or Road Trip for a wider driving tour across a region.
               </p>
             </div>
           </motion.div>
