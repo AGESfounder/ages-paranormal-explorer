@@ -54,9 +54,9 @@ export default function TourListItem({ tour, distance }) {
           </div>
           {/* 3 descriptors */}
           {tour.tags?.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {tour.tags.slice(0, 3).map(tag => (
-                <span key={tag} className="px-1.5 py-0.5 text-[9px] rounded bg-secondary/50 text-muted-foreground font-heading tracking-wider">{tag}</span>
+            <div className="grid grid-cols-3 gap-1.5">
+              {tour.tags.slice(0, 3).map((tag, i) => (
+                <span key={tag} className={`px-1.5 py-0.5 text-[9px] rounded bg-secondary/50 text-muted-foreground font-heading tracking-wider capitalize ${i === 0 ? 'text-left' : i === 1 ? 'text-center' : 'text-right'}`}>{tag}</span>
               ))}
             </div>
           )}
