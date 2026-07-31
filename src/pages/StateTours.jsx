@@ -60,7 +60,16 @@ export default function StateTours() {
       const result = await base44.integrations.Core.InvokeLLM({
         prompt: `Generate exactly 3 paranormal tours for ${stateName}, USA — the TOP 3 most active haunted locations in the state. Rank them by documented paranormal activity level: #1 is the MOST active/well-known, #2 is the second most active, #3 is the third. Each at a real haunted location. Mix walking, driving, and "mixed" (walking + driving) tours. For mixed tours, walking stops come first in the route, driving stops last. Include:
 - rank: 1, 2, or 3 (1 = most active)
-- title, city, tour_type ("walking", "driving", or "mixed"), description (2-3 sentences)
+- title, city, tour_type ("walking", "driving", or "mixed"), tour_category (see below), description (2-3 sentences)
+
+CATEGORY DETERMINATION — choose tour_category carefully based on what the tour actually covers:
+- "landmark" (Property): ONE specific haunted property where all stops are areas/rooms/buildings on the same site (e.g. a single asylum, hotel, prison, battlefield, mansion, or cemetery). Use this ONLY when the entire tour is within one property's grounds.
+- "area": A city, town, or local area where the stops are DIFFERENT haunted properties spread across that area (e.g. "Ghosts of Downtown", "Spirits of [Town Name]"). Use this when the tour covers a whole town or neighborhood with multiple distinct locations — NOT a single property.
+- "road_trip": A wider driving route with stops 5+ miles apart across a region.
+- "ship": A haunted ship or vessel where all stops are on the same vessel.
+- "cold_spot": A single haunted location with only 1-4 stops (too small for a full tour).
+
+CRITICAL: If the tour title or destination refers to a TOWN, CITY, or AREA (e.g. "Spirits of the Oldest Town", "Ghosts of Charleston"), the category MUST be "area" — NOT "landmark". A town is not a single property. Only use "landmark" when the tour is entirely within one specific property's grounds (one address).
 - introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "AGES (Accessible Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
 - conclusion: closing paragraph ending with "Thank you for exploring with AGES — Accessible Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
 - difficulty ("easy"/"moderate"/"challenging"), estimated_duration (e.g. "2-3 hours"), total_distance (e.g. "1.5 miles"), start_location_name, start_latitude, start_longitude (real coordinates)
@@ -92,6 +101,7 @@ Use real locations with documented paranormal history only.`,
                   title: { type: "string" },
                   city: { type: "string" },
                   tour_type: { type: "string" },
+                  tour_category: { type: "string", enum: ["landmark", "area", "road_trip", "ship", "cold_spot"] },
                   description: { type: "string" },
                   introduction: { type: "string" },
                   conclusion: { type: "string" },
