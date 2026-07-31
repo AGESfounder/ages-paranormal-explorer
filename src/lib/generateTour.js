@@ -177,7 +177,12 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
       stop_number: (s && typeof s.stop_number === 'number') ? s.stop_number : i + 1,
     }));
 
-    // DEDUP GUARD: Remove duplicate stops by name OR address (case-insensitive).
+    // DEDUP GUARD: Remove duplicate stops by name. For AREA and ROAD TRIP
+    // tours, also dedup by address (each stop should have a unique address).
+    // For PROPERTY (landmark), COLD SPOT, and SHIP tours, all stops share the
+    // same address (areas within one site/vessel), so address dedup would
+    // incorrectly discard all but the first stop — skip it for those.
+    const dedupByAddr = category === 'area' || category === 'road_trip';
     const seenStopNames = new Set();
     const seenStopAddrs = new Set();
     const validStops = [];
@@ -185,9 +190,9 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
       const nameKey = item.name.toLowerCase().trim();
       const addrKey = normalizeAddr(item.s?.address);
       if (seenStopNames.has(nameKey)) continue;
-      if (addrKey && seenStopAddrs.has(addrKey)) continue;
+      if (dedupByAddr && addrKey && seenStopAddrs.has(addrKey)) continue;
       if (nameKey) seenStopNames.add(nameKey);
-      if (addrKey) seenStopAddrs.add(addrKey);
+      if (dedupByAddr && addrKey) seenStopAddrs.add(addrKey);
       validStops.push(item);
     }
 
