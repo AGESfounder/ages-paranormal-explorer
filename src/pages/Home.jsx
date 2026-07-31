@@ -62,15 +62,15 @@ export default function Home() {
           <h1 className="font-display text-4xl text-primary tracking-[0.2em] text-3d-pop leading-none">
             EXPLORER
           </h1>
-          <p className="mt-2 font-heading text-[10px] tracking-[0.15em] uppercase text-primary/80 drop-shadow-[0_0_10px_hsl(199,89%,48%,0.3)] flex items-center justify-center gap-1.5 whitespace-nowrap">
+          <p className="mt-2 font-heading text-[9px] tracking-[0.05em] uppercase text-primary/80 drop-shadow-[0_0_10px_hsl(199,89%,48%,0.3)] flex items-center justify-center gap-0.5 whitespace-nowrap px-2">
             <span>Discover</span>
-            <ArrowRight className="w-3 h-3 text-primary/60 shrink-0" />
+            <ArrowRight className="w-2.5 h-2.5 text-primary/60 shrink-0" />
             <span>Explore</span>
-            <ArrowRight className="w-3 h-3 text-primary/60 shrink-0" />
+            <ArrowRight className="w-2.5 h-2.5 text-primary/60 shrink-0" />
             <span>Investigate</span>
-            <ArrowRight className="w-3 h-3 text-primary/60 shrink-0" />
+            <ArrowRight className="w-2.5 h-2.5 text-primary/60 shrink-0" />
             <span>Document</span>
-            <ArrowRight className="w-3 h-3 text-primary/60 shrink-0" />
+            <ArrowRight className="w-2.5 h-2.5 text-primary/60 shrink-0" />
             <span>Share</span>
           </p>
         </motion.div>
