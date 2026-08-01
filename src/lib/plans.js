@@ -14,7 +14,6 @@ export const PLANS = {
       'Browse all 50 states + international tours',
       'View tour details, stops, maps, and text',
       'Save favorites',
-      'Toolkit: Equipment Guide & Safety Protocol (2 of 12)',
     ],
   },
   explorer: {
@@ -36,7 +35,6 @@ export const PLANS = {
       'Evidence Journal (upload + track)',
       'Community Map access',
       'Leaderboard access',
-      'Standard toolkit (8 tools)',
       'Aura Bundle purchases',
     ],
   },
@@ -53,7 +51,6 @@ export const PLANS = {
       'Everything in Explorer',
       'AI narration for ~4 complete tours/month',
       'Custom tour generation (up to 5/month)',
-      'Full toolkit (all 12 tools)',
       'Evidence Dashboard with analytics',
       'Aura Bundle purchases',
     ],
