@@ -14,6 +14,7 @@ import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { getOfflineStop } from '@/lib/offlineTours';
 import BePatient from '@/components/BePatient';
+import AdGate from '@/components/AdGate';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -236,27 +237,29 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             <TabsTrigger value="investigate" className="flex-1 text-xs font-heading uppercase tracking-wider data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Investigate</TabsTrigger>
           </TabsList>
           <TabsContent value="paranormal" className="mt-3">
-            <div className="p-4 rounded-xl border border-border/40 bg-card/30">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Paranormal Findings</span>
-                <button onClick={() => narrate(stop.paranormal_info)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                  {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
-                </button>
+            <AdGate stopNumber={stop.stop_number}>
+              <div className="p-4 rounded-xl border border-border/40 bg-card/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Paranormal Findings</span>
+                  <button onClick={() => narrate(stop.paranormal_info)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                    {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
+                  </button>
+                </div>
+                <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
+                  <HighlightPeople
+                    text={stop.paranormal_info}
+                    people={people}
+                    onPerson={(p) => { setSelectedPerson(p); narrate(p.story); }}
+                  />
+                </p>
+                {peopleLoading && (
+                  <p className="text-[10px] text-muted-foreground mt-2 italic animate-glow-pulse">Be Patient: {isThinContent(stop.paranormal_info) ? 'Loading detailed findings…' : 'Extracting notable figures…'}</p>
+                )}
+                {people.length > 0 && !peopleLoading && (
+                  <p className="text-[10px] text-sky-400/70 mt-2">Tap a highlighted name to reveal their story.</p>
+                )}
               </div>
-              <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
-                <HighlightPeople
-                  text={stop.paranormal_info}
-                  people={people}
-                  onPerson={(p) => { setSelectedPerson(p); narrate(p.story); }}
-                />
-              </p>
-              {peopleLoading && (
-                <p className="text-[10px] text-muted-foreground mt-2 italic animate-glow-pulse">Be Patient: {isThinContent(stop.paranormal_info) ? 'Loading detailed findings…' : 'Extracting notable figures…'}</p>
-              )}
-              {people.length > 0 && !peopleLoading && (
-                <p className="text-[10px] text-sky-400/70 mt-2">Tap a highlighted name to reveal their story.</p>
-              )}
-            </div>
+            </AdGate>
           </TabsContent>
           <TabsContent value="history" className="mt-3">
             <div className="p-4 rounded-xl border border-border/40 bg-card/30">
