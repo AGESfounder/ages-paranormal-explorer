@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Square, Save, Info, X, Activity, Zap, Video, AlertTriangle, MessageCircle } from 'lucide-react';
+import { Play, Square, Save, Info, X, Activity, Zap, Video, AlertTriangle, MessageCircle, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import useGhostVoice from '../hooks/useGhostVoice';
+import { detectFigures } from '@/lib/anomalyDetect';
 
 // Phrases cycle every 3 seconds. They are NOT spoken while cycling — only the
 // phrase "locked" by an environmental disturbance is read aloud (normal voice),
@@ -33,6 +34,8 @@ export default function YesNoSweeper() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
+  const [anomalyDetected, setAnomalyDetected] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
 
   // Web Audio–based voice (unlocked on the Start tap) so the spoken answer
   // plays reliably on iOS even though it's triggered by a sensor event. Called
@@ -58,6 +61,12 @@ export default function YesNoSweeper() {
   const videoChunksRef = useRef([]);
   const audioStreamRef = useRef(null);
   const timerRef = useRef(null);
+  const camVideoRef = useRef(null);
+  const detectCanvasRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const anomalyTimerRef = useRef(null);
+  const lastAnomalyTriggerRef = useRef(0);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
   useEffect(() => () => stopEverything(), []);
@@ -71,6 +80,11 @@ export default function YesNoSweeper() {
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     if (audioStreamRef.current) { audioStreamRef.current.getTracks().forEach(t => t.stop()); audioStreamRef.current = null; }
+    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
+    if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
+    setCameraActive(false);
+    setAnomalyDetected(false);
     try { stopVoice(); } catch {}
   };
 
@@ -159,6 +173,53 @@ export default function YesNoSweeper() {
     };
     orientHandlerRef.current = orientHandler;
     window.addEventListener('deviceorientation', orientHandler);
+  };
+
+  // Camera-based anomaly trigger: runs the same IR figure detection as the
+  // Anomaly Camera. When a humanoid shape is detected, the current phrase is
+  // locked — same effect as a motion/orientation disturbance.
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 320 }, height: { ideal: 240 } },
+        audio: false,
+      });
+      cameraStreamRef.current = stream;
+      if (camVideoRef.current) {
+        camVideoRef.current.srcObject = stream;
+        await camVideoRef.current.play().catch(() => {});
+      }
+      setCameraActive(true);
+      processCameraFrame();
+    } catch (e) {
+      setSensorError(prev => (prev ? prev + ' ' : '') + 'Camera access denied — anomaly trigger disabled, but motion/orientation triggers still work.');
+    }
+  };
+
+  const processCameraFrame = () => {
+    const video = camVideoRef.current;
+    const canvas = detectCanvasRef.current;
+    if (!video || !canvas || video.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(processCameraFrame);
+      return;
+    }
+    const w = video.videoWidth || 320;
+    const h = video.videoHeight || 240;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, w, h);
+    try {
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const figures = detectFigures(imageData, w, h);
+      if (figures.length > 0) {
+        setAnomalyDetected(true);
+        if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
+        anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
+        triggerLock();
+      }
+    } catch {}
+    animFrameRef.current = requestAnimationFrame(processCameraFrame);
   };
 
   const draw = () => {
@@ -275,6 +336,7 @@ export default function YesNoSweeper() {
     unlock();
     startStepping();
     await startSensors();
+    await startCamera();
     await new Promise(r => setTimeout(r, 80));
     startDrawing();
     await startRecording();
@@ -292,8 +354,13 @@ export default function YesNoSweeper() {
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
+    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
+    if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
+    setCameraActive(false);
+    setAnomalyDetected(false);
     lockedRef.current = false;
     try { stopVoice(); } catch {}
     setPhase('stopped');
@@ -341,7 +408,7 @@ export default function YesNoSweeper() {
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Start</span>. The phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> cycle silently, one every 3 seconds, over and over.</li>
-            <li>Hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and is spoken aloud in a normal voice.</li>
+            <li>Hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and is spoken aloud in a normal voice. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
             <li>After a phrase is spoken, the sweep starts again from YES.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
@@ -368,9 +435,26 @@ export default function YesNoSweeper() {
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             <span className="text-[9px] text-white font-mono">REC {formatDuration(sessionDuration)}</span>
           </div>
+          {cameraActive && (
+            <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/80">
+              <Camera className="w-2.5 h-2.5 text-white" />
+              <span className="text-[9px] text-white font-mono">IR</span>
+            </div>
+          )}
+          {anomalyDetected && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="px-3 py-1 rounded bg-red-500/90 border border-red-300/50">
+                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ ANOMALY DETECTED</p>
+              </motion.div>
+            </div>
+          )}
         </div>
+        {/* Hidden camera elements for IR anomaly detection */}
+        <video ref={camVideoRef} className="hidden" playsInline muted />
+        <canvas ref={detectCanvasRef} className="hidden" />
         <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
-          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or vibrate the device to lock an answer
+          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or vibrate the device — or let the IR camera detect an anomaly — to lock an answer
         </p>
         {lockedPhrase ? (
           <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
