@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Library, MapPin, Play, Square, Save, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle } from 'lucide-react';
+import { Library, MapPin, Play, Square, Save, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import useGhostVoice from '../hooks/useGhostVoice';
+import { detectFigures } from '@/lib/anomalyDetect';
 
 const ROTATION_MS = 2000;         // each word stays 2 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
@@ -26,6 +27,8 @@ export default function LocationTermBank() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
+  const [cameraActive, setCameraActive] = useState(false);
+  const [anomalyDetected, setAnomalyDetected] = useState(false);
 
   const { isSpeaking, isGenerating, speak, unlock, attachMicToRecording } = useGhostVoice();
 
@@ -47,6 +50,11 @@ export default function LocationTermBank() {
   const videoChunksRef = useRef([]);
   const audioStreamRef = useRef(null);
   const timerRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const camVideoRef = useRef(null);
+  const detectCanvasRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const anomalyTimerRef = useRef(null);
 
   useEffect(() => { termsRef.current = terms; }, [terms]);
   useEffect(() => { capturedRef.current = captured; }, [captured]);
@@ -71,6 +79,9 @@ export default function LocationTermBank() {
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     if (audioStreamRef.current) { audioStreamRef.current.getTracks().forEach(t => t.stop()); audioStreamRef.current = null; }
+    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
+    if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
   };
 
   const generateBank = async () => {
@@ -206,6 +217,53 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     window.addEventListener('deviceorientation', orientHandler);
   };
 
+  // Camera-based anomaly trigger: runs the same IR figure detection as the
+  // Anomaly Camera. When a humanoid shape is detected, the current word is
+  // locked — same effect as a motion/orientation disturbance.
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 320 }, height: { ideal: 240 } },
+        audio: false,
+      });
+      cameraStreamRef.current = stream;
+      if (camVideoRef.current) {
+        camVideoRef.current.srcObject = stream;
+        await camVideoRef.current.play().catch(() => {});
+      }
+      setCameraActive(true);
+      processCameraFrame();
+    } catch (e) {
+      setSensorError(prev => (prev ? prev + ' ' : '') + 'Camera access denied — anomaly trigger disabled, but motion/orientation triggers still work.');
+    }
+  };
+
+  const processCameraFrame = () => {
+    const video = camVideoRef.current;
+    const canvas = detectCanvasRef.current;
+    if (!video || !canvas || video.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(processCameraFrame);
+      return;
+    }
+    const w = video.videoWidth || 320;
+    const h = video.videoHeight || 240;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, w, h);
+    try {
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const figures = detectFigures(imageData, w, h);
+      if (figures.length > 0) {
+        setAnomalyDetected(true);
+        if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
+        anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
+        triggerLock();
+      }
+    } catch {}
+    animFrameRef.current = requestAnimationFrame(processCameraFrame);
+  };
+
   // Canvas draw — renders what gets recorded
   const draw = () => {
     const canvas = canvasRef.current;
@@ -325,6 +383,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     setSessionDuration(0);
     setPhase('running');
     await startSensors();
+    await startCamera();
     await new Promise(r => setTimeout(r, 80));
     startDrawing();
     await startRecording();
@@ -343,7 +402,12 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     stopDrawing();
     if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
+    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
+    if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
+    setCameraActive(false);
+    setAnomalyDetected(false);
     lockedRef.current = false;
     setPhase('stopped');
   };
@@ -393,7 +457,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Build Terms</span> — allow location access so AGES gathers 60 words tied to your area's history & hauntings.</li>
             <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 2 seconds each; the session records.</li>
-            <li>Hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud.</li>
+            <li>Hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
             <li>After each word is dictated, the scan resumes automatically.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
@@ -452,9 +516,26 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             <span className="text-[9px] text-white font-mono">REC {formatDuration(sessionDuration)}</span>
           </div>
+          {cameraActive && (
+            <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/80">
+              <Camera className="w-2.5 h-2.5 text-white" />
+              <span className="text-[9px] text-white font-mono">IR</span>
+            </div>
+          )}
+          {anomalyDetected && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="px-3 py-1 rounded bg-red-500/90 border border-red-300/50">
+                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ ANOMALY DETECTED</p>
+              </motion.div>
+            </div>
+          )}
         </div>
+        {/* Hidden camera elements for IR anomaly detection */}
+        <video ref={camVideoRef} className="hidden" playsInline muted />
+        <canvas ref={detectCanvasRef} className="hidden" />
         <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
-          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device to lock a word
+          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device — or let the IR camera detect an anomaly — to lock a word
         </p>
         {lockedWord && (
           <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
