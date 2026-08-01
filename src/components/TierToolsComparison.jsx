@@ -18,12 +18,20 @@ const ALL_TOOLS = [
   { name: 'Alphabet Sweeper', desc: 'Sweep A→Z — environment-triggered letter dictation', premium: true },
 ];
 
-const TIER_TOOL_COUNT = { observer: 0, explorer: 8, investigator: 12, trailblazer: 12 };
+const TIER_TOOLS = {
+  observer: ['Equipment Guide', 'Safety Protocol'],
+  explorer: ['Audio Recorder', 'Radio Sweeper', 'Yes/No/IDK Sweeper', 'Equipment Guide', 'Weather Monitor', 'Moon Phase', 'Paranormal Research: Terms', 'Safety Protocol'],
+  investigator: null, // null = all tools
+  trailblazer: null,
+};
 
 export default function TierToolkitAccess({ planId }) {
   const [open, setOpen] = useState(false);
-  const count = TIER_TOOL_COUNT[planId] || 0;
-  const tools = ALL_TOOLS.slice(0, count);
+  const tierToolNames = TIER_TOOLS[planId];
+  const tools = tierToolNames
+    ? ALL_TOOLS.filter(t => tierToolNames.includes(t.name))
+    : ALL_TOOLS;
+  const count = tools.length;
 
   return (
     <div className="mt-3 pt-3 border-t border-border/30">

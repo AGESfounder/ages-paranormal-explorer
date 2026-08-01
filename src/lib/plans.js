@@ -14,6 +14,7 @@ export const PLANS = {
       'Browse all 50 states + international tours',
       'View tour details, stops, maps, and text',
       'Save favorites',
+      'Toolkit: Equipment Guide & Safety Protocol (2 of 12)',
     ],
   },
   explorer: {
