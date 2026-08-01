@@ -200,8 +200,9 @@ export default function Dashboard() {
             <TrendingUp className="w-4 h-4 text-primary" /> Upgrade Your Access
           </h3>
           <div className="space-y-3">
-            {PLAN_ORDER.filter(id => id !== 'observer' && id !== user?.plan).map(planId => {
+            {PLAN_ORDER.filter(id => id !== user?.plan).map(planId => {
               const plan = PLANS[planId];
+              const isObserver = planId === 'observer';
               const isTrailblazer = planId === 'trailblazer';
               return (
                 <div key={planId} className="p-4 rounded-xl border border-border/40 bg-card/30">
@@ -214,7 +215,9 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2 mb-3">
-                    {isTrailblazer ? (
+                    {isObserver ? (
+                      <span className="font-display text-2xl text-muted-foreground">Free</span>
+                    ) : isTrailblazer ? (
                       <>
                         <span className="font-display text-2xl text-amber-400">${plan.one_time_price}</span>
                         <span className="text-xs text-muted-foreground">one-time / 3 years</span>
@@ -236,35 +239,37 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <TierToolkitAccess planId={planId} />
-                  <div className="flex gap-2 mt-3">
-                    {!isTrailblazer && (
-                      <>
+                  {!isObserver && (
+                    <div className="flex gap-2 mt-3">
+                      {!isTrailblazer && (
+                        <>
+                          <button
+                            onClick={() => handlePurchase(`${planId}_monthly`)}
+                            disabled={redirecting === `${planId}_monthly`}
+                            className="flex-1 py-2.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-50 min-h-[44px] flex items-center justify-center"
+                          >
+                            {redirecting === `${planId}_monthly` ? <Loader2 className="w-4 h-4 animate-spin" /> : `Monthly $${plan.monthly_price}`}
+                          </button>
+                          <button
+                            onClick={() => handlePurchase(`${planId}_annual`)}
+                            disabled={redirecting === `${planId}_annual`}
+                            className="flex-1 py-2.5 rounded-lg bg-primary/20 border border-primary/40 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/30 transition-colors disabled:opacity-50 min-h-[44px] flex items-center justify-center"
+                          >
+                            {redirecting === `${planId}_annual` ? <Loader2 className="w-4 h-4 animate-spin" /> : `Annual $${plan.annual_price}`}
+                          </button>
+                        </>
+                      )}
+                      {isTrailblazer && (
                         <button
-                          onClick={() => handlePurchase(`${planId}_monthly`)}
-                          disabled={redirecting === `${planId}_monthly`}
-                          className="flex-1 py-2.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-50 min-h-[44px] flex items-center justify-center"
+                          onClick={() => handlePurchase('trailblazer')}
+                          disabled={redirecting === 'trailblazer'}
+                          className="flex-1 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-heading uppercase tracking-wider hover:bg-amber-500/20 transition-colors disabled:opacity-50 min-h-[44px] flex items-center justify-center"
                         >
-                          {redirecting === `${planId}_monthly` ? <Loader2 className="w-4 h-4 animate-spin" /> : `Monthly $${plan.monthly_price}`}
+                          {redirecting === 'trailblazer' ? <Loader2 className="w-4 h-4 animate-spin" /> : `Get Trailblazer $${plan.one_time_price}`}
                         </button>
-                        <button
-                          onClick={() => handlePurchase(`${planId}_annual`)}
-                          disabled={redirecting === `${planId}_annual`}
-                          className="flex-1 py-2.5 rounded-lg bg-primary/20 border border-primary/40 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/30 transition-colors disabled:opacity-50 min-h-[44px] flex items-center justify-center"
-                        >
-                          {redirecting === `${planId}_annual` ? <Loader2 className="w-4 h-4 animate-spin" /> : `Annual $${plan.annual_price}`}
-                        </button>
-                      </>
-                    )}
-                    {isTrailblazer && (
-                      <button
-                        onClick={() => handlePurchase('trailblazer')}
-                        disabled={redirecting === 'trailblazer'}
-                        className="flex-1 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-heading uppercase tracking-wider hover:bg-amber-500/20 transition-colors disabled:opacity-50 min-h-[44px] flex items-center justify-center"
-                      >
-                        {redirecting === 'trailblazer' ? <Loader2 className="w-4 h-4 animate-spin" /> : `Get Trailblazer $${plan.one_time_price}`}
-                      </button>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
