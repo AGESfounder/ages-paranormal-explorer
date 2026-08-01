@@ -6,6 +6,7 @@ import PageContainer from '@/components/PageContainer';
 import NavBar from '@/components/NavBar';
 import SectionHeader from '@/components/SectionHeader';
 import EnergyMeter from '@/components/EnergyMeter';
+import TierToolsComparison from '@/components/TierToolsComparison';
 import { base44 } from '@/api/base44Client';
 import { PLANS, AURA_BUNDLES, PLAN_ORDER } from '@/lib/plans';
 
@@ -125,6 +126,9 @@ export default function Dashboard() {
             </div>
           )}
         </motion.div>
+
+        {/* ── Tier Tools Comparison ── */}
+        <TierToolsComparison currentPlanId={user?.plan || 'observer'} />
 
         {/* ── Energy Meters ── */}
         {isPaid ? (
