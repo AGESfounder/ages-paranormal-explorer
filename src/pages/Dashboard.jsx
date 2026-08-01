@@ -6,7 +6,7 @@ import PageContainer from '@/components/PageContainer';
 import NavBar from '@/components/NavBar';
 import SectionHeader from '@/components/SectionHeader';
 import EnergyMeter from '@/components/EnergyMeter';
-import TierToolsComparison from '@/components/TierToolsComparison';
+import TierToolkitAccess from '@/components/TierToolsComparison';
 import { base44 } from '@/api/base44Client';
 import { PLANS, AURA_BUNDLES, PLAN_ORDER } from '@/lib/plans';
 
@@ -116,6 +116,8 @@ export default function Dashboard() {
             ))}
           </div>
 
+          <TierToolkitAccess planId={user?.plan || 'observer'} />
+
           {/* Expiration / renewal info */}
           {daysUntilExpiration !== null && daysUntilExpiration > 0 && (
             <div className="mt-3 pt-3 border-t border-border/30 flex items-center gap-2">
@@ -126,9 +128,6 @@ export default function Dashboard() {
             </div>
           )}
         </motion.div>
-
-        {/* ── Tier Tools Comparison ── */}
-        <TierToolsComparison currentPlanId={user?.plan || 'observer'} />
 
         {/* ── Energy Meters ── */}
         {isPaid ? (
@@ -236,7 +235,8 @@ export default function Dashboard() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex gap-2">
+                  <TierToolkitAccess planId={planId} />
+                  <div className="flex gap-2 mt-3">
                     {!isTrailblazer && (
                       <>
                         <button
