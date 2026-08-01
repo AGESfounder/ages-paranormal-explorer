@@ -457,7 +457,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Build Terms</span> — allow location access so AGES gathers 60 words tied to your area's history & hauntings.</li>
             <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 2 seconds each; the session records.</li>
-            <li>Hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
             <li>After each word is dictated, the scan resumes automatically.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
