@@ -28,6 +28,7 @@ export const PLANS = {
     badge: 'bg-primary/20 text-primary border-primary/40',
     features: [
       'Everything in Observer',
+      'Free!',
       'AI narration (~1 complete tour/month)',
       'Custom tour generation (1-2/month)',
       'All ranked tours unlocked',
