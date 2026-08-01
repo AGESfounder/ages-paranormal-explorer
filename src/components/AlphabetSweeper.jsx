@@ -6,7 +6,7 @@ import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-const LETTER_MS = 1250;          // each letter displayed 1.25 seconds
+const LETTER_MS = 2000;          // each letter displayed 2 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
 const ACCEL_THRESHOLD = 3.2;
 const ORIENT_THRESHOLD = 28;
