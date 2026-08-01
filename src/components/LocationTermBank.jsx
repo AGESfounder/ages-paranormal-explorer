@@ -90,6 +90,68 @@ export default function LocationTermBank() {
     setTerms([]);
     setCaptured([]);
     try {
+      // ── Priority: extract terms from the user's current tour stop ──
+      const me = await base44.auth.me().catch(() => null);
+      if (me?.last_stop_id) {
+        try {
+          const stop = await base44.entities.TourStop.get(me.last_stop_id);
+          if (stop) {
+            let tour = null;
+            if (stop.tour_id) { try { tour = await base44.entities.Tour.get(stop.tour_id); } catch {} }
+            const textParts = [
+              stop.name,
+              stop.historical_info,
+              stop.paranormal_info,
+              stop.famous_people,
+              stop.construction_date,
+              stop.address,
+              stop.hours_of_operation,
+              ...(stop.investigation_suggestions || []),
+              ...((stop.people || []).map(p => p.name ? `${p.name}: ${p.story}` : p.story)),
+            ].filter(Boolean);
+            const stopText = textParts.join('\n\n');
+            if (stopText.trim().length > 30) {
+              const res = await base44.integrations.Core.InvokeLLM({
+                prompt: `Analyze the following text from a paranormal tour stop and extract a word bank of terms for a "spirit communication" sweeper tool.
+
+Extract terms in these 5 categories:
+1. NAMES — proper nouns (people, places, buildings, ships) mentioned in the text
+2. MOST REPEATED NOUNS — nouns that appear most frequently in the text
+3. MOST REPEATED VERBS — action verbs that appear most frequently (EXCLUDE linking verbs and helping verbs)
+4. IMPORTANT PHRASES — meaningful 2-4 word phrases that capture key concepts from the text
+5. TIME-RELATED WORDS — dates, years, days of the week, months, and time references
+
+EXCLUDE these parts of speech entirely:
+- Articles (a, an, the)
+- Prepositions (in, on, at, to, of, for, with, from, by, about, under, over, etc.)
+- Linking verbs (is, are, was, were, be, been, being, seem, appear, become)
+- Helping verbs (have, has, had, do, does, did, will, would, can, could, should, shall, may, might, must)
+
+Return 40-60 terms total, mixing all 5 categories. Each term should be a single word or short phrase (no full sentences). Return as JSON.
+
+STOP TEXT:
+${stopText}`,
+                response_json_schema: {
+                  type: 'object',
+                  properties: {
+                    terms: { type: 'array', items: { type: 'string' } },
+                  },
+                },
+                model: 'gemini_3_flash',
+              });
+              const list = (res.terms || []).filter(t => t && typeof t === 'string');
+              if (list.length > 0) {
+                setTerms(list);
+                setLocationLabel(stop.name || tour?.title || 'current stop');
+                setPhase('ready');
+                return;
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // ── Fallback: original geolocation + LLM approach ──
       const coords = await new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error('no geo'));
         navigator.geolocation.getCurrentPosition(p => resolve(p.coords), () => reject(new Error('denied')), { timeout: 8000 });
@@ -455,7 +517,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
-            <li>Tap <span className="text-primary font-medium">Build Terms</span> — allow location access so AGES gathers 60 words tied to your area's history & hauntings.</li>
+            <li>Tap <span className="text-primary font-medium">Build Terms</span> — if you're on a tour stop, AGES extracts terms from that stop's history (names, nouns, verbs, phrases, time words); otherwise it gathers words tied to your area's history & hauntings.</li>
             <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 2 seconds each; the session records.</li>
             <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
             <li>After each word is dictated, the scan resumes automatically.</li>
@@ -488,7 +550,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         </p>
         <div className="p-4 rounded-lg bg-black/40 border border-primary/20 text-center space-y-2">
           <Library className="w-8 h-8 text-primary mx-auto opacity-60" />
-          <p className="text-[11px] text-muted-foreground leading-relaxed">60 location terms ready. Start the session to begin the rotating word scan with environment-triggered dictation and screen recording.</p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">{terms.length} terms ready. Start the session to begin the rotating word scan with environment-triggered dictation and screen recording.</p>
         </div>
         <button onClick={startSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Play className="w-4 h-4" /> Start Session
