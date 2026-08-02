@@ -76,7 +76,8 @@ export default function Dashboard() {
         subtitle="Subscription & Energy"
         showBack
         rightAction={
-          <Link to="/plan-analysis" className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/60 text-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-card hover:border-primary/40 transition-colors min-h-[44px]">
+          /* Hidden — kept for future use. Remove "hidden" class to re-enable. */
+          <Link to="/plan-analysis" className="hidden flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/60 text-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-card hover:border-primary/40 transition-colors min-h-[44px]">
             <FileText className="w-3.5 h-3.5 text-primary" /> Plan PDF
           </Link>
         }
