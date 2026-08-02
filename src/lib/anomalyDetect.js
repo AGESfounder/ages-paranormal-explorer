@@ -22,13 +22,13 @@ export function detectFigures(imageData, width, height) {
   const data = imageData.data;
   const regions = [];
   const visited = new Uint8Array(width * height);
-  const SKIN_THRESHOLD = 600;
+  const SKIN_THRESHOLD = 150;
 
-  for (let y = 0; y < height; y += 4) {
-    for (let x = 0; x < width; x += 4) {
+  for (let y = 0; y < height; y += 3) {
+    for (let x = 0; x < width; x += 3) {
       const idx = (y * width + x) * 4;
       const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-      const isSkin = r > 25 && g > 15 && b > 10 && r > g && r > b && (r - g) > 4 && r < 255 && g < 240;
+      const isSkin = r > 12 && g > 8 && b > 5 && r >= g && r > b && (r - b) > 2 && r < 255 && g < 245;
 
       if (isSkin && !visited[y * width + x]) {
         const queue = [[x, y]];
@@ -43,16 +43,16 @@ export function detectFigures(imageData, width, height) {
           pixels.add(vi);
           if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
           if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
-          for (const [nx, ny] of [[cx - 4, cy], [cx + 4, cy], [cx, cy - 4], [cx, cy + 4]]) {
+          for (const [nx, ny] of [[cx - 3, cy], [cx + 3, cy], [cx, cy - 3], [cx, cy + 3]]) {
             if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
             const ni = (ny * width + nx) * 4;
             const nr = data[ni], ng = data[ni + 1], nb = data[ni + 2];
-            if (nr > 25 && ng > 15 && nb > 10 && nr > ng && nr > nb && (nr - ng) > 4 && nr < 255 && ng < 240) queue.push([nx, ny]);
+            if (nr > 12 && ng > 8 && nb > 5 && nr >= ng && nr > nb && (nr - nb) > 2 && nr < 255 && ng < 245) queue.push([nx, ny]);
           }
         }
         if (pixelCount > SKIN_THRESHOLD) {
           const bw = maxX - minX, bh = maxY - minY;
-          if (bh > bw * 0.6 && bh > 25 && bw > 10) regions.push({ x: minX, y: minY, w: bw, h: bh, count: pixelCount, pixels });
+          if (bh > 15 && bw > 8) regions.push({ x: minX, y: minY, w: bw, h: bh, count: pixelCount, pixels });
         }
       }
     }
