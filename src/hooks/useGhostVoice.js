@@ -286,5 +286,42 @@ export default function useGhostVoice() {
     }
   }, []);
 
-  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, stop, unlock, attachMicToRecording };
+  // Fetch + decode an audio URL into an AudioBuffer for instant playback later.
+  const fetchAudioBuffer = useCallback(async (url) => {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx) return null;
+      const resp = await fetch(url);
+      const ab = await resp.arrayBuffer();
+      const audioBuf = await ctx.decodeAudioData(ab);
+      return audioBuf;
+    } catch { return null; }
+  }, []);
+
+  // Play a pre-decoded AudioBuffer via Web Audio (captured in recording).
+  // Returns a promise that resolves when the audio ends.
+  const playAudioBuffer = useCallback(async (buffer, opts = {}) => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
+    stopEerieBackground();
+    releaseNarration();
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || ctx.state !== 'running') return;
+      const sNode = ctx.createBufferSource();
+      sNode.buffer = buffer;
+      if (opts.creepy) sNode.playbackRate.value = 0.8;
+      sNode.connect(ctx.destination);
+      if (recordDestRef.current) sNode.connect(recordDestRef.current);
+      srcRef.current = sNode;
+      acquireNarration();
+      return new Promise(resolve => {
+        sNode.onended = () => { releaseNarration(); srcRef.current = null; resolve(); };
+      });
+    } catch (err) {
+      releaseNarration();
+    }
+  }, []);
+
+  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, stop, unlock, attachMicToRecording };
 }

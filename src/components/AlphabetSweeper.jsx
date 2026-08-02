@@ -36,35 +36,39 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { playPreGenerated, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { playPreGenerated, playAudioBuffer, fetchAudioBuffer, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
 
-  // Pre-generate high-quality TTS audio for each letter in BOTH the female
-  // ("honey") and male ("storm") voices. Cached across sessions for as long as
-  // the component stays mounted. Pre-generating ensures consistent voices and
-  // instant playback (no per-trigger API call).
+  // Pre-generate + pre-fetch + decode TTS audio for each letter in BOTH the
+  // female ("honey") and male ("storm") voices. AudioBuffers are cached across
+  // sessions for as long as the component stays mounted. Pre-decoding enables
+  // instant playback (no per-letter fetch/decode latency).
   const preGenerateLetters = async () => {
-    if (Object.keys(femaleLetterAudioRef.current).length >= 26) return;
+    if (Object.keys(femaleBufferRef.current).length >= 26) return;
     try {
       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
       const [femaleResults, maleResults] = await Promise.all([
         Promise.all(letters.map(l => base44.integrations.Core.GenerateSpeech({ text: l.toLowerCase(), voice: 'honey' }))),
         Promise.all(letters.map(l => base44.integrations.Core.GenerateSpeech({ text: l.toLowerCase(), voice: 'storm' }))),
       ]);
+      const [femaleBufs, maleBufs] = await Promise.all([
+        Promise.all(letters.map((l, i) => femaleResults[i]?.url ? fetchAudioBuffer(femaleResults[i].url) : null)),
+        Promise.all(letters.map((l, i) => maleResults[i]?.url ? fetchAudioBuffer(maleResults[i].url) : null)),
+      ]);
       letters.forEach((l, i) => {
-        if (femaleResults[i]?.url) femaleLetterAudioRef.current[l.toLowerCase()] = femaleResults[i].url;
-        if (maleResults[i]?.url) maleLetterAudioRef.current[l.toLowerCase()] = maleResults[i].url;
+        if (femaleBufs[i]) femaleBufferRef.current[l.toLowerCase()] = femaleBufs[i];
+        if (maleBufs[i]) maleBufferRef.current[l.toLowerCase()] = maleBufs[i];
       });
     } catch {}
   };
 
-  // Play the pre-generated female voice for a letter via Web Audio (unlocked,
-  // captured in the recording). Sets femaleBusyRef so the male trigger voice
-  // waits for the current letter to finish.
+  // Play the pre-decoded female voice for a letter via Web Audio (instant,
+  // unlocked, captured in the recording). Sets femaleBusyRef so the male
+  // trigger voice waits for the current letter to finish.
   const speakNormal = (letter) => {
-    const url = femaleLetterAudioRef.current[letter.toLowerCase()];
-    if (!url) return;
+    const buf = femaleBufferRef.current[letter.toLowerCase()];
+    if (!buf) return;
     femaleBusyRef.current = true;
-    playPreGenerated(url, {}).then(() => {
+    playAudioBuffer(buf, {}).then(() => {
       femaleBusyRef.current = false;
       if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
     });
@@ -73,7 +77,6 @@ export default function AlphabetSweeper() {
   const stopFemaleAudio = () => {
     pendingMaleRef.current = null;
     femaleBusyRef.current = false;
-    if (directionsAudioRef.current) { try { directionsAudioRef.current.pause(); } catch {} directionsAudioRef.current = null; }
     try { stopVoice(); } catch {}
   };
 
@@ -104,10 +107,11 @@ export default function AlphabetSweeper() {
   const motionTimerRef = useRef(null);
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
-  const femaleLetterAudioRef = useRef({});
-  const maleLetterAudioRef = useRef({});
-  const directionsAudioRef = useRef(null);
+  const femaleBufferRef = useRef({});
+  const maleBufferRef = useRef({});
   const resumeDelayRef = useRef(null);
+  const begunRef = useRef(false);
+  const preGeneratePromiseRef = useRef(null);
   const anomalyDetectedRef = useRef(false);
   const motionDetectedRef = useRef(false);
   const startDelayRef = useRef(null);
@@ -188,14 +192,14 @@ export default function AlphabetSweeper() {
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     // Let the female voice finish the current letter, then speak male
     const speakMale = () => {
-      const url = maleLetterAudioRef.current[letter.toLowerCase()];
-      if (!url) {
-        // No pre-generated male audio — resume after a short delay
+      const buf = maleBufferRef.current[letter.toLowerCase()];
+      if (!buf) {
+        // No pre-decoded male audio — resume after a short delay
         if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
         resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 2000);
         return;
       }
-      playPreGenerated(url, {}).then(() => {
+      playAudioBuffer(buf, {}).then(() => {
         // Male voice finished — resumeFromLock adds a 1.5s pause before A
         resumeFromLock();
       });
@@ -208,7 +212,7 @@ export default function AlphabetSweeper() {
     } else {
       speakMale();
     }
-  }, [playPreGenerated, resumeFromLock]);
+  }, [playAudioBuffer, resumeFromLock]);
 
   const flashMotion = useCallback(() => {
     setMotionDetected(true);
@@ -451,9 +455,17 @@ export default function AlphabetSweeper() {
     // fire during the pause).
     pausedRef.current = true;
     setPaused(true);
+    begunRef.current = false;
     const directions = 'Spell words you want to say to us. I am going to repeat the alphabet. You can choose letters by moving my device and standing in front of it when you hear or see the letter you need next.';
-    const beginAfterPause = () => {
+    const beginAfterPause = async () => {
+      if (begunRef.current) return;
+      begunRef.current = true;
       if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
+      if (!sessionActiveRef.current) return;
+      // Wait for letter audio pre-generation to finish before starting the sweep
+      if (preGeneratePromiseRef.current) {
+        try { await preGeneratePromiseRef.current; } catch {}
+      }
       if (!sessionActiveRef.current) return;
       pausedRef.current = false;
       setPaused(false);
@@ -461,20 +473,18 @@ export default function AlphabetSweeper() {
       attachSensorHandlers();
       processCameraFrame();
     };
-    // Pre-generate high-quality female voice for all 26 letters while the
-    // directions play (cached across sessions).
-    preGenerateLetters();
-    // Speak the directions via the high-quality "honey" female voice.
+    // Start pre-generation (pre-fetch + decode all 26 letters in both voices)
+    preGeneratePromiseRef.current = preGenerateLetters();
+    // Speak the directions via Web Audio (the "honey" female voice) — Web Audio
+    // is unlocked by unlock() so this plays reliably on iOS.
     try {
       const result = await base44.integrations.Core.GenerateSpeech({ text: directions, voice: 'honey' });
       if (!sessionActiveRef.current) return;
-      const audio = new Audio(result.url);
-      directionsAudioRef.current = audio;
-      audio.volume = 1;
-      audio.onended = () => { directionsAudioRef.current = null; beginAfterPause(); };
-      audio.onerror = () => { directionsAudioRef.current = null; beginAfterPause(); };
-      audio.play().catch(() => { directionsAudioRef.current = null; beginAfterPause(); });
-      // Safety fallback: if onended never fires, start anyway after 25s
+      playPreGenerated(result.url, {}).then(() => {
+        if (!sessionActiveRef.current) return;
+        beginAfterPause();
+      });
+      // Safety fallback: if audio never resolves, start anyway after 25s
       startDelayRef.current = setTimeout(() => beginAfterPause(), 25000);
     } catch { beginAfterPause(); }
     let elapsed = 0;
