@@ -327,5 +327,18 @@ export default function useGhostVoice() {
     }
   }, []);
 
-  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, stop, unlock, attachMicToRecording };
+  // Resume the AudioContext (e.g. after getUserMedia suspended it on iOS).
+  const resumeContext = useCallback(async () => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtxRef.current.state !== 'running') {
+        await audioCtxRef.current.resume();
+      }
+      return audioCtxRef.current.state === 'running';
+    } catch { return false; }
+  }, []);
+
+  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop, unlock, attachMicToRecording };
 }

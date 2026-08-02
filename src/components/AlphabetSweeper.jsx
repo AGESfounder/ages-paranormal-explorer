@@ -36,7 +36,7 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { playPreGenerated, playAudioBuffer, fetchAudioBuffer, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
 
   // Pre-generate + pre-fetch + decode TTS audio for each letter in BOTH the
   // female ("honey") and male ("storm") voices. AudioBuffers are cached across
@@ -449,10 +449,10 @@ export default function AlphabetSweeper() {
     await requestSensorPermissions();
     await startCameraStream();
     startDrawing();
-    await startRecording();
-    // Speak the directions via the female voice; letters + sensor handlers +
-    // camera processing begin only after the directions finish (so no triggers
-    // fire during the pause).
+    // Show "Get Ready…" while the directions play. Directions are spoken via
+    // Web Audio BEFORE the mic getUserMedia call — that call can suspend the
+    // AudioContext on iOS, so we play the directions while the context is
+    // still active from unlock().
     pausedRef.current = true;
     setPaused(true);
     begunRef.current = false;
@@ -466,6 +466,11 @@ export default function AlphabetSweeper() {
       if (preGeneratePromiseRef.current) {
         try { await preGeneratePromiseRef.current; } catch {}
       }
+      if (!sessionActiveRef.current) return;
+      // Start recording now (mic getUserMedia may suspend the AudioContext)
+      await startRecording();
+      // Resume the AudioContext after getUserMedia so letter playback works
+      await resumeContext();
       if (!sessionActiveRef.current) return;
       pausedRef.current = false;
       setPaused(false);
