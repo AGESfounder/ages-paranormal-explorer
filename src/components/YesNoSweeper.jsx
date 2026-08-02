@@ -48,6 +48,30 @@ export default function YesNoSweeper() {
   // WITHOUT the creepy flag → normal-speed delivery.
   const { isSpeaking, isGenerating, speak, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
 
+  // Normal browser TTS announces each phrase as it cycles (instant, local,
+  // female voice). The locked phrase is then spoken in the deep male
+  // "creepy" voice via useGhostVoice.
+  const speakNormal = (phrase) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      const synth = window.speechSynthesis;
+      try { synth.getVoices(); } catch {}
+      const u = new SpeechSynthesisUtterance(phrase);
+      u.lang = 'en-US';
+      u.rate = 0.9;
+      u.pitch = 1;
+      u.volume = 1;
+      const voices = synth.getVoices();
+      const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+      if (en) u.voice = en;
+      synth.speak(u);
+    } catch {}
+  };
+
+  const stopNormalVoice = () => {
+    try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
+  };
+
   const stepRef = useRef(null);
   const drawRef = useRef(null);
   const canvasRef = useRef(null);
@@ -91,9 +115,15 @@ export default function YesNoSweeper() {
     if (audioStreamRef.current) { audioStreamRef.current.getTracks().forEach(t => t.stop()); audioStreamRef.current = null; }
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
+    if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     setCameraActive(false);
     setAnomalyDetected(false);
+    setMotionDetected(false);
+    setAskingNext(false);
+    askingNextRef.current = false;
+    stopNormalVoice();
     try { stopVoice(); } catch {}
   };
 
@@ -105,7 +135,18 @@ export default function YesNoSweeper() {
     lockedRef.current = false;
     indexRef.current = 0;
     setCurrentIdx(0);
-    if (phase === 'running') startStepping();
+    // Show "Asking Next Question…" for 5 seconds before resuming the sweep,
+    // so the user has a clear pause between answers.
+    if (phase === 'running') {
+      setAskingNext(true);
+      askingNextRef.current = true;
+      if (askingNextTimerRef.current) clearTimeout(askingNextTimerRef.current);
+      askingNextTimerRef.current = setTimeout(() => {
+        setAskingNext(false);
+        askingNextRef.current = false;
+        startStepping();
+      }, 5000);
+    }
   }, [phase]);
 
   // Resume once the spoken phrase has actually started AND finished — wait for
@@ -118,15 +159,19 @@ export default function YesNoSweeper() {
     }
   }, [isSpeaking, isGenerating, lockedPhrase, resumeFromLock]);
 
-  // Cycle through phrases silently every 3 seconds (no voice while cycling).
+  // Cycle through phrases every 3 seconds, each spoken aloud in a female
+  // voice (normal browser TTS). The locked phrase is then spoken in the deep
+  // male "creepy" voice via useGhostVoice.
   const startStepping = () => {
     if (stepRef.current) clearInterval(stepRef.current);
     indexRef.current = 0;
     setCurrentIdx(0);
+    speakNormal(PHRASES[0].speech);
     stepRef.current = setInterval(() => {
       if (lockedRef.current) return;
       indexRef.current = (indexRef.current + 1) % PHRASES.length;
       setCurrentIdx(indexRef.current);
+      speakNormal(PHRASES[indexRef.current].speech);
     }, PHRASE_MS);
   };
 
@@ -142,7 +187,8 @@ export default function YesNoSweeper() {
     setCaptured(prev => { const updated = [...prev, phrase.display]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     speechStartedRef.current = false;
-    try { speak(phrase.speech, {}); } catch {} // normal-speed voice
+    stopNormalVoice();
+    try { speak(phrase.speech, {}); } catch {} // deep male "storm" voice
     if (resumeFallbackRef.current) clearTimeout(resumeFallbackRef.current);
     resumeFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 8000);
   }, [speak, resumeFromLock]);
@@ -160,6 +206,12 @@ export default function YesNoSweeper() {
     return true;
   };
 
+  const flashMotion = useCallback(() => {
+    setMotionDetected(true);
+    if (motionTimerRef.current) clearTimeout(motionTimerRef.current);
+    motionTimerRef.current = setTimeout(() => setMotionDetected(false), 3000);
+  }, []);
+
   const startSensors = async () => {
     const ok = await requestSensorPermissions();
     if (!ok) return;
@@ -167,7 +219,7 @@ export default function YesNoSweeper() {
       const a = e.accelerationIncludingGravity;
       if (!a) return;
       const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
-      if (Math.abs(mag - baselineRef.current) > ACCEL_THRESHOLD) triggerLock();
+      if (Math.abs(mag - baselineRef.current) > ACCEL_THRESHOLD) { flashMotion(); triggerLock(); }
       baselineRef.current = baselineRef.current * 0.97 + mag * 0.03;
     };
     motionHandlerRef.current = motionHandler;
@@ -177,7 +229,7 @@ export default function YesNoSweeper() {
       const cur = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
       if (lastOrientRef.current == null) { lastOrientRef.current = cur; return; }
       const lo = lastOrientRef.current;
-      if (Math.abs(cur.a - lo.a) > ORIENT_THRESHOLD || Math.abs(cur.b - lo.b) > ORIENT_THRESHOLD || Math.abs(cur.g - lo.g) > ORIENT_THRESHOLD) triggerLock();
+      if (Math.abs(cur.a - lo.a) > ORIENT_THRESHOLD || Math.abs(cur.b - lo.b) > ORIENT_THRESHOLD || Math.abs(cur.g - lo.g) > ORIENT_THRESHOLD) { flashMotion(); triggerLock(); }
       lastOrientRef.current = cur;
     };
     orientHandlerRef.current = orientHandler;
@@ -271,6 +323,13 @@ export default function YesNoSweeper() {
       ctx.fillStyle = '#67e8f9';
       ctx.font = '12px monospace';
       ctx.fillText('LOCKED — DICTATING', w / 2, h / 2 + 50);
+    } else if (askingNextRef.current) {
+      ctx.fillStyle = 'rgba(250,204,21,0.85)';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillText('ASKING NEXT QUESTION…', w / 2, h / 2 + 10);
+      ctx.fillStyle = 'rgba(250,204,21,0.6)';
+      ctx.font = '12px monospace';
+      ctx.fillText('PAUSE BEFORE NEXT SWEEP', w / 2, h / 2 + 40);
     } else {
       ctx.fillStyle = 'rgba(148,163,184,0.6)';
       ctx.font = `bold ${fontSize}px sans-serif`;
@@ -339,6 +398,9 @@ export default function YesNoSweeper() {
     indexRef.current = 0;
     sessionDurRef.current = 0;
     setSessionDuration(0);
+    setAskingNext(false);
+    askingNextRef.current = false;
+    if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
     setPhase('running');
     // Unlock Web Audio inside the tap gesture so the later sensor-triggered
     // spoken answer plays on iOS.
@@ -365,12 +427,18 @@ export default function YesNoSweeper() {
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
+    if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
     setCameraActive(false);
     setAnomalyDetected(false);
+    setMotionDetected(false);
+    setAskingNext(false);
+    askingNextRef.current = false;
     lockedRef.current = false;
+    stopNormalVoice();
     try { stopVoice(); } catch {}
     setPhase('stopped');
   };
@@ -416,9 +484,9 @@ export default function YesNoSweeper() {
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
-            <li>Tap <span className="text-primary font-medium">Start</span>. The phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> cycle silently, one every 3 seconds, over and over.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and is spoken aloud in a normal voice. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
-            <li>After a phrase is spoken, the sweep starts again from YES.</li>
+            <li>Tap <span className="text-primary font-medium">Start</span>. The phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> cycle, one every 3 seconds, each spoken aloud in a female voice, while the session records.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and is spoken aloud in a male voice. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
+            <li>After a phrase is spoken, "Asking Next Question…" appears for 5 seconds, then the sweep starts again from YES.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
         </div>
@@ -459,6 +527,14 @@ export default function YesNoSweeper() {
               </motion.div>
             </div>
           )}
+          {motionDetected && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="px-3 py-1 rounded bg-amber-500/90 border border-amber-300/50">
+                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ MOTION DETECTED</p>
+              </motion.div>
+            </div>
+          )}
         </div>
         {/* Hidden camera elements for IR anomaly detection */}
         <video ref={camVideoRef} className="hidden" playsInline muted />
@@ -470,6 +546,11 @@ export default function YesNoSweeper() {
           <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             className="text-center font-display text-3xl text-cyan-glow drop-shadow-[0_0_18px_hsl(185,80%,55%,0.85)] animate-glow-pulse">
             {lockedPhrase}
+          </motion.p>
+        ) : askingNext ? (
+          <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            className="text-center font-display text-xl text-amber-400/90 drop-shadow-[0_0_14px_hsl(45,96%,55%,0.6)] animate-glow-pulse">
+            Asking Next Question…
           </motion.p>
         ) : (
           <p className="text-center font-display text-2xl text-foreground/70 flex items-center justify-center gap-2">
