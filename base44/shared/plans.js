@@ -20,8 +20,8 @@ export const PLANS = {
     name: 'Explorer',
     manifestation_energy: 5,
     narration_energy: 300,
-    monthly_price: 4.99,
-    annual_price: 49.99,
+    monthly_price: 5.99,
+    annual_price: 59.99,
     color: 'text-primary',
     features: [
       'Everything in Observer',
@@ -59,7 +59,7 @@ export const PLANS = {
     manifestation_energy: 25,
     narration_energy: 1200,
     one_time_price: 199.99,
-    duration_years: 3,
+    duration_months: 30,
     max_slots: 300,
     color: 'text-amber-400',
     features: [
@@ -68,7 +68,7 @@ export const PLANS = {
       'Custom tour generation (up to 8/month)',
       'Exclusive Trailblazer badge',
       'Early access to new features',
-      '3-year price lock guarantee',
+      '30-month price lock guarantee',
       'Seasonal Aura Bundle discounts (20% off)',
       'Limited to 300 slots',
     ],
@@ -80,7 +80,7 @@ export const AURA_BUNDLES = {
     id: 'flicker',
     name: 'Flicker',
     energy: 100,
-    price: 0.99,
+    price: 1.99,
     narration_pct: 0.8,
     manifestation_pct: 0.2,
   },
@@ -88,7 +88,7 @@ export const AURA_BUNDLES = {
     id: 'apparition',
     name: 'Apparition',
     energy: 400,
-    price: 3.99,
+    price: 4.99,
     narration_pct: 0.8,
     manifestation_pct: 0.2,
   },
@@ -96,7 +96,7 @@ export const AURA_BUNDLES = {
     id: 'haunting',
     name: 'Haunting',
     energy: 1000,
-    price: 9.99,
+    price: 10.99,
     narration_pct: 0.8,
     manifestation_pct: 0.2,
   },
@@ -104,7 +104,7 @@ export const AURA_BUNDLES = {
     id: 'spectral',
     name: 'Spectral',
     energy: 2000,
-    price: 17.99,
+    price: 18.99,
     narration_pct: 0.8,
     manifestation_pct: 0.2,
   },
@@ -115,7 +115,7 @@ export const AURA_BUNDLES = {
 export const WIX_PRODUCTS = {
   explorer_monthly: {
     name: 'AGES Explorer — Monthly',
-    price: '4.99',
+    price: '5.99',
     product_type: 'subscription',
     plan_id: 'explorer',
     subscription_info: {
@@ -126,7 +126,7 @@ export const WIX_PRODUCTS = {
   },
   explorer_annual: {
     name: 'AGES Explorer — Annual',
-    price: '49.99',
+    price: '59.99',
     product_type: 'subscription',
     plan_id: 'explorer',
     subscription_info: {
@@ -158,32 +158,32 @@ export const WIX_PRODUCTS = {
     },
   },
   trailblazer: {
-    name: 'AGES Trailblazer — 3-Year Elite',
+    name: 'AGES Trailblazer — 30-Month Elite',
     price: '199.99',
     product_type: 'one_time',
     plan_id: 'trailblazer',
   },
   flicker: {
     name: 'Aura Bundle — Flicker (100 Energy)',
-    price: '0.99',
+    price: '1.99',
     product_type: 'aura_bundle',
     bundle_id: 'flicker',
   },
   apparition: {
     name: 'Aura Bundle — Apparition (400 Energy)',
-    price: '3.99',
+    price: '4.99',
     product_type: 'aura_bundle',
     bundle_id: 'apparition',
   },
   haunting: {
     name: 'Aura Bundle — Haunting (1000 Energy)',
-    price: '9.99',
+    price: '10.99',
     product_type: 'aura_bundle',
     bundle_id: 'haunting',
   },
   spectral: {
     name: 'Aura Bundle — Spectral (2000 Energy)',
-    price: '17.99',
+    price: '18.99',
     product_type: 'aura_bundle',
     bundle_id: 'spectral',
   },
@@ -207,7 +207,7 @@ export function getGrantForProduct(productId) {
   if (wixProduct.product_type === 'one_time' && wixProduct.plan_id === 'trailblazer') {
     const plan = PLANS.trailblazer;
     const expiration = new Date();
-    expiration.setFullYear(expiration.getFullYear() + plan.duration_years);
+    expiration.setMonth(expiration.getMonth() + plan.duration_months);
     return {
       plan: 'trailblazer',
       manifestation_energy: plan.manifestation_energy,

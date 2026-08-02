@@ -6,19 +6,19 @@ import { jsPDF } from 'jspdf';
 const PLANS = [
   { name: 'Observer', price: '$0', billing: 'Free forever', manE: 0, narE: 0,
     features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; save favorites' },
-  { name: 'Explorer', price: '$4.99', billing: 'Monthly ($49.99/yr)', manE: 5, narE: 300,
+  { name: 'Explorer', price: '$5.99', billing: 'Monthly ($59.99/yr)', manE: 5, narE: 300,
     features: 'AI narration (~1 tour/mo); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 8-tool toolkit; aura bundles' },
   { name: 'Investigator', price: '$9.99', billing: 'Monthly ($99.99/yr)', manE: 15, narE: 1000,
     features: 'Everything in Explorer; AI narration (~4 tours/mo); custom tours (up to 5/mo); full 12-tool toolkit; evidence dashboard analytics; aura bundles' },
-  { name: 'Trailblazer', price: '$199.99', billing: 'One-time, 3 years (max 300 slots)', manE: 25, narE: 1200,
-    features: 'Everything in Investigator; AI narration (~5 tours/mo); custom tours (up to 8/mo); exclusive badge; early access; 3-yr price lock; 20% off aura bundles' },
+  { name: 'Trailblazer', price: '$199.99', billing: 'One-time, 30 months (max 300 slots)', manE: 25, narE: 1200,
+    features: 'Everything in Investigator; AI narration (~5 tours/mo); custom tours (up to 8/mo); exclusive badge; early access; 30-mo price lock; 20% off aura bundles' },
 ];
 
 const AURA_BUNDLES = [
-  { name: 'Flicker', energy: 100, price: '$0.99' },
-  { name: 'Apparition', energy: 400, price: '$3.99' },
-  { name: 'Haunting', energy: 1000, price: '$9.99' },
-  { name: 'Spectral', energy: 2000, price: '$17.99' },
+  { name: 'Flicker', energy: 100, price: '$1.99' },
+  { name: 'Apparition', energy: 400, price: '$4.99' },
+  { name: 'Haunting', energy: 1000, price: '$10.99' },
+  { name: 'Spectral', energy: 2000, price: '$18.99' },
 ];
 
 // ===== COST ASSUMPTIONS =====
@@ -40,6 +40,7 @@ const APPLE_DEV_ANNUAL = 99;
 const GOOGLE_DEV_ONE_TIME = 25;
 const MEDIAN_CO_FIRST_YEAR = 569;
 const MEDIAN_CO_ANNUAL = 399;
+const BASE44_MONTHLY = 40;           // Base44 Builder plan subscription
 
 // AdMob (interstitial ads for free users — stop 2+ paranormal history on each tour)
 const ADMOB_ECPM = 15;                 // $15 per 1,000 interstitial impressions
@@ -65,7 +66,7 @@ function revenuecatFee(monthlySales) {
 
 // Per-plan monthly profit (1 month, 100% utilization)
 const monthlyAnalysis = [
-  { plan: 'Explorer', price: 4.99, manE: 5, narE: 300 },
+  { plan: 'Explorer', price: 5.99, manE: 5, narE: 300 },
   { plan: 'Investigator', price: 9.99, manE: 15, narE: 1000 },
 ].map(p => {
   const { credits, platformCost } = calcCosts(p.manE, p.narE, 1);
@@ -78,7 +79,7 @@ const monthlyAnalysis = [
 // Trailblazer (36 months, 100% utilization)
 const trailblazerAnalysis = (() => {
   const price = 199.99;
-  const { credits, platformCost } = calcCosts(25, 1200, 36);
+  const { credits, platformCost } = calcCosts(25, 1200, 30);
   const sf = storeFee(price);
   const totalCost = platformCost + sf;
   const profit = price - totalCost;
@@ -88,7 +89,7 @@ const trailblazerAnalysis = (() => {
 // Trailblazer at 50% utilization
 const trailblazer50 = (() => {
   const price = 199.99;
-  const { credits, platformCost } = calcCosts(12.5, 600, 36);
+  const { credits, platformCost } = calcCosts(12.5, 600, 30);
   const sf = storeFee(price);
   const totalCost = platformCost + sf;
   const profit = price - totalCost;
@@ -111,13 +112,15 @@ const fixedCostsFirstYear = [
   { item: 'Apple Developer Program', cost: APPLE_DEV_ANNUAL, period: 'Annual' },
   { item: 'Google Play Developer', cost: GOOGLE_DEV_ONE_TIME, period: 'One-time' },
   { item: 'Median.co (App Builder)', cost: MEDIAN_CO_FIRST_YEAR, period: 'Annual — Year 1' },
+  { item: 'Base44 Builder Plan', cost: BASE44_MONTHLY * 12, period: 'Annual ($' + BASE44_MONTHLY + '/mo)' },
 ];
 const fixedCostsOngoing = [
   { item: 'Apple Developer Program', cost: APPLE_DEV_ANNUAL, period: 'Annual' },
   { item: 'Median.co (App Builder)', cost: MEDIAN_CO_ANNUAL, period: 'Annual — Year 2+' },
+  { item: 'Base44 Builder Plan', cost: BASE44_MONTHLY * 12, period: 'Annual ($' + BASE44_MONTHLY + '/mo)' },
 ];
-const fixedFirstYearTotal = APPLE_DEV_ANNUAL + GOOGLE_DEV_ONE_TIME + MEDIAN_CO_FIRST_YEAR;
-const fixedOngoingAnnual = APPLE_DEV_ANNUAL + MEDIAN_CO_ANNUAL;
+const fixedFirstYearTotal = APPLE_DEV_ANNUAL + GOOGLE_DEV_ONE_TIME + MEDIAN_CO_FIRST_YEAR + (BASE44_MONTHLY * 12);
+const fixedOngoingAnnual = APPLE_DEV_ANNUAL + MEDIAN_CO_ANNUAL + (BASE44_MONTHLY * 12);
 const fixedOngoingMonthly = fixedOngoingAnnual / 12;
 
 // AdMob revenue projections at different free-user counts
@@ -139,9 +142,9 @@ const scenarios = [
   { label: 'Scale (500 paid / 2,500 free)', mix: { explorer: 330, investigator: 140, trailblazer: 30 }, freeUsers: 2500 },
   { label: 'Mature (1,000 paid / 5,000 free)', mix: { explorer: 680, investigator: 270, trailblazer: 50 }, freeUsers: 5000 },
 ].map(s => {
-  const explorerRev = s.mix.explorer * 4.99;
+  const explorerRev = s.mix.explorer * 5.99;
   const investigatorRev = s.mix.investigator * 9.99;
-  const trailblazerRev = s.mix.trailblazer * (199.99 / 36);
+  const trailblazerRev = s.mix.trailblazer * (199.99 / 30);
   const subRev = explorerRev + investigatorRev + trailblazerRev;
   const adRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
   const totalRev = subRev + adRev;
@@ -208,7 +211,7 @@ function downloadPDF() {
   para(`Platform cost: $${COST_PER_CREDIT.toFixed(4)}/credit (Builder/Pro: $40-80/mo / 10k-20k credits)`);
   para(`App Store fee: ${(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (Apple & Google, small devs < $1M/yr). Apple jumps to ${(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%.`);
   para(`RevenueCat: ${(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above $${REVENUECAT_THRESHOLD.toLocaleString()}/mo`);
-  para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | Median.co: $${MEDIAN_CO_FIRST_YEAR} Year 1, $${MEDIAN_CO_ANNUAL}/yr after`);
+  para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | Median.co: $${MEDIAN_CO_FIRST_YEAR} Year 1, $${MEDIAN_CO_ANNUAL}/yr after | Base44 Builder: $${BASE44_MONTHLY}/mo`);
   para(`AdMob: $${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
 
@@ -217,7 +220,7 @@ function downloadPDF() {
     monthlyAnalysis.map(r => [r.plan, '$' + r.price.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.sf.toFixed(2), '$' + r.totalCost.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
     [65, 45, 45, 55, 50, 50, 50, 45]);
 
-  heading('5. Trailblazer - 3-Year ($199.99)');
+  heading('5. Trailblazer - 30-Month ($199.99)');
   table(['Utilization', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
     [['100%', trailblazerAnalysis.credits.toLocaleString(), '$' + trailblazerAnalysis.platformCost.toFixed(2), '$' + trailblazerAnalysis.sf.toFixed(2), '$' + trailblazerAnalysis.totalCost.toFixed(2), '$' + trailblazerAnalysis.profit.toFixed(2), trailblazerAnalysis.margin.toFixed(1) + '%'],
      ['50%', trailblazer50.credits.toLocaleString(), '$' + trailblazer50.platformCost.toFixed(2), '$' + trailblazer50.sf.toFixed(2), '$' + trailblazer50.totalCost.toFixed(2), '$' + trailblazer50.profit.toFixed(2), trailblazer50.margin.toFixed(1) + '%']],
@@ -250,11 +253,11 @@ function downloadPDF() {
 
   heading('10. Key Takeaways');
   para('Store fees (15%) are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).');
-  para('Explorer yields ~60% margin at full utilization; Investigator ~43%. Both healthier when energy goes unused.');
-  para('Trailblazer operates at a LOSS at 100% utilization (-7%) due to 15% store fee on $199.99. At 50% realistic usage, margin is ~39%. The 300-slot cap is critical.');
+  para('Explorer yields ~64% margin at full utilization; Investigator ~43%. Both healthier when energy goes unused.');
+  para('Trailblazer yields a thin ~9% margin at 100% utilization (30-month duration helps). At 50% realistic usage, margin improves to ~47%. The 300-slot cap is critical.');
   para('AdMob revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
   para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + '.');
-  para('RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$' + revenuecatFee(6368).toFixed(0) + '/mo at the Mature scenario.');
+  para('RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$' + revenuecatFee(7104).toFixed(0) + '/mo at the Mature scenario.');
   para('RISK: Apple fee jumps to 30% above $1M/yr revenue. At that point, Trailblazer becomes deeply unprofitable even at 50% utilization — revisit pricing before crossing $1M.');
   para('Annual plans improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).');
 
@@ -381,7 +384,7 @@ export default function PlanAnalysis() {
             <p className="print-text"><span className="font-semibold">Platform cost:</span> ${COST_PER_CREDIT.toFixed(4)}/credit (Builder/Pro plan: $40–80/mo ÷ 10k–20k credits)</p>
             <p className="print-text"><span className="font-semibold">App Store / Google Play fee:</span> {(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (both stores, small devs &lt; $1M/yr). Apple jumps to {(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%.</p>
             <p className="print-text"><span className="font-semibold">RevenueCat:</span> {(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above ${REVENUECAT_THRESHOLD.toLocaleString()}/mo</p>
-            <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · Median.co ${MEDIAN_CO_FIRST_YEAR} Year 1, ${MEDIAN_CO_ANNUAL}/yr after</p>
+            <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · Median.co ${MEDIAN_CO_FIRST_YEAR} Year 1, ${MEDIAN_CO_ANNUAL}/yr after · Base44 Builder ${BASE44_MONTHLY}/mo (${BASE44_MONTHLY * 12}/yr)</p>
             <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
             <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis shows 100% utilization (worst case) and 50–70% (realistic average).</p>
           </div>
@@ -424,13 +427,13 @@ export default function PlanAnalysis() {
 
         {/* 5. Trailblazer (3-Year) */}
         <section className="mb-8">
-          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">5. Trailblazer — 3-Year Lifetime ($199.99)</h2>
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">5. Trailblazer — 30-Month Lifetime ($199.99)</h2>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
                   <th className={th}>Utilization</th>
-                  <th className={`${th} ${num}`}>Credits (36 mo)</th>
+                  <th className={`${th} ${num}`}>Credits (30 mo)</th>
                   <th className={`${th} ${num}`}>Platform Cost</th>
                   <th className={`${th} ${num}`}>Store Fee (15%)</th>
                   <th className={`${th} ${num}`}>Total Cost</th>
@@ -460,7 +463,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">With the 15% store fee, Trailblazer operates at a loss at 100% utilization. The 300-slot cap and realistic (~50%) usage keep it viable. At $1M+ annual revenue, Apple's 30% rate would make this tier deeply unprofitable.</p>
+          <p className="text-xs print-muted mt-2 italic">With the 15% store fee and shorter 30-month duration, Trailblazer yields a thin ~9% margin at 100% utilization. At 50% realistic usage, margin improves to ~47%. The 300-slot cap remains critical. At Apple's 30% rate (above $1M/yr), this tier returns to a loss even at 50% utilization.</p>
         </section>
 
         {/* 6. Aura Bundle Profit */}
@@ -538,7 +541,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Google Play's $25 is a one-time fee (not recurring). Median.co drops from $569 (Year 1) to $399/yr after.</p>
+          <p className="text-xs print-muted mt-2 italic">Google Play's $25 is a one-time fee (not recurring). Median.co drops from $569 (Year 1) to $399/yr after. Base44 Builder plan ($40/mo) covers app hosting, database, auth, and integrations.</p>
         </section>
 
         {/* 8. AdMob Ad Revenue */}
@@ -606,7 +609,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 36 months. 5:1 free-to-paid ratio assumed. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
         </section>
 
         {/* 10. Key Takeaways */}
@@ -614,11 +617,11 @@ export default function PlanAnalysis() {
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">10. Key Takeaways</h2>
           <div className="rounded-lg border border-border bg-card/40 print-block p-4 space-y-2 text-sm print-text">
             <p>• <span className="font-semibold">Store fees (15%)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).</p>
-            <p>• <span className="font-semibold">Explorer</span> yields ~60% margin at full utilization; <span className="font-semibold">Investigator</span> ~43%. Both healthier when energy goes unused.</p>
-            <p>• <span className="font-semibold">Trailblazer</span> operates at a <span className="font-semibold">loss</span> at 100% utilization ({trailblazerAnalysis.margin.toFixed(1)}%) due to the 15% store fee on $199.99. At 50% realistic usage, margin is ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap is critical.</p>
+            <p>• <span className="font-semibold">Explorer</span> yields ~64% margin at full utilization; <span className="font-semibold">Investigator</span> ~43%. Both healthier when energy goes unused.</p>
+            <p>• <span className="font-semibold">Trailblazer</span> yields a thin ~{trailblazerAnalysis.margin.toFixed(0)}% margin at 100% utilization (30-month duration helps). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap remains critical.</p>
             <p>• <span className="font-semibold">AdMob revenue</span> from free users meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
             <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal}.</p>
-            <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(6368).toFixed(0)}/mo at the Mature scenario.</p>
+            <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
             <p>• <span className="font-semibold">RISK:</span> Apple's fee jumps to 30% above $1M/yr revenue. At that point, Trailblazer becomes deeply unprofitable even at 50% utilization — revisit pricing before crossing $1M.</p>
             <p>• <span className="font-semibold">Annual plans</span> improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).</p>
           </div>
