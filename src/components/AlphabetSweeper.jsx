@@ -36,48 +36,39 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { unlock, attachMicToRecording } = useGhostVoice();
 
-  // Pre-generate + pre-fetch + decode TTS audio for each letter in BOTH the
-  // female ("honey") and male ("storm") voices. AudioBuffers are cached across
-  // sessions for as long as the component stays mounted. Pre-decoding enables
-  // instant playback (no per-letter fetch/decode latency).
-  const preGenerateLetters = async () => {
-    if (Object.keys(femaleBufferRef.current).length >= 26) return;
-    try {
-      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-      const [femaleResults, maleResults] = await Promise.all([
-        Promise.all(letters.map(l => base44.integrations.Core.GenerateSpeech({ text: l.toLowerCase(), voice: 'honey' }))),
-        Promise.all(letters.map(l => base44.integrations.Core.GenerateSpeech({ text: l.toLowerCase(), voice: 'storm' }))),
-      ]);
-      const [femaleBufs, maleBufs] = await Promise.all([
-        Promise.all(letters.map((l, i) => femaleResults[i]?.url ? fetchAudioBuffer(femaleResults[i].url) : null)),
-        Promise.all(letters.map((l, i) => maleResults[i]?.url ? fetchAudioBuffer(maleResults[i].url) : null)),
-      ]);
-      letters.forEach((l, i) => {
-        if (femaleBufs[i]) femaleBufferRef.current[l.toLowerCase()] = femaleBufs[i];
-        if (maleBufs[i]) maleBufferRef.current[l.toLowerCase()] = maleBufs[i];
-      });
-    } catch {}
-  };
-
-  // Play the pre-decoded female voice for a letter via Web Audio (instant,
-  // unlocked, captured in the recording). Sets femaleBusyRef so the male
-  // trigger voice waits for the current letter to finish.
+  // Speak a letter aloud using the browser's built-in speechSynthesis (female
+  // voice — high pitch). Sets femaleBusyRef so the male trigger voice waits.
   const speakNormal = (letter) => {
-    const buf = femaleBufferRef.current[letter.toLowerCase()];
-    if (!buf) return;
-    femaleBusyRef.current = true;
-    playAudioBuffer(buf, {}).then(() => {
-      femaleBusyRef.current = false;
-      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-    });
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      const synth = window.speechSynthesis;
+      const u = new SpeechSynthesisUtterance(letter.toLowerCase());
+      u.lang = 'en-US';
+      u.rate = 0.9;
+      u.pitch = 1.15;
+      u.volume = 1;
+      const voices = synth.getVoices();
+      const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+      if (en) u.voice = en;
+      femaleBusyRef.current = true;
+      u.onend = () => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
+      u.onerror = () => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
+      synth.speak(u);
+    } catch { femaleBusyRef.current = false; }
   };
 
   const stopFemaleAudio = () => {
     pendingMaleRef.current = null;
     femaleBusyRef.current = false;
-    try { stopVoice(); } catch {}
+    try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
   };
 
   const stepRef = useRef(null);
@@ -107,11 +98,7 @@ export default function AlphabetSweeper() {
   const motionTimerRef = useRef(null);
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
-  const femaleBufferRef = useRef({});
-  const maleBufferRef = useRef({});
   const resumeDelayRef = useRef(null);
-  const begunRef = useRef(false);
-  const preGeneratePromiseRef = useRef(null);
   const anomalyDetectedRef = useRef(false);
   const motionDetectedRef = useRef(false);
   const startDelayRef = useRef(null);
@@ -192,27 +179,38 @@ export default function AlphabetSweeper() {
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     // Let the female voice finish the current letter, then speak male
     const speakMale = () => {
-      const buf = maleBufferRef.current[letter.toLowerCase()];
-      if (!buf) {
-        // No pre-decoded male audio — resume after a short delay
+      try {
+        if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+          if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
+          resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 2000);
+          return;
+        }
+        const synth = window.speechSynthesis;
+        synth.cancel();
+        const u = new SpeechSynthesisUtterance(letter.toLowerCase());
+        u.lang = 'en-US';
+        u.rate = 0.7;
+        u.pitch = 0.3;
+        u.volume = 1;
+        const voices = synth.getVoices();
+        const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+        if (en) u.voice = en;
+        u.onend = () => { resumeFromLock(); };
+        u.onerror = () => { resumeFromLock(); };
+        synth.speak(u);
+        if (creepyFallbackRef.current) clearTimeout(creepyFallbackRef.current);
+        creepyFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 5000);
+      } catch {
         if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
         resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 2000);
-        return;
       }
-      playAudioBuffer(buf, {}).then(() => {
-        // Male voice finished — resumeFromLock adds a 1.5s pause before A
-        resumeFromLock();
-      });
-      // Safety net: if audio never resolves, resume anyway so the sweep doesn't stall
-      if (creepyFallbackRef.current) clearTimeout(creepyFallbackRef.current);
-      creepyFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 8000);
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
     } else {
       speakMale();
     }
-  }, [playAudioBuffer, resumeFromLock]);
+  }, [resumeFromLock]);
 
   const flashMotion = useCallback(() => {
     setMotionDetected(true);
@@ -449,28 +447,13 @@ export default function AlphabetSweeper() {
     await requestSensorPermissions();
     await startCameraStream();
     startDrawing();
-    // Show "Get Ready…" while the directions play. Directions are spoken via
-    // Web Audio BEFORE the mic getUserMedia call — that call can suspend the
-    // AudioContext on iOS, so we play the directions while the context is
-    // still active from unlock().
+    await startRecording();
+    // Show "Get Ready…" while the directions play.
     pausedRef.current = true;
     setPaused(true);
-    begunRef.current = false;
     const directions = 'Spell words you want to say to us. I am going to repeat the alphabet. You can choose letters by moving my device and standing in front of it when you hear or see the letter you need next.';
-    const beginAfterPause = async () => {
-      if (begunRef.current) return;
-      begunRef.current = true;
+    const beginAfterPause = () => {
       if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
-      if (!sessionActiveRef.current) return;
-      // Wait for letter audio pre-generation to finish before starting the sweep
-      if (preGeneratePromiseRef.current) {
-        try { await preGeneratePromiseRef.current; } catch {}
-      }
-      if (!sessionActiveRef.current) return;
-      // Start recording now (mic getUserMedia may suspend the AudioContext)
-      await startRecording();
-      // Resume the AudioContext after getUserMedia so letter playback works
-      await resumeContext();
       if (!sessionActiveRef.current) return;
       pausedRef.current = false;
       setPaused(false);
@@ -478,19 +461,27 @@ export default function AlphabetSweeper() {
       attachSensorHandlers();
       processCameraFrame();
     };
-    // Start pre-generation (pre-fetch + decode all 26 letters in both voices)
-    preGeneratePromiseRef.current = preGenerateLetters();
-    // Speak the directions via Web Audio (the "honey" female voice) — Web Audio
-    // is unlocked by unlock() so this plays reliably on iOS.
+    // Speak the directions via the browser's built-in speechSynthesis (female
+    // voice). This is primed within the user gesture above so it plays on iOS.
     try {
-      const result = await base44.integrations.Core.GenerateSpeech({ text: directions, voice: 'honey' });
-      if (!sessionActiveRef.current) return;
-      playPreGenerated(result.url, {}).then(() => {
-        if (!sessionActiveRef.current) return;
-        beginAfterPause();
-      });
-      // Safety fallback: if audio never resolves, start anyway after 25s
-      startDelayRef.current = setTimeout(() => beginAfterPause(), 25000);
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { beginAfterPause(); }
+      else {
+        const synth = window.speechSynthesis;
+        synth.cancel();
+        const u = new SpeechSynthesisUtterance(directions);
+        u.lang = 'en-US';
+        u.rate = 0.85;
+        u.pitch = 1.15;
+        u.volume = 1;
+        const voices = synth.getVoices();
+        const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+        if (en) u.voice = en;
+        u.onend = () => beginAfterPause();
+        u.onerror = () => beginAfterPause();
+        synth.speak(u);
+        // Safety fallback: if onend never fires, start anyway after 25s
+        startDelayRef.current = setTimeout(() => beginAfterPause(), 25000);
+      }
     } catch { beginAfterPause(); }
     let elapsed = 0;
     timerRef.current = setInterval(() => {
