@@ -71,7 +71,7 @@ export function detectFigures(imageData, width, height) {
       const a = r, b = regions[j];
       if (!(a.x + a.w < b.x - 20 || b.x + b.w < a.x - 20 || a.y + a.h < b.y - 20 || b.y + b.h < a.y - 20)) {
         const nx = Math.min(a.x, b.x), ny = Math.min(a.y, b.y);
-        r = { x: nx, y: ny, w: Math.max(a.x + a.w, b.x + b.w) - nx, h: Math.max(a.y + a.h, b.y + b.h) - ny, count: (a.count || 0) + (b.count || 0) };
+        r = { x: nx, y: ny, w: Math.max(a.x + a.w, b.x + b.w) - nx, h: Math.max(a.y + a.h, b.y + b.h) - ny, count: (a.count || 0) + (b.count || 0), pixels: a.pixels };
         for (const p of b.pixels) r.pixels.add(p);
         used.add(j);
       }
