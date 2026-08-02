@@ -96,6 +96,11 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
     e.stopPropagation();
     reset();
     setActionLoading('addStops');
+    toast({
+      title: 'Generating Stops',
+      description: 'Finding new haunted locations to add... this may take a moment.',
+      duration: 15000,
+    });
     try {
       const result = await addTourStops(tour);
       if (result.reason === 'max') {
