@@ -30,15 +30,17 @@ export function detectFigures(imageData, width, height) {
       const r = data[idx], g = data[idx + 1], b = data[idx + 2];
       const isSkin = r > 60 && g > 40 && b > 20 && r > g && r > b && (r - g) > 10 && r < 255 && g < 230;
 
-      if (isSkin && !visited[y / 4 * Math.floor(width / 4) + x / 4]) {
+      if (isSkin && !visited[y * width + x]) {
         const queue = [[x, y]];
         let minX = x, maxX = x, minY = y, maxY = y, pixelCount = 0;
+        const pixels = new Set();
         while (queue.length > 0) {
           const [cx, cy] = queue.shift();
-          const vi = cy / 4 * Math.floor(width / 4) + cx / 4;
+          const vi = cy * width + cx;
           if (visited[vi]) continue;
           visited[vi] = 1;
           pixelCount++;
+          pixels.add(vi);
           if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
           if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
           for (const [nx, ny] of [[cx - 4, cy], [cx + 4, cy], [cx, cy - 4], [cx, cy + 4]]) {
@@ -50,7 +52,7 @@ export function detectFigures(imageData, width, height) {
         }
         if (pixelCount > SKIN_THRESHOLD) {
           const bw = maxX - minX, bh = maxY - minY;
-          if (bh > bw * 0.8 && bh > 40 && bw > 15) regions.push({ x: minX, y: minY, w: bw, h: bh, count: pixelCount });
+          if (bh > bw * 0.8 && bh > 40 && bw > 15) regions.push({ x: minX, y: minY, w: bw, h: bh, count: pixelCount, pixels });
         }
       }
     }
@@ -60,13 +62,14 @@ export function detectFigures(imageData, width, height) {
   const used = new Set();
   for (let i = 0; i < regions.length; i++) {
     if (used.has(i)) continue;
-    let r = { ...regions[i] };
+    let r = { ...regions[i], pixels: new Set(regions[i].pixels) };
     for (let j = i + 1; j < regions.length; j++) {
       if (used.has(j)) continue;
       const a = r, b = regions[j];
       if (!(a.x + a.w < b.x - 20 || b.x + b.w < a.x - 20 || a.y + a.h < b.y - 20 || b.y + b.h < a.y - 20)) {
         const nx = Math.min(a.x, b.x), ny = Math.min(a.y, b.y);
         r = { x: nx, y: ny, w: Math.max(a.x + a.w, b.x + b.w) - nx, h: Math.max(a.y + a.h, b.y + b.h) - ny, count: (a.count || 0) + (b.count || 0) };
+        for (const p of b.pixels) r.pixels.add(p);
         used.add(j);
       }
     }

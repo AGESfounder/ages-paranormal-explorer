@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Camera, CameraOff, Video, Save, X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
-import { JOINT_CONNECTIONS, BASE_SKELETON, detectFigures } from '@/lib/anomalyDetect';
+import { detectFigures } from '@/lib/anomalyDetect';
 
 export default function SLSCamera() {
   const videoRef = useRef(null);
@@ -113,6 +113,23 @@ export default function SLSCamera() {
       const gray = d[i] * 0.2 + d[i + 1] * 0.6 + d[i + 2] * 0.2;
       d[i] = 0; d[i + 1] = Math.min(255, gray * 1.3); d[i + 2] = 0;
     }
+
+    // Light up detected figure shapes in bright green (actual shape & size)
+    figures.forEach(({ pixels }) => {
+      if (!pixels) return;
+      for (const vi of pixels) {
+        const cx = vi % w;
+        const cy = Math.floor(vi / w);
+        for (let dy = 0; dy < 4 && cy + dy < h; dy++) {
+          for (let dx = 0; dx < 4 && cx + dx < w; dx++) {
+            const pi = ((cy + dy) * w + (cx + dx)) * 4;
+            d[pi] = 0;
+            d[pi + 1] = Math.min(255, d[pi + 1] + 120);
+            d[pi + 2] = 0;
+          }
+        }
+      }
+    });
     ctx.putImageData(imageData, 0, 0);
 
     // Overlay drawn directly on canvas so recording captures what's on screen
@@ -128,32 +145,11 @@ export default function SLSCamera() {
       anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
     }
 
-    figures.forEach(({ x, y, w: bw, h: bh, count }) => {
-      const strength = Math.min((count || 1800) / 6000, 1);
-      const scale = 0.5 + strength * 0.5;
-      const sw = bw * scale, sh = bh * scale;
-      const sx = x + (bw - sw) / 2, sy = y + (bh - sh) / 2;
-      const wave = Math.sin(Date.now() / 300);
-      const joints = BASE_SKELETON.map(([jx, jy], idx) => {
-        let nx = jx, ny = jy;
-        if (idx === 6) { ny = 0.12; nx = 0.35 + wave * 0.08; }
-        if (idx === 7) { ny = 0.05; nx = 0.35 + wave * 0.15; }
-        if (idx === 9) { ny = 0.12; nx = 0.65 - wave * 0.08; }
-        if (idx === 10) { ny = 0.05; nx = 0.65 - wave * 0.15; }
-        return [sx + nx * sw, sy + ny * sh];
-      });
-      ctx.strokeStyle = 'rgba(0, 255, 200, 0.9)';
-      ctx.lineWidth = 2;
-      JOINT_CONNECTIONS.forEach(([a, b]) => {
-        ctx.beginPath(); ctx.moveTo(joints[a][0], joints[a][1]); ctx.lineTo(joints[b][0], joints[b][1]); ctx.stroke();
-      });
-      joints.forEach(([jx, jy], idx) => {
-        if (idx === 4) return;
-        ctx.beginPath();
-        ctx.arc(jx, jy, idx === 0 ? 7 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = idx === 0 ? 'rgba(0,255,150,1)' : 'rgba(0,220,255,0.9)';
-        ctx.fill();
-      });
+    // Bounding box + label for each detected figure
+    figures.forEach(({ x, y, w: bw, h: bh }) => {
+      ctx.strokeStyle = 'rgba(0, 255, 150, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x, y, bw, bh);
       ctx.fillStyle = 'rgba(0,255,150,0.9)';
       ctx.font = 'bold 11px monospace';
       ctx.fillText('ANOMALY DETECTED', x, y - 8);
