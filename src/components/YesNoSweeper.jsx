@@ -4,6 +4,8 @@ import { Play, Square, Save, Info, X, Activity, Zap, Video, AlertTriangle, Messa
 import { base44 } from '@/api/base44Client';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
+import useSensitivity from '../hooks/useSensitivity';
+import SensitivityControl from './SensitivityControl';
 
 // Phrases cycle every 3 seconds. They are NOT spoken while cycling — only the
 // phrase "locked" by an environmental disturbance is read aloud (normal voice),
@@ -36,6 +38,8 @@ export default function YesNoSweeper() {
   const [sensorError, setSensorError] = useState('');
   const [anomalyDetected, setAnomalyDetected] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
+
+  const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
   // Web Audio–based voice (unlocked on the Start tap) so the spoken answer
   // plays reliably on iOS even though it's triggered by a sensor event. Called
@@ -211,7 +215,7 @@ export default function YesNoSweeper() {
     ctx.drawImage(video, 0, 0, w, h);
     try {
       const imageData = ctx.getImageData(0, 0, w, h);
-      const figures = detectFigures(imageData, w, h);
+      const figures = detectFigures(imageData, w, h, sensitivityRef.current);
       if (figures.length > 0) {
         setAnomalyDetected(true);
         if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
@@ -413,6 +417,7 @@ export default function YesNoSweeper() {
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
         </div>
+        <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
         <button onClick={startSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Play className="w-4 h-4" /> Start Sweep
         </button>

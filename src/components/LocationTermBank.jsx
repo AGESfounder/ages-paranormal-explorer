@@ -4,6 +4,8 @@ import { Library, MapPin, Play, Square, Save, RefreshCw, Loader2, Zap, Info, X, 
 import { base44 } from '@/api/base44Client';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
+import useSensitivity from '../hooks/useSensitivity';
+import SensitivityControl from './SensitivityControl';
 
 const ROTATION_MS = 2000;         // each word stays 2 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
@@ -29,6 +31,8 @@ export default function LocationTermBank() {
   const [sensorError, setSensorError] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
   const [anomalyDetected, setAnomalyDetected] = useState(false);
+
+  const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
   const { isSpeaking, isGenerating, speak, unlock, attachMicToRecording } = useGhostVoice();
 
@@ -315,7 +319,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     ctx.drawImage(video, 0, 0, w, h);
     try {
       const imageData = ctx.getImageData(0, 0, w, h);
-      const figures = detectFigures(imageData, w, h);
+      const figures = detectFigures(imageData, w, h, sensitivityRef.current);
       if (figures.length > 0) {
         setAnomalyDetected(true);
         if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
@@ -524,6 +528,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
         </div>
+        <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
         <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Library className="w-4 h-4" /> Build Terms
         </button>

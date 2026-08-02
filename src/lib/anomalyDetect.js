@@ -1,6 +1,12 @@
 // Shared IR/anomaly figure-detection logic used by the SLS Camera and the
-// Yes/No/IDK Sweeper's camera trigger. Detects humanoid-shaped skin-tone
-// regions in a frame and returns bounding boxes.
+// Yes/No/IDK, Alphabet, and Term Sweepers' camera triggers. Detects
+// humanoid-shaped skin-tone regions in a frame and returns bounding boxes.
+//
+// Sensitivity levels (1–4) adjust detection strictness for different lighting:
+//   1 = Daylight (least sensitive — bright/outdoor use)
+//   2 = Indoor
+//   3 = Dim
+//   4 = Dark   (most sensitive — night investigations; the original default)
 
 export const JOINT_CONNECTIONS = [
   [0, 1], [1, 2], [2, 3],
@@ -18,20 +24,31 @@ export const BASE_SKELETON = [
   [0.60, 0.55], [0.62, 0.75], [0.64, 0.98],
 ];
 
-export function detectFigures(imageData, width, height) {
+// Per-level detection parameters. Higher levels = more permissive (darker envs).
+const PRESETS = {
+  1: { skinThreshold: 400, minBoxH: 26, minBoxW: 14, minR: 35, minG: 22, minB: 16, rMinusB: 10, maxR: 248, maxG: 232 },
+  2: { skinThreshold: 270, minBoxH: 21, minBoxW: 12, minR: 24, minG: 16, minB: 11, rMinusB: 6,  maxR: 252, maxG: 238 },
+  3: { skinThreshold: 190, minBoxH: 17, minBoxW: 10, minR: 16, minG: 11, minB: 8,  rMinusB: 3,  maxR: 254, maxG: 242 },
+  4: { skinThreshold: 150, minBoxH: 15, minBoxW: 8,  minR: 12, minG: 8,  minB: 5,  rMinusB: 2,  maxR: 255, maxG: 245 },
+};
+
+export function detectFigures(imageData, width, height, sensitivity = 4) {
+  const p = PRESETS[sensitivity] || PRESETS[4];
+  const isSkin = (r, g, b) =>
+    r > p.minR && g > p.minG && b > p.minB && r >= g && r > b &&
+    (r - b) > p.rMinusB && r < p.maxR && g < p.maxG;
+
   const data = imageData.data;
   const regions = [];
   const visited = new Uint8Array(width * height);
-  const SKIN_THRESHOLD = 150;
   const MAX_REGION_PIXELS = 3000;
 
   for (let y = 0; y < height; y += 4) {
     for (let x = 0; x < width; x += 4) {
       const idx = (y * width + x) * 4;
       const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-      const isSkin = r > 12 && g > 8 && b > 5 && r >= g && r > b && (r - b) > 2 && r < 255 && g < 245;
 
-      if (isSkin && !visited[y * width + x]) {
+      if (isSkin(r, g, b) && !visited[y * width + x]) {
         const queue = [[x, y]];
         let head = 0;
         let minX = x, maxX = x, minY = y, maxY = y, pixelCount = 0;
@@ -50,12 +67,12 @@ export function detectFigures(imageData, width, height) {
             if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
             const ni = (ny * width + nx) * 4;
             const nr = data[ni], ng = data[ni + 1], nb = data[ni + 2];
-            if (nr > 12 && ng > 8 && nb > 5 && nr >= ng && nr > nb && (nr - nb) > 2 && nr < 255 && ng < 245) queue.push([nx, ny]);
+            if (isSkin(nr, ng, nb)) queue.push([nx, ny]);
           }
         }
-        if (pixelCount > SKIN_THRESHOLD) {
+        if (pixelCount > p.skinThreshold) {
           const bw = maxX - minX, bh = maxY - minY;
-          if (bh > 15 && bw > 8) regions.push({ x: minX, y: minY, w: bw, h: bh, count: pixelCount, pixels });
+          if (bh > p.minBoxH && bw > p.minBoxW) regions.push({ x: minX, y: minY, w: bw, h: bh, count: pixelCount, pixels });
         }
       }
     }
@@ -72,7 +89,7 @@ export function detectFigures(imageData, width, height) {
       if (!(a.x + a.w < b.x - 20 || b.x + b.w < a.x - 20 || a.y + a.h < b.y - 20 || b.y + b.h < a.y - 20)) {
         const nx = Math.min(a.x, b.x), ny = Math.min(a.y, b.y);
         r = { x: nx, y: ny, w: Math.max(a.x + a.w, b.x + b.w) - nx, h: Math.max(a.y + a.h, b.y + b.h) - ny, count: (a.count || 0) + (b.count || 0), pixels: a.pixels };
-        for (const p of b.pixels) r.pixels.add(p);
+        for (const px of b.pixels) r.pixels.add(px);
         used.add(j);
       }
     }

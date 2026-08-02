@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Camera, CameraOff, Video, Save, X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { detectFigures } from '@/lib/anomalyDetect';
+import useSensitivity from '../hooks/useSensitivity';
+import SensitivityControl from './SensitivityControl';
 
 export default function SLSCamera() {
   const videoRef = useRef(null);
@@ -21,6 +23,8 @@ export default function SLSCamera() {
   const [recordDuration, setRecordDuration] = useState(0);
   const [saving, setSaving] = useState(false);
   const anomalyTimerRef = useRef(null);
+
+  const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
   const formatDuration = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 
@@ -106,7 +110,7 @@ export default function SLSCamera() {
 
     ctx.drawImage(video, 0, 0, w, h);
     const imageData = ctx.getImageData(0, 0, w, h);
-    const figures = detectFigures(imageData, w, h);
+    const figures = detectFigures(imageData, w, h, sensitivityRef.current);
 
     const d = imageData.data;
     for (let i = 0; i < d.length; i += 4) {
@@ -215,6 +219,10 @@ export default function SLSCamera() {
           </div>
         )}
       </div>
+
+      {!active && (
+        <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
+      )}
 
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
