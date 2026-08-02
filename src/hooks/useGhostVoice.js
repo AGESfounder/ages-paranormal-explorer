@@ -257,6 +257,7 @@ export default function useGhostVoice() {
     releaseNarration();
     try {
       const ctx = audioCtxRef.current;
+      if (ctx) { try { await ctx.resume(); } catch {} }
       if (!ctx || ctx.state !== 'running') {
         const audio = new Audio(url);
         audioRef.current = audio;
@@ -291,6 +292,7 @@ export default function useGhostVoice() {
     try {
       const ctx = audioCtxRef.current;
       if (!ctx) return null;
+      try { await ctx.resume(); } catch {}
       const resp = await fetch(url);
       const ab = await resp.arrayBuffer();
       const audioBuf = await ctx.decodeAudioData(ab);
@@ -307,7 +309,9 @@ export default function useGhostVoice() {
     releaseNarration();
     try {
       const ctx = audioCtxRef.current;
-      if (!ctx || ctx.state !== 'running') return;
+      if (!ctx) return;
+      try { await ctx.resume(); } catch {}
+      if (ctx.state !== 'running') return;
       const sNode = ctx.createBufferSource();
       sNode.buffer = buffer;
       if (opts.creepy) sNode.playbackRate.value = 0.8;
