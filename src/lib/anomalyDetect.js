@@ -23,19 +23,21 @@ export function detectFigures(imageData, width, height) {
   const regions = [];
   const visited = new Uint8Array(width * height);
   const SKIN_THRESHOLD = 150;
+  const MAX_REGION_PIXELS = 3000;
 
-  for (let y = 0; y < height; y += 3) {
-    for (let x = 0; x < width; x += 3) {
+  for (let y = 0; y < height; y += 4) {
+    for (let x = 0; x < width; x += 4) {
       const idx = (y * width + x) * 4;
       const r = data[idx], g = data[idx + 1], b = data[idx + 2];
       const isSkin = r > 12 && g > 8 && b > 5 && r >= g && r > b && (r - b) > 2 && r < 255 && g < 245;
 
       if (isSkin && !visited[y * width + x]) {
         const queue = [[x, y]];
+        let head = 0;
         let minX = x, maxX = x, minY = y, maxY = y, pixelCount = 0;
         const pixels = new Set();
-        while (queue.length > 0) {
-          const [cx, cy] = queue.shift();
+        while (head < queue.length) {
+          const [cx, cy] = queue[head++];
           const vi = cy * width + cx;
           if (visited[vi]) continue;
           visited[vi] = 1;
@@ -43,7 +45,8 @@ export function detectFigures(imageData, width, height) {
           pixels.add(vi);
           if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
           if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
-          for (const [nx, ny] of [[cx - 3, cy], [cx + 3, cy], [cx, cy - 3], [cx, cy + 3]]) {
+          if (pixelCount >= MAX_REGION_PIXELS) break;
+          for (const [nx, ny] of [[cx - 4, cy], [cx + 4, cy], [cx, cy - 4], [cx, cy + 4]]) {
             if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
             const ni = (ny * width + nx) * 4;
             const nr = data[ni], ng = data[ni + 1], nb = data[ni + 2];
