@@ -4,26 +4,14 @@ import { jsPDF } from 'jspdf';
 
 // ===== DATA (mirrors src/lib/plans.js + base44/shared/plans.js) =====
 const PLANS = [
-  {
-    name: 'Observer', price: '$0', billing: 'Free forever',
-    manE: 0, narE: 0,
-    features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; save favorites',
-  },
-  {
-    name: 'Explorer', price: '$4.99', billing: 'Monthly ($49.99/yr)',
-    manE: 5, narE: 300,
-    features: 'AI narration (~1 tour/mo); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 8-tool toolkit; aura bundles',
-  },
-  {
-    name: 'Investigator', price: '$9.99', billing: 'Monthly ($99.99/yr)',
-    manE: 15, narE: 1000,
-    features: 'Everything in Explorer; AI narration (~4 tours/mo); custom tours (up to 5/mo); full 12-tool toolkit; evidence dashboard analytics; aura bundles',
-  },
-  {
-    name: 'Trailblazer', price: '$199.99', billing: 'One-time, 3 years (max 300 slots)',
-    manE: 25, narE: 1200,
-    features: 'Everything in Investigator; AI narration (~5 tours/mo); custom tours (up to 8/mo); exclusive badge; early access; 3-yr price lock; 20% off aura bundles',
-  },
+  { name: 'Observer', price: '$0', billing: 'Free forever', manE: 0, narE: 0,
+    features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; save favorites' },
+  { name: 'Explorer', price: '$4.99', billing: 'Monthly ($49.99/yr)', manE: 5, narE: 300,
+    features: 'AI narration (~1 tour/mo); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 8-tool toolkit; aura bundles' },
+  { name: 'Investigator', price: '$9.99', billing: 'Monthly ($99.99/yr)', manE: 15, narE: 1000,
+    features: 'Everything in Explorer; AI narration (~4 tours/mo); custom tours (up to 5/mo); full 12-tool toolkit; evidence dashboard analytics; aura bundles' },
+  { name: 'Trailblazer', price: '$199.99', billing: 'One-time, 3 years (max 300 slots)', manE: 25, narE: 1200,
+    features: 'Everything in Investigator; AI narration (~5 tours/mo); custom tours (up to 8/mo); exclusive badge; early access; 3-yr price lock; 20% off aura bundles' },
 ];
 
 const AURA_BUNDLES = [
@@ -35,10 +23,30 @@ const AURA_BUNDLES = [
 
 // ===== COST ASSUMPTIONS =====
 const CREDITS_PER_MANIFESTATION = 3;   // 1 InvokeLLM call (Automatic model) = ~3 credits
-const CREDITS_PER_NARRATION = 1;       // 1 narration energy = 1 GenerateSpeech credit (1 credit / 50 chars)
+const CREDITS_PER_NARRATION = 1;       // 1 narration energy = 1 GenerateSpeech credit
 const COST_PER_CREDIT = 0.004;         // Builder/Pro plan: $40-80/mo ÷ 10k-20k credits
-const PAYMENT_FEE_PCT = 0.029;         // Wix/Stripe processing
-const PAYMENT_FEE_FLAT = 0.30;
+
+// App Store / Google Play IAP fees (replaces Wix/Stripe for digital content)
+const STORE_FEE_PCT = 0.15;            // Apple & Google: 15% for small devs (<$1M/yr)
+const STORE_FEE_PCT_HIGH = 0.30;       // Apple: 30% if >$1M/yr; Google stays 15%
+const STORE_HIGH_THRESHOLD = 1000000;
+
+// RevenueCat (subscription management layer)
+const REVENUECAT_FEE_PCT = 0.01;       // 1% of monthly sales above $2,500
+const REVENUECAT_THRESHOLD = 2500;
+
+// Fixed annual costs
+const APPLE_DEV_ANNUAL = 99;
+const GOOGLE_DEV_ONE_TIME = 25;
+const MEDIAN_CO_FIRST_YEAR = 569;
+const MEDIAN_CO_ANNUAL = 399;
+
+// AdMob (interstitial ads for free users — stop 2+ paranormal history on each tour)
+const ADMOB_ECPM = 15;                 // $15 per 1,000 interstitial impressions
+const ADMOB_PER_IMPRESSION = ADMOB_ECPM / 1000;
+const ADS_PER_TOUR = 7;                // stops 2-8 on avg 8-stop tour (stop 1 is free)
+const TOURS_PER_FREE_USER_MO = 2;
+const AD_REV_PER_FREE_USER_MO = ADS_PER_TOUR * TOURS_PER_FREE_USER_MO * ADMOB_PER_IMPRESSION;
 
 function calcCosts(manE, narE, months) {
   const credits = (manE * CREDITS_PER_MANIFESTATION + narE * CREDITS_PER_NARRATION) * months;
@@ -46,8 +54,13 @@ function calcCosts(manE, narE, months) {
   return { credits, platformCost };
 }
 
-function paymentFee(price) {
-  return price * PAYMENT_FEE_PCT + PAYMENT_FEE_FLAT;
+function storeFee(price) {
+  return price * STORE_FEE_PCT;
+}
+
+function revenuecatFee(monthlySales) {
+  if (monthlySales <= REVENUECAT_THRESHOLD) return 0;
+  return (monthlySales - REVENUECAT_THRESHOLD) * REVENUECAT_FEE_PCT;
 }
 
 // Per-plan monthly profit (1 month, 100% utilization)
@@ -56,30 +69,30 @@ const monthlyAnalysis = [
   { plan: 'Investigator', price: 9.99, manE: 15, narE: 1000 },
 ].map(p => {
   const { credits, platformCost } = calcCosts(p.manE, p.narE, 1);
-  const pf = paymentFee(p.price);
-  const totalCost = platformCost + pf;
+  const sf = storeFee(p.price);
+  const totalCost = platformCost + sf;
   const profit = p.price - totalCost;
-  return { ...p, credits, platformCost, pf, totalCost, profit, margin: (profit / p.price * 100) };
+  return { ...p, credits, platformCost, sf, totalCost, profit, margin: (profit / p.price * 100) };
 });
 
 // Trailblazer (36 months, 100% utilization)
 const trailblazerAnalysis = (() => {
   const price = 199.99;
   const { credits, platformCost } = calcCosts(25, 1200, 36);
-  const pf = paymentFee(price);
-  const totalCost = platformCost + pf;
+  const sf = storeFee(price);
+  const totalCost = platformCost + sf;
   const profit = price - totalCost;
-  return { price, credits, platformCost, pf, totalCost, profit, margin: (profit / price * 100) };
+  return { price, credits, platformCost, sf, totalCost, profit, margin: (profit / price * 100) };
 })();
 
 // Trailblazer at 50% utilization
 const trailblazer50 = (() => {
   const price = 199.99;
   const { credits, platformCost } = calcCosts(12.5, 600, 36);
-  const pf = paymentFee(price);
-  const totalCost = platformCost + pf;
+  const sf = storeFee(price);
+  const totalCost = platformCost + sf;
   const profit = price - totalCost;
-  return { price, credits, platformCost, pf, totalCost, profit, margin: (profit / price * 100) };
+  return { price, credits, platformCost, sf, totalCost, profit, margin: (profit / price * 100) };
 })();
 
 // Aura bundle profit (100% utilization)
@@ -87,34 +100,67 @@ const bundleAnalysis = AURA_BUNDLES.map(b => {
   const price = parseFloat(b.price.replace('$', ''));
   const credits = b.energy;
   const platformCost = credits * COST_PER_CREDIT;
-  const pf = paymentFee(price);
-  const totalCost = platformCost + pf;
+  const sf = storeFee(price);
+  const totalCost = platformCost + sf;
   const profit = price - totalCost;
-  return { ...b, priceNum: price, credits, platformCost, pf, totalCost, profit, margin: (profit / price * 100) };
+  return { ...b, priceNum: price, credits, platformCost, sf, totalCost, profit, margin: (profit / price * 100) };
 });
 
-// Revenue scenarios (monthly recurring, blended mix)
+// Fixed operating costs
+const fixedCostsFirstYear = [
+  { item: 'Apple Developer Program', cost: APPLE_DEV_ANNUAL, period: 'Annual' },
+  { item: 'Google Play Developer', cost: GOOGLE_DEV_ONE_TIME, period: 'One-time' },
+  { item: 'Median.co (App Builder)', cost: MEDIAN_CO_FIRST_YEAR, period: 'Annual — Year 1' },
+];
+const fixedCostsOngoing = [
+  { item: 'Apple Developer Program', cost: APPLE_DEV_ANNUAL, period: 'Annual' },
+  { item: 'Median.co (App Builder)', cost: MEDIAN_CO_ANNUAL, period: 'Annual — Year 2+' },
+];
+const fixedFirstYearTotal = APPLE_DEV_ANNUAL + GOOGLE_DEV_ONE_TIME + MEDIAN_CO_FIRST_YEAR;
+const fixedOngoingAnnual = APPLE_DEV_ANNUAL + MEDIAN_CO_ANNUAL;
+const fixedOngoingMonthly = fixedOngoingAnnual / 12;
+
+// AdMob revenue projections at different free-user counts
+const adMobScenarios = [
+  { label: '250 free users', users: 250 },
+  { label: '1,000 free users', users: 1000 },
+  { label: '2,500 free users', users: 2500 },
+  { label: '5,000 free users', users: 5000 },
+].map(s => ({
+  ...s,
+  monthlyRev: s.users * AD_REV_PER_FREE_USER_MO,
+  annualRev: s.users * AD_REV_PER_FREE_USER_MO * 12,
+}));
+
+// Revenue scenarios (monthly, 70% avg utilization, includes ad revenue + all costs)
 const scenarios = [
-  { label: 'Small (50 users)', mix: { explorer: 30, investigator: 15, trailblazer: 5 } },
-  { label: 'Growing (200 users)', mix: { explorer: 130, investigator: 55, trailblazer: 15 } },
-  { label: 'Scale (500 users)', mix: { explorer: 330, investigator: 140, trailblazer: 30 } },
-  { label: 'Mature (1,000 users)', mix: { explorer: 680, investigator: 270, trailblazer: 50 } },
+  { label: 'Small (50 paid / 250 free)', mix: { explorer: 30, investigator: 15, trailblazer: 5 }, freeUsers: 250 },
+  { label: 'Growing (200 paid / 1,000 free)', mix: { explorer: 130, investigator: 55, trailblazer: 15 }, freeUsers: 1000 },
+  { label: 'Scale (500 paid / 2,500 free)', mix: { explorer: 330, investigator: 140, trailblazer: 30 }, freeUsers: 2500 },
+  { label: 'Mature (1,000 paid / 5,000 free)', mix: { explorer: 680, investigator: 270, trailblazer: 50 }, freeUsers: 5000 },
 ].map(s => {
   const explorerRev = s.mix.explorer * 4.99;
   const investigatorRev = s.mix.investigator * 9.99;
-  const trailblazerRev = s.mix.trailblazer * (199.99 / 36); // amortized monthly
-  const totalRev = explorerRev + investigatorRev + trailblazerRev;
-  // Cost at 70% avg utilization
-  const explorerCost = s.mix.explorer * calcCosts(5 * 0.7, 300 * 0.7, 1).platformCost;
-  const investigatorCost = s.mix.investigator * calcCosts(15 * 0.7, 1000 * 0.7, 1).platformCost;
-  const trailblazerCost = s.mix.trailblazer * calcCosts(25 * 0.7, 1200 * 0.7, 1).platformCost;
-  const paymentCosts = (s.mix.explorer * paymentFee(4.99)) + (s.mix.investigator * paymentFee(9.99)) + (s.mix.trailblazer * paymentFee(199.99) / 36);
-  const totalCost = explorerCost + investigatorCost + trailblazerCost + paymentCosts;
+  const trailblazerRev = s.mix.trailblazer * (199.99 / 36);
+  const subRev = explorerRev + investigatorRev + trailblazerRev;
+  const adRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
+  const totalRev = subRev + adRev;
+  // Platform costs at 70% utilization
+  const platformCosts = s.mix.explorer * calcCosts(5 * 0.7, 300 * 0.7, 1).platformCost
+    + s.mix.investigator * calcCosts(15 * 0.7, 1000 * 0.7, 1).platformCost
+    + s.mix.trailblazer * calcCosts(25 * 0.7, 1200 * 0.7, 1).platformCost;
+  // Store fees (15% on IAP subscription revenue; ad revenue not subject to store fees)
+  const storeCosts = subRev * STORE_FEE_PCT;
+  // RevenueCat (1% above $2,500/month in subscription sales)
+  const revcatCost = revenuecatFee(subRev);
+  // Fixed costs (ongoing monthly)
+  const fixedCost = fixedOngoingMonthly;
+  const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
   const profit = totalRev - totalCost;
-  return { ...s, explorerRev, investigatorRev, trailblazerRev, totalRev, totalCost, profit, margin: (profit / totalRev * 100) };
+  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100) };
 });
 
-const today = new Date('2026-07-31').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
 function downloadPDF() {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
@@ -141,7 +187,6 @@ function downloadPDF() {
     y += 8;
   };
 
-  // Title
   doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
   doc.text('AGES Subscription Plan & Profit Analysis', M, y); y += 22;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
@@ -161,37 +206,57 @@ function downloadPDF() {
   para(`Manifestation Energy: 1 unit = 1 InvokeLLM call (Automatic) ~ ${CREDITS_PER_MANIFESTATION} integration credits`);
   para(`Narration Energy: 1 unit = 1 GenerateSpeech credit (1 credit / 50 chars)`);
   para(`Platform cost: $${COST_PER_CREDIT.toFixed(4)}/credit (Builder/Pro: $40-80/mo / 10k-20k credits)`);
-  para(`Payment processing: ${(PAYMENT_FEE_PCT * 100).toFixed(1)}% + $${PAYMENT_FEE_FLAT.toFixed(2)} per transaction`);
+  para(`App Store fee: ${(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (Apple & Google, small devs < $1M/yr). Apple jumps to ${(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%.`);
+  para(`RevenueCat: ${(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above $${REVENUECAT_THRESHOLD.toLocaleString()}/mo`);
+  para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | Median.co: $${MEDIAN_CO_FIRST_YEAR} Year 1, $${MEDIAN_CO_ANNUAL}/yr after`);
+  para(`AdMob: $${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
 
   heading('4. Per-Plan Profit - Monthly, 100% Utilization');
-  table(['Plan', 'Price', 'Credits', 'Platform', 'Fee', 'Cost', 'Profit', 'Margin'],
-    monthlyAnalysis.map(r => ['$' + r.price.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.pf.toFixed(2), '$' + r.totalCost.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']).map((r, i) => [monthlyAnalysis[i].plan, ...r]),
-    [65, 45, 50, 55, 45, 55, 55, 55, 50]);
+  table(['Plan', 'Price', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
+    monthlyAnalysis.map(r => [r.plan, '$' + r.price.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.sf.toFixed(2), '$' + r.totalCost.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
+    [65, 45, 45, 55, 50, 50, 50, 45]);
 
   heading('5. Trailblazer - 3-Year ($199.99)');
-  table(['Utilization', 'Credits', 'Platform', 'Fee', 'Cost', 'Profit', 'Margin'],
-    [['100%', trailblazerAnalysis.credits.toLocaleString(), '$' + trailblazerAnalysis.platformCost.toFixed(2), '$' + trailblazerAnalysis.pf.toFixed(2), '$' + trailblazerAnalysis.totalCost.toFixed(2), '$' + trailblazerAnalysis.profit.toFixed(2), trailblazerAnalysis.margin.toFixed(1) + '%'],
-     ['50%', trailblazer50.credits.toLocaleString(), '$' + trailblazer50.platformCost.toFixed(2), '$' + trailblazer50.pf.toFixed(2), '$' + trailblazer50.totalCost.toFixed(2), '$' + trailblazer50.profit.toFixed(2), trailblazer50.margin.toFixed(1) + '%']],
-    [65, 65, 55, 45, 55, 55, 50]);
+  table(['Utilization', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
+    [['100%', trailblazerAnalysis.credits.toLocaleString(), '$' + trailblazerAnalysis.platformCost.toFixed(2), '$' + trailblazerAnalysis.sf.toFixed(2), '$' + trailblazerAnalysis.totalCost.toFixed(2), '$' + trailblazerAnalysis.profit.toFixed(2), trailblazerAnalysis.margin.toFixed(1) + '%'],
+     ['50%', trailblazer50.credits.toLocaleString(), '$' + trailblazer50.platformCost.toFixed(2), '$' + trailblazer50.sf.toFixed(2), '$' + trailblazer50.totalCost.toFixed(2), '$' + trailblazer50.profit.toFixed(2), trailblazer50.margin.toFixed(1) + '%']],
+    [65, 65, 55, 50, 55, 55, 50]);
 
   heading('6. Aura Bundle Profit - 100% Utilization');
-  table(['Bundle', 'Price', 'Credits', 'Platform', 'Fee', 'Profit', 'Margin'],
-    bundleAnalysis.map(r => [r.name, '$' + r.priceNum.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.pf.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
-    [65, 45, 45, 55, 45, 55, 50]);
+  table(['Bundle', 'Price', 'Credits', 'Platform', 'Store Fee', 'Profit', 'Margin'],
+    bundleAnalysis.map(r => [r.name, '$' + r.priceNum.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.sf.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
+    [65, 45, 45, 55, 50, 55, 50]);
 
-  heading('7. Revenue Scenarios (Monthly, 70% Utilization)');
-  table(['Scenario', 'Explorer', 'Investigator', 'Trailblazer', 'Total Rev', 'Total Cost', 'Profit', 'Margin'],
-    scenarios.map(s => [s.label, '$' + s.explorerRev.toFixed(0), '$' + s.investigatorRev.toFixed(0), '$' + s.trailblazerRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
-    [90, 60, 65, 65, 60, 60, 55, 50]);
+  heading('7. Fixed Operating Costs');
+  table(['Item', 'Cost', 'Period'],
+    [...fixedCostsFirstYear.map(c => [c.item, '$' + c.cost, c.period]),
+     ['First-Year Total', '$' + fixedFirstYearTotal, ''],
+     ['---', '', ''],
+     ...fixedCostsOngoing.map(c => [c.item, '$' + c.cost, c.period]),
+     ['Ongoing Annual Total', '$' + fixedOngoingAnnual, '$' + fixedOngoingMonthly.toFixed(2) + '/mo']],
+    [160, 60, 120]);
 
-  heading('8. Key Takeaways');
-  para('Explorer is the volume driver - 66% margin at full utilization, higher when energy goes unused.');
-  para('Investigator delivers 52% margin at max use; higher price absorbs the larger energy allotment.');
-  para('Trailblazer breaks near-even at 100% utilization but ~51% margin at realistic (50%) usage. 300-slot cap protects credits.');
-  para('Aura Bundles are high-margin at $3.99+; Flicker ($0.99) is thin due to fixed payment fees.');
-  para('Annual plans improve cash flow and reduce per-transaction fee burden.');
-  para('Risk: users who max out narration energy monthly are costliest. Cache generated audio (replay saved URLs) to avoid repeat TTS charges.');
+  heading('8. AdMob Ad Revenue (Free Users)');
+  table(['Free Users', 'Monthly Rev', 'Annual Rev'],
+    adMobScenarios.map(s => [s.label, '$' + s.monthlyRev.toFixed(2), '$' + s.annualRev.toFixed(2)]),
+    [120, 80, 80]);
+  para(`Model: ${ADS_PER_TOUR} ads/tour x ${TOURS_PER_FREE_USER_MO} tours/mo x $${ADMOB_PER_IMPRESSION.toFixed(3)}/impression = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo. Stop 1 paranormal history is free; stops 2+ show interstitial ads.`);
+
+  heading('9. Revenue Scenarios (Monthly, 70% Utilization)');
+  table(['Scenario', 'Sub Rev', 'Ad Rev', 'Total Rev', 'Platform', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
+    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.adRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts.toFixed(0), '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
+    [100, 45, 45, 50, 50, 40, 40, 40, 50, 50, 45]);
+
+  heading('10. Key Takeaways');
+  para('Store fees (15%) are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).');
+  para('Explorer yields ~60% margin at full utilization; Investigator ~43%. Both healthier when energy goes unused.');
+  para('Trailblazer operates at a LOSS at 100% utilization (-7%) due to 15% store fee on $199.99. At 50% realistic usage, margin is ~39%. The 300-slot cap is critical.');
+  para('AdMob revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
+  para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + '.');
+  para('RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$' + revenuecatFee(6368).toFixed(0) + '/mo at the Mature scenario.');
+  para('RISK: Apple fee jumps to 30% above $1M/yr revenue. At that point, Trailblazer becomes deeply unprofitable even at 50% utilization — revisit pricing before crossing $1M.');
+  para('Annual plans improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).');
 
   doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
   if (y > 760) { doc.addPage(); y = 50; }
@@ -314,8 +379,11 @@ export default function PlanAnalysis() {
             <p className="print-text"><span className="font-semibold">Manifestation Energy:</span> 1 unit = 1 InvokeLLM call (Automatic model) ≈ {CREDITS_PER_MANIFESTATION} integration credits</p>
             <p className="print-text"><span className="font-semibold">Narration Energy:</span> 1 unit = 1 GenerateSpeech credit (1 credit / 50 chars of audio)</p>
             <p className="print-text"><span className="font-semibold">Platform cost:</span> ${COST_PER_CREDIT.toFixed(4)}/credit (Builder/Pro plan: $40–80/mo ÷ 10k–20k credits)</p>
-            <p className="print-text"><span className="font-semibold">Payment processing:</span> {(PAYMENT_FEE_PCT*100).toFixed(1)}% + ${PAYMENT_FEE_FLAT.toFixed(2)} per transaction</p>
-            <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis below shows 100% utilization (worst case) and 50–70% (realistic average).</p>
+            <p className="print-text"><span className="font-semibold">App Store / Google Play fee:</span> {(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (both stores, small devs &lt; $1M/yr). Apple jumps to {(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%.</p>
+            <p className="print-text"><span className="font-semibold">RevenueCat:</span> {(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above ${REVENUECAT_THRESHOLD.toLocaleString()}/mo</p>
+            <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · Median.co ${MEDIAN_CO_FIRST_YEAR} Year 1, ${MEDIAN_CO_ANNUAL}/yr after</p>
+            <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
+            <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis shows 100% utilization (worst case) and 50–70% (realistic average).</p>
           </div>
         </section>
 
@@ -330,7 +398,7 @@ export default function PlanAnalysis() {
                   <th className={`${th} ${num}`}>Price</th>
                   <th className={`${th} ${num}`}>Credits/mo</th>
                   <th className={`${th} ${num}`}>Platform Cost</th>
-                  <th className={`${th} ${num}`}>Payment Fee</th>
+                  <th className={`${th} ${num}`}>Store Fee (15%)</th>
                   <th className={`${th} ${num}`}>Total Cost</th>
                   <th className={`${th} ${num}`}>Profit</th>
                   <th className={`${th} ${num}`}>Margin</th>
@@ -343,7 +411,7 @@ export default function PlanAnalysis() {
                     <td className={`${td} ${num} print-text`}>${r.price.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>{r.credits}</td>
                     <td className={`${td} ${num} print-text`}>${r.platformCost.toFixed(2)}</td>
-                    <td className={`${td} ${num} print-text`}>${r.pf.toFixed(2)}</td>
+                    <td className={`${td} ${num} print-text`}>${r.sf.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>${r.totalCost.toFixed(2)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${r.profit.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>{r.margin.toFixed(1)}%</td>
@@ -364,7 +432,7 @@ export default function PlanAnalysis() {
                   <th className={th}>Utilization</th>
                   <th className={`${th} ${num}`}>Credits (36 mo)</th>
                   <th className={`${th} ${num}`}>Platform Cost</th>
-                  <th className={`${th} ${num}`}>Payment Fee</th>
+                  <th className={`${th} ${num}`}>Store Fee (15%)</th>
                   <th className={`${th} ${num}`}>Total Cost</th>
                   <th className={`${th} ${num}`}>Profit</th>
                   <th className={`${th} ${num}`}>Margin</th>
@@ -375,7 +443,7 @@ export default function PlanAnalysis() {
                   <td className={`${td} font-semibold print-text`}>100% (max use)</td>
                   <td className={`${td} ${num} print-text`}>{trailblazerAnalysis.credits.toLocaleString()}</td>
                   <td className={`${td} ${num} print-text`}>${trailblazerAnalysis.platformCost.toFixed(2)}</td>
-                  <td className={`${td} ${num} print-text`}>${trailblazerAnalysis.pf.toFixed(2)}</td>
+                  <td className={`${td} ${num} print-text`}>${trailblazerAnalysis.sf.toFixed(2)}</td>
                   <td className={`${td} ${num} print-text`}>${trailblazerAnalysis.totalCost.toFixed(2)}</td>
                   <td className={`${td} ${num} font-semibold print-text`}>${trailblazerAnalysis.profit.toFixed(2)}</td>
                   <td className={`${td} ${num} print-text`}>{trailblazerAnalysis.margin.toFixed(1)}%</td>
@@ -384,7 +452,7 @@ export default function PlanAnalysis() {
                   <td className={`${td} font-semibold print-text`}>50% (realistic)</td>
                   <td className={`${td} ${num} print-text`}>{trailblazer50.credits.toLocaleString()}</td>
                   <td className={`${td} ${num} print-text`}>${trailblazer50.platformCost.toFixed(2)}</td>
-                  <td className={`${td} ${num} print-text`}>${trailblazer50.pf.toFixed(2)}</td>
+                  <td className={`${td} ${num} print-text`}>${trailblazer50.sf.toFixed(2)}</td>
                   <td className={`${td} ${num} print-text`}>${trailblazer50.totalCost.toFixed(2)}</td>
                   <td className={`${td} ${num} font-semibold print-text`}>${trailblazer50.profit.toFixed(2)}</td>
                   <td className={`${td} ${num} print-text`}>{trailblazer50.margin.toFixed(1)}%</td>
@@ -392,7 +460,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer is capped at 300 slots to protect long-term credit viability. At 100% utilization it breaks nearly even; at realistic usage it yields strong margin.</p>
+          <p className="text-xs print-muted mt-2 italic">With the 15% store fee, Trailblazer operates at a loss at 100% utilization. The 300-slot cap and realistic (~50%) usage keep it viable. At $1M+ annual revenue, Apple's 30% rate would make this tier deeply unprofitable.</p>
         </section>
 
         {/* 6. Aura Bundle Profit */}
@@ -406,7 +474,7 @@ export default function PlanAnalysis() {
                   <th className={`${th} ${num}`}>Price</th>
                   <th className={`${th} ${num}`}>Credits</th>
                   <th className={`${th} ${num}`}>Platform Cost</th>
-                  <th className={`${th} ${num}`}>Payment Fee</th>
+                  <th className={`${th} ${num}`}>Store Fee (15%)</th>
                   <th className={`${th} ${num}`}>Profit</th>
                   <th className={`${th} ${num}`}>Margin</th>
                 </tr>
@@ -418,7 +486,7 @@ export default function PlanAnalysis() {
                     <td className={`${td} ${num} print-text`}>${r.priceNum.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>{r.credits}</td>
                     <td className={`${td} ${num} print-text`}>${r.platformCost.toFixed(2)}</td>
-                    <td className={`${td} ${num} print-text`}>${r.pf.toFixed(2)}</td>
+                    <td className={`${td} ${num} print-text`}>${r.sf.toFixed(2)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${r.profit.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>{r.margin.toFixed(1)}%</td>
                   </tr>
@@ -426,21 +494,94 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Flicker's $0.99 price carries a high relative payment-fee burden. Larger bundles have stronger margins.</p>
+          <p className="text-xs print-muted mt-2 italic">Store fee (15%) replaces the old flat $0.30 + 2.9% processing fee. This is cheaper for small transactions (Flicker) but more expensive for larger ones.</p>
         </section>
 
-        {/* 7. Revenue Scenarios */}
+        {/* 7. Fixed Operating Costs */}
         <section className="mb-8">
-          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">7. Revenue Scenarios (Monthly, 70% Avg Utilization)</h2>
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">7. Fixed Operating Costs</h2>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
+                  <th className={th}>Item</th>
+                  <th className={`${th} ${num}`}>Cost</th>
+                  <th className={th}>Period</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fixedCostsFirstYear.map(c => (
+                  <tr key={c.item}>
+                    <td className={`${td} print-text`}>{c.item}</td>
+                    <td className={`${td} ${num} print-text`}>${c.cost}</td>
+                    <td className={`${td} print-muted`}>{c.period}</td>
+                  </tr>
+                ))}
+                <tr className="font-semibold">
+                  <td className={`${td} print-text`}>First-Year Total</td>
+                  <td className={`${td} ${num} print-text`}>${fixedFirstYearTotal}</td>
+                  <td className={`${td} print-muted`}>${(fixedFirstYearTotal / 12).toFixed(2)}/mo</td>
+                </tr>
+                <tr><td colSpan={3} className={`${td} text-center print-muted text-xs`}>— Year 2+ —</td></tr>
+                {fixedCostsOngoing.map(c => (
+                  <tr key={c.item}>
+                    <td className={`${td} print-text`}>{c.item}</td>
+                    <td className={`${td} ${num} print-text`}>${c.cost}</td>
+                    <td className={`${td} print-muted`}>{c.period}</td>
+                  </tr>
+                ))}
+                <tr className="font-semibold">
+                  <td className={`${td} print-text`}>Ongoing Annual Total</td>
+                  <td className={`${td} ${num} print-text`}>${fixedOngoingAnnual}</td>
+                  <td className={`${td} print-muted`}>${fixedOngoingMonthly.toFixed(2)}/mo</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs print-muted mt-2 italic">Google Play's $25 is a one-time fee (not recurring). Median.co drops from $569 (Year 1) to $399/yr after.</p>
+        </section>
+
+        {/* 8. AdMob Ad Revenue */}
+        <section className="mb-8">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">8. AdMob Ad Revenue (Free Users)</h2>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className={th}>Free Users</th>
+                  <th className={`${th} ${num}`}>Monthly Revenue</th>
+                  <th className={`${th} ${num}`}>Annual Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adMobScenarios.map(s => (
+                  <tr key={s.label}>
+                    <td className={`${td} font-semibold print-text`}>{s.label}</td>
+                    <td className={`${td} ${num} print-text`}>${s.monthlyRev.toFixed(2)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.annualRev.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs print-muted mt-2 italic">Model: {ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo × ${ADMOB_PER_IMPRESSION.toFixed(3)}/impression = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo. Stop 1 paranormal history is free; stops 2+ show interstitial ads. Ad revenue is not subject to store fees.</p>
+        </section>
+
+        {/* 9. Revenue Scenarios */}
+        <section className="mb-8">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">9. Revenue Scenarios (Monthly, 70% Avg Utilization)</h2>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead>
+                <tr>
                   <th className={th}>Scenario</th>
-                  <th className={`${th} ${num}`}>Explorer Rev</th>
-                  <th className={`${th} ${num}`}>Investigator Rev</th>
-                  <th className={`${th} ${num}`}>Trailblazer (amort.)</th>
+                  <th className={`${th} ${num}`}>Sub Rev</th>
+                  <th className={`${th} ${num}`}>Ad Rev</th>
                   <th className={`${th} ${num}`}>Total Rev</th>
+                  <th className={`${th} ${num}`}>Platform</th>
+                  <th className={`${th} ${num}`}>Store 15%</th>
+                  <th className={`${th} ${num}`}>RevCat</th>
+                  <th className={`${th} ${num}`}>Fixed</th>
                   <th className={`${th} ${num}`}>Total Cost</th>
                   <th className={`${th} ${num}`}>Profit</th>
                   <th className={`${th} ${num}`}>Margin</th>
@@ -449,11 +590,14 @@ export default function PlanAnalysis() {
               <tbody>
                 {scenarios.map(s => (
                   <tr key={s.label}>
-                    <td className={`${td} font-semibold print-text`}>{s.label}</td>
-                    <td className={`${td} ${num} print-text`}>${s.explorerRev.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>${s.investigatorRev.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>${s.trailblazerRev.toFixed(0)}</td>
+                    <td className={`${td} font-semibold print-text whitespace-nowrap`}>{s.label}</td>
+                    <td className={`${td} ${num} print-text`}>${s.subRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.adRev.toFixed(0)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${s.totalRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.platformCosts.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.storeCosts.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.revcatCost.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.fixedCost.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.totalCost.toFixed(0)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${s.profit.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>{s.margin.toFixed(1)}%</td>
@@ -462,19 +606,21 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 36 months. Costs assume 70% average energy utilization across all paying users.</p>
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 36 months. 5:1 free-to-paid ratio assumed. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
         </section>
 
-        {/* 8. Key Takeaways */}
+        {/* 10. Key Takeaways */}
         <section className="mb-8">
-          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">8. Key Takeaways</h2>
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">10. Key Takeaways</h2>
           <div className="rounded-lg border border-border bg-card/40 print-block p-4 space-y-2 text-sm print-text">
-            <p>• <span className="font-semibold">Explorer</span> is the volume driver — 66% margin at full utilization, higher when users don't exhaust energy.</p>
-            <p>• <span className="font-semibold">Investigator</span> delivers 52% margin at max use; the higher price absorbs the larger energy allotment.</p>
-            <p>• <span className="font-semibold">Trailblazer</span> breaks near-even at 100% utilization but yields ~51% margin at realistic (50%) usage. The 300-slot cap protects against credit overruns.</p>
-            <p>• <span className="font-semibold">Aura Bundles</span> are high-margin at the $3.99+ tiers; Flicker ($0.99) is thin due to fixed payment fees.</p>
-            <p>• <span className="font-semibold">Annual plans</span> improve cash flow and reduce per-transaction fee burden (one payment vs. twelve).</p>
-            <p>• <span className="font-semibold">Risk factor:</span> users who max out narration energy every month are the costliest. Caching generated audio (replay saved URLs) is critical to avoid repeat TTS charges.</p>
+            <p>• <span className="font-semibold">Store fees (15%)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).</p>
+            <p>• <span className="font-semibold">Explorer</span> yields ~60% margin at full utilization; <span className="font-semibold">Investigator</span> ~43%. Both healthier when energy goes unused.</p>
+            <p>• <span className="font-semibold">Trailblazer</span> operates at a <span className="font-semibold">loss</span> at 100% utilization ({trailblazerAnalysis.margin.toFixed(1)}%) due to the 15% store fee on $199.99. At 50% realistic usage, margin is ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap is critical.</p>
+            <p>• <span className="font-semibold">AdMob revenue</span> from free users meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
+            <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal}.</p>
+            <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(6368).toFixed(0)}/mo at the Mature scenario.</p>
+            <p>• <span className="font-semibold">RISK:</span> Apple's fee jumps to 30% above $1M/yr revenue. At that point, Trailblazer becomes deeply unprofitable even at 50% utilization — revisit pricing before crossing $1M.</p>
+            <p>• <span className="font-semibold">Annual plans</span> improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).</p>
           </div>
         </section>
 
