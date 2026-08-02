@@ -335,7 +335,8 @@ export default function YesNoSweeper() {
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
     const locked = lockedIdxRef.current != null;
-    const phrase = locked ? PHRASES[lockedIdxRef.current].display : PHRASES[indexRef.current].display;
+    const safeIdx = Math.min(indexRef.current, PHRASES.length - 1);
+    const phrase = locked ? PHRASES[lockedIdxRef.current].display : PHRASES[safeIdx].display;
 
     ctx.fillStyle = '#070b14';
     ctx.fillRect(0, 0, w, h);
