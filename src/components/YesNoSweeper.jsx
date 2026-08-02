@@ -557,8 +557,8 @@ export default function YesNoSweeper() {
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Start</span>. "Asking Next Question…" appears for 10 seconds (no dictation), then the phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> appear once, one every 4 seconds, each spoken aloud in a female voice, while the session records.</li>
+            <li>If no trigger occurs during the rotation, "Asking Next Question…" appears again for 10 seconds and the cycle repeats. If the device is triggered, a Male voice will repeat the word triggered. After a phrase is dictated by the male voice, a 5-second delay occurs before "Asking Next Question…" starts the cycle over.</li>
             <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and is spoken aloud in a male voice. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
-            <li>If no trigger occurs during the rotation, "Asking Next Question…" appears again for 10 seconds and the cycle repeats. After a phrase is dictated by the male voice, a 5-second delay occurs before "Asking Next Question…" starts the cycle over.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
         </div>
