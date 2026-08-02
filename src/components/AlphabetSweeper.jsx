@@ -31,6 +31,7 @@ export default function AlphabetSweeper() {
   const [sensorError, setSensorError] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
   const [anomalyDetected, setAnomalyDetected] = useState(false);
+  const [motionDetected, setMotionDetected] = useState(false);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
@@ -85,6 +86,7 @@ export default function AlphabetSweeper() {
   const detectCanvasRef = useRef(null);
   const animFrameRef = useRef(null);
   const anomalyTimerRef = useRef(null);
+  const motionTimerRef = useRef(null);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
 
@@ -125,7 +127,9 @@ export default function AlphabetSweeper() {
     if (audioStreamRef.current) { audioStreamRef.current.getTracks().forEach(t => t.stop()); audioStreamRef.current = null; }
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
+    setMotionDetected(false);
   };
 
   const startStepping = () => {
@@ -155,12 +159,18 @@ export default function AlphabetSweeper() {
     setCaptured(prev => { const updated = [...prev, letter]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     creepyStartedRef.current = false;
-    try { speak(letter, { creepy: true }); } catch {}
+    try { speak(letter, {}); } catch {}
     // Safety net: if speech never starts or never reports completion, resume
     // anyway so the sweep doesn't stall.
     if (creepyFallbackRef.current) clearTimeout(creepyFallbackRef.current);
     creepyFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 7000);
   }, [speak, resumeFromLock]);
+
+  const flashMotion = useCallback(() => {
+    setMotionDetected(true);
+    if (motionTimerRef.current) clearTimeout(motionTimerRef.current);
+    motionTimerRef.current = setTimeout(() => setMotionDetected(false), 3000);
+  }, []);
 
   const requestSensorPermissions = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -183,7 +193,7 @@ export default function AlphabetSweeper() {
       const a = e.accelerationIncludingGravity;
       if (!a) return;
       const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
-      if (Math.abs(mag - baselineRef.current) > ACCEL_THRESHOLD) triggerLock();
+      if (Math.abs(mag - baselineRef.current) > ACCEL_THRESHOLD) { flashMotion(); triggerLock(); }
       baselineRef.current = baselineRef.current * 0.97 + mag * 0.03;
     };
     motionHandlerRef.current = motionHandler;
@@ -193,7 +203,7 @@ export default function AlphabetSweeper() {
       const cur = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
       if (lastOrientRef.current == null) { lastOrientRef.current = cur; return; }
       const lo = lastOrientRef.current;
-      if (Math.abs(cur.a - lo.a) > ORIENT_THRESHOLD || Math.abs(cur.b - lo.b) > ORIENT_THRESHOLD || Math.abs(cur.g - lo.g) > ORIENT_THRESHOLD) triggerLock();
+      if (Math.abs(cur.a - lo.a) > ORIENT_THRESHOLD || Math.abs(cur.b - lo.b) > ORIENT_THRESHOLD || Math.abs(cur.g - lo.g) > ORIENT_THRESHOLD) { flashMotion(); triggerLock(); }
       lastOrientRef.current = cur;
     };
     orientHandlerRef.current = orientHandler;
@@ -380,10 +390,12 @@ export default function AlphabetSweeper() {
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     setCameraActive(false);
     setAnomalyDetected(false);
+    setMotionDetected(false);
     lockedRef.current = false;
     stopNormalVoice();
     setPhase('stopped');
@@ -431,8 +443,8 @@ export default function AlphabetSweeper() {
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
-            <li>Tap <span className="text-primary font-medium">Start Sweep</span>. Letters cycle A → Z, one every 2 seconds, while the session records.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current letter — it glows bright and is spoken aloud. The IR camera also watches for anomalies: a detected figure locks the current letter the same way.</li>
+            <li>Tap <span className="text-primary font-medium">Start Sweep</span>. Letters cycle A → Z, one every 2 seconds, each spoken aloud in a female voice, while the session records.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current letter — it glows bright and is spoken aloud in a male voice. The IR camera also watches for anomalies: a detected figure locks the current letter the same way.</li>
             <li>After each letter is dictated, the alphabet restarts from A.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
@@ -472,6 +484,14 @@ export default function AlphabetSweeper() {
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 className="px-3 py-1 rounded bg-red-500/90 border border-red-300/50">
                 <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ ANOMALY DETECTED</p>
+              </motion.div>
+            </div>
+          )}
+          {motionDetected && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="px-3 py-1 rounded bg-amber-500/90 border border-amber-300/50">
+                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ MOTION DETECTED</p>
               </motion.div>
             </div>
           )}

@@ -7,7 +7,7 @@ import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity from '../hooks/useSensitivity';
 import SensitivityControl from './SensitivityControl';
 
-const ROTATION_MS = 2000;         // each word stays 2 seconds
+const ROTATION_MS = 3000;         // each word stays 3 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
 const ACCEL_THRESHOLD = 0.8;
 const ORIENT_THRESHOLD = 6;
@@ -31,10 +31,32 @@ export default function LocationTermBank() {
   const [sensorError, setSensorError] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
   const [anomalyDetected, setAnomalyDetected] = useState(false);
+  const [motionDetected, setMotionDetected] = useState(false);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
   const { isSpeaking, isGenerating, speak, unlock, attachMicToRecording } = useGhostVoice();
+
+  const speakNormal = (word) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      const synth = window.speechSynthesis;
+      try { synth.getVoices(); } catch {}
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang = 'en-US';
+      u.rate = 0.9;
+      u.pitch = 1;
+      u.volume = 1;
+      const voices = synth.getVoices();
+      const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+      if (en) u.voice = en;
+      synth.speak(u);
+    } catch {}
+  };
+
+  const stopNormalVoice = () => {
+    try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
+  };
 
   const rotRef = useRef(null);
   const drawRef = useRef(null);
@@ -59,6 +81,7 @@ export default function LocationTermBank() {
   const detectCanvasRef = useRef(null);
   const animFrameRef = useRef(null);
   const anomalyTimerRef = useRef(null);
+  const motionTimerRef = useRef(null);
 
   useEffect(() => { termsRef.current = terms; }, [terms]);
   useEffect(() => { capturedRef.current = captured; }, [captured]);
@@ -76,6 +99,7 @@ export default function LocationTermBank() {
   useEffect(() => () => stopEverything(), []);
 
   const stopEverything = () => {
+    stopNormalVoice();
     if (rotRef.current) { clearInterval(rotRef.current); rotRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -85,7 +109,9 @@ export default function LocationTermBank() {
     if (audioStreamRef.current) { audioStreamRef.current.getTracks().forEach(t => t.stop()); audioStreamRef.current = null; }
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
+    setMotionDetected(false);
   };
 
   const generateBank = async () => {
@@ -222,12 +248,16 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   const startRotation = () => {
     if (rotRef.current) clearInterval(rotRef.current);
     const pool = termsRef.current;
-    if (pool.length) currentWordRef.current = pool[Math.floor(Math.random() * pool.length)];
+    if (pool.length) {
+      currentWordRef.current = pool[Math.floor(Math.random() * pool.length)];
+      speakNormal(currentWordRef.current);
+    }
     rotRef.current = setInterval(() => {
       if (lockedRef.current) return;
       const p = termsRef.current;
       if (!p.length) return;
       currentWordRef.current = p[Math.floor(Math.random() * p.length)];
+      speakNormal(currentWordRef.current);
     }, ROTATION_MS);
   };
 
@@ -242,8 +272,15 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     setLockedWord(word);
     currentWordRef.current = word;
     setCaptured(prev => { const updated = [...prev, { word, at: new Date().toLocaleTimeString() }]; capturedRef.current = updated; return updated; });
-    try { speak(word, { creepy: true }); } catch {}
+    stopNormalVoice();
+    try { speak(word, {}); } catch {}
   }, [speak]);
+
+  const flashMotion = useCallback(() => {
+    setMotionDetected(true);
+    if (motionTimerRef.current) clearTimeout(motionTimerRef.current);
+    motionTimerRef.current = setTimeout(() => setMotionDetected(false), 3000);
+  }, []);
 
   const requestSensorPermissions = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -266,7 +303,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       const a = e.accelerationIncludingGravity;
       if (!a) return;
       const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
-      if (Math.abs(mag - baselineRef.current) > ACCEL_THRESHOLD) triggerLock();
+      if (Math.abs(mag - baselineRef.current) > ACCEL_THRESHOLD) { flashMotion(); triggerLock(); }
       baselineRef.current = baselineRef.current * 0.97 + mag * 0.03;
     };
     motionHandlerRef.current = motionHandler;
@@ -276,7 +313,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       const cur = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
       if (lastOrientRef.current == null) { lastOrientRef.current = cur; return; }
       const lo = lastOrientRef.current;
-      if (Math.abs(cur.a - lo.a) > ORIENT_THRESHOLD || Math.abs(cur.b - lo.b) > ORIENT_THRESHOLD || Math.abs(cur.g - lo.g) > ORIENT_THRESHOLD) triggerLock();
+      if (Math.abs(cur.a - lo.a) > ORIENT_THRESHOLD || Math.abs(cur.b - lo.b) > ORIENT_THRESHOLD || Math.abs(cur.g - lo.g) > ORIENT_THRESHOLD) { flashMotion(); triggerLock(); }
       lastOrientRef.current = cur;
     };
     orientHandlerRef.current = orientHandler;
@@ -448,12 +485,12 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     sessionDurRef.current = 0;
     setSessionDuration(0);
     setPhase('running');
+    startRotation();
     await startSensors();
     await startCamera();
     await new Promise(r => setTimeout(r, 80));
     startDrawing();
     await startRecording();
-    startRotation();
     let elapsed = 0;
     timerRef.current = setInterval(() => {
       elapsed++;
@@ -463,6 +500,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   };
 
   const stopSession = () => {
+    stopNormalVoice();
     if (rotRef.current) { clearInterval(rotRef.current); rotRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     stopDrawing();
@@ -470,10 +508,12 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     setCameraActive(false);
     setAnomalyDetected(false);
+    setMotionDetected(false);
     lockedRef.current = false;
     setPhase('stopped');
   };
@@ -522,9 +562,9 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Build Terms</span> — if you're on a tour stop, AGES extracts terms from that stop's history (names, nouns, verbs, phrases, time words); otherwise it gathers words tied to your area's history & hauntings.</li>
-            <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 2 seconds each; the session records.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
-            <li>After each word is dictated, the scan resumes automatically.</li>
+            <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 3 seconds each, each spoken aloud in a female voice; the session records.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud in a male voice. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
+            <li>After each word is dictated, the scan resumes automatically with a new random word every 3 seconds.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
         </div>
@@ -594,6 +634,14 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 className="px-3 py-1 rounded bg-red-500/90 border border-red-300/50">
                 <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ ANOMALY DETECTED</p>
+              </motion.div>
+            </div>
+          )}
+          {motionDetected && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="px-3 py-1 rounded bg-amber-500/90 border border-amber-300/50">
+                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ MOTION DETECTED</p>
               </motion.div>
             </div>
           )}

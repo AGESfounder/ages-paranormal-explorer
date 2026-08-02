@@ -37,6 +37,8 @@ export default function YesNoSweeper() {
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
   const [anomalyDetected, setAnomalyDetected] = useState(false);
+  const [motionDetected, setMotionDetected] = useState(false);
+  const [askingNext, setAskingNext] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
@@ -70,6 +72,9 @@ export default function YesNoSweeper() {
   const animFrameRef = useRef(null);
   const cameraStreamRef = useRef(null);
   const anomalyTimerRef = useRef(null);
+  const motionTimerRef = useRef(null);
+  const askingNextTimerRef = useRef(null);
+  const askingNextRef = useRef(false);
   const lastAnomalyTriggerRef = useRef(0);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
