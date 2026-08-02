@@ -7,15 +7,16 @@ import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity from '../hooks/useSensitivity';
 import SensitivityControl from './SensitivityControl';
 
-// Phrases cycle every 3 seconds. They are NOT spoken while cycling — only the
-// phrase "locked" by an environmental disturbance is read aloud (normal voice),
-// then the sweep restarts.
+// "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
+// appear once in rotation (4 sec each). If no trigger, the asking phase repeats.
+// A trigger locks the current phrase, speaks it in the male voice, then a 5-second
+// delay precedes the next asking phase.
 const PHRASES = [
   { display: 'YES', speech: 'Yes' },
   { display: 'NO', speech: 'No' },
   { display: "I DON'T KNOW", speech: "I don't know" },
 ];
-const PHRASE_MS = 3000;
+const PHRASE_MS = 4000;
 const TRIGGER_COOLDOWN_MS = 3500;
 const ACCEL_THRESHOLD = 0.8;
 const ORIENT_THRESHOLD = 6;
@@ -113,6 +114,8 @@ export default function YesNoSweeper() {
   const lastAnomalyTriggerRef = useRef(0);
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
+  const sweepingRef = useRef(false);
+  const resumeDelayRef = useRef(null);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
   useEffect(() => () => stopEverything(), []);
@@ -130,34 +133,73 @@ export default function YesNoSweeper() {
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
+    if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     setCameraActive(false);
     setAnomalyDetected(false);
     setMotionDetected(false);
     setAskingNext(false);
     askingNextRef.current = false;
+    sweepingRef.current = false;
     stopNormalVoice();
     try { stopVoice(); } catch {}
+  };
+
+  // ── Asking phase: "Asking Next Question…" for 10 seconds, no dictation ──
+  const startAskingPhase = () => {
+    if (lockedRef.current) return;
+    sweepingRef.current = false;
+    stopNormalVoice();
+    setAskingNext(true);
+    askingNextRef.current = true;
+    if (askingNextTimerRef.current) clearTimeout(askingNextTimerRef.current);
+    askingNextTimerRef.current = setTimeout(() => {
+      if (lockedRef.current) return;
+      setAskingNext(false);
+      askingNextRef.current = false;
+      startSweepPhase();
+    }, 10000);
+  };
+
+  // ── Sweep phase: one rotation of YES → NO → I DON'T KNOW, 4 sec each ──
+  const startSweepPhase = () => {
+    if (lockedRef.current) return;
+    sweepingRef.current = true;
+    indexRef.current = 0;
+    setCurrentIdx(0);
+    speakNormal(PHRASES[0].speech);
+    scheduleNextSweepStep();
+  };
+
+  const scheduleNextSweepStep = () => {
+    if (stepRef.current) clearTimeout(stepRef.current);
+    stepRef.current = setTimeout(() => {
+      if (lockedRef.current) return;
+      indexRef.current += 1;
+      if (indexRef.current >= PHRASES.length) {
+        // Rotation complete, no trigger → back to asking phase
+        startAskingPhase();
+        return;
+      }
+      setCurrentIdx(indexRef.current);
+      speakNormal(PHRASES[indexRef.current].speech);
+      scheduleNextSweepStep();
+    }, PHRASE_MS);
   };
 
   const resumeFromLock = useCallback(() => {
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
     speechStartedRef.current = false;
-    setLockedPhrase(null);
-    lockedIdxRef.current = null;
-    lockedRef.current = false;
-    indexRef.current = 0;
-    setCurrentIdx(0);
-    // Show "Asking Next Question…" for 5 seconds before resuming the sweep,
-    // so the user has a clear pause between answers.
+    // Keep the locked word on screen during the 5-second delay, then start asking phase
     if (phase === 'running') {
-      setAskingNext(true);
-      askingNextRef.current = true;
-      if (askingNextTimerRef.current) clearTimeout(askingNextTimerRef.current);
-      askingNextTimerRef.current = setTimeout(() => {
-        setAskingNext(false);
-        askingNextRef.current = false;
-        startStepping();
+      if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
+      resumeDelayRef.current = setTimeout(() => {
+        setLockedPhrase(null);
+        lockedIdxRef.current = null;
+        lockedRef.current = false;
+        indexRef.current = 0;
+        setCurrentIdx(0);
+        startAskingPhase();
       }, 5000);
     }
   }, [phase]);
@@ -172,25 +214,9 @@ export default function YesNoSweeper() {
     }
   }, [isSpeaking, isGenerating, lockedPhrase, resumeFromLock]);
 
-  // Cycle through phrases every 3 seconds, each spoken aloud in a female
-  // voice (normal browser TTS). The locked phrase is then spoken in the deep
-  // male "creepy" voice via useGhostVoice.
-  const startStepping = () => {
-    if (stepRef.current) clearInterval(stepRef.current);
-    indexRef.current = 0;
-    setCurrentIdx(0);
-    speakNormal(PHRASES[0].speech);
-    stepRef.current = setInterval(() => {
-      if (lockedRef.current) return;
-      indexRef.current = (indexRef.current + 1) % PHRASES.length;
-      setCurrentIdx(indexRef.current);
-      speakNormal(PHRASES[indexRef.current].speech);
-    }, PHRASE_MS);
-  };
-
   const triggerLock = useCallback(() => {
     const now = Date.now();
-    if (lockedRef.current || now - lastTriggerRef.current < TRIGGER_COOLDOWN_MS) return;
+    if (lockedRef.current || !sweepingRef.current || now - lastTriggerRef.current < TRIGGER_COOLDOWN_MS) return;
     lastTriggerRef.current = now;
     const idx = indexRef.current;
     const phrase = PHRASES[idx];
@@ -420,12 +446,14 @@ export default function YesNoSweeper() {
     setSessionDuration(0);
     setAskingNext(false);
     askingNextRef.current = false;
+    sweepingRef.current = false;
     if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
+    if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     setPhase('running');
     // Unlock Web Audio inside the tap gesture so the later sensor-triggered
     // spoken answer plays on iOS.
     unlock();
-    startStepping();
+    startAskingPhase();
     await startSensors();
     await startCamera();
     await new Promise(r => setTimeout(r, 80));
@@ -449,6 +477,7 @@ export default function YesNoSweeper() {
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
+    if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
@@ -457,6 +486,7 @@ export default function YesNoSweeper() {
     setMotionDetected(false);
     setAskingNext(false);
     askingNextRef.current = false;
+    sweepingRef.current = false;
     lockedRef.current = false;
     stopNormalVoice();
     try { stopVoice(); } catch {}
@@ -504,9 +534,9 @@ export default function YesNoSweeper() {
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
-            <li>Tap <span className="text-primary font-medium">Start</span>. The phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> cycle, one every 3 seconds, each spoken aloud in a female voice, while the session records.</li>
+            <li>Tap <span className="text-primary font-medium">Start</span>. "Asking Next Question…" appears for 10 seconds (no dictation), then the phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> appear once, one every 4 seconds, each spoken aloud in a female voice, while the session records.</li>
             <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and is spoken aloud in a male voice. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
-            <li>After a phrase is spoken, "Asking Next Question…" appears for 5 seconds, then the sweep starts again from YES.</li>
+            <li>If no trigger occurs during the rotation, "Asking Next Question…" appears again for 10 seconds and the cycle repeats. After a phrase is dictated by the male voice, a 5-second delay occurs before "Asking Next Question…" starts the cycle over.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
         </div>
