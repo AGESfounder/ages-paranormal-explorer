@@ -32,6 +32,7 @@ export default function AlphabetSweeper() {
   const [cameraActive, setCameraActive] = useState(false);
   const [anomalyDetected, setAnomalyDetected] = useState(false);
   const [motionDetected, setMotionDetected] = useState(false);
+  const [paused, setPaused] = useState(false);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
@@ -103,6 +104,8 @@ export default function AlphabetSweeper() {
   const anomalyDetectedRef = useRef(false);
   const motionDetectedRef = useRef(false);
   const startDelayRef = useRef(null);
+  const pausedRef = useRef(false);
+  const sessionActiveRef = useRef(false);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
   useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
@@ -135,6 +138,8 @@ export default function AlphabetSweeper() {
 
   const stopEverything = () => {
     stopNormalVoice();
+    sessionActiveRef.current = false;
+    pausedRef.current = false;
     if (creepyFallbackRef.current) { clearTimeout(creepyFallbackRef.current); creepyFallbackRef.current = null; }
     if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
@@ -311,7 +316,14 @@ export default function AlphabetSweeper() {
     ctx.fillText('REC ' + formatDuration(sessionDurRef.current), w - 14, 26);
 
     ctx.textAlign = 'center';
-    if (lockedLetterRef.current) {
+    if (pausedRef.current) {
+      ctx.fillStyle = 'rgba(250,204,21,0.85)';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillText('GET READY…', w / 2, h / 2 + 10);
+      ctx.fillStyle = 'rgba(250,204,21,0.6)';
+      ctx.font = '12px monospace';
+      ctx.fillText('LISTEN TO DIRECTIONS', w / 2, h / 2 + 40);
+    } else if (lockedLetterRef.current) {
       ctx.shadowColor = 'rgba(34,211,238,0.9)';
       ctx.shadowBlur = 30;
       ctx.fillStyle = '#22d3ee';
@@ -409,8 +421,9 @@ export default function AlphabetSweeper() {
     sessionDurRef.current = 0;
     setSessionDuration(0);
     setPhase('running');
-    // Prime speechSynthesis within the user gesture so the first letter
-    // (spoken 3s later, after an await) plays on iOS.
+    sessionActiveRef.current = true;
+    // Prime speechSynthesis within the user gesture so the directions
+    // (spoken after an await) play on iOS.
     try {
       if ('speechSynthesis' in window) {
         const u = new SpeechSynthesisUtterance(' ');
@@ -418,13 +431,43 @@ export default function AlphabetSweeper() {
         window.speechSynthesis.speak(u);
       }
     } catch {}
-    // 3-second pause before letters and dictation begin
-    startDelayRef.current = setTimeout(() => { startDelayRef.current = null; startStepping(); }, 3000);
-    await startSensors();
-    await startCamera();
-    await new Promise(r => setTimeout(r, 80));
+    // Start drawing + recording immediately so the directions are captured.
     startDrawing();
     await startRecording();
+    // Speak the directions via the female voice; letters + sensors begin
+    // only after the directions finish (so no triggers fire during the pause).
+    pausedRef.current = true;
+    setPaused(true);
+    const directions = 'Spell words you want to say to us. I am going to repeat the alphabet. You can choose letters by moving my device and standing in front of it when you hear or see the letter you need next.';
+    const beginAfterPause = async () => {
+      if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
+      if (!sessionActiveRef.current) return;
+      pausedRef.current = false;
+      setPaused(false);
+      startStepping();
+      await startSensors();
+      await startCamera();
+    };
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        beginAfterPause();
+      } else {
+        const synth = window.speechSynthesis;
+        const u = new SpeechSynthesisUtterance(directions);
+        u.lang = 'en-US';
+        u.rate = 0.9;
+        u.pitch = 1;
+        u.volume = 1;
+        const voices = synth.getVoices();
+        const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+        if (en) u.voice = en;
+        u.onend = () => beginAfterPause();
+        u.onerror = () => beginAfterPause();
+        synth.speak(u);
+        // Safety fallback: if onend never fires, start anyway after 20s
+        startDelayRef.current = setTimeout(() => beginAfterPause(), 20000);
+      }
+    } catch { beginAfterPause(); }
     let elapsed = 0;
     timerRef.current = setInterval(() => {
       elapsed++;
@@ -434,6 +477,9 @@ export default function AlphabetSweeper() {
   };
 
   const stopSession = () => {
+    sessionActiveRef.current = false;
+    pausedRef.current = false;
+    setPaused(false);
     if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -554,7 +600,12 @@ export default function AlphabetSweeper() {
         <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
           <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device — or let the IR camera detect an anomaly — to lock a letter
         </p>
-        {lockedLetter ? (
+        {paused ? (
+          <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            className="text-center font-display text-2xl text-amber-400/90 drop-shadow-[0_0_14px_hsl(45,96%,55%,0.6)] animate-glow-pulse">
+            Get Ready…
+          </motion.p>
+        ) : lockedLetter ? (
           <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             className="text-center font-display text-5xl text-cyan-glow drop-shadow-[0_0_18px_hsl(185,80%,55%,0.85)] animate-glow-pulse">
             {lockedLetter}
