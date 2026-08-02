@@ -36,21 +36,30 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { unlock, attachMicToRecording } = useGhostVoice();
+  const { speak, unlock, attachMicToRecording } = useGhostVoice();
 
-  // Speak a letter aloud using the browser's built-in speechSynthesis (female
-  // voice — high pitch). Sets femaleBusyRef so the male trigger voice waits.
+  // Pick the most natural-sounding female system voice available (Samantha on
+  // iOS, Karen on AU, etc.). Falls back to any en-US voice.
+  const pickFemaleVoice = (voices) => {
+    return voices.find(v => /^en[-_]US/i.test(v.lang) && /samantha|karen|moira|tessa|fiona|serena|allison|ava/i.test(v.name))
+      || voices.find(v => /^en[-_]US/i.test(v.lang) && !/google|microsoft|zira/i.test(v.name))
+      || voices.find(v => /^en[-_]US/i.test(v.lang))
+      || voices.find(v => /^en/i.test(v.lang));
+  };
+
+  // Speak a letter aloud using the browser's built-in speechSynthesis (natural
+  // female voice). Sets femaleBusyRef so the male trigger voice waits.
   const speakNormal = (letter) => {
     try {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
       const synth = window.speechSynthesis;
       const u = new SpeechSynthesisUtterance(letter.toLowerCase());
       u.lang = 'en-US';
-      u.rate = 0.9;
-      u.pitch = 1.15;
+      u.rate = 0.95;
+      u.pitch = 1.0;
       u.volume = 1;
       const voices = synth.getVoices();
-      const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+      const en = pickFemaleVoice(voices);
       if (en) u.voice = en;
       femaleBusyRef.current = true;
       u.onend = () => {
@@ -122,10 +131,8 @@ export default function AlphabetSweeper() {
     currentLetterRef.current = LETTERS[0];
     setCurrentLetter(LETTERS[0]);
     if (phase === 'running') {
-      // Brief pause after the male voice finishes so the dictated letter is
-      // fully heard before the alphabet restarts from A.
       if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
-      resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; startStepping(); }, 1500);
+      startStepping();
     }
   }, [phase]);
 
@@ -177,40 +184,22 @@ export default function AlphabetSweeper() {
     setLockedLetter(letter);
     setCaptured(prev => { const updated = [...prev, letter]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
-    // Let the female voice finish the current letter, then speak male
+    // Let the female voice finish the current letter, then speak the male
+    // trigger voice via GenerateSpeech (high-quality "storm" voice — same as
+    // the Yes/No sweeper). A fixed 5-second window gives the API call + audio
+    // playback time to complete, so the letter is never cut off and the sweep
+    // never freezes waiting for an onend event that may not fire on iOS.
     const speakMale = () => {
-      try {
-        if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-          if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
-          resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 2000);
-          return;
-        }
-        const synth = window.speechSynthesis;
-        synth.cancel();
-        const u = new SpeechSynthesisUtterance(letter.toLowerCase());
-        u.lang = 'en-US';
-        u.rate = 0.7;
-        u.pitch = 0.3;
-        u.volume = 1;
-        const voices = synth.getVoices();
-        const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
-        if (en) u.voice = en;
-        u.onend = () => { resumeFromLock(); };
-        u.onerror = () => { resumeFromLock(); };
-        synth.speak(u);
-        if (creepyFallbackRef.current) clearTimeout(creepyFallbackRef.current);
-        creepyFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 5000);
-      } catch {
-        if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
-        resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 2000);
-      }
+      try { speak(letter, {}); } catch {}
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
     } else {
       speakMale();
     }
-  }, [resumeFromLock]);
+    if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
+    resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 5000);
+  }, [speak, resumeFromLock]);
 
   const flashMotion = useCallback(() => {
     setMotionDetected(true);
@@ -470,11 +459,11 @@ export default function AlphabetSweeper() {
         synth.cancel();
         const u = new SpeechSynthesisUtterance(directions);
         u.lang = 'en-US';
-        u.rate = 0.85;
-        u.pitch = 1.15;
+        u.rate = 0.92;
+        u.pitch = 1.0;
         u.volume = 1;
         const voices = synth.getVoices();
-        const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
+        const en = pickFemaleVoice(voices);
         if (en) u.voice = en;
         u.onend = () => beginAfterPause();
         u.onerror = () => beginAfterPause();
