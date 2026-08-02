@@ -22,13 +22,13 @@ export function detectFigures(imageData, width, height) {
   const data = imageData.data;
   const regions = [];
   const visited = new Uint8Array(width * height);
-  const SKIN_THRESHOLD = 1800;
+  const SKIN_THRESHOLD = 600;
 
   for (let y = 0; y < height; y += 4) {
     for (let x = 0; x < width; x += 4) {
       const idx = (y * width + x) * 4;
       const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-      const isSkin = r > 60 && g > 40 && b > 20 && r > g && r > b && (r - g) > 10 && r < 255 && g < 230;
+      const isSkin = r > 25 && g > 15 && b > 10 && r > g && r > b && (r - g) > 4 && r < 255 && g < 240;
 
       if (isSkin && !visited[y * width + x]) {
         const queue = [[x, y]];
@@ -47,12 +47,12 @@ export function detectFigures(imageData, width, height) {
             if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
             const ni = (ny * width + nx) * 4;
             const nr = data[ni], ng = data[ni + 1], nb = data[ni + 2];
-            if (nr > 60 && ng > 40 && nb > 20 && nr > ng && nr > nb && (nr - ng) > 10 && nr < 255 && ng < 230) queue.push([nx, ny]);
+            if (nr > 25 && ng > 15 && nb > 10 && nr > ng && nr > nb && (nr - ng) > 4 && nr < 255 && ng < 240) queue.push([nx, ny]);
           }
         }
         if (pixelCount > SKIN_THRESHOLD) {
           const bw = maxX - minX, bh = maxY - minY;
-          if (bh > bw * 0.8 && bh > 40 && bw > 15) regions.push({ x: minX, y: minY, w: bw, h: bh, count: pixelCount, pixels });
+          if (bh > bw * 0.6 && bh > 25 && bw > 10) regions.push({ x: minX, y: minY, w: bw, h: bh, count: pixelCount, pixels });
         }
       }
     }
