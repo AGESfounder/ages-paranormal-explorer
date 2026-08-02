@@ -246,5 +246,45 @@ export default function useGhostVoice() {
     } catch { return null; }
   }, []);
 
-  return { isSpeaking, isGenerating, narrate, speak, stop, unlock, attachMicToRecording };
+  // Play a pre-generated TTS audio URL via Web Audio (so it's captured in the
+  // recording and plays reliably on iOS). Returns a promise that resolves when
+  // the audio ends. Does NOT set isSpeaking/isGenerating — callers manage their
+  // own completion callbacks.
+  const playPreGenerated = useCallback(async (url, opts = {}) => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
+    stopEerieBackground();
+    releaseNarration();
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || ctx.state !== 'running') {
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.volume = 1;
+        if (opts.creepy) audio.playbackRate = 0.8;
+        return new Promise(resolve => {
+          audio.onended = () => { audioRef.current = null; resolve(); };
+          audio.onerror = () => { audioRef.current = null; resolve(); };
+          audio.play().catch(() => resolve());
+        });
+      }
+      const resp = await fetch(url);
+      const ab = await resp.arrayBuffer();
+      const audioBuf = await ctx.decodeAudioData(ab);
+      const sNode = ctx.createBufferSource();
+      sNode.buffer = audioBuf;
+      if (opts.creepy) sNode.playbackRate.value = 0.8;
+      sNode.connect(ctx.destination);
+      if (recordDestRef.current) sNode.connect(recordDestRef.current);
+      srcRef.current = sNode;
+      acquireNarration();
+      return new Promise(resolve => {
+        sNode.onended = () => { releaseNarration(); srcRef.current = null; resolve(); };
+      });
+    } catch (err) {
+      releaseNarration();
+    }
+  }, []);
+
+  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, stop, unlock, attachMicToRecording };
 }
