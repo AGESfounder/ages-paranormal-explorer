@@ -3,9 +3,9 @@ import { Play, Square, Save, X, Video, AlertTriangle, Zap, Activity } from 'luci
 import { base44 } from '@/api/base44Client';
 
 const SENSITIVITY_THRESHOLDS = {
-  accel: 0.4,   // m/s² delta from baseline
-  gyro: 0.08,   // rad/s delta from baseline
-  mag: 3.0,     // μT delta from baseline
+  accel: 0.12,  // m/s² delta from baseline
+  gyro: 0.025,  // rad/s delta from baseline
+  mag: 1.0,     // μT delta from baseline
 };
 
 // Map alert level 0–100 to color class

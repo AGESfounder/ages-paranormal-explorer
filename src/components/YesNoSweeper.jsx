@@ -17,8 +17,8 @@ const PHRASES = [
 ];
 const PHRASE_MS = 3000;
 const TRIGGER_COOLDOWN_MS = 3500;
-const ACCEL_THRESHOLD = 3.2;
-const ORIENT_THRESHOLD = 28;
+const ACCEL_THRESHOLD = 0.8;
+const ORIENT_THRESHOLD = 6;
 
 function formatDuration(sec) {
   const m = Math.floor(sec / 60);
