@@ -124,8 +124,12 @@ export default function YesNoSweeper() {
   const pendingMaleRef = useRef(null);
   const sweepingRef = useRef(false);
   const resumeDelayRef = useRef(null);
+  const anomalyDetectedRef = useRef(false);
+  const motionDetectedRef = useRef(false);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
+  useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
+  useEffect(() => { motionDetectedRef.current = motionDetected; }, [motionDetected]);
   useEffect(() => () => stopEverything(), []);
 
   const stopEverything = () => {
@@ -373,6 +377,24 @@ export default function YesNoSweeper() {
       ctx.fillText(phrase, w / 2, h / 2 + 20);
     }
 
+    // Draw sensor alert badges on the canvas so they appear in the recording
+    if (anomalyDetectedRef.current) {
+      ctx.fillStyle = 'rgba(239,68,68,0.92)';
+      ctx.fillRect(w / 2 - 85, 44, 170, 22);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠ ANOMALY DETECTED', w / 2, 59);
+    }
+    if (motionDetectedRef.current) {
+      ctx.fillStyle = 'rgba(245,158,11,0.92)';
+      ctx.fillRect(w / 2 - 85, h - 52, 170, 22);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠ MOTION DETECTED', w / 2, h - 37);
+    }
+
     ctx.textAlign = 'left';
     ctx.fillStyle = '#64748b';
     ctx.font = '11px monospace';
@@ -570,7 +592,7 @@ export default function YesNoSweeper() {
             </div>
           )}
           {anomalyDetected && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="absolute top-8 left-1/2 -translate-x-1/2 pointer-events-none">
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 className="px-3 py-1 rounded bg-red-500/90 border border-red-300/50">
                 <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ ANOMALY DETECTED</p>
@@ -578,7 +600,7 @@ export default function YesNoSweeper() {
             </div>
           )}
           {motionDetected && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none">
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 className="px-3 py-1 rounded bg-amber-500/90 border border-amber-300/50">
                 <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ MOTION DETECTED</p>
