@@ -25,18 +25,20 @@ export const BASE_SKELETON = [
 ];
 
 // Per-level detection parameters. Higher levels = more permissive (darker envs).
+// rMinusG = red-green saturation gap (skin has strong red dominance over green;
+// warm-toned walls/wood have a much smaller gap — this is the key daylight filter).
 const PRESETS = {
-  1: { skinThreshold: 400, minBoxH: 26, minBoxW: 14, minR: 35, minG: 22, minB: 16, rMinusB: 10, maxR: 248, maxG: 232 },
-  2: { skinThreshold: 270, minBoxH: 21, minBoxW: 12, minR: 24, minG: 16, minB: 11, rMinusB: 6,  maxR: 252, maxG: 238 },
-  3: { skinThreshold: 190, minBoxH: 17, minBoxW: 10, minR: 16, minG: 11, minB: 8,  rMinusB: 3,  maxR: 254, maxG: 242 },
-  4: { skinThreshold: 150, minBoxH: 15, minBoxW: 8,  minR: 12, minG: 8,  minB: 5,  rMinusB: 2,  maxR: 255, maxG: 245 },
+  1: { skinThreshold: 800, minBoxH: 40, minBoxW: 22, minR: 80, minG: 50, minB: 30, rMinusB: 25, rMinusG: 18, maxR: 245, maxG: 220 },
+  2: { skinThreshold: 500, minBoxH: 30, minBoxW: 18, minR: 55, minG: 35, minB: 22, rMinusB: 16, rMinusG: 12, maxR: 250, maxG: 230 },
+  3: { skinThreshold: 190, minBoxH: 17, minBoxW: 10, minR: 16, minG: 11, minB: 8,  rMinusB: 3,  rMinusG: 0,  maxR: 254, maxG: 242 },
+  4: { skinThreshold: 150, minBoxH: 15, minBoxW: 8,  minR: 12, minG: 8,  minB: 5,  rMinusB: 2,  rMinusG: 0,  maxR: 255, maxG: 245 },
 };
 
 export function detectFigures(imageData, width, height, sensitivity = 4) {
   const p = PRESETS[sensitivity] || PRESETS[4];
   const isSkin = (r, g, b) =>
     r > p.minR && g > p.minG && b > p.minB && r >= g && r > b &&
-    (r - b) > p.rMinusB && r < p.maxR && g < p.maxG;
+    (r - b) > p.rMinusB && (r - g) > p.rMinusG && r < p.maxR && g < p.maxG;
 
   const data = imageData.data;
   const regions = [];
