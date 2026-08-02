@@ -128,8 +128,8 @@ export default function SLSCamera() {
           for (let dx = 0; dx < 4 && cx + dx < w; dx++) {
             const pi = ((cy + dy) * w + (cx + dx)) * 4;
             d[pi] = 0;
-            d[pi + 1] = Math.min(255, d[pi + 1] + 120);
-            d[pi + 2] = 0;
+            d[pi + 1] = 180;
+            d[pi + 2] = 255;
           }
         }
       }
@@ -151,10 +151,10 @@ export default function SLSCamera() {
 
     // Bounding box + label for each detected figure
     figures.forEach(({ x, y, w: bw, h: bh }) => {
-      ctx.strokeStyle = 'rgba(0, 255, 150, 0.7)';
+      ctx.strokeStyle = 'rgba(0, 180, 255, 0.8)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x, y, bw, bh);
-      ctx.fillStyle = 'rgba(0,255,150,0.9)';
+      ctx.fillStyle = 'rgba(0, 180, 255, 0.9)';
       ctx.font = 'bold 11px monospace';
       ctx.fillText('ANOMALY DETECTED', x, y - 8);
     });
