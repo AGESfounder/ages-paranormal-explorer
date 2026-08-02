@@ -27,7 +27,7 @@ TOUR TYPE: ${tour.tour_type}
 EXISTING STOPS (in current order):
 ${existingSummary || '(none yet)'}
 
-Generate up to ${Math.min(slotsAvailable, 4)} NEW haunted stops near ${tour.city}, ${tour.state} that are NOT already in the existing stops. Each must be a real, well-documented haunted location that is publicly accessible after 7 PM.
+Generate up to ${Math.min(slotsAvailable, 2)} NEW haunted stops near ${tour.city}, ${tour.state} that are NOT already in the existing stops. Each must be a real, well-documented haunted location that is publicly accessible after 7 PM.
 
 For each new stop, specify "insert_after_stop_number" — the existing stop number after which this new stop should be placed to minimize travel distance and maintain routing logic. Use 0 to insert at the very beginning (before stop 1).
 
