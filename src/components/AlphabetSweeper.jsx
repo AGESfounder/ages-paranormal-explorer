@@ -38,6 +38,19 @@ export default function AlphabetSweeper() {
 
   const { isSpeaking, isGenerating, speak, unlock, attachMicToRecording } = useGhostVoice();
 
+  // Pick the most natural-sounding female voice available on this device.
+  const pickFemaleVoice = () => {
+    try {
+      const voices = window.speechSynthesis.getVoices();
+      const femaleNames = ['Samantha', 'Victoria', 'Google US English', 'Microsoft Aria', 'Microsoft Michelle', 'Microsoft Zira', 'Karen', 'Moira', 'Fiona', 'Tessa', 'Serena'];
+      for (const name of femaleNames) {
+        const v = voices.find(v => v.name.includes(name));
+        if (v) return v;
+      }
+      return voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang)) || null;
+    } catch { return null; }
+  };
+
   // Normal browser TTS announces each letter as it cycles (instant, local).
   const speakNormal = (letter) => {
     try {
@@ -48,12 +61,11 @@ export default function AlphabetSweeper() {
       // avoids the "capital X" announcement some voices add for uppercase.
       const u = new SpeechSynthesisUtterance(letter.toLowerCase());
       u.lang = 'en-US';
-      u.rate = 0.9;
-      u.pitch = 1;
+      u.rate = 0.95;
+      u.pitch = 1.1;
       u.volume = 1;
-      const voices = synth.getVoices();
-      const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
-      if (en) u.voice = en;
+      const fv = pickFemaleVoice();
+      if (fv) u.voice = fv;
       femaleBusyRef.current = true;
       u.onend = () => {
         femaleBusyRef.current = false;
@@ -216,10 +228,7 @@ export default function AlphabetSweeper() {
     return true;
   };
 
-  const startSensors = async () => {
-    const ok = await requestSensorPermissions();
-    if (!ok) return;
-
+  const attachSensorHandlers = () => {
     const motionHandler = (e) => {
       const a = e.accelerationIncludingGravity;
       if (!a) return;
@@ -244,7 +253,7 @@ export default function AlphabetSweeper() {
   // Camera-based anomaly trigger: runs the same IR figure detection as the
   // Anomaly Camera. When a humanoid shape is detected, the current letter is
   // locked — same effect as a motion/orientation disturbance.
-  const startCamera = async () => {
+  const startCameraStream = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 320 }, height: { ideal: 240 } },
@@ -256,7 +265,6 @@ export default function AlphabetSweeper() {
         await camVideoRef.current.play().catch(() => {});
       }
       setCameraActive(true);
-      processCameraFrame();
     } catch (e) {
       setSensorError(prev => (prev ? prev + ' ' : '') + 'Camera access denied — anomaly trigger disabled, but motion/orientation triggers still work.');
     }
@@ -431,22 +439,26 @@ export default function AlphabetSweeper() {
         window.speechSynthesis.speak(u);
       }
     } catch {}
-    // Start drawing + recording immediately so the directions are captured.
+    // Request all permissions (sensors, camera, mic) BEFORE directions so
+    // every prompt appears up front, then start drawing + recording.
+    await requestSensorPermissions();
+    await startCameraStream();
     startDrawing();
     await startRecording();
-    // Speak the directions via the female voice; letters + sensors begin
-    // only after the directions finish (so no triggers fire during the pause).
+    // Speak the directions via the female voice; letters + sensor handlers +
+    // camera processing begin only after the directions finish (so no triggers
+    // fire during the pause).
     pausedRef.current = true;
     setPaused(true);
     const directions = 'Spell words you want to say to us. I am going to repeat the alphabet. You can choose letters by moving my device and standing in front of it when you hear or see the letter you need next.';
-    const beginAfterPause = async () => {
+    const beginAfterPause = () => {
       if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
       if (!sessionActiveRef.current) return;
       pausedRef.current = false;
       setPaused(false);
       startStepping();
-      await startSensors();
-      await startCamera();
+      attachSensorHandlers();
+      processCameraFrame();
     };
     try {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
@@ -455,12 +467,11 @@ export default function AlphabetSweeper() {
         const synth = window.speechSynthesis;
         const u = new SpeechSynthesisUtterance(directions);
         u.lang = 'en-US';
-        u.rate = 0.9;
-        u.pitch = 1;
+        u.rate = 0.95;
+        u.pitch = 1.1;
         u.volume = 1;
-        const voices = synth.getVoices();
-        const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
-        if (en) u.voice = en;
+        const fv = pickFemaleVoice();
+        if (fv) u.voice = fv;
         u.onend = () => beginAfterPause();
         u.onerror = () => beginAfterPause();
         synth.speak(u);
