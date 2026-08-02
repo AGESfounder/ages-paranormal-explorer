@@ -85,6 +85,7 @@ export default function Toolkit() {
   const gainNodeRef = useRef(null);
   const bandpassNodeRef = useRef(null);
   const peakNodeRef = useRef(null);
+  const peak2NodeRef = useRef(null);
   const lfoRef = useRef(null);
   const lfoGainRef = useRef(null);
   const crackleLfoRef = useRef(null);
@@ -145,6 +146,7 @@ export default function Toolkit() {
     gainNodeRef.current = null;
     bandpassNodeRef.current = null;
     peakNodeRef.current = null;
+    peak2NodeRef.current = null;
     lfoGainRef.current = null;
     crackleGainRef.current = null;
   };
@@ -185,37 +187,46 @@ export default function Toolkit() {
     filter.Q.value = 0.7;
     filter.frequency.value = 300;
 
-    // Bandpass filter — emphasizes speech frequencies so word fragments cut through
+    // Bandpass filter — wide speech-frequency window so voice fragments cut through
     const bandpass = ctx.createBiquadFilter();
     bandpass.type = 'bandpass';
-    bandpass.frequency.value = 1500;
-    bandpass.Q.value = 0.8;
+    bandpass.frequency.value = 1800;
+    bandpass.Q.value = 0.4;
 
-    // Peaking filter — adds formant-like spectral peaks that sweep with the dial
+    // Peaking filter — formant 1, adds spectral peaks that sweep with the dial
     const peak = ctx.createBiquadFilter();
     peak.type = 'peaking';
     peak.frequency.value = 800;
     peak.Q.value = 2;
-    peak.gain.value = 8;
+    peak.gain.value = 12;
+
+    // Second peaking filter — formant 2, higher range for vowel-like fragments
+    const peak2 = ctx.createBiquadFilter();
+    peak2.type = 'peaking';
+    peak2.frequency.value = 2200;
+    peak2.Q.value = 3;
+    peak2.gain.value = 10;
 
     // Master gain
     const gain = ctx.createGain();
     gain.gain.value = radioVolume;
 
-    // LFO for pulsating static — slow sine modulates gain for a "between stations" pulse
+    // LFO for pulsating static — pulses at the same rate as the frequency sweep
+    const sweepMs = SWEEP_SPEEDS[radioSweepSpeed]?.ms ?? 200;
+    const pulseHz = 1000 / sweepMs;
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
-    lfo.frequency.value = 4;
+    lfo.frequency.value = pulseHz;
     const lfoGain = ctx.createGain();
     lfoGain.gain.value = radioVolume * 0.4;
     lfo.connect(lfoGain);
     lfoGain.connect(gain.gain);
     lfo.start();
 
-    // Second LFO for crackle texture — faster square wave adds sizzle
+    // Second LFO for crackle texture — double the pulse rate for sizzle
     const crackleLfo = ctx.createOscillator();
     crackleLfo.type = 'square';
-    crackleLfo.frequency.value = 11;
+    crackleLfo.frequency.value = pulseHz * 2;
     const crackleGain = ctx.createGain();
     crackleGain.gain.value = radioVolume * 0.12;
     crackleLfo.connect(crackleGain);
@@ -225,7 +236,8 @@ export default function Toolkit() {
     noise.connect(filter);
     filter.connect(bandpass);
     bandpass.connect(peak);
-    peak.connect(gain);
+    peak.connect(peak2);
+    peak2.connect(gain);
     gain.connect(ctx.destination);   // speakers (what the user hears)
     noise.start();
 
@@ -234,6 +246,7 @@ export default function Toolkit() {
     gainNodeRef.current = gain;
     bandpassNodeRef.current = bandpass;
     peakNodeRef.current = peak;
+    peak2NodeRef.current = peak2;
     lfoRef.current = lfo;
     lfoGainRef.current = lfoGain;
     crackleLfoRef.current = crackleLfo;
@@ -308,11 +321,20 @@ export default function Toolkit() {
       if (filterNodeRef.current && audioCtxRef.current) {
         filterNodeRef.current.frequency.setValueAtTime(audibleFreq, audioCtxRef.current.currentTime);
       }
-      // Sweep the peaking filter through formant frequencies (300–3000 Hz) for word-like fragments
+      // Sweep formant 1 (300–3000 Hz) for word-like fragments
       if (peakNodeRef.current && audioCtxRef.current) {
         const formantFreq = 300 + ratio * 2700;
         peakNodeRef.current.frequency.setValueAtTime(formantFreq, audioCtxRef.current.currentTime);
       }
+      // Sweep formant 2 (800–4000 Hz) for vowel-like character
+      if (peak2NodeRef.current && audioCtxRef.current) {
+        const formant2Freq = 800 + ratio * 3200;
+        peak2NodeRef.current.frequency.setValueAtTime(formant2Freq, audioCtxRef.current.currentTime);
+      }
+      // Sync the pulse LFO to the sweep rate — one pulse per frequency step
+      const pulseHz = 1000 / ms;
+      if (lfoRef.current) lfoRef.current.frequency.setValueAtTime(pulseHz, audioCtxRef.current.currentTime);
+      if (crackleLfoRef.current) crackleLfoRef.current.frequency.setValueAtTime(pulseHz * 2, audioCtxRef.current.currentTime);
     }, ms);
   };
 
