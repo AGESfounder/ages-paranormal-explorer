@@ -211,7 +211,7 @@ export default function Dashboard() {
                       <span className={`px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider border ${plan.badge}`}>
                         {plan.name}
                       </span>
-                      {isTrailblazer && <span className="text-[10px] text-amber-400 font-heading">3-Year Elite</span>}
+                      {isTrailblazer && <span className="text-[10px] text-amber-400 font-heading">30-Month Elite</span>}
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2 mb-3">
@@ -220,7 +220,7 @@ export default function Dashboard() {
                     ) : isTrailblazer ? (
                       <>
                         <span className="font-display text-2xl text-amber-400">${plan.one_time_price}</span>
-                        <span className="text-xs text-muted-foreground">one-time / 3 years</span>
+                        <span className="text-xs text-muted-foreground">one-time / 30 months</span>
                       </>
                     ) : (
                       <>
