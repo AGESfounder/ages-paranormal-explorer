@@ -53,11 +53,22 @@ export default function AlphabetSweeper() {
       const voices = synth.getVoices();
       const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
       if (en) u.voice = en;
+      femaleBusyRef.current = true;
+      u.onend = () => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
+      u.onerror = () => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
       synth.speak(u);
-    } catch {}
+    } catch { femaleBusyRef.current = false; }
   };
 
   const stopNormalVoice = () => {
+    pendingMaleRef.current = null;
+    femaleBusyRef.current = false;
     try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
   };
 
@@ -87,6 +98,8 @@ export default function AlphabetSweeper() {
   const animFrameRef = useRef(null);
   const anomalyTimerRef = useRef(null);
   const motionTimerRef = useRef(null);
+  const femaleBusyRef = useRef(false);
+  const pendingMaleRef = useRef(null);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
 
@@ -155,15 +168,22 @@ export default function AlphabetSweeper() {
     lockedRef.current = true;
     lockedLetterRef.current = letter;
     setLockedLetter(letter);
-    stopNormalVoice();
     setCaptured(prev => { const updated = [...prev, letter]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     creepyStartedRef.current = false;
-    try { speak(letter, {}); } catch {}
-    // Safety net: if speech never starts or never reports completion, resume
-    // anyway so the sweep doesn't stall.
-    if (creepyFallbackRef.current) clearTimeout(creepyFallbackRef.current);
-    creepyFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 7000);
+    // Let the female voice finish the current letter, then speak male
+    const speakMale = () => {
+      try { speak(letter, {}); } catch {}
+      // Safety net: if speech never starts or never reports completion, resume
+      // anyway so the sweep doesn't stall.
+      if (creepyFallbackRef.current) clearTimeout(creepyFallbackRef.current);
+      creepyFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 7000);
+    };
+    if (femaleBusyRef.current) {
+      pendingMaleRef.current = speakMale;
+    } else {
+      speakMale();
+    }
   }, [speak, resumeFromLock]);
 
   const flashMotion = useCallback(() => {

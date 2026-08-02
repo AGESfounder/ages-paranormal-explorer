@@ -50,11 +50,22 @@ export default function LocationTermBank() {
       const voices = synth.getVoices();
       const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
       if (en) u.voice = en;
+      femaleBusyRef.current = true;
+      u.onend = () => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
+      u.onerror = () => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
       synth.speak(u);
-    } catch {}
+    } catch { femaleBusyRef.current = false; }
   };
 
   const stopNormalVoice = () => {
+    pendingMaleRef.current = null;
+    femaleBusyRef.current = false;
     try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
   };
 
@@ -82,19 +93,26 @@ export default function LocationTermBank() {
   const animFrameRef = useRef(null);
   const anomalyTimerRef = useRef(null);
   const motionTimerRef = useRef(null);
+  const femaleBusyRef = useRef(false);
+  const pendingMaleRef = useRef(null);
+  const speechStartedRef = useRef(false);
 
   useEffect(() => { termsRef.current = terms; }, [terms]);
   useEffect(() => { capturedRef.current = captured; }, [captured]);
 
-  // Resume scanning once narration of a locked word finishes
+  // Resume scanning once narration of a locked word has actually started AND
+  // finished — wait for isGenerating/isSpeaking to go true first so we don't
+  // resume before the male voice begins.
   useEffect(() => {
-    if (lockedWord && !isSpeaking && !isGenerating) {
+    if (lockedWord && (isGenerating || isSpeaking)) speechStartedRef.current = true;
+    if (lockedWord && speechStartedRef.current && !isSpeaking && !isGenerating) {
+      speechStartedRef.current = false;
       setLockedWord(null);
       lockedWordRef.current = null;
       lockedRef.current = false;
       if (phase === 'running') startRotation();
     }
-  }, [isSpeaking, isGenerating, lockedWord]);
+  }, [isSpeaking, isGenerating, lockedWord, phase]);
 
   useEffect(() => () => stopEverything(), []);
 
@@ -272,8 +290,16 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     setLockedWord(word);
     currentWordRef.current = word;
     setCaptured(prev => { const updated = [...prev, { word, at: new Date().toLocaleTimeString() }]; capturedRef.current = updated; return updated; });
-    stopNormalVoice();
-    try { speak(word, {}); } catch {}
+    speechStartedRef.current = false;
+    // Let the female voice finish the current word, then speak male
+    const speakMale = () => {
+      try { speak(word, {}); } catch {}
+    };
+    if (femaleBusyRef.current) {
+      pendingMaleRef.current = speakMale;
+    } else {
+      speakMale();
+    }
   }, [speak]);
 
   const flashMotion = useCallback(() => {

@@ -64,11 +64,22 @@ export default function YesNoSweeper() {
       const voices = synth.getVoices();
       const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
       if (en) u.voice = en;
+      femaleBusyRef.current = true;
+      u.onend = () => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
+      u.onerror = () => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
       synth.speak(u);
-    } catch {}
+    } catch { femaleBusyRef.current = false; }
   };
 
   const stopNormalVoice = () => {
+    pendingMaleRef.current = null;
+    femaleBusyRef.current = false;
     try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
   };
 
@@ -100,6 +111,8 @@ export default function YesNoSweeper() {
   const askingNextTimerRef = useRef(null);
   const askingNextRef = useRef(false);
   const lastAnomalyTriggerRef = useRef(0);
+  const femaleBusyRef = useRef(false);
+  const pendingMaleRef = useRef(null);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
   useEffect(() => () => stopEverything(), []);
@@ -187,10 +200,17 @@ export default function YesNoSweeper() {
     setCaptured(prev => { const updated = [...prev, phrase.display]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     speechStartedRef.current = false;
-    stopNormalVoice();
-    try { speak(phrase.speech, {}); } catch {} // deep male "storm" voice
-    if (resumeFallbackRef.current) clearTimeout(resumeFallbackRef.current);
-    resumeFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 8000);
+    // Let the female voice finish the current phrase, then speak male
+    const speakMale = () => {
+      try { speak(phrase.speech, {}); } catch {} // deep male "storm" voice
+      if (resumeFallbackRef.current) clearTimeout(resumeFallbackRef.current);
+      resumeFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 8000);
+    };
+    if (femaleBusyRef.current) {
+      pendingMaleRef.current = speakMale;
+    } else {
+      speakMale();
+    }
   }, [speak, resumeFromLock]);
 
   const requestSensorPermissions = async () => {
