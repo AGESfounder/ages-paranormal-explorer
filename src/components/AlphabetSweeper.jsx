@@ -38,51 +38,52 @@ export default function AlphabetSweeper() {
 
   const { isSpeaking, isGenerating, speak, unlock, attachMicToRecording } = useGhostVoice();
 
-  // Pick the most natural-sounding female voice available on this device.
-  const pickFemaleVoice = () => {
+  // Pre-generate high-quality TTS audio for each letter (cached across sessions
+  // for as long as the component stays mounted). Uses the "honey" voice — a
+  // warm, natural-sounding female voice — instead of robotic browser TTS.
+  const preGenerateLetters = async () => {
+    if (Object.keys(letterAudioRef.current).length >= 26) return;
     try {
-      const voices = window.speechSynthesis.getVoices();
-      const femaleNames = ['Samantha', 'Victoria', 'Google US English', 'Microsoft Aria', 'Microsoft Michelle', 'Microsoft Zira', 'Karen', 'Moira', 'Fiona', 'Tessa', 'Serena'];
-      for (const name of femaleNames) {
-        const v = voices.find(v => v.name.includes(name));
-        if (v) return v;
-      }
-      return voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang)) || null;
-    } catch { return null; }
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      const results = await Promise.all(
+        letters.map(l => base44.integrations.Core.GenerateSpeech({ text: l.toLowerCase(), voice: 'honey' }))
+      );
+      letters.forEach((l, i) => { if (results[i]?.url) letterAudioRef.current[l.toLowerCase()] = results[i].url; });
+    } catch {}
   };
 
-  // Normal browser TTS announces each letter as it cycles (instant, local).
+  // Play the pre-generated female voice for a letter. Skips audio if the
+  // letter hasn't been generated yet (the on-screen letter still displays).
   const speakNormal = (letter) => {
-    try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-      const synth = window.speechSynthesis;
-      try { synth.getVoices(); } catch {}
-      // A single lowercase letter is read as the letter name (e.g. "ay") and
-      // avoids the "capital X" announcement some voices add for uppercase.
-      const u = new SpeechSynthesisUtterance(letter.toLowerCase());
-      u.lang = 'en-US';
-      u.rate = 0.95;
-      u.pitch = 1.1;
-      u.volume = 1;
-      const fv = pickFemaleVoice();
-      if (fv) u.voice = fv;
-      femaleBusyRef.current = true;
-      u.onend = () => {
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      };
-      u.onerror = () => {
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      };
-      synth.speak(u);
-    } catch { femaleBusyRef.current = false; }
+    const url = letterAudioRef.current[letter.toLowerCase()];
+    if (!url) return;
+    if (femaleAudioRef.current) { try { femaleAudioRef.current.pause(); } catch {} femaleAudioRef.current = null; }
+    const audio = new Audio(url);
+    femaleAudioRef.current = audio;
+    audio.volume = 1;
+    femaleBusyRef.current = true;
+    audio.onended = () => {
+      femaleBusyRef.current = false;
+      femaleAudioRef.current = null;
+      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+    };
+    audio.onerror = () => {
+      femaleBusyRef.current = false;
+      femaleAudioRef.current = null;
+      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+    };
+    audio.play().catch(() => {
+      femaleBusyRef.current = false;
+      femaleAudioRef.current = null;
+      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+    });
   };
 
-  const stopNormalVoice = () => {
+  const stopFemaleAudio = () => {
     pendingMaleRef.current = null;
     femaleBusyRef.current = false;
-    try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
+    if (femaleAudioRef.current) { try { femaleAudioRef.current.pause(); } catch {} femaleAudioRef.current = null; }
+    if (directionsAudioRef.current) { try { directionsAudioRef.current.pause(); } catch {} directionsAudioRef.current = null; }
   };
 
   const stepRef = useRef(null);
@@ -113,6 +114,10 @@ export default function AlphabetSweeper() {
   const motionTimerRef = useRef(null);
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
+  const letterAudioRef = useRef({});
+  const femaleAudioRef = useRef(null);
+  const directionsAudioRef = useRef(null);
+  const resumeDelayRef = useRef(null);
   const anomalyDetectedRef = useRef(false);
   const motionDetectedRef = useRef(false);
   const startDelayRef = useRef(null);
@@ -136,7 +141,12 @@ export default function AlphabetSweeper() {
     indexRef.current = 0;
     currentLetterRef.current = LETTERS[0];
     setCurrentLetter(LETTERS[0]);
-    if (phase === 'running') startStepping();
+    if (phase === 'running') {
+      // Brief pause after the male voice finishes so the dictated letter is
+      // fully heard before the alphabet restarts from A.
+      if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
+      resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; startStepping(); }, 1500);
+    }
   }, [phase]);
 
   useEffect(() => {
@@ -149,11 +159,12 @@ export default function AlphabetSweeper() {
   useEffect(() => () => stopEverything(), []);
 
   const stopEverything = () => {
-    stopNormalVoice();
+    stopFemaleAudio();
     sessionActiveRef.current = false;
     pausedRef.current = false;
     if (creepyFallbackRef.current) { clearTimeout(creepyFallbackRef.current); creepyFallbackRef.current = null; }
     if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
+    if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -460,24 +471,21 @@ export default function AlphabetSweeper() {
       attachSensorHandlers();
       processCameraFrame();
     };
+    // Pre-generate high-quality female voice for all 26 letters while the
+    // directions play (cached across sessions).
+    preGenerateLetters();
+    // Speak the directions via the high-quality "honey" female voice.
     try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-        beginAfterPause();
-      } else {
-        const synth = window.speechSynthesis;
-        const u = new SpeechSynthesisUtterance(directions);
-        u.lang = 'en-US';
-        u.rate = 0.95;
-        u.pitch = 1.1;
-        u.volume = 1;
-        const fv = pickFemaleVoice();
-        if (fv) u.voice = fv;
-        u.onend = () => beginAfterPause();
-        u.onerror = () => beginAfterPause();
-        synth.speak(u);
-        // Safety fallback: if onend never fires, start anyway after 20s
-        startDelayRef.current = setTimeout(() => beginAfterPause(), 20000);
-      }
+      const result = await base44.integrations.Core.GenerateSpeech({ text: directions, voice: 'honey' });
+      if (!sessionActiveRef.current) return;
+      const audio = new Audio(result.url);
+      directionsAudioRef.current = audio;
+      audio.volume = 1;
+      audio.onended = () => { directionsAudioRef.current = null; beginAfterPause(); };
+      audio.onerror = () => { directionsAudioRef.current = null; beginAfterPause(); };
+      audio.play().catch(() => { directionsAudioRef.current = null; beginAfterPause(); });
+      // Safety fallback: if onended never fires, start anyway after 25s
+      startDelayRef.current = setTimeout(() => beginAfterPause(), 25000);
     } catch { beginAfterPause(); }
     let elapsed = 0;
     timerRef.current = setInterval(() => {
@@ -501,12 +509,13 @@ export default function AlphabetSweeper() {
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
+    if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     setCameraActive(false);
     setAnomalyDetected(false);
     setMotionDetected(false);
     lockedRef.current = false;
-    stopNormalVoice();
+    stopFemaleAudio();
     setPhase('stopped');
   };
 
