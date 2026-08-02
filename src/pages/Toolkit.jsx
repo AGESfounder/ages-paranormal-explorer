@@ -83,6 +83,12 @@ export default function Toolkit() {
   const noiseNodeRef = useRef(null);
   const filterNodeRef = useRef(null);
   const gainNodeRef = useRef(null);
+  const bandpassNodeRef = useRef(null);
+  const peakNodeRef = useRef(null);
+  const lfoRef = useRef(null);
+  const lfoGainRef = useRef(null);
+  const crackleLfoRef = useRef(null);
+  const crackleGainRef = useRef(null);
   const [radioVolume, setRadioVolume] = useState(0.35);
   const [radioSweepSpeed, setRadioSweepSpeed] = useState('normal');
   const freqRef = useRef(null);
@@ -123,12 +129,24 @@ export default function Toolkit() {
       try { noiseNodeRef.current.stop(); } catch (e) { /* already stopped */ }
       noiseNodeRef.current = null;
     }
+    if (lfoRef.current) {
+      try { lfoRef.current.stop(); } catch (e) { /* already stopped */ }
+      lfoRef.current = null;
+    }
+    if (crackleLfoRef.current) {
+      try { crackleLfoRef.current.stop(); } catch (e) { /* already stopped */ }
+      crackleLfoRef.current = null;
+    }
     if (audioCtxRef.current) {
       audioCtxRef.current.close();
       audioCtxRef.current = null;
     }
     filterNodeRef.current = null;
     gainNodeRef.current = null;
+    bandpassNodeRef.current = null;
+    peakNodeRef.current = null;
+    lfoGainRef.current = null;
+    crackleGainRef.current = null;
   };
 
   const startRadioSweep = async () => {
@@ -167,18 +185,59 @@ export default function Toolkit() {
     filter.Q.value = 0.7;
     filter.frequency.value = 300;
 
+    // Bandpass filter — emphasizes speech frequencies so word fragments cut through
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.frequency.value = 1500;
+    bandpass.Q.value = 0.8;
+
+    // Peaking filter — adds formant-like spectral peaks that sweep with the dial
+    const peak = ctx.createBiquadFilter();
+    peak.type = 'peaking';
+    peak.frequency.value = 800;
+    peak.Q.value = 2;
+    peak.gain.value = 8;
+
     // Master gain
     const gain = ctx.createGain();
     gain.gain.value = radioVolume;
 
+    // LFO for pulsating static — slow sine modulates gain for a "between stations" pulse
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 4;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = radioVolume * 0.4;
+    lfo.connect(lfoGain);
+    lfoGain.connect(gain.gain);
+    lfo.start();
+
+    // Second LFO for crackle texture — faster square wave adds sizzle
+    const crackleLfo = ctx.createOscillator();
+    crackleLfo.type = 'square';
+    crackleLfo.frequency.value = 11;
+    const crackleGain = ctx.createGain();
+    crackleGain.gain.value = radioVolume * 0.12;
+    crackleLfo.connect(crackleGain);
+    crackleGain.connect(gain.gain);
+    crackleLfo.start();
+
     noise.connect(filter);
-    filter.connect(gain);
+    filter.connect(bandpass);
+    bandpass.connect(peak);
+    peak.connect(gain);
     gain.connect(ctx.destination);   // speakers (what the user hears)
     noise.start();
 
     noiseNodeRef.current = noise;
     filterNodeRef.current = filter;
     gainNodeRef.current = gain;
+    bandpassNodeRef.current = bandpass;
+    peakNodeRef.current = peak;
+    lfoRef.current = lfo;
+    lfoGainRef.current = lfoGain;
+    crackleLfoRef.current = crackleLfo;
+    crackleGainRef.current = crackleGain;
 
     // Recording destination — captures the sweep audio
     const dest = ctx.createMediaStreamDestination();
@@ -248,6 +307,11 @@ export default function Toolkit() {
       const audibleFreq = filterMin + ratio * (filterMax - filterMin);
       if (filterNodeRef.current && audioCtxRef.current) {
         filterNodeRef.current.frequency.setValueAtTime(audibleFreq, audioCtxRef.current.currentTime);
+      }
+      // Sweep the peaking filter through formant frequencies (300–3000 Hz) for word-like fragments
+      if (peakNodeRef.current && audioCtxRef.current) {
+        const formantFreq = 300 + ratio * 2700;
+        peakNodeRef.current.frequency.setValueAtTime(formantFreq, audioCtxRef.current.currentTime);
       }
     }, ms);
   };
@@ -510,6 +574,12 @@ export default function Toolkit() {
                   setRadioVolume(v);
                   if (gainNodeRef.current) {
                     gainNodeRef.current.gain.value = v;
+                  }
+                  if (lfoGainRef.current) {
+                    lfoGainRef.current.gain.value = v * 0.4;
+                  }
+                  if (crackleGainRef.current) {
+                    crackleGainRef.current.gain.value = v * 0.12;
                   }
                 }}
                 className="w-full h-1.5 rounded-full bg-secondary appearance-none cursor-pointer accent-primary"
