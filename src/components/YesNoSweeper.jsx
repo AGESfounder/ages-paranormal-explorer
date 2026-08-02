@@ -75,6 +75,14 @@ export default function YesNoSweeper() {
         if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
       };
       synth.speak(u);
+      // Safety: if onend/onerror never fires (e.g. iOS speechSynthesis locked),
+      // reset femaleBusyRef after 3s so the male trigger isn't blocked forever.
+      setTimeout(() => {
+        if (femaleBusyRef.current) {
+          femaleBusyRef.current = false;
+          if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+        }
+      }, 3000);
     } catch { femaleBusyRef.current = false; }
   };
 
@@ -150,6 +158,7 @@ export default function YesNoSweeper() {
     if (lockedRef.current) return;
     sweepingRef.current = false;
     stopNormalVoice();
+    try { stopVoice(); } catch {}
     setAskingNext(true);
     askingNextRef.current = true;
     if (askingNextTimerRef.current) clearTimeout(askingNextTimerRef.current);
@@ -187,33 +196,6 @@ export default function YesNoSweeper() {
     }, PHRASE_MS);
   };
 
-  const resumeFromLock = useCallback(() => {
-    if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
-    speechStartedRef.current = false;
-    // Keep the locked word on screen during the 5-second delay, then start asking phase
-    if (phase === 'running') {
-      if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
-      resumeDelayRef.current = setTimeout(() => {
-        setLockedPhrase(null);
-        lockedIdxRef.current = null;
-        lockedRef.current = false;
-        indexRef.current = 0;
-        setCurrentIdx(0);
-        startAskingPhase();
-      }, 5000);
-    }
-  }, [phase]);
-
-  // Resume once the spoken phrase has actually started AND finished — wait for
-  // isGenerating/isSpeaking to go true first so we don't resume before playback
-  // begins.
-  useEffect(() => {
-    if (lockedPhrase && (isGenerating || isSpeaking)) speechStartedRef.current = true;
-    if (lockedPhrase && speechStartedRef.current && !isSpeaking && !isGenerating) {
-      resumeFromLock();
-    }
-  }, [isSpeaking, isGenerating, lockedPhrase, resumeFromLock]);
-
   const triggerLock = useCallback(() => {
     const now = Date.now();
     if (lockedRef.current || !sweepingRef.current || now - lastTriggerRef.current < TRIGGER_COOLDOWN_MS) return;
@@ -225,19 +207,27 @@ export default function YesNoSweeper() {
     setLockedPhrase(phrase.display);
     setCaptured(prev => { const updated = [...prev, phrase.display]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
-    speechStartedRef.current = false;
+    sweepingRef.current = false;
     // Let the female voice finish the current phrase, then speak male
     const speakMale = () => {
       try { speak(phrase.speech, {}); } catch {} // deep male "storm" voice
-      if (resumeFallbackRef.current) clearTimeout(resumeFallbackRef.current);
-      resumeFallbackRef.current = setTimeout(() => { if (lockedRef.current) resumeFromLock(); }, 8000);
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
     } else {
       speakMale();
     }
-  }, [speak, resumeFromLock]);
+    // 5-second pause after locking, then restart the asking phase
+    if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
+    resumeDelayRef.current = setTimeout(() => {
+      setLockedPhrase(null);
+      lockedIdxRef.current = null;
+      lockedRef.current = false;
+      indexRef.current = 0;
+      setCurrentIdx(0);
+      startAskingPhase();
+    }, 5000);
+  }, [speak]);
 
   const requestSensorPermissions = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -454,6 +444,15 @@ export default function YesNoSweeper() {
     // Unlock Web Audio inside the tap gesture so the later sensor-triggered
     // spoken answer plays on iOS.
     unlock();
+    // Prime speechSynthesis within the user gesture so later calls from
+    // timeouts work on iOS (first speakNormal is 10s after this tap).
+    try {
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+      }
+    } catch {}
     startAskingPhase();
     await startSensors();
     await startCamera();
