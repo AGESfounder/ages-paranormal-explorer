@@ -75,6 +75,7 @@ export default function Settings() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState([]);
+  const [disclaimerOpen, setDisclaimerOpen] = useState(false);
 
   useEffect(() => {
     loadBlockedUsers();
@@ -208,13 +209,20 @@ export default function Settings() {
             </div>
             <span className="text-[10px] text-muted-foreground">View ›</span>
           </Link>
-          <Link to="/terms" className="flex items-center justify-between p-3 hover:bg-primary/5 transition-colors">
+          <Link to="/terms" className="flex items-center justify-between p-3 border-b border-border/20 hover:bg-primary/5 transition-colors">
             <div className="flex items-center gap-2">
               <ScrollText className="w-4 h-4 text-primary/70" />
               <span className="text-sm text-foreground">Terms of Service</span>
             </div>
             <span className="text-[10px] text-muted-foreground">View ›</span>
           </Link>
+          <button onClick={() => setDisclaimerOpen(true)} className="w-full flex items-center justify-between p-3 hover:bg-primary/5 transition-colors">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-primary/70" />
+              <span className="text-sm text-foreground">Explorer App Disclaimer</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">View ›</span>
+          </button>
         </div>
 
         {/* Blocked Users */}
@@ -277,6 +285,26 @@ export default function Settings() {
               <Button variant="outline" disabled={deleting}>Cancel</Button>
             </DialogClose>
             <Button variant="destructive" disabled={deleting} onClick={handleDeleteAccount}>{deleting ? 'Deleting…' : 'Delete Account'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={disclaimerOpen} onOpenChange={setDisclaimerOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Explorer App Disclaimer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-xs text-foreground/80 leading-relaxed">
+            <p>Explorer is designed to help users discover historic locations, learn about local legends, and conduct their own paranormal investigations.</p>
+            <p>The information, AI-generated content, narrated stories, and investigative suggestions provided by this app are intended for educational and entertainment purposes. While some investigators believe certain environmental conditions or unexplained phenomena may be associated with paranormal activity, there is no scientifically accepted evidence that ghosts or spirits exist or that any method can conclusively detect them.</p>
+            <p>Explorer does not claim or guarantee the existence of ghosts, spirits, or other paranormal entities, nor does it claim that any location or experience will produce paranormal activity. Any observations, experiences, photographs, recordings, or equipment readings should be interpreted by each user using their own judgment.</p>
+            <p>Always respect private property, obey local laws, and prioritize your personal safety while exploring. Never enter restricted areas or trespass in search of paranormal experiences.</p>
+            <p>By using Explorer, you acknowledge that the app is intended to enhance your exploration of history, folklore, and the paranormal through self-guided experiences and that no specific results or paranormal encounters are promised or guaranteed.</p>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Close</Button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>
