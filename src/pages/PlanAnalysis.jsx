@@ -295,9 +295,10 @@ export default function PlanAnalysis() {
             <p className="text-sm text-muted-foreground mt-1">Generated {today}</p>
           </div>
           <div className="flex gap-2">
+            {/* Hidden — kept for future use. Remove "hidden" class to re-enable. */}
             <button
               onClick={downloadPDF}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px]"
+              className="hidden flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px]"
             >
               <Download className="w-4 h-4" /> Download PDF
             </button>
