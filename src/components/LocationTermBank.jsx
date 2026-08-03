@@ -4,7 +4,8 @@ import { Library, MapPin, Play, Square, Save, RefreshCw, Loader2, Zap, Info, X, 
 import { base44 } from '@/api/base44Client';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
-import useSensitivity from '../hooks/useSensitivity';
+import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
+import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
@@ -153,7 +154,7 @@ export default function LocationTermBank() {
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
-    if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
+    if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     setMotionDetected(false);
   };
 
@@ -391,6 +392,12 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         await camVideoRef.current.play().catch(() => {});
       }
       setCameraActive(true);
+      // Torch mode: turn on the phone's torch so the light is captured in the
+      // recording.
+      if (sensitivityRef.current === TORCH_LEVEL) {
+        const ok = await enableTorch(stream);
+        if (!ok) setSensorError(prev => (prev ? prev + ' ' : '') + 'Torch not supported on this device — anomaly trigger still works without it.');
+      }
     } catch (e) {
       setSensorError(prev => (prev ? prev + ' ' : '') + 'Camera access denied — anomaly trigger disabled, but motion/orientation triggers still work.');
     }
@@ -599,7 +606,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
-    if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
+    if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     setCameraActive(false);
     setAnomalyDetected(false);

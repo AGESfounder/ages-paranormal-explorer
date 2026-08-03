@@ -7,12 +7,12 @@ export const SENSITIVITY_LEVELS = [
   { id: 2, label: 'Indoor' },
   { id: 3, label: 'Dim' },
   { id: 4, label: 'Dark' },
-  { id: 5, label: 'Flashlight' },
+  { id: 5, label: 'Torch' },
 ];
 
-// Level 5 (Flashlight) turns on the phone's torch while the camera records.
+// Level 5 (Torch) turns on the phone's torch while the camera records.
 // Detection uses the Daylight preset (bright-lit scene).
-export const FLASHLIGHT_LEVEL = 5;
+export const TORCH_LEVEL = 5;
 
 // Shared sensitivity state for all 4 camera-based anomaly tools.
 // Persists to localStorage so the user sets it once and it applies everywhere.

@@ -2,7 +2,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Camera, CameraOff, Video, Save, X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { detectFigures } from '@/lib/anomalyDetect';
-import useSensitivity, { FLASHLIGHT_LEVEL } from '../hooks/useSensitivity';
+import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
+import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 
 export default function SLSCamera() {
@@ -31,18 +32,8 @@ export default function SLSCamera() {
   const stopCamera = useCallback(() => {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (timerRef.current) clearInterval(timerRef.current);
-    // Turn off the torch before stopping the track (Flashlight mode).
-    if (streamRef.current) {
-      try {
-        const track = streamRef.current.getVideoTracks()[0];
-        if (track) {
-          const caps = track.getCapabilities ? track.getCapabilities() : {};
-          if (caps && 'torch' in caps) {
-            track.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
-          }
-        }
-      } catch {}
-    }
+    // Turn off the torch before stopping the track (Torch mode).
+    if (streamRef.current) disableTorch(streamRef.current);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     } else if (streamRef.current) {
@@ -73,19 +64,10 @@ export default function SLSCamera() {
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
 
-      // Flashlight mode: turn on the phone's torch for the duration of the
-      // session. applyConstraints with torch is only supported on some mobile
-      // browsers; if unsupported, the session still runs without the light.
-      if (sensitivityRef.current === FLASHLIGHT_LEVEL) {
-        try {
-          const track = stream.getVideoTracks()[0];
-          const caps = track.getCapabilities ? track.getCapabilities() : {};
-          if (caps && 'torch' in caps) {
-            await track.applyConstraints({ advanced: [{ torch: true }] });
-          } else {
-            setError('Flashlight not supported on this device — using Dark mode detection instead.');
-          }
-        } catch {}
+      // Torch mode: turn on the phone's torch for the duration of the session.
+      if (sensitivityRef.current === TORCH_LEVEL) {
+        const ok = await enableTorch(stream);
+        if (!ok) setError('Torch not supported on this device — using Dark mode detection instead.');
       }
 
       setActive(true);

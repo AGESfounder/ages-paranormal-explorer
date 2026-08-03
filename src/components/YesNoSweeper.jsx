@@ -4,7 +4,8 @@ import { Play, Square, Save, Info, X, Activity, Zap, Video, AlertTriangle, Messa
 import { base44 } from '@/api/base44Client';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
-import useSensitivity from '../hooks/useSensitivity';
+import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
+import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 
 // "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
@@ -146,7 +147,7 @@ export default function YesNoSweeper() {
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
-    if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
+    if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     setCameraActive(false);
     setAnomalyDetected(false);
     setMotionDetected(false);
@@ -291,6 +292,12 @@ export default function YesNoSweeper() {
         await camVideoRef.current.play().catch(() => {});
       }
       setCameraActive(true);
+      // Torch mode: turn on the phone's torch so the light is captured in the
+      // recording.
+      if (sensitivityRef.current === TORCH_LEVEL) {
+        const ok = await enableTorch(stream);
+        if (!ok) setSensorError(prev => (prev ? prev + ' ' : '') + 'Torch not supported on this device — anomaly trigger still works without it.');
+      }
       processCameraFrame();
     } catch (e) {
       setSensorError(prev => (prev ? prev + ' ' : '') + 'Camera access denied — anomaly trigger disabled, but motion/orientation triggers still work.');
@@ -500,7 +507,7 @@ export default function YesNoSweeper() {
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
-    if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
+    if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
     setCameraActive(false);
