@@ -220,23 +220,36 @@ export default function AlphabetSweeper() {
     // Speak the locked letter in a deep male voice via speechSynthesis (same
     // reliable mechanism as the directions/letters). Low pitch + male system
     // voice gives a distinct, deep trigger announcement.
-    // Speak the locked letter in a deep male voice. Prefer the pre-generated
-    // Web Audio buffer (connected to the recording destination so it IS
-    // captured in the session recording). Fall back to speechSynthesis if the
-    // buffer isn't ready yet.
-    const speakMale = () => {
-      const buffer = maleVoiceBuffersRef.current[letter];
-      if (buffer) {
-        try { playAudioBuffer(buffer, { volume: 1.0 }); } catch {}
+    // Speak the locked letter in a deep male voice via Web Audio (connected to
+    // the recording destination so it IS captured in the session recording).
+    // Generate on demand only for letters actually triggered, then cache so
+    // repeats are instant and free. Fall back to speechSynthesis if generation
+    // fails.
+    const speakMale = async () => {
+      const cached = maleVoiceBuffersRef.current[letter];
+      if (cached) {
+        try { playAudioBuffer(cached, { volume: 1.0 }); } catch {}
         return;
       }
+      try {
+        const result = await base44.integrations.Core.GenerateSpeech({
+          text: letter.toLowerCase(),
+          voice: 'storm',
+        });
+        const buffer = await fetchAudioBuffer(result.url);
+        if (buffer) {
+          maleVoiceBuffersRef.current[letter] = buffer;
+          try { playAudioBuffer(buffer, { volume: 1.0 }); } catch {}
+          return;
+        }
+      } catch {}
       try {
         if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
         const synth = window.speechSynthesis;
         const u = new SpeechSynthesisUtterance(letter.toLowerCase());
         u.lang = 'en-US';
         u.rate = 0.85;
-        u.pitch = 0.4; // deep male pitch
+        u.pitch = 0.4;
         u.volume = 1;
         const voices = synth.getVoices();
         const male = pickMaleVoice(voices);
@@ -508,24 +521,6 @@ export default function AlphabetSweeper() {
       // screen to grant permission sets off the motion sensor, so we wait for
       // the device to settle before starting the investigation.
       await new Promise(r => setTimeout(r, 3000));
-      // Pre-generate male voice audio for all 26 letters in the background.
-      // This eliminates the GenerateSpeech API delay when a letter is triggered,
-      // so the male voice plays instantly (no cutting off) via Web Audio and is
-      // captured in the session recording.
-      (async () => {
-        for (const letter of LETTERS) {
-          if (!sessionActiveRef.current) return;
-          if (maleVoiceBuffersRef.current[letter]) continue;
-          try {
-            const result = await base44.integrations.Core.GenerateSpeech({
-              text: letter.toLowerCase(),
-              voice: 'storm',
-            });
-            const buffer = await fetchAudioBuffer(result.url);
-            if (buffer) maleVoiceBuffersRef.current[letter] = buffer;
-          } catch {}
-        }
-      })();
       pausedRef.current = false;
       setPaused(false);
       startStepping();
