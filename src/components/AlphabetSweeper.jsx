@@ -8,6 +8,14 @@ import useSensitivity from '../hooks/useSensitivity';
 import SensitivityControl from './SensitivityControl';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+// Phonetic spellings so TTS pronounces each letter as a clear letter name
+// (e.g. "A" → "ay", not "uh") in both the female and male voices.
+const LETTER_TEXT = {
+  A: 'ay', B: 'bee', C: 'see', D: 'dee', E: 'ee', F: 'eff', G: 'jee',
+  H: 'aitch', I: 'eye', J: 'jay', K: 'kay', L: 'ell', M: 'em', N: 'en',
+  O: 'oh', P: 'pee', Q: 'cue', R: 'are', S: 'ess', T: 'tee', U: 'you',
+  V: 'vee', W: 'double you', X: 'eks', Y: 'why', Z: 'zee',
+};
 const LETTER_MS = 2000;          // each letter displayed 2 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
 const ACCEL_THRESHOLD = 0.8;
@@ -55,7 +63,7 @@ export default function AlphabetSweeper() {
     try {
       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
       const results = await Promise.all(
-        letters.map(l => base44.integrations.Core.GenerateSpeech({ text: l.toLowerCase(), voice: 'honey' }))
+        letters.map(l => base44.integrations.Core.GenerateSpeech({ text: LETTER_TEXT[l] || l.toLowerCase(), voice: 'honey' }))
       );
       letters.forEach((l, i) => {
         if (results[i]?.url) femaleUrlRef.current[l.toLowerCase()] = results[i].url;
@@ -80,7 +88,7 @@ export default function AlphabetSweeper() {
     try {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
       const synth = window.speechSynthesis;
-      const u = new SpeechSynthesisUtterance(letter.toLowerCase());
+      const u = new SpeechSynthesisUtterance(LETTER_TEXT[letter] || letter.toLowerCase());
       u.lang = 'en-US';
       u.rate = 0.95;
       u.pitch = 1.0;
@@ -219,7 +227,7 @@ export default function AlphabetSweeper() {
     // playback time to complete, so the letter is never cut off and the sweep
     // never freezes waiting for an onend event that may not fire on iOS.
     const speakMale = () => {
-      try { speak(letter, { volume: 2.5 }); } catch {}
+      try { speak(LETTER_TEXT[letter] || letter, { volume: 2.5 }); } catch {}
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
