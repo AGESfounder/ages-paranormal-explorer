@@ -220,18 +220,6 @@ const scenarios = [
   const subRev = explorerRev + investigatorRev + trailblazerRev;
   const adRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
   const totalRev = subRev + adRev;
-  // Platform costs at 70% utilization
-  const platformCosts = s.mix.explorer * calcCosts(5 * 0.7, 500 * 0.7, 1).platformCost
-    + s.mix.investigator * calcCosts(15 * 0.7, 1500 * 0.7, 1).platformCost
-    + s.mix.trailblazer * calcCosts(15 * 0.7, 1500 * 0.7, 1).platformCost;
-  // Store fees (15% on IAP subscription revenue; ad revenue not subject to store fees)
-  const storeCosts = subRev * STORE_FEE_PCT;
-  // RevenueCat (1% above $2,500/month in subscription sales)
-  const revcatCost = revenuecatFee(subRev);
-  // Fixed costs (ongoing monthly)
-  const fixedCost = fixedOngoingMonthly;
-  const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
-  const profit = totalRev - totalCost;
   // Total credits consumed by paid users at 70% utilization
   const totalCredits = Math.round(
     s.mix.explorer * calcCosts(5 * 0.7, 500 * 0.7, 1).credits
@@ -243,7 +231,18 @@ const scenarios = [
   const totalCreditsWithFree = totalCredits + freeCredits;
   const base44Plan = requiredBase44Plan(totalCredits);
   const base44PlanWithFree = requiredBase44Plan(totalCreditsWithFree);
-  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, freeCredits, totalCreditsWithFree, base44Plan, base44PlanWithFree };
+  // Platform cost = actual Base44 plan tier cost (fixed monthly, not per-credit)
+  const platformCosts = base44Plan.cost;
+  const platformCostsWithFree = base44PlanWithFree.cost;
+  // Store fees (15% on IAP subscription revenue; ad revenue not subject to store fees)
+  const storeCosts = subRev * STORE_FEE_PCT;
+  // RevenueCat (1% above $2,500/month in subscription sales)
+  const revcatCost = revenuecatFee(subRev);
+  // Fixed costs (ongoing monthly)
+  const fixedCost = fixedOngoingMonthly;
+  const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
+  const profit = totalRev - totalCost;
+  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, adRev, totalRev, platformCosts, platformCostsWithFree, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, freeCredits, totalCreditsWithFree, base44Plan, base44PlanWithFree };
 });
 
 // Determine which Base44 plan(s) are needed for a given monthly credit volume
@@ -304,7 +303,7 @@ function downloadPDF() {
   para(`App Store fee: ${(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (Apple & Google, small devs < $1M/yr). Apple jumps to ${(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%.`);
   para(`RevenueCat: ${(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above $${REVENUECAT_THRESHOLD.toLocaleString()}/mo`);
   para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | Median.co: $${MEDIAN_CO_FIRST_YEAR} Year 1, $${MEDIAN_CO_ANNUAL}/yr after`);
-  para(`Base44 Builder Plan ($${BASE44_MONTHLY}/mo) is NOT in fixed costs — it is already embedded in the per-credit platform cost ($${COST_PER_CREDIT.toFixed(4)}/credit = $${BASE44_MONTHLY}/mo ÷ 10,000 credits). Listing it separately would double-count.`);
+  para(`Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by total credits consumed. The per-credit rate ($${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4-6.`);
   para(`AdMob: $${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
 
@@ -363,16 +362,16 @@ function downloadPDF() {
   para(`Model: ${ADS_PER_TOUR} ads/tour x ${TOURS_PER_FREE_USER_MO} tours/mo x $${ADMOB_PER_IMPRESSION.toFixed(3)}/impression = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo. Stop 1 paranormal history is free; stops 2+ show interstitial ads.`);
 
   heading('9. Revenue Scenarios (Monthly, 70% Utilization)');
-  table(['Scenario', 'Sub Rev', 'Ad Rev', 'Total Rev', 'Platform', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
-    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.adRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts.toFixed(0), '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
-    [100, 45, 45, 50, 50, 40, 40, 40, 50, 50, 45]);
+  table(['Scenario', 'Sub Rev', 'Ad Rev', 'Total Rev', 'B44 Plan', 'Plan w/Free', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
+    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.adRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.platformCostsWithFree, '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
+    [90, 40, 40, 45, 45, 50, 40, 40, 35, 45, 45, 40]);
 
   heading('9a. Base44 Plan Required Per Scenario');
   para('Total monthly integration credits consumed by paid users (70% utilization) and the minimum Base44 plan needed. "With ungated free users" assumes no energy gating — free users consume ~180 credits/mo each.');
   table(['Scenario', 'Paid Credits', 'Free Credits', 'Total Credits', 'Plan (Paid Only)', 'Plan (w/ Free)', 'Plan $/mo'],
     scenarios.map(s => [s.label, s.totalCredits.toLocaleString(), s.freeCredits.toLocaleString(), s.totalCreditsWithFree.toLocaleString(), s.base44Plan.plan, s.base44PlanWithFree.plan, '$' + s.base44PlanWithFree.cost]),
     [100, 55, 55, 55, 70, 70, 50]);
-  para('Base44 plan costs are IN ADDITION to per-credit platform costs in the scenarios above. Without energy gating, free users dominate credit consumption — Growing needs ' + scenarios[1].base44Plan.plan + ' for paid users but ' + scenarios[1].base44PlanWithFree.plan + ' ($' + scenarios[1].base44PlanWithFree.cost + '/mo) with ungated free users.');
+  para('Base44 plan costs in section 9 ("B44 Plan" column) are the actual fixed monthly plan tier costs — these replace the old per-credit calculation. "Plan w/ Free" shows the cost if energy gating is NOT deployed. Without gating, free users dominate credit consumption — Growing needs ' + scenarios[1].base44Plan.plan + ' for paid users but ' + scenarios[1].base44PlanWithFree.plan + ' ($' + scenarios[1].base44PlanWithFree.cost + '/mo) with ungated free users.');
 
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free users burn ~180 credits/mo each if ungated. Must upgrade plans to scale.');
@@ -381,7 +380,7 @@ function downloadPDF() {
   para(`Explorer yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.`);
   para(`Trailblazer is UNPROFITABLE at 100% utilization (${trailblazerAnalysis.margin.toFixed(0)}% = $${trailblazerAnalysis.profit.toFixed(0)} loss over 30 months). At 50% realistic usage, margin improves to ~${trailblazer50.margin.toFixed(0)}%. The 300-slot cap is essential.`);
   para('AdMob revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
-  para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing, excluding Base44 which is embedded in per-credit costs) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + '.');
+  para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + '. Base44 plan costs are now shown as actual tier costs in section 9, not per-credit estimates.');
   para('RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$' + revenuecatFee(7104).toFixed(0) + '/mo at the Mature scenario.');
   para('RISK: Apple fee jumps to 30% above $1M/yr revenue. At that point, Trailblazer becomes deeply unprofitable even at 50% utilization — revisit pricing before crossing $1M.');
   para('Annual plans improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).');
@@ -510,7 +509,7 @@ export default function PlanAnalysis() {
             <p className="print-text"><span className="font-semibold">App Store / Google Play fee:</span> {(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (both stores, small devs &lt; $1M/yr). Apple jumps to {(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%.</p>
             <p className="print-text"><span className="font-semibold">RevenueCat:</span> {(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above ${REVENUECAT_THRESHOLD.toLocaleString()}/mo</p>
             <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · Median.co ${MEDIAN_CO_FIRST_YEAR} Year 1, ${MEDIAN_CO_ANNUAL}/yr after</p>
-            <p className="print-text text-xs italic"><span className="font-semibold">Note:</span> Base44 Builder Plan (${BASE44_MONTHLY}/mo) is NOT listed as a fixed cost — it is already embedded in the per-credit platform cost (${COST_PER_CREDIT.toFixed(4)}/credit = ${BASE44_MONTHLY}/mo ÷ 10,000 credits). Listing it separately would double-count the subscription fee.</p>
+            <p className="print-text text-xs italic"><span className="font-semibold">Note:</span> Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (e.g. Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by the total credits consumed. The per-credit rate (${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4–6.</p>
             <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
             <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis shows 100% utilization (worst case) and 50–70% (realistic average).</p>
             <p className="print-text text-xs font-semibold text-red-500 mt-2">⚠ WARNING: No energy gating is currently implemented. All actions below are ungated — every user (including free Observer) can consume unlimited credits. Costs shown assume gating is enforced; actual costs may be higher until gating is deployed.</p>
@@ -815,7 +814,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Google Play's $25 is a one-time fee (not recurring). Median.co drops from $569 (Year 1) to $399/yr after. Base44 Builder plan ($40/mo) is not listed here — it is already embedded in the per-credit platform cost ($0.004/credit = $40/mo ÷ 10,000 credits) used throughout this analysis.</p>
+          <p className="text-xs print-muted mt-2 italic">Google Play's $25 is a one-time fee (not recurring). Median.co drops from $569 (Year 1) to $399/yr after. Base44 plan costs are shown as actual tier costs in section 9, not listed here as fixed costs.</p>
         </section>
 
         {/* 8. AdMob Ad Revenue */}
@@ -855,7 +854,8 @@ export default function PlanAnalysis() {
                   <th className={`${th} ${num}`}>Sub Rev</th>
                   <th className={`${th} ${num}`}>Ad Rev</th>
                   <th className={`${th} ${num}`}>Total Rev</th>
-                  <th className={`${th} ${num}`}>Platform</th>
+                  <th className={`${th} ${num}`}>Base44 Plan</th>
+                  <th className={`${th} ${num}`}>Plan w/ Free</th>
                   <th className={`${th} ${num}`}>Store 15%</th>
                   <th className={`${th} ${num}`}>RevCat</th>
                   <th className={`${th} ${num}`}>Fixed</th>
@@ -871,7 +871,8 @@ export default function PlanAnalysis() {
                     <td className={`${td} ${num} print-text`}>${s.subRev.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.adRev.toFixed(0)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${s.totalRev.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>${s.platformCosts.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.platformCosts}</td>
+                    <td className={`${td} ${num} print-text`}>${s.platformCostsWithFree}</td>
                     <td className={`${td} ${num} print-text`}>${s.storeCosts.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.revcatCost.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.fixedCost.toFixed(0)}</td>
@@ -883,7 +884,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). "Plan w/ Free" = plan cost if ungated free users are included — this is the real cost without energy gating. Total Cost uses the paid-only plan cost; add the "Plan w/ Free" difference to see the ungated scenario. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
 
           {/* 9a. Base44 Plan Required Per Scenario */}
           <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
@@ -941,7 +942,7 @@ export default function PlanAnalysis() {
               </div>
             </div>
             <p className="text-xs text-red-500 print-text mt-3">⚠ Without energy gating, free users dominate credit consumption. The Growing scenario needs {scenarios[1].base44Plan.plan} for paid users alone, but {scenarios[1].base44PlanWithFree.plan} (${scenarios[1].base44PlanWithFree.cost}/mo) when ungated free users are included. Energy gating is critical to keep Base44 plan costs manageable.</p>
-            <p className="text-xs print-muted mt-1 italic">Base44 plan costs shown here are IN ADDITION to the per-credit platform costs already embedded in the Revenue Scenarios table above. The per-credit rate ($0.004) assumes Builder plan pricing; higher tiers reduce the effective per-credit rate. Elite pricing is estimated — check base44.com/pricing for current rates.</p>
+            <p className="text-xs print-muted mt-1 italic">Base44 plan costs in section 9 ("Base44 Plan" column) are the actual fixed monthly plan tier costs — these replace the old per-credit calculation. "Plan w/ Free" shows the cost if energy gating is NOT deployed. Elite pricing is estimated — check base44.com/pricing for current rates.</p>
           </div>
         </section>
 
@@ -957,7 +958,7 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold">Explorer</span> yields ~{monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; <span className="font-semibold">Investigator</span> ~{monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.</p>
             <p>• <span className="font-semibold text-red-500">⚠ Trailblazer is unprofitable at 100% utilization</span> ({trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} loss over 30 months). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap and 6-months-free pricing are critical — Trailblazer now matches Investigator energy at a locked-in discount.</p>
             <p>• <span className="font-semibold">AdMob revenue</span> from free users meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
-            <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing, excluding Base44 which is embedded in per-credit costs) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal}.</p>
+            <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal}. Base44 plan costs are now shown as actual tier costs in section 9, not per-credit estimates.</p>
             <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
             <p>• <span className="font-semibold">RISK:</span> Apple's fee jumps to 30% above $1M/yr revenue. At that point, Trailblazer becomes deeply unprofitable even at 50% utilization — revisit pricing before crossing $1M.</p>
             <p>• <span className="font-semibold">Annual plans</span> improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).</p>
