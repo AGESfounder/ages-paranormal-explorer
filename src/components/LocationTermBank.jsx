@@ -511,6 +511,15 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     sessionDurRef.current = 0;
     setSessionDuration(0);
     setPhase('running');
+    // Prime speechSynthesis within the user gesture so the word dictation
+    // (spoken later, after the permission prompts + settle pause) plays on iOS.
+    try {
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+      }
+    } catch {}
     await startSensors();
     await startCamera();
     startDrawing();
