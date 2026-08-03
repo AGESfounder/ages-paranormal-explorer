@@ -321,10 +321,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     return true;
   };
 
-  const startSensors = async () => {
-    const ok = await requestSensorPermissions();
-    if (!ok) return;
-
+  const attachSensorHandlers = () => {
     const motionHandler = (e) => {
       const a = e.accelerationIncludingGravity;
       if (!a) return;
@@ -346,9 +343,10 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     window.addEventListener('deviceorientation', orientHandler);
   };
 
-  // Camera-based anomaly trigger: runs the same IR figure detection as the
-  // Anomaly Camera. When a humanoid shape is detected, the current word is
-  // locked — same effect as a motion/orientation disturbance.
+  // Camera-based anomaly trigger: starts the camera stream only. Frame
+  // processing (processCameraFrame) is started separately AFTER the settle
+  // pause so motion from tapping the permission buttons doesn't trigger a
+  // lock before the device has settled.
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -361,7 +359,6 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         await camVideoRef.current.play().catch(() => {});
       }
       setCameraActive(true);
-      processCameraFrame();
     } catch (e) {
       setSensorError(prev => (prev ? prev + ' ' : '') + 'Camera access denied — anomaly trigger disabled, but motion/orientation triggers still work.');
     }
@@ -520,7 +517,10 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         window.speechSynthesis.speak(u);
       }
     } catch {}
-    await startSensors();
+    // Request all permissions up front (just the prompts). Sensor handlers
+    // and camera frame processing are attached AFTER the settle pause so
+    // motion from tapping the permission buttons doesn't trigger a lock.
+    await requestSensorPermissions();
     await startCamera();
     startDrawing();
     await startRecording();
@@ -528,6 +528,8 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     // screen to grant permission sets off the motion sensor, so we wait for
     // the device to settle before starting the word rotation.
     await new Promise(r => setTimeout(r, 3000));
+    attachSensorHandlers();
+    processCameraFrame();
     startRotation();
     let elapsed = 0;
     timerRef.current = setInterval(() => {
