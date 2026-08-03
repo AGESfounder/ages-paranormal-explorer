@@ -485,9 +485,6 @@ export default function AlphabetSweeper() {
     } catch {}
     // Request sensor permissions up front (just the permission prompt).
     await requestSensorPermissions();
-    // 3-second pause after sensor permission — tapping the screen to grant
-    // permission sets off the motion sensor, so we wait for the device to settle.
-    await new Promise(r => setTimeout(r, 3000));
     startDrawing();
     // Show "Get Ready…" while the directions play. Directions play FIRST,
     // before the mic prompt, camera, or alphabet.
@@ -502,15 +499,14 @@ export default function AlphabetSweeper() {
       if (!sessionActiveRef.current) return;
       // Mic prompt AFTER directions.
       await startRecording();
-      // 3-second pause after mic permission — tapping the screen to grant
-      // permission sets off the motion sensor, so we wait for the device to settle.
-      await new Promise(r => setTimeout(r, 3000));
       // Resume the AudioContext (suspended by mic access on iOS) so the male
       // trigger voice plays via Web Audio and is captured in the recording.
       await resumeContext();
       // Start camera AFTER directions and mic prompt.
       await startCameraStream();
-      // 3-second pause after camera permission — same reason.
+      // 3-second pause after the last permission prompt (camera) — tapping the
+      // screen to grant permission sets off the motion sensor, so we wait for
+      // the device to settle before starting the investigation.
       await new Promise(r => setTimeout(r, 3000));
       // Pre-generate male voice audio for all 26 letters in the background.
       // This eliminates the GenerateSpeech API delay when a letter is triggered,
@@ -535,6 +531,14 @@ export default function AlphabetSweeper() {
       startStepping();
       attachSensorHandlers();
       processCameraFrame();
+      // Start the session timer only after directions are done and recording
+      // has begun, so the REC counter doesn't run during the directions.
+      let elapsed = 0;
+      timerRef.current = setInterval(() => {
+        elapsed++;
+        sessionDurRef.current = elapsed;
+        setSessionDuration(elapsed);
+      }, 1000);
     };
     // Speak the directions via the browser's built-in speechSynthesis (female
     // voice). This is primed within the user gesture above so it plays on iOS.
@@ -558,12 +562,6 @@ export default function AlphabetSweeper() {
         startDelayRef.current = setTimeout(() => beginAfterPause(), 25000);
       }
     } catch { beginAfterPause(); }
-    let elapsed = 0;
-    timerRef.current = setInterval(() => {
-      elapsed++;
-      sessionDurRef.current = elapsed;
-      setSessionDuration(elapsed);
-    }, 1000);
     // iOS fix: speechSynthesis pauses after ~15s. Resume periodically so
     // letter dictation doesn't go silent partway through a session.
     resumeIntervalRef.current = setInterval(() => {
