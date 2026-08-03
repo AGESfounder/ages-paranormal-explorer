@@ -87,8 +87,11 @@ export default function AlphabetSweeper() {
     try {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
       const synth = window.speechSynthesis;
-      synth.cancel(); // clear any stuck/pending utterances (iOS fix)
-      const u = new SpeechSynthesisUtterance(LETTER_TEXT[letter] || letter.toLowerCase());
+      // Do NOT call synth.cancel() here — repeated cancel() calls disrupt the
+      // iOS speech engine and cause it to go silent after a few letters. Use
+      // the actual letter character (e.g. 'A') instead of phonetic spellings —
+      // speechSynthesis pronounces single uppercase letters as letter names.
+      const u = new SpeechSynthesisUtterance(letter);
       u.lang = 'en-US';
       u.rate = 0.95;
       u.pitch = 1.0;
@@ -97,11 +100,19 @@ export default function AlphabetSweeper() {
       const en = pickFemaleVoice(voices);
       if (en) u.voice = en;
       femaleBusyRef.current = true;
+      // Safety timeout: if onend never fires (iOS bug), reset after 1.5s so
+      // the male trigger voice isn't blocked and the next letter can play.
+      const busyTimeout = setTimeout(() => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      }, 1500);
       u.onend = () => {
+        clearTimeout(busyTimeout);
         femaleBusyRef.current = false;
         if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
       };
       u.onerror = () => {
+        clearTimeout(busyTimeout);
         femaleBusyRef.current = false;
         if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
       };
@@ -150,6 +161,7 @@ export default function AlphabetSweeper() {
   const startDelayRef = useRef(null);
   const pausedRef = useRef(false);
   const sessionActiveRef = useRef(false);
+  const resumeIntervalRef = useRef(null);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
   useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
@@ -192,6 +204,7 @@ export default function AlphabetSweeper() {
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
+    if (resumeIntervalRef.current) { clearInterval(resumeIntervalRef.current); resumeIntervalRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     setMotionDetected(false);
   };
@@ -234,7 +247,7 @@ export default function AlphabetSweeper() {
         if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
         const synth = window.speechSynthesis;
         synth.cancel();
-        const u = new SpeechSynthesisUtterance(LETTER_TEXT[letter] || letter);
+        const u = new SpeechSynthesisUtterance(letter);
         u.lang = 'en-US';
         u.rate = 0.85;
         u.pitch = 0.4; // deep male pitch
@@ -489,8 +502,9 @@ export default function AlphabetSweeper() {
     await requestSensorPermissions();
     await startCameraStream();
     startDrawing();
-    await startRecording();
-    // Show "Get Ready…" while the directions play.
+    // Show "Get Ready…" while the directions play. Directions are spoken
+    // BEFORE mic access — getUserMedia({ audio: true }) changes the iOS audio
+    // session and can silence speechSynthesis.
     pausedRef.current = true;
     setPaused(true);
     const directions = 'Spell words you want to say to us. I am going to repeat the alphabet. You can choose letters by moving my device and standing in front of it when you hear or see the letter you need next.';
@@ -502,6 +516,7 @@ export default function AlphabetSweeper() {
       startStepping();
       attachSensorHandlers();
       processCameraFrame();
+      startRecording(); // start recording after directions finish (non-blocking)
     };
     // Speak the directions via the browser's built-in speechSynthesis (female
     // voice). This is primed within the user gesture above so it plays on iOS.
@@ -531,6 +546,15 @@ export default function AlphabetSweeper() {
       sessionDurRef.current = elapsed;
       setSessionDuration(elapsed);
     }, 1000);
+    // iOS fix: speechSynthesis pauses after ~15s. Resume periodically so
+    // letter dictation doesn't go silent partway through a session.
+    resumeIntervalRef.current = setInterval(() => {
+      try {
+        if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+          window.speechSynthesis.resume();
+        }
+      } catch {}
+    }, 5000);
   };
 
   const stopSession = () => {
@@ -546,6 +570,7 @@ export default function AlphabetSweeper() {
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
+    if (resumeIntervalRef.current) { clearInterval(resumeIntervalRef.current); resumeIntervalRef.current = null; }
     if (cameraStreamRef.current) { cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
