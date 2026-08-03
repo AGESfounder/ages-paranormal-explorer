@@ -19,13 +19,13 @@ export const PLANS = {
     id: 'explorer',
     name: 'Explorer',
     manifestation_energy: 5,
-    narration_energy: 300,
+    narration_energy: 500,
     monthly_price: 5.99,
     annual_price: 59.99,
     color: 'text-primary',
     features: [
       'Everything in Observer',
-      'AI narration (~1 complete tour/month)',
+      'AI narration (~3 guided tours/month)',
       'Custom tour generation (1-2/month)',
       'All ranked tours unlocked',
       'Nearby + Abroad tours',
@@ -40,13 +40,13 @@ export const PLANS = {
     id: 'investigator',
     name: 'Investigator',
     manifestation_energy: 15,
-    narration_energy: 1000,
+    narration_energy: 1500,
     monthly_price: 9.99,
     annual_price: 99.99,
     color: 'text-accent-foreground',
     features: [
       'Everything in Explorer',
-      'AI narration for ~4 complete tours/month',
+      'AI narration for ~10 guided tours/month',
       'Custom tour generation (up to 5/month)',
       'Full toolkit (all 12 tools)',
       'Evidence Dashboard with analytics',
@@ -57,14 +57,14 @@ export const PLANS = {
     id: 'trailblazer',
     name: 'Trailblazer',
     manifestation_energy: 25,
-    narration_energy: 1200,
+    narration_energy: 2000,
     one_time_price: 199.99,
     duration_months: 30,
     max_slots: 300,
     color: 'text-amber-400',
     features: [
       'Everything in Investigator',
-      'AI narration for ~5 complete tours/month',
+      'AI narration for ~14 guided tours/month',
       'Custom tour generation (up to 8/month)',
       'Exclusive Trailblazer badge',
       'Early access to new features',
@@ -121,7 +121,7 @@ export const WIX_PRODUCTS = {
     subscription_info: {
       subscriptionSettings: { frequency: 'MONTH' },
       title: 'AGES Explorer Monthly',
-      description: 'Standard access: AI narration, tour generation, ranked tours, evidence journal, community map, and 8 toolkit tools. Billed monthly.',
+      description: 'Standard access: AI narration (~3 guided tours/mo), tour generation, ranked tours, evidence journal, community map, and 8 toolkit tools. Billed monthly.',
     },
   },
   explorer_annual: {
@@ -132,7 +132,7 @@ export const WIX_PRODUCTS = {
     subscription_info: {
       subscriptionSettings: { frequency: 'YEAR' },
       title: 'AGES Explorer Annual',
-      description: 'Standard access: AI narration, tour generation, ranked tours, evidence journal, community map, and 8 toolkit tools. Billed annually (save 16%).',
+      description: 'Standard access: AI narration (~3 guided tours/mo), tour generation, ranked tours, evidence journal, community map, and 8 toolkit tools. Billed annually (save 16%).',
     },
   },
   investigator_monthly: {
@@ -143,7 +143,7 @@ export const WIX_PRODUCTS = {
     subscription_info: {
       subscriptionSettings: { frequency: 'MONTH' },
       title: 'AGES Investigator Monthly',
-      description: 'Premium access: full 12-tool toolkit, evidence dashboard analytics, more energy. Billed monthly.',
+      description: 'Premium access: AI narration (~10 guided tours/mo), full 12-tool toolkit, evidence dashboard analytics, more energy. Billed monthly.',
     },
   },
   investigator_annual: {
@@ -154,7 +154,7 @@ export const WIX_PRODUCTS = {
     subscription_info: {
       subscriptionSettings: { frequency: 'YEAR' },
       title: 'AGES Investigator Annual',
-      description: 'Premium access: full 12-tool toolkit, evidence dashboard analytics, more energy. Billed annually (save 16%).',
+      description: 'Premium access: AI narration (~10 guided tours/mo), full 12-tool toolkit, evidence dashboard analytics, more energy. Billed annually (save 16%).',
     },
   },
   trailblazer: {
