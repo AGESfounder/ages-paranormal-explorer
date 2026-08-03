@@ -6,19 +6,19 @@ import { jsPDF } from 'jspdf';
 const PLANS = [
   { name: 'Observer', price: '$0', billing: 'Free forever', manE: 0, narE: 0,
     features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; save favorites' },
-  { name: 'Explorer', price: '$5.99', billing: 'Monthly ($59.99/yr)', manE: 5, narE: 500,
+  { name: 'Explorer', price: '$7.99', billing: 'Monthly ($79.99/yr)', manE: 5, narE: 500,
     features: 'AI narration (~1 fully narrated tour/mo, all tabs); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 8-tool toolkit; aura bundles' },
-  { name: 'Investigator', price: '$9.99', billing: 'Monthly ($99.99/yr)', manE: 15, narE: 1500,
+  { name: 'Investigator', price: '$11.99', billing: 'Monthly ($119.99/yr)', manE: 15, narE: 1500,
     features: 'Everything in Explorer; AI narration (~3 fully narrated tours/mo, all tabs); custom tours (up to 5/mo); full 12-tool toolkit; evidence dashboard analytics; aura bundles' },
-  { name: 'Trailblazer', price: '$199.99', billing: 'One-time, 30 months (max 300 slots)', manE: 25, narE: 2000,
-    features: 'Everything in Investigator; AI narration (~5 fully narrated tours/mo, all tabs); custom tours (up to 8/mo); exclusive badge; early access; 30-mo price lock; 20% off aura bundles' },
+  { name: 'Trailblazer', price: '$239.99', billing: 'One-time, 30 months (6 months free, max 300 slots)', manE: 15, narE: 1500,
+    features: 'Everything in Investigator; AI narration (~3 fully narrated tours/mo, all tabs); custom tours (up to 5/mo); exclusive badge; early access; 30-mo price lock (6 months free); 20% off aura bundles' },
 ];
 
 const AURA_BUNDLES = [
-  { name: 'Flicker', energy: 100, price: '$1.99' },
-  { name: 'Apparition', energy: 400, price: '$4.99' },
-  { name: 'Haunting', energy: 1000, price: '$10.99' },
-  { name: 'Spectral', energy: 2000, price: '$18.99' },
+  { name: 'Flicker', energy: 150, price: '$2.99' },
+  { name: 'Apparition', energy: 500, price: '$6.49' },
+  { name: 'Haunting', energy: 1500, price: '$16.99' },
+  { name: 'Spectral', energy: 2500, price: '$24.99' },
 ];
 
 // ===== COST ASSUMPTIONS =====
@@ -137,8 +137,8 @@ function revenuecatFee(monthlySales) {
 
 // Per-plan monthly profit (1 month, 100% utilization)
 const monthlyAnalysis = [
-  { plan: 'Explorer', price: 5.99, manE: 5, narE: 500 },
-  { plan: 'Investigator', price: 9.99, manE: 15, narE: 1500 },
+  { plan: 'Explorer', price: 7.99, manE: 5, narE: 500 },
+  { plan: 'Investigator', price: 11.99, manE: 15, narE: 1500 },
 ].map(p => {
   const { credits, platformCost } = calcCosts(p.manE, p.narE, 1);
   const sf = storeFee(p.price);
@@ -149,8 +149,8 @@ const monthlyAnalysis = [
 
 // Trailblazer (36 months, 100% utilization)
 const trailblazerAnalysis = (() => {
-  const price = 199.99;
-  const { credits, platformCost } = calcCosts(25, 2000, 30);
+  const price = 239.99;
+  const { credits, platformCost } = calcCosts(15, 1500, 30);
   const sf = storeFee(price);
   const totalCost = platformCost + sf;
   const profit = price - totalCost;
@@ -159,8 +159,8 @@ const trailblazerAnalysis = (() => {
 
 // Trailblazer at 50% utilization
 const trailblazer50 = (() => {
-  const price = 199.99;
-  const { credits, platformCost } = calcCosts(12.5, 1000, 30);
+  const price = 239.99;
+  const { credits, platformCost } = calcCosts(7.5, 750, 30);
   const sf = storeFee(price);
   const totalCost = platformCost + sf;
   const profit = price - totalCost;
@@ -214,16 +214,16 @@ const scenarios = [
   { label: 'Scale (500 paid / 2,500 free)', mix: { explorer: 330, investigator: 140, trailblazer: 30 }, freeUsers: 2500 },
   { label: 'Mature (1,000 paid / 5,000 free)', mix: { explorer: 680, investigator: 270, trailblazer: 50 }, freeUsers: 5000 },
 ].map(s => {
-  const explorerRev = s.mix.explorer * 5.99;
-  const investigatorRev = s.mix.investigator * 9.99;
-  const trailblazerRev = s.mix.trailblazer * (199.99 / 30);
+  const explorerRev = s.mix.explorer * 7.99;
+  const investigatorRev = s.mix.investigator * 11.99;
+  const trailblazerRev = s.mix.trailblazer * (239.99 / 30);
   const subRev = explorerRev + investigatorRev + trailblazerRev;
   const adRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
   const totalRev = subRev + adRev;
   // Platform costs at 70% utilization
   const platformCosts = s.mix.explorer * calcCosts(5 * 0.7, 500 * 0.7, 1).platformCost
     + s.mix.investigator * calcCosts(15 * 0.7, 1500 * 0.7, 1).platformCost
-    + s.mix.trailblazer * calcCosts(25 * 0.7, 2000 * 0.7, 1).platformCost;
+    + s.mix.trailblazer * calcCosts(15 * 0.7, 1500 * 0.7, 1).platformCost;
   // Store fees (15% on IAP subscription revenue; ad revenue not subject to store fees)
   const storeCosts = subRev * STORE_FEE_PCT;
   // RevenueCat (1% above $2,500/month in subscription sales)
@@ -290,16 +290,16 @@ function downloadPDF() {
 
   heading('3a. Base44 Credit Capacity — When to Upgrade');
   para('Integration credits are hard-capped per plan. Actions FAIL when exhausted — no pay-per-credit overflow.');
-  para('Builder ($40/mo, 10k credits): ~19 Explorer, ~6 Investigator, ~4 Trailblazer users at 100% utilization');
-  para('Pro ($80/mo, 20k credits): ~38 Explorer, ~12 Investigator, ~9 Trailblazer users at 100% utilization');
-  para('At 50% realistic utilization: Builder supports ~38 Explorer, ~12 Investigator, ~9 Trailblazer');
+  para('Builder ($40/mo, 10k credits): ~19 Explorer, ~6 Investigator, ~6 Trailblazer users at 100% utilization');
+  para('Pro ($80/mo, 20k credits): ~38 Explorer, ~12 Investigator, ~12 Trailblazer users at 100% utilization');
+  para('At 50% realistic utilization: Builder supports ~38 Explorer, ~12 Investigator, ~12 Trailblazer');
   para('Free Observer users also consume ~180 credits/mo each if ungated — ~55 free users exhaust Builder alone');
   para('Upgrade Builder→Pro at ~19 active Explorer users; Pro→Elite at ~38');
 
   heading('3b. Full Narration Cost Per Tour (All Tabs)');
   para(`Per stop: Ghost Story ~6 credits + History ~20 + Paranormal ~20 + Investigate ~6 = ${NARRATION_PER_STOP} credits/stop`);
   para(`Tour intro ~10 + conclusion ~10. Average tour (${AVG_STOPS_PER_TOUR} stops): ${FULL_TOUR_NARRATION_CREDITS} credits = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour`);
-  para(`Explorer: ${TOURS_PER_ENERGY(500)} tours/mo | Investigator: ${TOURS_PER_ENERGY(1500)} tours/mo | Trailblazer: ${TOURS_PER_ENERGY(2000)} tours/mo`);
+  para(`Explorer: ${TOURS_PER_ENERGY(500)} tours/mo | Investigator: ${TOURS_PER_ENERGY(1500)} tours/mo | Trailblazer: ${TOURS_PER_ENERGY(1500)} tours/mo`);
   para(`Ghost-story-only narration (1 tab/stop) costs ~${NARRATION_PER_STOP} credits/stop vs ~${NARRATION_PER_STOP * 4} for all tabs — stretching energy ~4x further.`);
 
   heading('3b. Credit Consumption Audit');
@@ -316,7 +316,7 @@ function downloadPDF() {
     monthlyAnalysis.map(r => [r.plan, '$' + r.price.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.sf.toFixed(2), '$' + r.totalCost.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
     [65, 45, 45, 55, 50, 50, 50, 45]);
 
-  heading('5. Trailblazer - 30-Month ($199.99)');
+  heading('5. Trailblazer - 30-Month ($239.99)');
   table(['Utilization', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
     [['100%', trailblazerAnalysis.credits.toLocaleString(), '$' + trailblazerAnalysis.platformCost.toFixed(2), '$' + trailblazerAnalysis.sf.toFixed(2), '$' + trailblazerAnalysis.totalCost.toFixed(2), '$' + trailblazerAnalysis.profit.toFixed(2), trailblazerAnalysis.margin.toFixed(1) + '%'],
      ['50%', trailblazer50.credits.toLocaleString(), '$' + trailblazer50.platformCost.toFixed(2), '$' + trailblazer50.sf.toFixed(2), '$' + trailblazer50.totalCost.toFixed(2), '$' + trailblazer50.profit.toFixed(2), trailblazer50.margin.toFixed(1) + '%']],
@@ -348,9 +348,9 @@ function downloadPDF() {
     [100, 45, 45, 50, 50, 40, 40, 40, 50, 50, 45]);
 
   heading('10. Key Takeaways');
-  para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~4 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free users burn ~180 credits/mo each if ungated. Must upgrade plans to scale.');
+  para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free users burn ~180 credits/mo each if ungated. Must upgrade plans to scale.');
   para('Store fees (15%) are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).');
-  para(`Full narration cost: ~${FULL_TOUR_NARRATION_CREDITS} credits/tour = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour. Explorer ~${TOURS_PER_ENERGY(500)} tour/mo, Investigator ~${TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~${TOURS_PER_ENERGY(2000)} tours/mo.`);
+  para(`Full narration cost: ~${FULL_TOUR_NARRATION_CREDITS} credits/tour = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour. Explorer ~${TOURS_PER_ENERGY(500)} tour/mo, Investigator ~${TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~${TOURS_PER_ENERGY(1500)} tours/mo.`);
   para(`Explorer yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.`);
   para(`Trailblazer is UNPROFITABLE at 100% utilization (${trailblazerAnalysis.margin.toFixed(0)}% = $${trailblazerAnalysis.profit.toFixed(0)} loss over 30 months). At 50% realistic usage, margin improves to ~${trailblazer50.margin.toFixed(0)}%. The 300-slot cap is essential.`);
   para('AdMob revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
@@ -511,7 +511,7 @@ export default function PlanAnalysis() {
                 {BASE44_PLANS.map(p => {
                   const explorerCredits = 5 * 3 + 500; // 515
                   const investigatorCredits = 15 * 3 + 1500; // 1545
-                  const trailblazerCredits = 25 * 3 + 2000; // 2075
+                  const trailblazerCredits = 15 * 3 + 1500; // 1545 (same as Investigator)
                   return (
                     <tr key={p.name}>
                       <td className={`${td} font-semibold print-text`}>{p.name}</td>
@@ -530,13 +530,13 @@ export default function PlanAnalysis() {
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-3 rounded-lg bg-card/40 border border-border/40">
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">At 50% Realistic Utilization</p>
-              <p className="text-sm print-text mt-1">Builder (10k credits) supports: ~{Math.floor(10000 / (515 * 0.5))} Explorer, ~{Math.floor(10000 / (1545 * 0.5))} Investigator, ~{Math.floor(10000 / (2075 * 0.5))} Trailblazer users</p>
-              <p className="text-sm print-text">Pro (20k credits) supports: ~{Math.floor(20000 / (515 * 0.5))} Explorer, ~{Math.floor(20000 / (1545 * 0.5))} Investigator, ~{Math.floor(20000 / (2075 * 0.5))} Trailblazer users</p>
+              <p className="text-sm print-text mt-1">Builder (10k credits) supports: ~{Math.floor(10000 / (515 * 0.5))} Explorer, ~{Math.floor(10000 / (1545 * 0.5))} Investigator, ~{Math.floor(10000 / (1545 * 0.5))} Trailblazer users</p>
+              <p className="text-sm print-text">Pro (20k credits) supports: ~{Math.floor(20000 / (515 * 0.5))} Explorer, ~{Math.floor(20000 / (1545 * 0.5))} Investigator, ~{Math.floor(20000 / (1545 * 0.5))} Trailblazer users</p>
             </div>
             <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/30">
               <p className="text-[10px] font-heading uppercase tracking-wider text-red-500">Upgrade Triggers (100% Util)</p>
-              <p className="text-sm print-text mt-1"><span className="font-semibold">Builder → Pro:</span> At ~19 Explorer, ~6 Investigator, or ~4 Trailblazer active users</p>
-              <p className="text-sm print-text"><span className="font-semibold">Pro → Elite:</span> At ~38 Explorer, ~12 Investigator, or ~9 Trailblazer active users</p>
+              <p className="text-sm print-text mt-1"><span className="font-semibold">Builder → Pro:</span> At ~19 Explorer, ~6 Investigator, or ~6 Trailblazer active users</p>
+              <p className="text-sm print-text"><span className="font-semibold">Pro → Elite:</span> At ~38 Explorer, ~12 Investigator, or ~12 Trailblazer active users</p>
               <p className="text-xs text-red-500 print-text mt-1">⚠ Free (Observer) users also consume credits if ungated — each typical free user uses ~180 credits/mo, so ~55 free users exhaust Builder alone.</p>
             </div>
           </div>
@@ -573,7 +573,7 @@ export default function PlanAnalysis() {
             {[
               { plan: 'Explorer', narE: 500, tours: TOURS_PER_ENERGY(500) },
               { plan: 'Investigator', narE: 1500, tours: TOURS_PER_ENERGY(1500) },
-              { plan: 'Trailblazer', narE: 2000, tours: TOURS_PER_ENERGY(2000) },
+              { plan: 'Trailblazer', narE: 1500, tours: TOURS_PER_ENERGY(1500) },
             ].map(t => (
               <div key={t.plan} className="p-3 rounded-lg bg-card/40 border border-border/40">
                 <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">{t.plan}</p>
@@ -674,7 +674,7 @@ export default function PlanAnalysis() {
 
         {/* 5. Trailblazer (3-Year) */}
         <section className="mb-8">
-          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">5. Trailblazer — 30-Month Lifetime ($199.99)</h2>
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">5. Trailblazer — 30-Month Lifetime ($239.99)</h2>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -710,7 +710,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">With 2000 narration energy/month over 30 months, Trailblazer is unprofitable at 100% utilization ({trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} loss). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap is essential. At Apple's 30% rate (above $1M/yr), this tier is deeply unprofitable even at 50% utilization.</p>
+          <p className="text-xs print-muted mt-2 italic">With 1500 narration energy/month over 30 months, Trailblazer is unprofitable at 100% utilization ({trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} loss). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap is essential. At Apple's 30% rate (above $1M/yr), this tier is deeply unprofitable even at 50% utilization.</p>
         </section>
 
         {/* 6. Aura Bundle Profit */}
@@ -863,13 +863,13 @@ export default function PlanAnalysis() {
         <section className="mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">10. Key Takeaways</h2>
           <div className="rounded-lg border border-border bg-card/40 print-block p-4 space-y-2 text-sm print-text">
-            <p>• <span className="font-semibold text-red-500">⚠ CREDIT CAPACITY: Base44 Builder plan includes only 10,000 credits/mo.</span> At 100% utilization that supports just ~19 Explorer, ~6 Investigator, or ~4 Trailblazer users. Pro (20k credits) doubles capacity. Free Observer users also burn ~180 credits/mo each if ungated — ~55 free users alone exhaust Builder. You MUST upgrade plans as you scale, and energy gating is essential to prevent free users from consuming your entire credit allowance.</p>
+            <p>• <span className="font-semibold text-red-500">⚠ CREDIT CAPACITY: Base44 Builder plan includes only 10,000 credits/mo.</span> At 100% utilization that supports just ~19 Explorer, ~6 Investigator, or ~6 Trailblazer users. Pro (20k credits) doubles capacity. Free Observer users also burn ~180 credits/mo each if ungated — ~55 free users alone exhaust Builder. You MUST upgrade plans as you scale, and energy gating is essential to prevent free users from consuming your entire credit allowance.</p>
             <p>• <span className="font-semibold text-red-500">⚠ CRITICAL: No energy gating implemented.</span> All 27 credit-consuming actions are currently ungated. Every user (including free Observer) can create tours, narrate, enrich stops, and use sweepers without restriction. At 1,000 active free users this costs ~${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo (typical) to ~${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo (heavy) in unrecovered platform costs. Energy gating must be deployed before launch.</p>
             <p>• <span className="font-semibold">27 credit-consuming actions identified</span> across 14 manifestation (InvokeLLM) and 13 narration (GenerateSpeech) actions. Full audit in section 3c. Key hidden costs: stop enrichment (auto-fires on 1st stop view, 3–6 credits each) and Haunted Locations discovery (auto-fires on every search, 3 credits each).</p>
             <p>• <span className="font-semibold">Store fees (15%)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).</p>
-            <p>• <span className="font-semibold">Full narration cost:</span> Each fully narrated tour (all 4 tabs per stop + intro + conclusion) costs ~{FULL_TOUR_NARRATION_CREDITS} credits = ${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Energy budgets support: Explorer ~{TOURS_PER_ENERGY(500)} tour/mo, Investigator ~{TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~{TOURS_PER_ENERGY(2000)} tours/mo.</p>
+            <p>• <span className="font-semibold">Full narration cost:</span> Each fully narrated tour (all 4 tabs per stop + intro + conclusion) costs ~{FULL_TOUR_NARRATION_CREDITS} credits = ${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Energy budgets support: Explorer ~{TOURS_PER_ENERGY(500)} tour/mo, Investigator ~{TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~{TOURS_PER_ENERGY(1500)} tours/mo.</p>
             <p>• <span className="font-semibold">Explorer</span> yields ~{monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; <span className="font-semibold">Investigator</span> ~{monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.</p>
-            <p>• <span className="font-semibold text-red-500">⚠ Trailblazer is unprofitable at 100% utilization</span> ({trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} loss over 30 months). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap and realistic usage patterns are critical — consider reducing Trailblazer narration energy or raising price.</p>
+            <p>• <span className="font-semibold text-red-500">⚠ Trailblazer is unprofitable at 100% utilization</span> ({trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} loss over 30 months). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap and 6-months-free pricing are critical — Trailblazer now matches Investigator energy at a locked-in discount.</p>
             <p>• <span className="font-semibold">AdMob revenue</span> from free users meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
             <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing, excluding Base44 which is embedded in per-credit costs) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal}.</p>
             <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
