@@ -10,6 +10,7 @@ import NavBar from '../components/NavBar';
 import CustomTourModal from '../components/CustomTourModal';
 import HauntedLocations from '../components/HauntedLocations';
 import DashboardEnergyPreview from '../components/DashboardEnergyPreview';
+import EnergyCostBadge from '../components/EnergyCostBadge';
 import { base44 } from '@/api/base44Client';
 
 const menuItems = [
@@ -296,6 +297,7 @@ export default function Home() {
             <div className="text-center">
               <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Custom Tour</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">Bring Visions to Life</p>
+              <EnergyCostBadge type="manifestation" variant="badge" cost={1} className="mt-1" />
             </div>
           </button>
           <Link

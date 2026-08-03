@@ -10,6 +10,7 @@ import TourCategoryPicker from '@/components/TourCategoryPicker';
 import AccessTypePicker from '@/components/AccessTypePicker';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import EnergyCostBadge from '@/components/EnergyCostBadge';
 
 export default function CustomTourModal({ isOpen, onClose }) {
   const [destination, setDestination] = useState('');
@@ -154,7 +155,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
                 ) : (
                   <>
                     <Ghost className="w-4 h-4" />
-                    Generate Custom Tour
+                    Generate Custom Tour <EnergyCostBadge type="manifestation" cost={1} />
                   </>
                 )}
               </button>

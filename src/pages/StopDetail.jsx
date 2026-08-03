@@ -17,6 +17,7 @@ import BePatient from '@/components/BePatient';
 import AdGate from '@/components/AdGate';
 import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import EnergyCostBadge from '@/components/EnergyCostBadge';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -237,7 +238,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Ghost Story</span>
               </div>
               <button onClick={() => narrate(stop.narration_text)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={stop.narration_text} /></>}
               </button>
             </div>
             <p className="text-log text-xs text-foreground/70 leading-relaxed italic">"{stop.narration_text}"</p>
@@ -256,7 +257,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Paranormal Findings</span>
                   <button onClick={() => narrate(stop.paranormal_info)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                    {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
+                    {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={stop.paranormal_info} /></>}
                   </button>
                 </div>
                 <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
@@ -280,7 +281,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Historical Background</span>
                 <button onClick={() => narrate(stop.historical_info)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                  {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
+                  {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={stop.historical_info} /></>}
                 </button>
               </div>
               <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{stop.historical_info}</p>
@@ -297,7 +298,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-heading uppercase tracking-wider text-primary">Investigation Suggestions</h4>
                 <button onClick={() => narrate(stop.investigation_suggestions?.join('. ') + '. Estimated investigation time: ' + stop.estimated_investigation_time + '.')} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                  {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play</>}
+                  {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={stop.investigation_suggestions?.join('. ') + '. Estimated investigation time: ' + stop.estimated_investigation_time + '.'} /></>}
                 </button>
               </div>
               {stop.investigation_suggestions?.map((suggestion, i) => {
