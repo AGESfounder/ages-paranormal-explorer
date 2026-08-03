@@ -8,6 +8,8 @@ import ExistingTourDialog from '@/components/ExistingTourDialog';
 import DrawerSelect from '@/components/DrawerSelect';
 import TourCategoryPicker from '@/components/TourCategoryPicker';
 import AccessTypePicker from '@/components/AccessTypePicker';
+import { useEnergyGate } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function CustomTourModal({ isOpen, onClose }) {
   const [destination, setDestination] = useState('');
@@ -18,6 +20,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
   const [category, setCategory] = useState('');
   const [accessType, setAccessType] = useState('exterior_interior');
   const navigate = useNavigate();
+  const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const handleGenerate = async () => {
     const dest = destination.trim();
@@ -29,6 +32,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
       setError('Please select a tour type.');
       return;
     }
+    if (!gateManifestation()) return;
     setError('');
     setLoading(true);
 
@@ -40,6 +44,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
         return;
       }
       const newTour = await generateLocationTour(destination, state, undefined, category, accessType);
+      spendManifestation();
       onClose();
       setDestination('');
       setState('');
@@ -163,6 +168,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
       )}
     </AnimatePresence>
     <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
+    <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
     </>
   );
 }

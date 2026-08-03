@@ -9,6 +9,8 @@ import ExistingTourDialog from '@/components/ExistingTourDialog';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
 import useGhostVoice from '../hooks/useGhostVoice';
 import BePatient from '@/components/BePatient';
+import { useEnergyGate } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -139,7 +141,16 @@ export default function HauntedLocations() {
   const [existingTour, setExistingTour] = useState(null);
   const [createAccessType, setCreateAccessType] = useState('exterior_interior');
   const navigate = useNavigate();
-  const { narrate, stop, isSpeaking, isGenerating } = useGhostVoice();
+  const { narrate: rawNarrate, stop, isSpeaking, isGenerating } = useGhostVoice();
+  const { gateManifestation, spendManifestation, gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+
+  // Gated narration wrapper — checks energy before speaking, toggles off for free.
+  const narrate = (text, opts = {}) => {
+    if (isSpeaking || isGenerating) { rawNarrate(text, opts); return; }
+    if (!gateNarration(text)) return;
+    rawNarrate(text, opts);
+    spendNarration(estimateNarrationCost(text));
+  };
 
   useEffect(() => {
     if (!isSpeaking && !isGenerating) setNarratingId(null);
@@ -287,6 +298,7 @@ export default function HauntedLocations() {
   // feature works for any U.S. zip code (e.g. Las Vegas) instead of returning
   // an empty "no locations" result.
   const discoverLocations = async (lat, lon, label) => {
+    if (!gateManifestation()) return [];
     try {
       const result = await base44.integrations.Core.InvokeLLM({
         prompt: `Find real haunted locations and haunted areas within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return up to 10 results with this category mix: ~30% cold spots (single haunted locations with only 1-4 stops, like a single haunted house, bridge, or small cemetery — locations that don't have enough distinct areas for a full tour), ~30% properties (single haunted properties with multiple stops/areas on the same site, like an asylum, hotel, or prison), ~30% areas (cities, towns, or neighborhoods known for multiple haunted locations), ~10% road trips (wider driving routes with stops 5+ miles apart). For each result provide: name, type ("cold_spot", "property", "area", or "road_trip"), address (street address for properties/cold spots, or the city name for areas/road trips), city, state (full state name), latitude, longitude (real GPS coordinates — for areas/road trips use the center of the area), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
@@ -316,6 +328,7 @@ export default function HauntedLocations() {
           },
         },
       });
+      spendManifestation();
       // buildLocations already surfaces every existing tour within 30 mi (by
       // stop coords or start coords) with a "Go to Existing Tour" button. This
       // web-search fallback only runs when no nearby tour exists, so every
@@ -415,6 +428,7 @@ export default function HauntedLocations() {
   };
 
   const handleCreateTour = async (loc) => {
+    if (!gateManifestation()) return;
     setError('');
     setCreatingId(loc.id);
     const isProp = loc.tourCategory === 'cold_spot' || loc.tourCategory === 'landmark';
@@ -433,6 +447,7 @@ export default function HauntedLocations() {
         loc.createCategory || 'landmark',
         accessType
       );
+      spendManifestation();
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
       console.error('Tour creation failed:', e);
@@ -656,6 +671,7 @@ export default function HauntedLocations() {
         )}
       </div>
       <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
+      <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
     </motion.div>
   );
 }

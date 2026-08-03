@@ -14,6 +14,8 @@ import { callJson } from '@/lib/llmJson';
 import BePatient from '@/components/BePatient';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
 import TourAccessInfo from '@/components/TourAccessInfo';
+import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -89,7 +91,16 @@ export default function TourDetail() {
   const [conclusionRead, setConclusionRead] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [completingTour, setCompletingTour] = useState(false);
-  const { isSpeaking, isGenerating, narrate } = useGhostVoice();
+  const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
+  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+
+  // Gated narration wrapper — checks energy before speaking, toggles off for free.
+  const narrate = (text, opts = {}) => {
+    if (isSpeaking || isGenerating) { rawNarrate(text, opts); return; }
+    if (!gateNarration(text)) return;
+    rawNarrate(text, opts);
+    spendNarration(estimateNarrationCost(text));
+  };
 
   const totalDistance = useMemo(() => {
     if (stops.length < 2) return 0;
@@ -156,6 +167,13 @@ export default function TourDetail() {
   };
 
   const generateStops = async (tourData) => {
+    const gate = await checkManifestationGate();
+    if (!gate.allowed) {
+      setStopsError(gate.reason === 'energy'
+        ? "You're out of manifestation energy. Buy an Aura Bundle or upgrade your plan."
+        : 'Upgrade to a paid plan to generate tour stops.');
+      return;
+    }
     setGeneratingStops(true);
     setStopsError('');
     try {
@@ -219,6 +237,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         const saved = await base44.entities.TourStop.create({ ...stop, tour_id: tourId });
         created.push(saved);
       }
+      spendManifestationEnergy();
       setStops(created.sort((a, b) => a.stop_number - b.stop_number));
       setGeneratingStops(false);
     } catch (err) {
@@ -510,6 +529,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         )}
       </div>
 
+      <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
       <NavBar />
     </PageContainer>
   );

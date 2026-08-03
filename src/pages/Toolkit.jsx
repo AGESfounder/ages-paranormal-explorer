@@ -14,6 +14,8 @@ import { base44 } from '@/api/base44Client';
 import ResearchDatabase from '../components/ResearchDatabase';
 import useGhostVoice from '../hooks/useGhostVoice';
 import useWakeLock from '../hooks/useWakeLock';
+import { useEnergyGate } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 const DEFAULT_TOOLS = [
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
@@ -95,7 +97,16 @@ export default function Toolkit() {
   const freqRef = useRef(null);
   const dirRef = useRef(1);
   const scrollRef = useRef(null);
-  const { isSpeaking: narrating, isGenerating, narrate, stop: stopNarration } = useGhostVoice();
+  const { isSpeaking: narrating, isGenerating, narrate: rawNarrate, stop: stopNarration } = useGhostVoice();
+  const { gateNarration, spendNarration, estimateNarrationCost, gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+
+  // Gated narration wrapper — checks energy before speaking, toggles off for free.
+  const narrate = (text, opts = {}) => {
+    if (narrating || isGenerating) { rawNarrate(text, opts); return; }
+    if (!gateNarration(text)) return;
+    rawNarrate(text, opts);
+    spendNarration(estimateNarrationCost(text));
+  };
   useWakeLock(!!activeTool);
 
   useEffect(() => {
@@ -431,6 +442,7 @@ export default function Toolkit() {
   };
 
   const fetchWeatherByCoords = async (lat, lon) => {
+    if (!gateManifestation()) return;
     setWeatherLoading(true);
     try {
       const res = await base44.integrations.Core.InvokeLLM({
@@ -449,6 +461,7 @@ export default function Toolkit() {
         add_context_from_internet: true,
       });
       setWeatherData(res);
+      spendManifestation();
     } catch (err) {
       console.error('Weather fetch failed', err);
     }
@@ -458,6 +471,7 @@ export default function Toolkit() {
   const fetchWeatherByLocation = async () => {
     const loc = weatherLocation.trim();
     if (!loc) return;
+    if (!gateManifestation()) return;
     setWeatherLoading(true);
     try {
       const res = await base44.integrations.Core.InvokeLLM({
@@ -476,6 +490,7 @@ export default function Toolkit() {
         add_context_from_internet: true,
       });
       setWeatherData(res);
+      spendManifestation();
     } catch (err) {
       console.error('Weather fetch failed', err);
     }
@@ -1358,6 +1373,7 @@ Best Practices
           onReorder={handleReorder}
         />
       </div>
+      <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
       <NavBar />
     </PageContainer>
   );

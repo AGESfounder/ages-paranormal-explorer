@@ -15,6 +15,8 @@ import { callJson } from '@/lib/llmJson';
 import { getOfflineStop } from '@/lib/offlineTours';
 import BePatient from '@/components/BePatient';
 import AdGate from '@/components/AdGate';
+import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -37,13 +39,24 @@ export default function StopDetail() {
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
-  const { isSpeaking, isGenerating, narrate } = useGhostVoice();
+  const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
+  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+
+  // Gated narration wrapper — checks energy before speaking, toggles off for free.
+  const narrate = (text, opts = {}) => {
+    if (isSpeaking || isGenerating) { rawNarrate(text, opts); return; }
+    if (!gateNarration(text)) return;
+    rawNarrate(text, opts);
+    spendNarration(estimateNarrationCost(text));
+  };
 
   // Lazily enrich a stop the first time it is viewed. Tour creation stores only
   // lightweight summaries, so the full rich historical/paranormal detail and
   // notable people are generated here per-stop (small, reliable calls) and
   // persisted. Stops that already have rich content only get people filled in.
   const ensureRichContent = async (currentStop) => {
+    const gate = await checkManifestationGate();
+    if (!gate.allowed) return;
     const needsFull = isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info);
     if (!needsFull && currentStop.people && currentStop.people.length > 0) return;
     setPeopleLoading(true);
@@ -91,6 +104,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         try { await base44.entities.TourStop.update(currentStop.id, updates); } catch (e) {}
         setStop(prev => ({ ...prev, ...updates }));
       }
+      spendManifestationEnergy();
       setPeople(generatedPeople);
     } catch (e) {}
     setPeopleLoading(false);
@@ -329,6 +343,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         isSpeaking={isSpeaking}
         onNarrate={() => selectedPerson && narrate(selectedPerson.story)}
       />
+      <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
     </PageContainer>
   );
 }

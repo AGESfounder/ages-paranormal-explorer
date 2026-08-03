@@ -4,6 +4,8 @@ import { X, Loader2, Globe, Ship, Ghost } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import DrawerSelect from '@/components/DrawerSelect';
+import { useEnergyGate } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 const LOCATION_OPTIONS = [
   { value: 'England', label: 'England' },
@@ -78,6 +80,7 @@ const STOP_OPTIONS = [
 
 export default function ToursAbroadModal({ isOpen, onClose }) {
   const navigate = useNavigate();
+  const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
   const [destinationName, setDestinationName] = useState('');
   const [location, setLocation] = useState('');
   const [locationType, setLocationType] = useState('');
@@ -94,6 +97,7 @@ export default function ToursAbroadModal({ isOpen, onClose }) {
       setError('Please fill in all fields.');
       return;
     }
+    if (!gateManifestation()) return;
     setError('');
     setLoading(true);
 
@@ -255,6 +259,7 @@ Use real locations and real paranormal history for "${dest}". Verify hours, pric
         await base44.entities.TourStop.bulkCreate(stopRecords);
       }
 
+      spendManifestation();
       onClose();
       setDestinationName('');
       setLocation('');
@@ -270,121 +275,11 @@ Use real locations and real paranormal history for "${dest}". Verify hours, pric
   };
 
   return (
+    <>
     <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-        >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-          <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative w-full sm:w-[420px] max-h-[90vh] overflow-y-auto bg-card border border-border/50 rounded-t-2xl sm:rounded-2xl shadow-2xl p-6 mx-0 sm:mx-4"
-          >
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
-              disabled={loading}
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2.5 rounded-lg bg-accent/20">
-                <Globe className="w-5 h-5 text-cyan-glow" />
-              </div>
-              <div>
-                <h2 className="font-heading text-base font-semibold text-foreground">Tours Abroad</h2>
-                <p className="text-[10px] text-muted-foreground font-heading uppercase tracking-wider">International Hauntings</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Destination Name
-                </label>
-                <div className="relative">
-                  <Ghost className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="e.g. Edinburgh Castle"
-                    value={destinationName}
-                    onChange={e => setDestinationName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
-                    Location
-                  </label>
-                    <DrawerSelect icon={Globe} value={location} onChange={setLocation} placeholder="Select..." options={LOCATION_OPTIONS} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
-                    Type
-                  </label>
-                    <DrawerSelect icon={Ship} value={locationType} onChange={setLocationType} placeholder="Select..." options={TYPE_OPTIONS} />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Number of Stops
-                </label>
-                <DrawerSelect value={stopCount} onChange={setStopCount} options={STOP_OPTIONS} />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Specifics <span className="text-muted-foreground/60">(optional)</span>
-                </label>
-                <textarea
-                  placeholder="e.g. focus on vampire legends, include the oldest wing, prioritize maritime ghost stories..."
-                  value={specifics}
-                  onChange={e => setSpecifics(e.target.value)}
-                  rows={3}
-                  className="w-full px-4 py-2.5 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors resize-none"
-                />
-              </div>
-
-              {error && (
-                <p className="text-xs text-red-400 text-center">{error}</p>
-              )}
-
-              <button
-                onClick={handleGenerate}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-accent text-accent-foreground font-heading text-xs uppercase tracking-wider hover:bg-accent/90 transition-colors disabled:opacity-60 shadow-[0_0_20px_hsl(270,40%,42%,0.3)]"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Generating Tour...
-                  </>
-                ) : (
-                  <>
-                    <Ship className="w-4 h-4" />
-                    Generate Abroad Tour
-                  </>
-                )}
-              </button>
-
-              <p className="text-[10px] text-muted-foreground/60 text-center">
-                Creates a destination-focused tour at an international haunted location or vessel.
-              </p>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
+...
     </AnimatePresence>
+    <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
+    </>
   );
 }

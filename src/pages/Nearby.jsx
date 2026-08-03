@@ -12,9 +12,12 @@ import TourCategoryBadge from '@/components/TourCategoryBadge';
 import TourListItem from '@/components/TourListItem';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import { findExistingTour } from '@/lib/generateTour';
+import { useEnergyGate } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function Nearby() {
   const navigate = useNavigate();
+  const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
   const [tours, setTours] = useState([]);
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(true);
@@ -36,6 +39,7 @@ export default function Nearby() {
   const generateTourForRange = async (range) => {
     const category = 'area';
     if (!coords || generatingRange) return;
+    if (!gateManifestation()) return;
     setGeneratingRange(range.label);
     try {
       const result = await base44.integrations.Core.InvokeLLM({
@@ -117,6 +121,7 @@ Use real locations with documented paranormal history only.`,
         return;
       }
       const saved = await base44.entities.Tour.create({ ...tourData, tour_category: category });
+      spendManifestation();
       setGeneratingRange(null);
       navigate(`/tour/${saved.id}`);
     } catch (err) {
@@ -128,6 +133,7 @@ Use real locations with documented paranormal history only.`,
   const generateTourForZip = async (zipCodeParam) => {
     const category = 'area';
     if (!zipCodeParam || !zipCodeParam.trim() || zipCodeParam.length < 5) return;
+    if (!gateManifestation()) return;
     setGeneratingRange('Custom Zip Code');
     try {
       let zipLat, zipLon, zipLabel;
@@ -224,6 +230,7 @@ Use real locations with documented paranormal history only.`,
         return;
       }
       const saved = await base44.entities.Tour.create({ ...tourData, tour_category: category });
+      spendManifestation();
       setGeneratingRange(null);
       setZipCode('');
       setZipMode(false);
@@ -448,6 +455,7 @@ Use real locations with documented paranormal history only.`,
       </div>
       </PullToRefresh>
       <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
+      <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
       <NavBar />
     </PageContainer>
   );
