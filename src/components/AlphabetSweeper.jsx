@@ -44,7 +44,7 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { speak, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
 
   // Pick the most natural-sounding female system voice available (Samantha on
   // iOS, Karen on AU, etc.). Falls back to any en-US voice.
@@ -63,51 +63,38 @@ export default function AlphabetSweeper() {
       || voices.find(v => /^en/i.test(v.lang));
   };
 
-  // Pre-generate and decode all 26 letters into AudioBuffers (honey voice) so
-  // each letter plays instantly via playAudioBuffer (Web Audio) during the
-  // sweep. Web Audio output is connected to the recording destination, so the
-  // voices ARE captured in the session recording.
-  const preGenerateLetters = async () => {
-    if (Object.keys(letterBufferRef.current).length >= 26) return;
-    try {
-      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-      const results = await Promise.all(
-        letters.map(l => base44.integrations.Core.GenerateSpeech({ text: LETTER_TEXT[l] || l.toLowerCase(), voice: 'honey' }))
-      );
-      const buffers = await Promise.all(
-        results.map(r => r?.url ? fetchAudioBuffer(r.url) : null)
-      );
-      letters.forEach((l, i) => {
-        if (buffers[i]) letterBufferRef.current[l] = buffers[i];
-      });
-    } catch {}
-  };
-
-  // Speak a letter aloud using the browser's built-in speechSynthesis (same
-  // reliable mechanism as the directions). Uses phonetic spellings (LETTER_TEXT)
-  // so each letter is pronounced as a clear letter name. Sets femaleBusyRef so
-  // the male trigger voice waits for the current letter to finish.
-  // Speak a letter via Web Audio (playAudioBuffer if pre-generated, else
-  // GenerateSpeech on the fly). Web Audio output is connected to the recording
-  // destination so the voices ARE captured in the session video.
+  // Speak a letter aloud using the browser's built-in speechSynthesis. Uses
+  // the lowercase letter so the voice doesn't announce "Capital" before it.
+  // Sets femaleBusyRef so the male trigger voice waits for the current letter.
   const speakNormal = (letter) => {
-    femaleBusyRef.current = true;
-    const resetBusy = () => {
-      femaleBusyRef.current = false;
-      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-    };
-    const buffer = letterBufferRef.current[letter];
-    if (buffer) {
-      playAudioBuffer(buffer, { volume: 1.0 }).then(resetBusy);
-    } else {
-      // Fallback: generate on the fly via Web Audio (API call, ~1-2s)
-      base44.integrations.Core.GenerateSpeech({
-        text: LETTER_TEXT[letter] || letter.toLowerCase(),
-        voice: 'honey',
-      }).then(result => {
-        if (result?.url) return playPreGenerated(result.url, { volume: 1.0 });
-      }).then(resetBusy).catch(resetBusy);
-    }
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+      const synth = window.speechSynthesis;
+      const u = new SpeechSynthesisUtterance(letter.toLowerCase());
+      u.lang = 'en-US';
+      u.rate = 0.95;
+      u.pitch = 1.0;
+      u.volume = 1;
+      const voices = synth.getVoices();
+      const en = pickFemaleVoice(voices);
+      if (en) u.voice = en;
+      femaleBusyRef.current = true;
+      const busyTimeout = setTimeout(() => {
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      }, 1500);
+      u.onend = () => {
+        clearTimeout(busyTimeout);
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
+      u.onerror = () => {
+        clearTimeout(busyTimeout);
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+      };
+      synth.speak(u);
+    } catch { femaleBusyRef.current = false; }
   };
 
   const stopFemaleAudio = () => {
@@ -145,7 +132,6 @@ export default function AlphabetSweeper() {
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
   const femaleUrlRef = useRef({});
-  const letterBufferRef = useRef({});
   const resumeDelayRef = useRef(null);
   const anomalyDetectedRef = useRef(false);
   const motionDetectedRef = useRef(false);
@@ -233,10 +219,22 @@ export default function AlphabetSweeper() {
     // Speak the locked letter in a deep male voice via speechSynthesis (same
     // reliable mechanism as the directions/letters). Low pitch + male system
     // voice gives a distinct, deep trigger announcement.
-    // Speak the locked letter in a deep male voice via Web Audio (GenerateSpeech
-    // "storm" voice). Web Audio output is captured in the session recording.
+    // Speak the locked letter in a deep male voice via speechSynthesis.
+    // Uses lowercase so the voice doesn't announce "Capital" before it.
     const speakMale = () => {
-      try { speak(letter, { voice: 'storm' }); } catch {}
+      try {
+        if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+        const synth = window.speechSynthesis;
+        const u = new SpeechSynthesisUtterance(letter.toLowerCase());
+        u.lang = 'en-US';
+        u.rate = 0.85;
+        u.pitch = 0.4; // deep male pitch
+        u.volume = 1;
+        const voices = synth.getVoices();
+        const male = pickMaleVoice(voices);
+        if (male) u.voice = male;
+        synth.speak(u);
+      } catch {}
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
@@ -468,21 +466,24 @@ export default function AlphabetSweeper() {
     setSessionDuration(0);
     setPhase('running');
     sessionActiveRef.current = true;
-    // Request all permissions (sensors, camera) up front.
+    // Prime speechSynthesis within the user gesture so the directions
+    // (spoken after an await) play on iOS.
+    try {
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+      }
+    } catch {}
+    // Request all permissions (sensors, camera, mic) BEFORE directions so
+    // every prompt appears up front, then start drawing + recording.
     await requestSensorPermissions();
     await startCameraStream();
     startDrawing();
-    // Start recording (mic access) FIRST. getUserMedia({ audio: true }) changes
-    // the iOS audio session; the 3-second pause below lets the AudioContext
-    // settle before we speak.
     await startRecording();
-    // 3-second pause after mic access is allowed, so the AudioContext can
-    // stabilise on iOS before we start speaking via Web Audio.
+    // 3-second pause after mic access — pressing the Start button sets off
+    // the sensor, so we wait for the device to settle before doing anything.
     await new Promise(r => setTimeout(r, 3000));
-    await resumeContext();
-    // Pre-generate letter AudioBuffers in the background (Web Audio, captured
-    // in the recording).
-    preGenerateLetters();
     // Show "Get Ready…" while the directions play.
     pausedRef.current = true;
     setPaused(true);
@@ -496,26 +497,42 @@ export default function AlphabetSweeper() {
       attachSensorHandlers();
       processCameraFrame();
     };
-    // Speak the directions via Web Audio (GenerateSpeech honey voice) so they
-    // are captured in the recording. playPreGenerated resolves when the audio
-    // ends, then we begin the sweep.
-    startDelayRef.current = setTimeout(() => beginAfterPause(), 30000);
+    // Speak the directions via the browser's built-in speechSynthesis (female
+    // voice). This is primed within the user gesture above so it plays on iOS.
     try {
-      const result = await base44.integrations.Core.GenerateSpeech({ text: directions, voice: 'honey' });
-      if (result?.url) {
-        await playPreGenerated(result.url, { volume: 1.0 });
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { beginAfterPause(); }
+      else {
+        const synth = window.speechSynthesis;
+        synth.cancel();
+        const u = new SpeechSynthesisUtterance(directions);
+        u.lang = 'en-US';
+        u.rate = 0.92;
+        u.pitch = 1.0;
+        u.volume = 1;
+        const voices = synth.getVoices();
+        const en = pickFemaleVoice(voices);
+        if (en) u.voice = en;
+        u.onend = () => beginAfterPause();
+        u.onerror = () => beginAfterPause();
+        synth.speak(u);
+        // Safety fallback: if onend never fires, start anyway after 25s
+        startDelayRef.current = setTimeout(() => beginAfterPause(), 25000);
       }
-    } catch {}
-    beginAfterPause();
+    } catch { beginAfterPause(); }
     let elapsed = 0;
     timerRef.current = setInterval(() => {
       elapsed++;
       sessionDurRef.current = elapsed;
       setSessionDuration(elapsed);
     }, 1000);
-    // Periodically resume the AudioContext in case iOS suspends it.
+    // iOS fix: speechSynthesis pauses after ~15s. Resume periodically so
+    // letter dictation doesn't go silent partway through a session.
     resumeIntervalRef.current = setInterval(() => {
-      resumeContext();
+      try {
+        if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+          window.speechSynthesis.resume();
+        }
+      } catch {}
     }, 5000);
   };
 
