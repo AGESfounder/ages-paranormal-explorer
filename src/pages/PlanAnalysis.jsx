@@ -120,6 +120,28 @@ const UNGATED_TYPICAL = {
   monthlyCost: (10 * 3 + 10 * 15) * COST_PER_CREDIT,
 };
 
+// Itemized per-action breakdown of what a typical free (Observer) user consumes per month.
+// Every row is an ungated action — no energy check prevents it. "Auto" = fires without
+// the user explicitly requesting it. "Fix" = the gating action that would stop the leak.
+const FREE_USER_BREAKDOWN = [
+  { action: 'Stop Enrichment (thin content)', trigger: 'Auto — fires on 1st stop view', freq: 7, creditsEach: 3, type: 'Manifest.', fix: 'Gate: require Explorer+ to trigger enrichment' },
+  { action: 'People Extraction (rich content)', trigger: 'Auto — fires on 1st stop view', freq: 3, creditsEach: 2, type: 'Manifest.', fix: 'Gate: require Explorer+ to extract people' },
+  { action: 'Custom Tour Creation', trigger: 'User taps Create Tour', freq: 1, creditsEach: 3, type: 'Manifest.', fix: 'Gate: require Explorer+ manifestation energy' },
+  { action: 'Haunted Locations Discovery', trigger: 'User searches nearby/zip', freq: 2, creditsEach: 3, type: 'Manifest.', fix: 'Gate: require Explorer+ to search' },
+  { action: 'Weather Check', trigger: 'User opens Weather Monitor', freq: 1, creditsEach: 3, type: 'Manifest.', fix: 'Gate: require Explorer+ for weather' },
+  { action: 'Narrate Stop Ghost Story', trigger: 'User taps Narrate button', freq: 6, creditsEach: 6, type: 'Narration', fix: 'Gate: require Explorer+ narration energy' },
+  { action: 'Narrate Stop Paranormal Info', trigger: 'User taps Narrate button', freq: 2, creditsEach: 20, type: 'Narration', fix: 'Gate: require Explorer+ narration energy' },
+  { action: 'Narrate Stop Historical Info', trigger: 'User taps Narrate button', freq: 2, creditsEach: 20, type: 'Narration', fix: 'Gate: require Explorer+ narration energy' },
+  { action: 'Narrate Tour Introduction', trigger: 'User taps Narrate button', freq: 2, creditsEach: 10, type: 'Narration', fix: 'Gate: require Explorer+ narration energy' },
+  { action: 'Sweeper Trigger Voices', trigger: 'User triggers letter/term', freq: 5, creditsEach: 1, type: 'Narration', fix: 'Gate: require Explorer+ narration energy' },
+].map(row => ({
+  ...row,
+  totalCredits: row.freq * row.creditsEach,
+  monthlyCost: row.freq * row.creditsEach * COST_PER_CREDIT,
+}));
+const FREE_USER_BREAKDOWN_TOTAL = FREE_USER_BREAKDOWN.reduce((sum, r) => sum + r.totalCredits, 0);
+const FREE_USER_BREAKDOWN_COST = FREE_USER_BREAKDOWN_TOTAL * COST_PER_CREDIT;
+
 function calcCosts(manE, narE, months) {
   const credits = (manE * CREDITS_PER_MANIFESTATION + narE * CREDITS_PER_NARRATION) * months;
   const platformCost = credits * COST_PER_CREDIT;
@@ -332,6 +354,16 @@ function downloadPDF() {
   table(['Action', 'Page', 'Type', 'Integration', 'Credits', 'Gated'],
     CREDIT_AUDIT.map(a => [a.action, a.page, a.type, a.integration, a.credits, a.gated]),
     [120, 100, 50, 120, 50, 40]);
+
+  heading('3d. Where Free Credits Leak - Per-Action Breakdown');
+  para(`Itemized monthly credit consumption for a typical free (Observer) user. Total: ${FREE_USER_BREAKDOWN_TOTAL} credits = $${FREE_USER_BREAKDOWN_COST.toFixed(2)}/mo per free user.`);
+  table(['Action', 'Trigger', 'Freq/mo', 'Cr Each', 'Total Cr', 'Cost/mo', 'Fix (Gate With)'],
+    [...FREE_USER_BREAKDOWN.map(r => [r.action, r.trigger, r.freq, r.creditsEach, r.totalCredits, '$' + r.monthlyCost.toFixed(2), r.fix]),
+     ['TOTAL per free user/mo', '', '', '', FREE_USER_BREAKDOWN_TOTAL, '$' + FREE_USER_BREAKDOWN_COST.toFixed(2), '']],
+    [110, 100, 35, 35, 45, 45, 110]);
+  para(`At 1,000 free users: $${(1000 * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo. At 5,000: $${(5000 * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo.`);
+  const autoLeak = FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto'));
+  para(`Two "Auto" actions (Stop Enrichment + People Extraction) fire without user action — ${autoLeak.reduce((s, r) => s + r.totalCredits, 0)} of ${FREE_USER_BREAKDOWN_TOTAL} credits (${Math.round(autoLeak.reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user. Gate these first.`);
 
   heading('4. Per-Plan Profit - Monthly, 100% Utilization');
   table(['Plan', 'Price', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
@@ -663,6 +695,61 @@ export default function PlanAnalysis() {
               </div>
             </div>
             <p className="text-xs text-red-500 print-text mt-2">At 1,000 active free users (typical usage): ~${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo in unrecovered platform costs. At heavy usage: ~${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo.</p>
+          </div>
+
+          {/* 3d. Itemized Free-Credit Leak Breakdown */}
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+            <h3 className="font-heading text-sm font-semibold text-foreground mb-1 print-text">3d. Where Free Credits Leak — Per-Action Breakdown (Typical Free User)</h3>
+            <p className="text-xs print-muted mb-3">Every row below is an action a free (Observer) user can trigger today with zero energy cost — no gating stops them. "Auto" actions fire without the user even asking. This is the itemized leak that costs <span className="font-semibold text-red-500">{FREE_USER_BREAKDOWN_TOTAL} credits = ${FREE_USER_BREAKDOWN_COST.toFixed(2)}/mo per free user</span>. Multiply by your free-user count to see the total monthly drain.</p>
+            <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+              <table className="w-full min-w-[800px]">
+                <thead>
+                  <tr>
+                    <th className={th}>Action</th>
+                    <th className={th}>Trigger</th>
+                    <th className={`${th} ${num}`}>Freq/mo</th>
+                    <th className={`${th} ${num}`}>Credits Each</th>
+                    <th className={`${th} ${num}`}>Total Credits</th>
+                    <th className={`${th} ${num}`}>Cost/mo</th>
+                    <th className={th}>Fix (Gate With)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {FREE_USER_BREAKDOWN.map((r, i) => (
+                    <tr key={i} className={r.type === 'Narration' ? 'bg-accent/5' : ''}>
+                      <td className={`${td} text-xs print-text`}>{r.action}</td>
+                      <td className={`${td} text-xs print-muted`}>{r.trigger}</td>
+                      <td className={`${td} ${num} text-xs print-text`}>{r.freq}</td>
+                      <td className={`${td} ${num} text-xs print-text`}>{r.creditsEach}</td>
+                      <td className={`${td} ${num} text-xs font-semibold print-text`}>{r.totalCredits}</td>
+                      <td className={`${td} ${num} text-xs print-text`}>${r.monthlyCost.toFixed(2)}</td>
+                      <td className={`${td} text-xs text-primary print-text`}>{r.fix}</td>
+                    </tr>
+                  ))}
+                  <tr className="font-semibold border-t-2 border-red-500/40 bg-red-500/5">
+                    <td className={`${td} print-text`} colSpan={4}>Total per free user / month</td>
+                    <td className={`${td} ${num} print-text`}>{FREE_USER_BREAKDOWN_TOTAL}</td>
+                    <td className={`${td} ${num} print-text`}>${FREE_USER_BREAKDOWN_COST.toFixed(2)}</td>
+                    <td className={`${td} print-muted`}></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { users: 250, label: '250 free users' },
+                { users: 1000, label: '1,000 free users' },
+                { users: 2500, label: '2,500 free users' },
+                { users: 5000, label: '5,000 free users' },
+              ].map(s => (
+                <div key={s.users} className="p-3 rounded-lg bg-card/40 border border-border/40 text-center">
+                  <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                  <p className="text-lg font-bold text-red-500 print-text">${(s.users * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo</p>
+                  <p className="text-[10px] text-muted-foreground print-muted">{(s.users * FREE_USER_BREAKDOWN_TOTAL).toLocaleString()} credits/mo</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs print-muted mt-3 italic">The two "Auto" actions (Stop Enrichment + People Extraction) fire without the user doing anything — they're the most dangerous leaks because every free user who opens a stop triggers them. Gating these two alone would eliminate {FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto')).reduce((s, r) => s + r.totalCredits, 0)} of the {FREE_USER_BREAKDOWN_TOTAL} credits ({Math.round(FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto')).reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user.</p>
           </div>
         </section>
 
