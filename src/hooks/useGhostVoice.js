@@ -164,8 +164,11 @@ export default function useGhostVoice() {
           const sNode = ctx.createBufferSource();
           sNode.buffer = audioBuf;
           if (opts.creepy) sNode.playbackRate.value = 0.8;
-          sNode.connect(ctx.destination);
-          if (recordDestRef.current) sNode.connect(recordDestRef.current);
+          const gainNode = ctx.createGain();
+          gainNode.gain.value = opts.volume || 1.0;
+          sNode.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          if (recordDestRef.current) gainNode.connect(recordDestRef.current);
           srcRef.current = sNode;
           setIsGenerating(false);
           setIsSpeaking(true);
@@ -178,7 +181,7 @@ export default function useGhostVoice() {
 
       const audio = new Audio(result.url);
       audioRef.current = audio;
-      audio.volume = 1;
+      audio.volume = Math.min(1, opts.volume || 1.0);
       // Creepy mode: slow + deepen the playback for a haunting delivery
       if (opts.creepy) {
         audio.playbackRate = 0.8;
@@ -261,7 +264,7 @@ export default function useGhostVoice() {
       if (!ctx || ctx.state !== 'running') {
         const audio = new Audio(url);
         audioRef.current = audio;
-        audio.volume = 1;
+        audio.volume = Math.min(1, opts.volume || 1.0);
         if (opts.creepy) audio.playbackRate = 0.8;
         return new Promise(resolve => {
           audio.onended = () => { audioRef.current = null; resolve(); };
@@ -275,8 +278,11 @@ export default function useGhostVoice() {
       const sNode = ctx.createBufferSource();
       sNode.buffer = audioBuf;
       if (opts.creepy) sNode.playbackRate.value = 0.8;
-      sNode.connect(ctx.destination);
-      if (recordDestRef.current) sNode.connect(recordDestRef.current);
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = opts.volume || 1.0;
+      sNode.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      if (recordDestRef.current) gainNode.connect(recordDestRef.current);
       srcRef.current = sNode;
       acquireNarration();
       return new Promise(resolve => {
