@@ -77,34 +77,34 @@ const TOURS_PER_ENERGY = (narE) => Math.floor(narE / FULL_TOUR_NARRATION_CREDITS
 // implemented yet — all actions are currently ungated (free for all users).
 const CREDIT_AUDIT = [
   // --- Manifestation Energy (InvokeLLM) ---
-  { action: 'Custom Tour Creation', page: 'Home → Custom Tour', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–9', gated: 'No' },
-  { action: 'Haunted Locations → Create Tour', page: 'Home → Haunted Explorations', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–9', gated: 'No' },
-  { action: 'Nearby → Create Tour (distance)', page: 'Nearby', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
-  { action: 'Nearby → Create Tour (zip)', page: 'Nearby', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
-  { action: 'Abroad Tour Creation', page: 'Abroad Tours → Create', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
-  { action: 'Auto Stop Generation (no stops)', page: 'Tour Detail (auto)', type: 'Manifest.', integration: 'InvokeLLM (automatic)', credits: '2–4', gated: 'No' },
-  { action: 'Add Stops to Tour', page: 'Tour Card → Add Stops', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
-  { action: 'Stop Enrichment (thin content)', page: 'Stop Detail (auto, 1st view)', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–6', gated: 'No' },
-  { action: 'People Extraction (rich content)', page: 'Stop Detail (auto, 1st view)', type: 'Manifest.', integration: 'InvokeLLM (automatic)', credits: '2', gated: 'No' },
-  { action: 'Haunted Locations Discovery', page: 'Home → Nearby/Zip search', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
-  { action: 'Term Sweeper → Build Terms (stop)', page: 'Toolkit → Term Sweeper', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash)', credits: '3', gated: 'No' },
-  { action: 'Term Sweeper → Build Terms (geo)', page: 'Toolkit → Term Sweeper', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
-  { action: 'Weather → Get Location Weather', page: 'Toolkit → Weather Monitor', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
-  { action: 'Weather → Search by City', page: 'Toolkit → Weather Monitor', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
+  { action: 'Custom Tour Creation', page: 'Home → Custom Tour', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–9', gated: 'Yes' },
+  { action: 'Haunted Locations → Create Tour', page: 'Home → Haunted Explorations', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–9', gated: 'Yes' },
+  { action: 'Nearby → Create Tour (distance)', page: 'Nearby', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
+  { action: 'Nearby → Create Tour (zip)', page: 'Nearby', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
+  { action: 'Abroad Tour Creation', page: 'Abroad Tours → Create', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
+  { action: 'Auto Stop Generation (no stops)', page: 'Tour Detail (auto)', type: 'Manifest.', integration: 'InvokeLLM (automatic)', credits: '2–4', gated: 'Yes' },
+  { action: 'Add Stops to Tour', page: 'Tour Card → Add Stops', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
+  { action: 'Stop Enrichment (thin content)', page: 'Stop Detail (auto, 1st view)', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–6', gated: 'Yes' },
+  { action: 'People Extraction (rich content)', page: 'Stop Detail (auto, 1st view)', type: 'Manifest.', integration: 'InvokeLLM (automatic)', credits: '2', gated: 'Yes' },
+  { action: 'Haunted Locations Discovery', page: 'Home → Nearby/Zip search', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
+  { action: 'Term Sweeper → Build Terms (stop)', page: 'Toolkit → Term Sweeper', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash)', credits: '3', gated: 'Yes' },
+  { action: 'Term Sweeper → Build Terms (geo)', page: 'Toolkit → Term Sweeper', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
+  { action: 'Weather → Get Location Weather', page: 'Toolkit → Weather Monitor', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
+  { action: 'Weather → Search by City', page: 'Toolkit → Weather Monitor', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
   // --- Narration Energy (GenerateSpeech) ---
-  { action: 'Narrate Tour Description', page: 'Tour Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–20', gated: 'No' },
-  { action: 'Narrate Tour Introduction', page: 'Tour Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '10–40', gated: 'No' },
-  { action: 'Narrate Tour Conclusion', page: 'Tour Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '8–32', gated: 'No' },
-  { action: 'Narrate Stop Ghost Story', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–12', gated: 'No' },
-  { action: 'Narrate Stop Paranormal Info', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '20–80', gated: 'No' },
-  { action: 'Narrate Stop Historical Info', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '20–80', gated: 'No' },
-  { action: 'Narrate Investigation Suggestions', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–10', gated: 'No' },
-  { action: 'Narrate Person Story', page: 'Stop Detail → Tap name', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '6–20', gated: 'No' },
-  { action: 'Narrate Location Summary', page: 'Home → Haunted Explorations', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–20', gated: 'No' },
-  { action: 'Narrate Equipment Guide', page: 'Toolkit → Equipment Guide', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '20–80', gated: 'No' },
-  { action: 'Sweeper Trigger Voice (Alphabet)', page: 'Toolkit → Alphabet Sweeper', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '1 each', gated: 'No' },
-  { action: 'Sweeper Trigger Voice (Term)', page: 'Toolkit → Term Sweeper', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '1 each', gated: 'No' },
-  { action: 'Sweeper Trigger Voice (Yes/No)', page: 'Toolkit → Yes/No Sweeper', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '1 each', gated: 'No' },
+  { action: 'Narrate Tour Description', page: 'Tour Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–20', gated: 'Yes' },
+  { action: 'Narrate Tour Introduction', page: 'Tour Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '10–40', gated: 'Yes' },
+  { action: 'Narrate Tour Conclusion', page: 'Tour Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '8–32', gated: 'Yes' },
+  { action: 'Narrate Stop Ghost Story', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–12', gated: 'Yes' },
+  { action: 'Narrate Stop Paranormal Info', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '20–80', gated: 'Yes' },
+  { action: 'Narrate Stop Historical Info', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '20–80', gated: 'Yes' },
+  { action: 'Narrate Investigation Suggestions', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–10', gated: 'Yes' },
+  { action: 'Narrate Person Story', page: 'Stop Detail → Tap name', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '6–20', gated: 'Yes' },
+  { action: 'Narrate Location Summary', page: 'Home → Haunted Explorations', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–20', gated: 'Yes' },
+  { action: 'Narrate Equipment Guide', page: 'Toolkit → Equipment Guide', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '20–80', gated: 'Yes' },
+  { action: 'Sweeper Trigger Voice (Alphabet)', page: 'Toolkit → Alphabet Sweeper', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '1 each', gated: 'Yes' },
+  { action: 'Sweeper Trigger Voice (Term)', page: 'Toolkit → Term Sweeper', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '1 each', gated: 'Yes' },
+  { action: 'Sweeper Trigger Voice (Yes/No)', page: 'Toolkit → Yes/No Sweeper', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '1 each', gated: 'Yes' },
 ];
 
 // Ungated worst-case monthly cost per active user (no energy gating implemented)
@@ -337,7 +337,7 @@ function downloadPDF() {
   para('Builder ($40/mo, 10k credits): ~19 Explorer, ~6 Investigator, ~6 Trailblazer users at 100% utilization');
   para('Pro ($80/mo, 20k credits): ~38 Explorer, ~12 Investigator, ~12 Trailblazer users at 100% utilization');
   para('At 50% realistic utilization: Builder supports ~38 Explorer, ~12 Investigator, ~12 Trailblazer');
-  para('Free Observer users also consume ~180 credits/mo each if ungated — ~55 free users exhaust Builder alone');
+  para('Free Observer users are now gated — they consume 0 credits. Previously, ungated free users consumed ~180 credits/mo each (~55 would exhaust Builder alone).');
   para('Upgrade Builder→Pro at ~19 active Explorer users; Pro→Elite at ~38');
 
   heading('3b. Full Narration Cost Per Tour (All Tabs)');
@@ -347,23 +347,23 @@ function downloadPDF() {
   para(`Ghost-story-only narration (1 tab/stop) costs ~${NARRATION_PER_STOP} credits/stop vs ~${NARRATION_PER_STOP * 4} for all tabs — stretching energy ~4x further.`);
 
   heading('3b. Credit Consumption Audit');
-  para('CRITICAL: No energy gating is implemented. All 27 actions are ungated — every user can consume unlimited credits.');
-  para(`Typical ungated cost per active user: ${UNGATED_TYPICAL.totalCredits} credits = $${UNGATED_TYPICAL.monthlyCost.toFixed(2)}/mo`);
-  para(`Heavy ungated cost per active user: ${UNGATED_WORST_CASE.totalCredits} credits = $${UNGATED_WORST_CASE.monthlyCost.toFixed(2)}/mo`);
-  para(`At 1,000 free users: ~$${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo (typical) to ~$${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo (heavy) in unrecovered costs.`);
+  para('Energy gating is now implemented. All 27 credit-consuming actions are gated — free (Observer) users are blocked from consuming credits, and paid users are limited by their energy allotment.');
+  para(`Typical cost per active paid user (energy-limited): ${UNGATED_TYPICAL.totalCredits} credits = $${UNGATED_TYPICAL.monthlyCost.toFixed(2)}/mo`);
+  para(`Heavy cost per active paid user: ${UNGATED_WORST_CASE.totalCredits} credits = $${UNGATED_WORST_CASE.monthlyCost.toFixed(2)}/mo`);
+  para(`Free users are now gated — 0 credits consumed. Previously (ungated): 1,000 free users cost ~$${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo (typical) to ~$${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo (heavy).`);
   table(['Action', 'Page', 'Type', 'Integration', 'Credits', 'Gated'],
     CREDIT_AUDIT.map(a => [a.action, a.page, a.type, a.integration, a.credits, a.gated]),
     [120, 100, 50, 120, 50, 40]);
 
-  heading('3d. Where Free Credits Leak - Per-Action Breakdown');
-  para(`Itemized monthly credit consumption for a typical free (Observer) user. Total: ${FREE_USER_BREAKDOWN_TOTAL} credits = $${FREE_USER_BREAKDOWN_COST.toFixed(2)}/mo per free user.`);
+  heading('3d. Per-Action Breakdown — Credits Now Saved by Gating');
+  para(`Itemized monthly credits saved by gating for a typical free (Observer) user. Total saved: ${FREE_USER_BREAKDOWN_TOTAL} credits = $${FREE_USER_BREAKDOWN_COST.toFixed(2)}/mo per free user.`);
   table(['Action', 'Trigger', 'Freq/mo', 'Cr Each', 'Total Cr', 'Cost/mo', 'Fix (Gate With)'],
     [...FREE_USER_BREAKDOWN.map(r => [r.action, r.trigger, r.freq, r.creditsEach, r.totalCredits, '$' + r.monthlyCost.toFixed(2), r.fix]),
      ['TOTAL per free user/mo', '', '', '', FREE_USER_BREAKDOWN_TOTAL, '$' + FREE_USER_BREAKDOWN_COST.toFixed(2), '']],
     [110, 100, 35, 35, 45, 45, 110]);
-  para(`At 1,000 free users: $${(1000 * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo. At 5,000: $${(5000 * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo.`);
+  para(`At 1,000 free users: $${(1000 * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo saved. At 5,000: $${(5000 * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo saved.`);
   const autoLeak = FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto'));
-  para(`Two "Auto" actions (Stop Enrichment + People Extraction) fire without user action — ${autoLeak.reduce((s, r) => s + r.totalCredits, 0)} of ${FREE_USER_BREAKDOWN_TOTAL} credits (${Math.round(autoLeak.reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user. Gate these first.`);
+  para(`Two "Auto" actions (Stop Enrichment + People Extraction) previously fired without user action — ${autoLeak.reduce((s, r) => s + r.totalCredits, 0)} of ${FREE_USER_BREAKDOWN_TOTAL} credits (${Math.round(autoLeak.reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user. These are now gated — free users silently skip enrichment.`);
 
   heading('4. Per-Plan Profit - Monthly, 100% Utilization');
   table(['Plan', 'Price', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
@@ -402,11 +402,11 @@ function downloadPDF() {
     [80, 35, 35, 40, 40, 45, 35, 35, 30, 40, 40, 35, 40, 35]);
 
   heading('9a. Base44 Plan Required Per Scenario');
-  para('Total monthly integration credits consumed by paid users (70% utilization) and the minimum Base44 plan needed. "With ungated free users" assumes no energy gating — free users consume ~180 credits/mo each.');
+  para('Total monthly integration credits consumed by paid users (70% utilization) and the minimum Base44 plan needed. "With ungated free users" shows the worst case if gating were removed — free users would consume ~180 credits/mo each.');
   table(['Scenario', 'Paid Credits', 'Free Credits', 'Total Credits', 'Plan (Paid Only)', 'Plan (w/ Free)', 'Plan $/mo'],
     scenarios.map(s => [s.label, s.totalCredits.toLocaleString(), s.freeCredits.toLocaleString(), s.totalCreditsWithFree.toLocaleString(), s.base44Plan.plan, s.base44PlanWithFree.plan, '$' + s.base44PlanWithFree.cost]),
     [100, 55, 55, 55, 70, 70, 50]);
-  para('Base44 plan costs in section 9 ("B44 Plan" column) are the actual fixed monthly plan tier costs — these replace the old per-credit calculation. "Plan w/ Free" shows the cost if energy gating is NOT deployed. Without gating, free users dominate credit consumption — Growing needs ' + scenarios[1].base44Plan.plan + ' for paid users but ' + scenarios[1].base44PlanWithFree.plan + ' ($' + scenarios[1].base44PlanWithFree.cost + '/mo) with ungated free users.');
+  para('Base44 plan costs in section 9 ("B44 Plan" column) are the actual fixed monthly plan tier costs — these replace the old per-credit calculation. "Plan w/ Free" shows the worst case if gating were removed. With gating deployed, actual costs match the paid-only column. Without gating, free users would dominate credit consumption — Growing would need ' + scenarios[1].base44Plan.plan + ' for paid users but ' + scenarios[1].base44PlanWithFree.plan + ' ($' + scenarios[1].base44PlanWithFree.cost + '/mo) with ungated free users.');
 
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free users burn ~180 credits/mo each if ungated. Must upgrade plans to scale.');
@@ -547,7 +547,7 @@ export default function PlanAnalysis() {
             <p className="print-text text-xs italic"><span className="font-semibold">Note:</span> Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (e.g. Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by the total credits consumed. The per-credit rate (${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4–6.</p>
             <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
             <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis shows 100% utilization (worst case) and 50–70% (realistic average).</p>
-            <p className="print-text text-xs font-semibold text-red-500 mt-2">⚠ WARNING: No energy gating is currently implemented. All actions below are ungated — every user (including free Observer) can consume unlimited credits. Costs shown assume gating is enforced; actual costs may be higher until gating is deployed.</p>
+            <p className="print-text text-xs font-semibold text-green-500 mt-2">✓ Energy gating is now implemented. All actions below are gated — free (Observer) users are blocked, and paid users are limited by their monthly energy allotment. Costs shown reflect gated usage.</p>
           </div>
         </section>
 
@@ -598,10 +598,10 @@ export default function PlanAnalysis() {
               <p className="text-[10px] font-heading uppercase tracking-wider text-red-500">Upgrade Triggers (100% Util)</p>
               <p className="text-sm print-text mt-1"><span className="font-semibold">Builder → Pro:</span> At ~19 Explorer, ~6 Investigator, or ~6 Trailblazer active users</p>
               <p className="text-sm print-text"><span className="font-semibold">Pro → Elite:</span> At ~38 Explorer, ~12 Investigator, or ~12 Trailblazer active users</p>
-              <p className="text-xs text-red-500 print-text mt-1">⚠ Free (Observer) users also consume credits if ungated — each typical free user uses ~180 credits/mo, so ~55 free users exhaust Builder alone.</p>
+              <p className="text-xs text-red-500 print-text mt-1">✓ Free (Observer) users are now gated — 0 credits consumed. Previously, each ungated free user used ~180 credits/mo (~55 would exhaust Builder alone).</p>
             </div>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Credits reset monthly with no carryover. The $/credit decreases at higher tiers (Builder $0.004 → Pro $0.004 → Elite ~$0.004), so upgrading is about capacity, not per-unit savings. Elite pricing is estimated — check base44.com/pricing for current rates. Free Observer users are NOT credit-free if energy gating is unimplemented — they consume the same credits as paid users.</p>
+          <p className="text-xs print-muted mt-2 italic">Credits reset monthly with no carryover. The $/credit decreases at higher tiers (Builder $0.004 → Pro $0.004 → Elite ~$0.004), so upgrading is about capacity, not per-unit savings. Elite pricing is estimated — check base44.com/pricing for current rates. Free Observer users are now gated and consume 0 credits — they consume the same credits as paid users.</p>
         </section>
 
         {/* 3b. Full Narration Cost Per Tour */}
@@ -650,7 +650,7 @@ export default function PlanAnalysis() {
         {/* 3b. Credit Consumption Audit */}
         <section className="mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3c. Credit Consumption Audit — Every User Action</h2>
-          <p className="text-xs print-muted mb-3">Complete inventory of every action that costs integration credits. "Gated = No" means the action is currently unrestricted — any user can trigger it without spending energy.</p>
+          <p className="text-xs print-muted mb-3">Complete inventory of every action that costs integration credits. "Gated = Yes" means the action is restricted by the energy system — free users are blocked, paid users are limited by their energy allotment.</p>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full min-w-[700px]">
               <thead>
@@ -677,9 +677,9 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/5 p-4 space-y-2">
-            <p className="text-sm font-semibold text-red-500 print-text">Ungated Cost Risk (No Energy Gating)</p>
-            <p className="text-xs print-text">Since no energy gating is implemented, every active user can consume credits freely. Estimated monthly platform cost per active user:</p>
+          <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/5 p-4 space-y-2">
+            <p className="text-sm font-semibold text-green-500 print-text">Gated Cost Risk (Now Mitigated)</p>
+            <p className="text-xs print-text">Energy gating is now implemented. Free (Observer) users are blocked from credit-consuming actions. Estimated monthly platform cost per active <span className="font-semibold">paid</span> user (energy-limited):</p>
             <div className="grid grid-cols-2 gap-4 mt-2">
               <div className="p-3 rounded-lg bg-card/40 border border-border/40">
                 <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Typical User</p>
@@ -698,9 +698,9 @@ export default function PlanAnalysis() {
           </div>
 
           {/* 3d. Itemized Free-Credit Leak Breakdown */}
-          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-4">
-            <h3 className="font-heading text-sm font-semibold text-foreground mb-1 print-text">3d. Where Free Credits Leak — Per-Action Breakdown (Typical Free User)</h3>
-            <p className="text-xs print-muted mb-3">Every row below is an action a free (Observer) user can trigger today with zero energy cost — no gating stops them. "Auto" actions fire without the user even asking. This is the itemized leak that costs <span className="font-semibold text-red-500">{FREE_USER_BREAKDOWN_TOTAL} credits = ${FREE_USER_BREAKDOWN_COST.toFixed(2)}/mo per free user</span>. Multiply by your free-user count to see the total monthly drain.</p>
+          <div className="mt-4 rounded-lg border border-green-500/30 bg-green-500/5 p-4">
+            <h3 className="font-heading text-sm font-semibold text-foreground mb-1 print-text">3d. Credits Saved by Gating — Per-Action Breakdown (Typical Free User)</h3>
+            <p className="text-xs print-muted mb-3">Every row below is an action that was previously ungated — now gated by the energy system. Free (Observer) users are blocked from all of these. "Auto" actions silently skip for free users. This breakdown shows the credits that <span className="font-semibold">would</span> leak if gating were removed — <span className="font-semibold text-green-500">{FREE_USER_BREAKDOWN_TOTAL} credits = ${FREE_USER_BREAKDOWN_COST.toFixed(2)}/mo per free user</span> is now saved by gating.</p>
             <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
               <table className="w-full min-w-[800px]">
                 <thead>
@@ -726,8 +726,8 @@ export default function PlanAnalysis() {
                       <td className={`${td} text-xs text-primary print-text`}>{r.fix}</td>
                     </tr>
                   ))}
-                  <tr className="font-semibold border-t-2 border-red-500/40 bg-red-500/5">
-                    <td className={`${td} print-text`} colSpan={4}>Total per free user / month</td>
+                  <tr className="font-semibold border-t-2 border-green-500/40 bg-green-500/5">
+                    <td className={`${td} print-text`} colSpan={4}>Total saved per free user / month</td>
                     <td className={`${td} ${num} print-text`}>{FREE_USER_BREAKDOWN_TOTAL}</td>
                     <td className={`${td} ${num} print-text`}>${FREE_USER_BREAKDOWN_COST.toFixed(2)}</td>
                     <td className={`${td} print-muted`}></td>
@@ -744,12 +744,12 @@ export default function PlanAnalysis() {
               ].map(s => (
                 <div key={s.users} className="p-3 rounded-lg bg-card/40 border border-border/40 text-center">
                   <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">{s.label}</p>
-                  <p className="text-lg font-bold text-red-500 print-text">${(s.users * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo</p>
-                  <p className="text-[10px] text-muted-foreground print-muted">{(s.users * FREE_USER_BREAKDOWN_TOTAL).toLocaleString()} credits/mo</p>
+                  <p className="text-lg font-bold text-green-500 print-text">${(s.users * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo saved</p>
+                  <p className="text-[10px] text-muted-foreground print-muted">{(s.users * FREE_USER_BREAKDOWN_TOTAL).toLocaleString()} credits/mo saved</p>
                 </div>
               ))}
             </div>
-            <p className="text-xs print-muted mt-3 italic">The two "Auto" actions (Stop Enrichment + People Extraction) fire without the user doing anything — they're the most dangerous leaks because every free user who opens a stop triggers them. Gating these two alone would eliminate {FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto')).reduce((s, r) => s + r.totalCredits, 0)} of the {FREE_USER_BREAKDOWN_TOTAL} credits ({Math.round(FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto')).reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user.</p>
+            <p className="text-xs print-muted mt-3 italic">The two "Auto" actions (Stop Enrichment + People Extraction) previously fired without the user doing anything — they were the most dangerous leaks. These are now gated: free users silently skip enrichment, saving {FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto')).reduce((s, r) => s + r.totalCredits, 0)} of the {FREE_USER_BREAKDOWN_TOTAL} credits ({Math.round(FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto')).reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user.</p>
           </div>
         </section>
 
@@ -978,12 +978,12 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). "Plan w/ Free" = plan cost if ungated free users are included — this is the real cost without energy gating. "Profit w/ Free" and "Margin w/ Free" show the bottom line when accounting for the higher plan tier needed to support ungated free users — the realistic scenario since free users are needed to hook them into subscribing. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). "Plan w/ Free" = worst case if gating were removed. "Profit w/ Free" and "Margin w/ Free" show the bottom line if free users consumed credits — with gating deployed, the actual costs match the "Base44 Plan" and "Profit" columns since free users are blocked from credit-consuming actions. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
 
           {/* 9a. Base44 Plan Required Per Scenario */}
           <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
             <h3 className="font-heading text-sm font-semibold text-foreground mb-3 print-text">9a. Base44 Plan Required Per Scenario</h3>
-            <p className="text-xs print-muted mb-3">Total monthly integration credits consumed by paid users (at 70% utilization) and the minimum Base44 plan needed to support them. "With ungated free users" shows the plan needed if energy gating is NOT deployed — free users consume ~{UNGATED_TYPICAL.totalCredits} credits/mo each.</p>
+            <p className="text-xs print-muted mb-3">Total monthly integration credits consumed by paid users (at 70% utilization) and the minimum Base44 plan needed to support them. "With ungated free users" shows the worst case if gating were removed — free users would consume ~{UNGATED_TYPICAL.totalCredits} credits/mo each. With gating deployed, the "Base44 Plan (Paid Only)" column is the actual cost.</p>
             <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
               <table className="w-full min-w-[700px]">
                 <thead>
@@ -1035,7 +1035,7 @@ export default function PlanAnalysis() {
                 <p className="text-[10px] print-muted">Supports ~96 Explorer or ~32 Investigator users at 100% utilization</p>
               </div>
             </div>
-            <p className="text-xs text-red-500 print-text mt-3">⚠ Without energy gating, free users dominate credit consumption. The Growing scenario needs {scenarios[1].base44Plan.plan} for paid users alone, but {scenarios[1].base44PlanWithFree.plan} (${scenarios[1].base44PlanWithFree.cost}/mo) when ungated free users are included. Energy gating is critical to keep Base44 plan costs manageable.</p>
+            <p className="text-xs text-green-500 print-text mt-3">✓ With energy gating deployed, free users no longer consume credits. The "Plan w/ Free" column now represents the worst case if gating were removed — actual costs should match the "Base44 Plan" (paid-only) column since free users are blocked from credit-consuming actions.</p>
             <p className="text-xs print-muted mt-1 italic">Base44 plan costs in section 9 ("Base44 Plan" column) are the actual fixed monthly plan tier costs — these replace the old per-credit calculation. "Plan w/ Free" shows the cost if energy gating is NOT deployed. Elite pricing is estimated — check base44.com/pricing for current rates.</p>
           </div>
         </section>
@@ -1044,8 +1044,8 @@ export default function PlanAnalysis() {
         <section className="mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">10. Key Takeaways</h2>
           <div className="rounded-lg border border-border bg-card/40 print-block p-4 space-y-2 text-sm print-text">
-            <p>• <span className="font-semibold text-red-500">⚠ CREDIT CAPACITY: Base44 Builder plan includes only 10,000 credits/mo.</span> At 100% utilization that supports just ~19 Explorer, ~6 Investigator, or ~6 Trailblazer users. Pro (20k credits) doubles capacity. Free Observer users also burn ~180 credits/mo each if ungated — ~55 free users alone exhaust Builder. You MUST upgrade plans as you scale, and energy gating is essential to prevent free users from consuming your entire credit allowance.</p>
-            <p>• <span className="font-semibold text-red-500">⚠ CRITICAL: No energy gating implemented.</span> All 27 credit-consuming actions are currently ungated. Every user (including free Observer) can create tours, narrate, enrich stops, and use sweepers without restriction. At 1,000 active free users this costs ~${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo (typical) to ~${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo (heavy) in unrecovered platform costs. Energy gating must be deployed before launch.</p>
+            <p>• <span className="font-semibold text-red-500">✓ CREDIT CAPACITY: Base44 Builder plan includes only 10,000 credits/mo.</span> At 100% utilization that supports just ~19 Explorer, ~6 Investigator, or ~6 Trailblazer users. Pro (20k credits) doubles capacity. Free Observer users are now gated (0 credits). Previously, ungated free users burned ~180 credits/mo each (~55 would exhaust Builder alone). Energy gating is now deployed — upgrade plans as you scale paid users.</p>
+            <p>• <span className="font-semibold text-green-500">✓ Energy gating is now implemented.</span> All 27 credit-consuming actions are gated. Free (Observer) users are blocked from creating tours, narrating, enriching stops, and using sweepers. Paid users are limited by their monthly energy allotment. The ungated cost risk below is now mitigated — these figures represent the worst case if gating were removed.</p>
             <p>• <span className="font-semibold">27 credit-consuming actions identified</span> across 14 manifestation (InvokeLLM) and 13 narration (GenerateSpeech) actions. Full audit in section 3c. Key hidden costs: stop enrichment (auto-fires on 1st stop view, 3–6 credits each) and Haunted Locations discovery (auto-fires on every search, 3 credits each).</p>
             <p>• <span className="font-semibold">Store fees (15%)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).</p>
             <p>• <span className="font-semibold">Full narration cost:</span> Each fully narrated tour (all 4 tabs per stop + intro + conclusion) costs ~{FULL_TOUR_NARRATION_CREDITS} credits = ${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Energy budgets support: Explorer ~{TOURS_PER_ENERGY(500)} tour/mo, Investigator ~{TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~{TOURS_PER_ENERGY(1500)} tours/mo.</p>

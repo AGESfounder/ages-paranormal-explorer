@@ -7,6 +7,8 @@ import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
+import { useEnergyGate } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 // Phonetic spellings so TTS pronounces each letter as a clear letter name
@@ -46,6 +48,7 @@ export default function AlphabetSweeper() {
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
   const { speak, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { gateNarration, spendNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   // Pick the most natural-sounding female system voice available (Samantha on
   // iOS, Karen on AU, etc.). Falls back to any en-US voice.
@@ -224,7 +227,7 @@ export default function AlphabetSweeper() {
     // Yes/No/IDK sweeper: speak() from useGhostVoice (GenerateSpeech "storm"
     // voice via Web Audio, connected to the recording destination).
     const speakMale = () => {
-      try { speak(LETTER_TEXT[letter] || letter.toLowerCase(), { volume: 1.6 }); } catch {}
+      try { speak(LETTER_TEXT[letter] || letter.toLowerCase(), { volume: 1.6 }); spendNarration(1); } catch {}
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
@@ -446,6 +449,7 @@ export default function AlphabetSweeper() {
   };
 
   const startSession = async () => {
+    if (!gateNarration()) return;
     unlock();
     setCaptured([]);
     setVideoBlob(null);
@@ -617,6 +621,7 @@ export default function AlphabetSweeper() {
         <button onClick={startSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Play className="w-4 h-4" /> Start Sweep
         </button>
+        {showUpgrade && <UpgradePrompt reason={gateReason} onClose={() => setShowUpgrade(false)} />}
       </div>
     );
   }

@@ -7,6 +7,8 @@ import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
+import { useEnergyGate } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
@@ -58,6 +60,7 @@ export default function LocationTermBank() {
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
   const { isSpeaking, isGenerating, speak, unlock, attachMicToRecording } = useGhostVoice();
+  const { gateManifestation, spendManifestation, gateNarration, spendNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const speakNormal = (word) => {
     try {
@@ -159,6 +162,7 @@ export default function LocationTermBank() {
   };
 
   const generateBank = async () => {
+    if (!gateManifestation()) return;
     setPhase('loading');
     setError('');
     setTerms([]);
@@ -222,6 +226,7 @@ ${stopText}`,
               });
               const list = (res.terms || []).filter(t => t && typeof t === 'string');
               if (list.length > 0) {
+                spendManifestation();
                 setTerms(list);
                 setLocationLabel(stop.name || tour?.title || 'current stop');
                 setPhase('ready');
@@ -287,6 +292,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       });
       const list = (res.terms || []).filter(t => t && typeof t === 'string');
       if (list.length === 0) throw new Error('No terms returned');
+      spendManifestation();
       setTerms(list);
       setLocationLabel(res.location || 'your location');
       setPhase('ready');
@@ -326,7 +332,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     speechStartedRef.current = false;
     // Let the female voice finish the current word, then speak male
     const speakMale = () => {
-      try { speak(formatForSpeech(word), {}); } catch {}
+      try { speak(formatForSpeech(word), {}); spendNarration(1); } catch {}
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
@@ -552,6 +558,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   };
 
   const startSession = async () => {
+    if (!gateNarration()) return;
     unlock();
     setCaptured([]);
     setVideoBlob(null);
@@ -669,6 +676,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Library className="w-4 h-4" /> Build Terms
         </button>
+        {showUpgrade && <UpgradePrompt reason={gateReason} onClose={() => setShowUpgrade(false)} />}
       </div>
     );
   }
@@ -700,6 +708,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-primary/30 hover:text-primary transition-colors">
           <RefreshCw className="w-3.5 h-3.5" /> Rebuild Terms
         </button>
+        {showUpgrade && <UpgradePrompt reason={gateReason} onClose={() => setShowUpgrade(false)} />}
       </div>
     );
   }

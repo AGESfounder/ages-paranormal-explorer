@@ -7,6 +7,8 @@ import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
+import { useEnergyGate } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 // "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
 // appear once in rotation (4 sec each). If no trigger, the asking phase repeats.
@@ -49,6 +51,7 @@ export default function YesNoSweeper() {
   // plays reliably on iOS even though it's triggered by a sensor event. Called
   // WITHOUT the creepy flag → normal-speed delivery.
   const { isSpeaking, isGenerating, speak, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { gateNarration, spendNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   // Normal browser TTS announces each phrase as it cycles (instant, local,
   // female voice). The locked phrase is then spoken in the deep male
@@ -215,7 +218,7 @@ export default function YesNoSweeper() {
     sweepingRef.current = false;
     // Let the female voice finish the current phrase, then speak male
     const speakMale = () => {
-      try { speak(phrase.speech, {}); } catch {} // deep male "storm" voice
+      try { speak(phrase.speech, {}); spendNarration(1); } catch {} // deep male "storm" voice
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
@@ -451,6 +454,7 @@ export default function YesNoSweeper() {
   };
 
   const startSession = async () => {
+    if (!gateNarration()) return;
     setCaptured([]);
     setVideoBlob(null);
     setLockedPhrase(null);
@@ -573,6 +577,7 @@ export default function YesNoSweeper() {
         <button onClick={startSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Play className="w-4 h-4" /> Start Sweep
         </button>
+        {showUpgrade && <UpgradePrompt reason={gateReason} onClose={() => setShowUpgrade(false)} />}
       </div>
     );
   }
