@@ -242,7 +242,10 @@ const scenarios = [
   const fixedCost = fixedOngoingMonthly;
   const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
   const profit = totalRev - totalCost;
-  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, adRev, totalRev, platformCosts, platformCostsWithFree, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, freeCredits, totalCreditsWithFree, base44Plan, base44PlanWithFree };
+  // Profit if ungated free users are included (using the higher plan tier cost)
+  const totalCostWithFree = platformCostsWithFree + storeCosts + revcatCost + fixedCost;
+  const profitWithFree = totalRev - totalCostWithFree;
+  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, adRev, totalRev, platformCosts, platformCostsWithFree, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCostWithFree, profitWithFree, marginWithFree: (profitWithFree / totalRev * 100), totalCredits, freeCredits, totalCreditsWithFree, base44Plan, base44PlanWithFree };
 });
 
 // Determine which Base44 plan(s) are needed for a given monthly credit volume
@@ -362,9 +365,9 @@ function downloadPDF() {
   para(`Model: ${ADS_PER_TOUR} ads/tour x ${TOURS_PER_FREE_USER_MO} tours/mo x $${ADMOB_PER_IMPRESSION.toFixed(3)}/impression = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo. Stop 1 paranormal history is free; stops 2+ show interstitial ads.`);
 
   heading('9. Revenue Scenarios (Monthly, 70% Utilization)');
-  table(['Scenario', 'Sub Rev', 'Ad Rev', 'Total Rev', 'B44 Plan', 'Plan w/Free', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
-    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.adRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.platformCostsWithFree, '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
-    [90, 40, 40, 45, 45, 50, 40, 40, 35, 45, 45, 40]);
+  table(['Scenario', 'Sub Rev', 'Ad Rev', 'Total Rev', 'B44 Plan', 'Plan w/Free', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin', 'Prof w/Free', 'Marg w/Free'],
+    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.adRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.platformCostsWithFree, '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%', '$' + s.profitWithFree.toFixed(0), s.marginWithFree.toFixed(1) + '%']),
+    [80, 35, 35, 40, 40, 45, 35, 35, 30, 40, 40, 35, 40, 35]);
 
   heading('9a. Base44 Plan Required Per Scenario');
   para('Total monthly integration credits consumed by paid users (70% utilization) and the minimum Base44 plan needed. "With ungated free users" assumes no energy gating — free users consume ~180 credits/mo each.');
@@ -862,6 +865,8 @@ export default function PlanAnalysis() {
                   <th className={`${th} ${num}`}>Total Cost</th>
                   <th className={`${th} ${num}`}>Profit</th>
                   <th className={`${th} ${num}`}>Margin</th>
+                  <th className={`${th} ${num}`}>Profit w/ Free</th>
+                  <th className={`${th} ${num}`}>Margin w/ Free</th>
                 </tr>
               </thead>
               <tbody>
@@ -879,12 +884,14 @@ export default function PlanAnalysis() {
                     <td className={`${td} ${num} print-text`}>${s.totalCost.toFixed(0)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${s.profit.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>{s.margin.toFixed(1)}%</td>
+                    <td className={`${td} ${num} font-semibold ${s.profitWithFree < 0 ? 'text-red-500' : 'print-text'}`}>${s.profitWithFree.toFixed(0)}</td>
+                    <td className={`${td} ${num} ${s.marginWithFree < 0 ? 'text-red-500' : 'print-text'}`}>{s.marginWithFree.toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). "Plan w/ Free" = plan cost if ungated free users are included — this is the real cost without energy gating. Total Cost uses the paid-only plan cost; add the "Plan w/ Free" difference to see the ungated scenario. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). "Plan w/ Free" = plan cost if ungated free users are included — this is the real cost without energy gating. "Profit w/ Free" and "Margin w/ Free" show the bottom line when accounting for the higher plan tier needed to support ungated free users — the realistic scenario since free users are needed to hook them into subscribing. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
 
           {/* 9a. Base44 Plan Required Per Scenario */}
           <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
