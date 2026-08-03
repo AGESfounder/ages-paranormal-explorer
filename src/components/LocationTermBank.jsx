@@ -117,9 +117,13 @@ export default function LocationTermBank() {
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
   const speechStartedRef = useRef(false);
+  const anomalyDetectedRef = useRef(false);
+  const motionDetectedRef = useRef(false);
 
   useEffect(() => { termsRef.current = terms; }, [terms]);
   useEffect(() => { capturedRef.current = captured; }, [captured]);
+  useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
+  useEffect(() => { motionDetectedRef.current = motionDetected; }, [motionDetected]);
 
   // Resume scanning once narration of a locked word has actually started AND
   // finished — wait for isGenerating/isSpeaking to go true first so we don't
@@ -465,6 +469,24 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       ctx.fillStyle = 'rgba(148,163,184,0.55)';
       ctx.font = 'bold 34px sans-serif';
       ctx.fillText(word.toUpperCase(), w / 2, h / 2 + 8);
+    }
+
+    // Draw sensor alert badges on the canvas so they appear in the recording
+    if (anomalyDetectedRef.current) {
+      ctx.fillStyle = 'rgba(239,68,68,0.92)';
+      ctx.fillRect(w / 2 - 85, 44, 170, 22);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠ ANOMALY DETECTED', w / 2, 59);
+    }
+    if (motionDetectedRef.current) {
+      ctx.fillStyle = 'rgba(245,158,11,0.92)';
+      ctx.fillRect(w / 2 - 85, h - 52, 170, 22);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠ MOTION DETECTED', w / 2, h - 37);
     }
 
     // captured count
