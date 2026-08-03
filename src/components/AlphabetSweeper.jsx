@@ -44,7 +44,7 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { speak, resumeContext, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
 
   // Pick the most natural-sounding female system voice available (Samantha on
   // iOS, Karen on AU, etc.). Falls back to any en-US voice.
@@ -219,11 +219,24 @@ export default function AlphabetSweeper() {
     // Speak the locked letter in a deep male voice via speechSynthesis (same
     // reliable mechanism as the directions/letters). Low pitch + male system
     // voice gives a distinct, deep trigger announcement.
-    // Speak the locked letter in a deep male voice via Web Audio (GenerateSpeech
-    // "storm" voice). Web Audio output is connected to the recording destination
-    // so the male voice IS captured in the session recording.
+    // Speak the locked letter in a deep male voice via speechSynthesis (same
+    // reliable mechanism as the directions/letters). Low pitch + male system
+    // voice gives a distinct, deep trigger announcement. The mic picks it up
+    // from the speaker so it's captured in the session recording.
     const speakMale = () => {
-      try { speak(letter, { voice: 'storm' }); } catch {}
+      try {
+        if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+        const synth = window.speechSynthesis;
+        const u = new SpeechSynthesisUtterance(letter.toLowerCase());
+        u.lang = 'en-US';
+        u.rate = 0.85;
+        u.pitch = 0.4; // deep male pitch
+        u.volume = 1;
+        const voices = synth.getVoices();
+        const male = pickMaleVoice(voices);
+        if (male) u.voice = male;
+        synth.speak(u);
+      } catch {}
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
@@ -232,7 +245,7 @@ export default function AlphabetSweeper() {
     }
     if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
     resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 5000);
-  }, [speak, resumeFromLock]);
+  }, [resumeFromLock]);
 
   const flashMotion = useCallback(() => {
     setMotionDetected(true);
@@ -466,6 +479,9 @@ export default function AlphabetSweeper() {
     } catch {}
     // Request sensor permissions up front (just the permission prompt).
     await requestSensorPermissions();
+    // 3-second pause after sensor permission — tapping the screen to grant
+    // permission sets off the motion sensor, so we wait for the device to settle.
+    await new Promise(r => setTimeout(r, 3000));
     startDrawing();
     // Show "Get Ready…" while the directions play. Directions play FIRST,
     // before the mic prompt, camera, or alphabet.
@@ -480,14 +496,13 @@ export default function AlphabetSweeper() {
       if (!sessionActiveRef.current) return;
       // Mic prompt AFTER directions.
       await startRecording();
-      // 3-second pause after mic access — pressing the Start button sets off
-      // the sensor, so we wait for the device to settle.
+      // 3-second pause after mic permission — tapping the screen to grant
+      // permission sets off the motion sensor, so we wait for the device to settle.
       await new Promise(r => setTimeout(r, 3000));
-      // Resume the AudioContext so the male trigger voice (Web Audio) plays
-      // and is captured in the recording.
-      await resumeContext();
       // Start camera AFTER directions and mic prompt.
       await startCameraStream();
+      // 3-second pause after camera permission — same reason.
+      await new Promise(r => setTimeout(r, 3000));
       pausedRef.current = false;
       setPaused(false);
       startStepping();
