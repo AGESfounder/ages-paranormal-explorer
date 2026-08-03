@@ -44,7 +44,7 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { speak, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { speak, resumeContext, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
 
   // Pick the most natural-sounding female system voice available (Samantha on
   // iOS, Karen on AU, etc.). Falls back to any en-US voice.
@@ -219,22 +219,11 @@ export default function AlphabetSweeper() {
     // Speak the locked letter in a deep male voice via speechSynthesis (same
     // reliable mechanism as the directions/letters). Low pitch + male system
     // voice gives a distinct, deep trigger announcement.
-    // Speak the locked letter in a deep male voice via speechSynthesis.
-    // Uses lowercase so the voice doesn't announce "Capital" before it.
+    // Speak the locked letter in a deep male voice via Web Audio (GenerateSpeech
+    // "storm" voice). Web Audio output is connected to the recording destination
+    // so the male voice IS captured in the session recording.
     const speakMale = () => {
-      try {
-        if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-        const synth = window.speechSynthesis;
-        const u = new SpeechSynthesisUtterance(letter.toLowerCase());
-        u.lang = 'en-US';
-        u.rate = 0.85;
-        u.pitch = 0.4; // deep male pitch
-        u.volume = 1;
-        const voices = synth.getVoices();
-        const male = pickMaleVoice(voices);
-        if (male) u.voice = male;
-        synth.speak(u);
-      } catch {}
+      try { speak(letter, { voice: 'storm' }); } catch {}
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
@@ -475,22 +464,30 @@ export default function AlphabetSweeper() {
         window.speechSynthesis.speak(u);
       }
     } catch {}
-    // Request all permissions (sensors, camera, mic) BEFORE directions so
-    // every prompt appears up front, then start drawing + recording.
+    // Request sensor permissions up front (just the permission prompt).
     await requestSensorPermissions();
-    await startCameraStream();
     startDrawing();
-    await startRecording();
-    // 3-second pause after mic access — pressing the Start button sets off
-    // the sensor, so we wait for the device to settle before doing anything.
-    await new Promise(r => setTimeout(r, 3000));
-    // Show "Get Ready…" while the directions play.
+    // Show "Get Ready…" while the directions play. Directions play FIRST,
+    // before the mic prompt, camera, or alphabet.
     pausedRef.current = true;
     setPaused(true);
     const directions = 'Spell words you want to say to us. I am going to repeat the alphabet. You can choose letters by moving my device and standing in front of it when you hear or see the letter you need next.';
-    const beginAfterPause = () => {
+    let begun = false;
+    const beginAfterPause = async () => {
+      if (begun) return;
+      begun = true;
       if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
       if (!sessionActiveRef.current) return;
+      // Mic prompt AFTER directions.
+      await startRecording();
+      // 3-second pause after mic access — pressing the Start button sets off
+      // the sensor, so we wait for the device to settle.
+      await new Promise(r => setTimeout(r, 3000));
+      // Resume the AudioContext so the male trigger voice (Web Audio) plays
+      // and is captured in the recording.
+      await resumeContext();
+      // Start camera AFTER directions and mic prompt.
+      await startCameraStream();
       pausedRef.current = false;
       setPaused(false);
       startStepping();
