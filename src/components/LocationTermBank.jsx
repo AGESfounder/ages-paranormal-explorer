@@ -511,12 +511,15 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     sessionDurRef.current = 0;
     setSessionDuration(0);
     setPhase('running');
-    startRotation();
     await startSensors();
     await startCamera();
-    await new Promise(r => setTimeout(r, 80));
     startDrawing();
     await startRecording();
+    // 3-second pause after the last permission prompt (mic) — tapping the
+    // screen to grant permission sets off the motion sensor, so we wait for
+    // the device to settle before starting the word rotation.
+    await new Promise(r => setTimeout(r, 3000));
+    startRotation();
     let elapsed = 0;
     timerRef.current = setInterval(() => {
       elapsed++;
@@ -656,7 +659,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
             </div>
           )}
           {anomalyDetected && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="absolute top-8 left-1/2 -translate-x-1/2 pointer-events-none">
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 className="px-3 py-1 rounded bg-red-500/90 border border-red-300/50">
                 <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ ANOMALY DETECTED</p>
@@ -664,7 +667,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
             </div>
           )}
           {motionDetected && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none">
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 className="px-3 py-1 rounded bg-amber-500/90 border border-amber-300/50">
                 <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ MOTION DETECTED</p>
