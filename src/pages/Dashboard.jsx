@@ -211,7 +211,7 @@ export default function Dashboard() {
                       <span className={`px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider border ${plan.badge}`}>
                         {plan.name}
                       </span>
-                      {isTrailblazer && <span className="text-[10px] text-amber-400 font-heading">30-Month Elite</span>}
+                      {isTrailblazer && <span className="text-[10px] text-amber-400 font-heading">30-Month Elite · 6 Months Free</span>}
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2 mb-3">
