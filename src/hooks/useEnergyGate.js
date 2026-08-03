@@ -32,7 +32,8 @@ export function useEnergyGate() {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
 
-  const isPaid = user?.plan && user.plan !== 'observer';
+  const isAdmin = user?.role === 'admin';
+  const isPaid = isAdmin || (user?.plan && user.plan !== 'observer');
   const manEnergy = user?.manifestation_energy || 0;
   const auraManEnergy = user?.aura_manifestation_energy || 0;
   const narEnergy = user?.narration_energy || 0;
@@ -43,16 +44,19 @@ export function useEnergyGate() {
   }, []);
 
   const canManifest = useCallback(() => {
+    if (isAdmin) return true;
     return isPaid && (manEnergy > 0 || auraManEnergy > 0);
-  }, [isPaid, manEnergy, auraManEnergy]);
+  }, [isAdmin, isPaid, manEnergy, auraManEnergy]);
 
   const canNarrate = useCallback((text) => {
+    if (isAdmin) return true;
     if (!isPaid) return false;
     const cost = estimateNarrationCost(text);
     return (narEnergy + auraNarEnergy) >= cost;
-  }, [isPaid, narEnergy, auraNarEnergy, estimateNarrationCost]);
+  }, [isAdmin, isPaid, narEnergy, auraNarEnergy, estimateNarrationCost]);
 
   const spendManifestation = useCallback(async () => {
+    if (isAdmin) return; // Admins don't spend energy
     let newMan = manEnergy;
     let newAura = auraManEnergy;
     if (newMan > 0) newMan -= 1;
@@ -61,9 +65,10 @@ export function useEnergyGate() {
       await base44.auth.updateMe({ manifestation_energy: newMan, aura_manifestation_energy: newAura });
       setUser(prev => ({ ...prev, manifestation_energy: newMan, aura_manifestation_energy: newAura }));
     } catch (e) { console.error('Failed to update manifestation energy:', e); }
-  }, [manEnergy, auraManEnergy]);
+  }, [isAdmin, manEnergy, auraManEnergy]);
 
   const spendNarration = useCallback(async (cost) => {
+    if (isAdmin) return; // Admins don't spend energy
     let newNar = narEnergy;
     let newAura = auraNarEnergy;
     if (newNar >= cost) newNar -= cost;
@@ -72,23 +77,25 @@ export function useEnergyGate() {
       await base44.auth.updateMe({ narration_energy: newNar, aura_narration_energy: newAura });
       setUser(prev => ({ ...prev, narration_energy: newNar, aura_narration_energy: newAura }));
     } catch (e) { console.error('Failed to update narration energy:', e); }
-  }, [narEnergy, auraNarEnergy]);
+  }, [isAdmin, narEnergy, auraNarEnergy]);
 
   // Gate a manifestation (InvokeLLM) action. Returns true if allowed.
   // If blocked, shows the upgrade prompt automatically.
   const gateManifestation = useCallback(() => {
+    if (isAdmin) return true;
     if (!isPaid) { setGateReason('plan'); setShowUpgrade(true); return false; }
     if (manEnergy <= 0 && auraManEnergy <= 0) { setGateReason('energy'); setShowUpgrade(true); return false; }
     return true;
-  }, [isPaid, manEnergy, auraManEnergy]);
+  }, [isAdmin, isPaid, manEnergy, auraManEnergy]);
 
   // Gate a narration (GenerateSpeech) action. Returns true if allowed.
   const gateNarration = useCallback((text) => {
+    if (isAdmin) return true;
     if (!isPaid) { setGateReason('plan'); setShowUpgrade(true); return false; }
     const cost = estimateNarrationCost(text);
     if (narEnergy + auraNarEnergy < cost) { setGateReason('energy'); setShowUpgrade(true); return false; }
     return true;
-  }, [isPaid, narEnergy, auraNarEnergy, estimateNarrationCost]);
+  }, [isAdmin, isPaid, narEnergy, auraNarEnergy, estimateNarrationCost]);
 
   return {
     user, isPaid,
@@ -107,6 +114,7 @@ export function useEnergyGate() {
 export async function checkManifestationGate() {
   try {
     const user = await base44.auth.me();
+    if (user?.role === 'admin') return { allowed: true };
     const isPaid = user?.plan && user.plan !== 'observer';
     if (!isPaid) return { allowed: false, reason: 'plan' };
     const manE = user?.manifestation_energy || 0;
@@ -121,6 +129,7 @@ export async function checkManifestationGate() {
 export async function spendManifestationEnergy() {
   try {
     const user = await base44.auth.me();
+    if (user?.role === 'admin') return; // Admins don't spend energy
     let newMan = user?.manifestation_energy || 0;
     let newAura = user?.aura_manifestation_energy || 0;
     if (newMan > 0) newMan -= 1;
