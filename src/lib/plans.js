@@ -28,7 +28,7 @@ export const PLANS = {
     features: [
       'Everything in Observer',
       'Ad-Free tours',
-      'AI narration (~3 guided tours/month)',
+      'AI narration (~1 fully narrated tour/month)',
       'Custom tour generation (1-2/month)',
       'All ranked tours unlocked',
       'Nearby + Abroad tours',
@@ -49,7 +49,7 @@ export const PLANS = {
     badge: 'bg-accent/20 text-accent-foreground border-accent/40',
     features: [
       'Everything in Explorer',
-      'AI narration for ~10 guided tours/month',
+      'AI narration for ~3 fully narrated tours/month',
       'Custom tour generation (up to 5/month)',
       'Evidence Dashboard with analytics',
       'Aura Bundle purchases',
@@ -67,7 +67,7 @@ export const PLANS = {
     badge: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
     features: [
       'Everything in Investigator',
-      'AI narration for ~14 guided tours/month',
+      'AI narration for ~5 fully narrated tours/month',
       'Custom tour generation (up to 8/month)',
       'Exclusive Trailblazer badge',
       'Early access to new features',

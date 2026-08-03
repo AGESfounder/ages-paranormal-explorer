@@ -25,7 +25,7 @@ export const PLANS = {
     color: 'text-primary',
     features: [
       'Everything in Observer',
-      'AI narration (~3 guided tours/month)',
+      'AI narration (~1 fully narrated tour/month)',
       'Custom tour generation (1-2/month)',
       'All ranked tours unlocked',
       'Nearby + Abroad tours',
@@ -46,7 +46,7 @@ export const PLANS = {
     color: 'text-accent-foreground',
     features: [
       'Everything in Explorer',
-      'AI narration for ~10 guided tours/month',
+      'AI narration for ~3 fully narrated tours/month',
       'Custom tour generation (up to 5/month)',
       'Full toolkit (all 12 tools)',
       'Evidence Dashboard with analytics',
@@ -64,7 +64,7 @@ export const PLANS = {
     color: 'text-amber-400',
     features: [
       'Everything in Investigator',
-      'AI narration for ~14 guided tours/month',
+      'AI narration for ~5 fully narrated tours/month',
       'Custom tour generation (up to 8/month)',
       'Exclusive Trailblazer badge',
       'Early access to new features',
@@ -121,7 +121,7 @@ export const WIX_PRODUCTS = {
     subscription_info: {
       subscriptionSettings: { frequency: 'MONTH' },
       title: 'AGES Explorer Monthly',
-      description: 'Standard access: AI narration (~3 guided tours/mo), tour generation, ranked tours, evidence journal, community map, and 8 toolkit tools. Billed monthly.',
+      description: 'Standard access: AI narration (~1 fully narrated tour/mo, all tabs), tour generation, ranked tours, evidence journal, community map, and 8 toolkit tools. Billed monthly.',
     },
   },
   explorer_annual: {
@@ -132,7 +132,7 @@ export const WIX_PRODUCTS = {
     subscription_info: {
       subscriptionSettings: { frequency: 'YEAR' },
       title: 'AGES Explorer Annual',
-      description: 'Standard access: AI narration (~3 guided tours/mo), tour generation, ranked tours, evidence journal, community map, and 8 toolkit tools. Billed annually (save 16%).',
+      description: 'Standard access: AI narration (~1 fully narrated tour/mo, all tabs), tour generation, ranked tours, evidence journal, community map, and 8 toolkit tools. Billed annually (save 16%).',
     },
   },
   investigator_monthly: {
@@ -143,7 +143,7 @@ export const WIX_PRODUCTS = {
     subscription_info: {
       subscriptionSettings: { frequency: 'MONTH' },
       title: 'AGES Investigator Monthly',
-      description: 'Premium access: AI narration (~10 guided tours/mo), full 12-tool toolkit, evidence dashboard analytics, more energy. Billed monthly.',
+      description: 'Premium access: AI narration (~3 fully narrated tours/mo, all tabs), full 12-tool toolkit, evidence dashboard analytics, more energy. Billed monthly.',
     },
   },
   investigator_annual: {
@@ -154,7 +154,7 @@ export const WIX_PRODUCTS = {
     subscription_info: {
       subscriptionSettings: { frequency: 'YEAR' },
       title: 'AGES Investigator Annual',
-      description: 'Premium access: AI narration (~10 guided tours/mo), full 12-tool toolkit, evidence dashboard analytics, more energy. Billed annually (save 16%).',
+      description: 'Premium access: AI narration (~3 fully narrated tours/mo, all tabs), full 12-tool toolkit, evidence dashboard analytics, more energy. Billed annually (save 16%).',
     },
   },
   trailblazer: {

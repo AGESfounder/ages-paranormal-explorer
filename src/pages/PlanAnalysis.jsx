@@ -7,11 +7,11 @@ const PLANS = [
   { name: 'Observer', price: '$0', billing: 'Free forever', manE: 0, narE: 0,
     features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; save favorites' },
   { name: 'Explorer', price: '$5.99', billing: 'Monthly ($59.99/yr)', manE: 5, narE: 500,
-    features: 'AI narration (~3 guided tours/mo); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 8-tool toolkit; aura bundles' },
+    features: 'AI narration (~1 fully narrated tour/mo, all tabs); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 8-tool toolkit; aura bundles' },
   { name: 'Investigator', price: '$9.99', billing: 'Monthly ($99.99/yr)', manE: 15, narE: 1500,
-    features: 'Everything in Explorer; AI narration (~10 guided tours/mo); custom tours (up to 5/mo); full 12-tool toolkit; evidence dashboard analytics; aura bundles' },
+    features: 'Everything in Explorer; AI narration (~3 fully narrated tours/mo, all tabs); custom tours (up to 5/mo); full 12-tool toolkit; evidence dashboard analytics; aura bundles' },
   { name: 'Trailblazer', price: '$199.99', billing: 'One-time, 30 months (max 300 slots)', manE: 25, narE: 2000,
-    features: 'Everything in Investigator; AI narration (~14 guided tours/mo); custom tours (up to 8/mo); exclusive badge; early access; 30-mo price lock; 20% off aura bundles' },
+    features: 'Everything in Investigator; AI narration (~5 fully narrated tours/mo, all tabs); custom tours (up to 8/mo); exclusive badge; early access; 30-mo price lock; 20% off aura bundles' },
 ];
 
 const AURA_BUNDLES = [
