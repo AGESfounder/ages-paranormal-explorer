@@ -44,7 +44,7 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { speak, playPreGenerated, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { speak, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
 
   // Pick the most natural-sounding female system voice available (Samantha on
   // iOS, Karen on AU, etc.). Falls back to any en-US voice.
@@ -52,6 +52,14 @@ export default function AlphabetSweeper() {
     return voices.find(v => /^en[-_]US/i.test(v.lang) && /samantha|karen|moira|tessa|fiona|serena|allison|ava/i.test(v.name))
       || voices.find(v => /^en[-_]US/i.test(v.lang) && !/google|microsoft|zira/i.test(v.name))
       || voices.find(v => /^en[-_]US/i.test(v.lang))
+      || voices.find(v => /^en/i.test(v.lang));
+  };
+
+  // Pick a deep male system voice for the trigger announcement.
+  const pickMaleVoice = (voices) => {
+    return voices.find(v => /^en[-_]US/i.test(v.lang) && /daniel|alex|fred|tom|david|mark|oliver|arthur/i.test(v.name))
+      || voices.find(v => /^en/i.test(v.lang) && /male|daniel|alex|fred|tom|david/i.test(v.name))
+      || voices.find(v => /^en[-_]GB/i.test(v.lang) && /daniel/i.test(v.name))
       || voices.find(v => /^en/i.test(v.lang));
   };
 
@@ -71,23 +79,15 @@ export default function AlphabetSweeper() {
     } catch {}
   };
 
-  // Speak a letter using the pre-generated high-quality "honey" voice via Web
-  // Audio. Falls back to speechSynthesis if the URL isn't cached yet. Sets
-  // femaleBusyRef so the male trigger voice waits for the current letter.
+  // Speak a letter aloud using the browser's built-in speechSynthesis (same
+  // reliable mechanism as the directions). Uses phonetic spellings (LETTER_TEXT)
+  // so each letter is pronounced as a clear letter name. Sets femaleBusyRef so
+  // the male trigger voice waits for the current letter to finish.
   const speakNormal = (letter) => {
-    const url = femaleUrlRef.current[letter.toLowerCase()];
-    if (url) {
-      femaleBusyRef.current = true;
-      playPreGenerated(url, { volume: 1.5 }).then(() => {
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      });
-      return;
-    }
-    // Fallback to speechSynthesis if URL not ready yet
     try {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
       const synth = window.speechSynthesis;
+      synth.cancel(); // clear any stuck/pending utterances (iOS fix)
       const u = new SpeechSynthesisUtterance(LETTER_TEXT[letter] || letter.toLowerCase());
       u.lang = 'en-US';
       u.rate = 0.95;
@@ -226,8 +226,24 @@ export default function AlphabetSweeper() {
     // the Yes/No sweeper). A fixed 5-second window gives the API call + audio
     // playback time to complete, so the letter is never cut off and the sweep
     // never freezes waiting for an onend event that may not fire on iOS.
+    // Speak the locked letter in a deep male voice via speechSynthesis (same
+    // reliable mechanism as the directions/letters). Low pitch + male system
+    // voice gives a distinct, deep trigger announcement.
     const speakMale = () => {
-      try { speak(LETTER_TEXT[letter] || letter, { volume: 2.5 }); } catch {}
+      try {
+        if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+        const synth = window.speechSynthesis;
+        synth.cancel();
+        const u = new SpeechSynthesisUtterance(LETTER_TEXT[letter] || letter);
+        u.lang = 'en-US';
+        u.rate = 0.85;
+        u.pitch = 0.4; // deep male pitch
+        u.volume = 1;
+        const voices = synth.getVoices();
+        const male = pickMaleVoice(voices);
+        if (male) u.voice = male;
+        synth.speak(u);
+      } catch {}
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
@@ -474,11 +490,9 @@ export default function AlphabetSweeper() {
     await startCameraStream();
     startDrawing();
     await startRecording();
-    // Show "Get Ready…" while the directions play. Pre-generate the
-    // high-quality female letter audio in the background during this pause.
+    // Show "Get Ready…" while the directions play.
     pausedRef.current = true;
     setPaused(true);
-    preGenerateFemaleUrls();
     const directions = 'Spell words you want to say to us. I am going to repeat the alphabet. You can choose letters by moving my device and standing in front of it when you hear or see the letter you need next.';
     const beginAfterPause = () => {
       if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
