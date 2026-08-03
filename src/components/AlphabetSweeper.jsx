@@ -44,7 +44,7 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { playAudioBuffer, fetchAudioBuffer, resumeContext, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
 
   // Pick the most natural-sounding female system voice available (Samantha on
   // iOS, Karen on AU, etc.). Falls back to any en-US voice.
@@ -139,6 +139,7 @@ export default function AlphabetSweeper() {
   const pausedRef = useRef(false);
   const sessionActiveRef = useRef(false);
   const resumeIntervalRef = useRef(null);
+  const maleVoiceBuffersRef = useRef({});
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
   useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
@@ -219,11 +220,16 @@ export default function AlphabetSweeper() {
     // Speak the locked letter in a deep male voice via speechSynthesis (same
     // reliable mechanism as the directions/letters). Low pitch + male system
     // voice gives a distinct, deep trigger announcement.
-    // Speak the locked letter in a deep male voice via speechSynthesis (same
-    // reliable mechanism as the directions/letters). Low pitch + male system
-    // voice gives a distinct, deep trigger announcement. The mic picks it up
-    // from the speaker so it's captured in the session recording.
+    // Speak the locked letter in a deep male voice. Prefer the pre-generated
+    // Web Audio buffer (connected to the recording destination so it IS
+    // captured in the session recording). Fall back to speechSynthesis if the
+    // buffer isn't ready yet.
     const speakMale = () => {
+      const buffer = maleVoiceBuffersRef.current[letter];
+      if (buffer) {
+        try { playAudioBuffer(buffer, { volume: 1.0 }); } catch {}
+        return;
+      }
       try {
         if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
         const synth = window.speechSynthesis;
@@ -245,7 +251,7 @@ export default function AlphabetSweeper() {
     }
     if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
     resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 5000);
-  }, [resumeFromLock]);
+  }, [playAudioBuffer, resumeFromLock]);
 
   const flashMotion = useCallback(() => {
     setMotionDetected(true);
@@ -499,10 +505,31 @@ export default function AlphabetSweeper() {
       // 3-second pause after mic permission — tapping the screen to grant
       // permission sets off the motion sensor, so we wait for the device to settle.
       await new Promise(r => setTimeout(r, 3000));
+      // Resume the AudioContext (suspended by mic access on iOS) so the male
+      // trigger voice plays via Web Audio and is captured in the recording.
+      await resumeContext();
       // Start camera AFTER directions and mic prompt.
       await startCameraStream();
       // 3-second pause after camera permission — same reason.
       await new Promise(r => setTimeout(r, 3000));
+      // Pre-generate male voice audio for all 26 letters in the background.
+      // This eliminates the GenerateSpeech API delay when a letter is triggered,
+      // so the male voice plays instantly (no cutting off) via Web Audio and is
+      // captured in the session recording.
+      (async () => {
+        for (const letter of LETTERS) {
+          if (!sessionActiveRef.current) return;
+          if (maleVoiceBuffersRef.current[letter]) continue;
+          try {
+            const result = await base44.integrations.Core.GenerateSpeech({
+              text: letter.toLowerCase(),
+              voice: 'storm',
+            });
+            const buffer = await fetchAudioBuffer(result.url);
+            if (buffer) maleVoiceBuffersRef.current[letter] = buffer;
+          } catch {}
+        }
+      })();
       pausedRef.current = false;
       setPaused(false);
       startStepping();
