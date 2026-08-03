@@ -49,6 +49,21 @@ const ADS_PER_TOUR = 7;                // stops 2-8 on avg 8-stop tour (stop 1 i
 const TOURS_PER_FREE_USER_MO = 2;
 const AD_REV_PER_FREE_USER_MO = ADS_PER_TOUR * TOURS_PER_FREE_USER_MO * ADMOB_PER_IMPRESSION;
 
+// ===== FULL NARRATION COST PER TOUR =====
+// Each stop has 4 independent narration buttons (GenerateSpeech @ 1 credit/50 chars):
+//   Ghost Story (narration_text):  ~300 chars → ~6 credits
+//   History tab (historical_info):  ~1,000 chars → ~20 credits
+//   Paranormal tab (paranormal_info): ~1,000 chars → ~20 credits
+//   Investigate tab (suggestions):  ~300 chars → ~6 credits
+//   Per stop total: ~52 credits
+// Tour intro: ~500 chars → ~10 credits; Tour conclusion: ~500 chars → ~10 credits
+// Average tour (7 stops): 10 + 7×52 + 10 = 384 credits ≈ 400 credits
+const NARRATION_PER_STOP = 52;
+const NARRATION_INTRO_CONCLUSION = 20;
+const AVG_STOPS_PER_TOUR = 7;
+const FULL_TOUR_NARRATION_CREDITS = NARRATION_INTRO_CONCLUSION + AVG_STOPS_PER_TOUR * NARRATION_PER_STOP; // 384
+const TOURS_PER_ENERGY = (narE) => Math.floor(narE / FULL_TOUR_NARRATION_CREDITS);
+
 // ===== CREDIT CONSUMPTION AUDIT =====
 // Every user action that consumes integration credits (InvokeLLM or GenerateSpeech).
 // "Gated" = currently restricted by the energy system. NOTE: No energy gating is
@@ -115,8 +130,8 @@ function revenuecatFee(monthlySales) {
 
 // Per-plan monthly profit (1 month, 100% utilization)
 const monthlyAnalysis = [
-  { plan: 'Explorer', price: 5.99, manE: 5, narE: 300 },
-  { plan: 'Investigator', price: 9.99, manE: 15, narE: 1000 },
+  { plan: 'Explorer', price: 5.99, manE: 5, narE: 500 },
+  { plan: 'Investigator', price: 9.99, manE: 15, narE: 1500 },
 ].map(p => {
   const { credits, platformCost } = calcCosts(p.manE, p.narE, 1);
   const sf = storeFee(p.price);
@@ -128,7 +143,7 @@ const monthlyAnalysis = [
 // Trailblazer (36 months, 100% utilization)
 const trailblazerAnalysis = (() => {
   const price = 199.99;
-  const { credits, platformCost } = calcCosts(25, 1200, 30);
+  const { credits, platformCost } = calcCosts(25, 2000, 30);
   const sf = storeFee(price);
   const totalCost = platformCost + sf;
   const profit = price - totalCost;
@@ -138,7 +153,7 @@ const trailblazerAnalysis = (() => {
 // Trailblazer at 50% utilization
 const trailblazer50 = (() => {
   const price = 199.99;
-  const { credits, platformCost } = calcCosts(12.5, 600, 30);
+  const { credits, platformCost } = calcCosts(12.5, 1000, 30);
   const sf = storeFee(price);
   const totalCost = platformCost + sf;
   const profit = price - totalCost;
@@ -198,9 +213,9 @@ const scenarios = [
   const adRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
   const totalRev = subRev + adRev;
   // Platform costs at 70% utilization
-  const platformCosts = s.mix.explorer * calcCosts(5 * 0.7, 300 * 0.7, 1).platformCost
-    + s.mix.investigator * calcCosts(15 * 0.7, 1000 * 0.7, 1).platformCost
-    + s.mix.trailblazer * calcCosts(25 * 0.7, 1200 * 0.7, 1).platformCost;
+  const platformCosts = s.mix.explorer * calcCosts(5 * 0.7, 500 * 0.7, 1).platformCost
+    + s.mix.investigator * calcCosts(15 * 0.7, 1500 * 0.7, 1).platformCost
+    + s.mix.trailblazer * calcCosts(25 * 0.7, 2000 * 0.7, 1).platformCost;
   // Store fees (15% on IAP subscription revenue; ad revenue not subject to store fees)
   const storeCosts = subRev * STORE_FEE_PCT;
   // RevenueCat (1% above $2,500/month in subscription sales)
@@ -264,7 +279,13 @@ function downloadPDF() {
   para(`AdMob: $${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
 
-  heading('3a. Credit Consumption Audit');
+  heading('3a. Full Narration Cost Per Tour (All Tabs)');
+  para(`Per stop: Ghost Story ~6 credits + History ~20 + Paranormal ~20 + Investigate ~6 = ${NARRATION_PER_STOP} credits/stop`);
+  para(`Tour intro ~10 + conclusion ~10. Average tour (${AVG_STOPS_PER_TOUR} stops): ${FULL_TOUR_NARRATION_CREDITS} credits = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour`);
+  para(`Explorer: ${TOURS_PER_ENERGY(500)} tours/mo | Investigator: ${TOURS_PER_ENERGY(1500)} tours/mo | Trailblazer: ${TOURS_PER_ENERGY(2000)} tours/mo`);
+  para(`Ghost-story-only narration (1 tab/stop) costs ~${NARRATION_PER_STOP} credits/stop vs ~${NARRATION_PER_STOP * 4} for all tabs — stretching energy ~4x further.`);
+
+  heading('3b. Credit Consumption Audit');
   para('CRITICAL: No energy gating is implemented. All 27 actions are ungated — every user can consume unlimited credits.');
   para(`Typical ungated cost per active user: ${UNGATED_TYPICAL.totalCredits} credits = $${UNGATED_TYPICAL.monthlyCost.toFixed(2)}/mo`);
   para(`Heavy ungated cost per active user: ${UNGATED_WORST_CASE.totalCredits} credits = $${UNGATED_WORST_CASE.monthlyCost.toFixed(2)}/mo`);
@@ -311,8 +332,9 @@ function downloadPDF() {
 
   heading('10. Key Takeaways');
   para('Store fees (15%) are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).');
-  para('Explorer yields ~64% margin at full utilization; Investigator ~43%. Both healthier when energy goes unused.');
-  para('Trailblazer yields a thin ~9% margin at 100% utilization (30-month duration helps). At 50% realistic usage, margin improves to ~47%. The 300-slot cap is critical.');
+  para(`Full narration cost: ~${FULL_TOUR_NARRATION_CREDITS} credits/tour = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour. Explorer ~${TOURS_PER_ENERGY(500)} tour/mo, Investigator ~${TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~${TOURS_PER_ENERGY(2000)} tours/mo.`);
+  para(`Explorer yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.`);
+  para(`Trailblazer is UNPROFITABLE at 100% utilization (${trailblazerAnalysis.margin.toFixed(0)}% = $${trailblazerAnalysis.profit.toFixed(0)} loss over 30 months). At 50% realistic usage, margin improves to ~${trailblazer50.margin.toFixed(0)}%. The 300-slot cap is essential.`);
   para('AdMob revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
   para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + '.');
   para('RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$' + revenuecatFee(7104).toFixed(0) + '/mo at the Mature scenario.');
@@ -353,10 +375,9 @@ export default function PlanAnalysis() {
             <p className="text-sm text-muted-foreground mt-1">Generated {today}</p>
           </div>
           <div className="flex gap-2">
-            {/* Hidden — kept for future use. Remove "hidden" class to re-enable. */}
             <button
               onClick={downloadPDF}
-              className="hidden flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px]"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px]"
             >
               <Download className="w-4 h-4" /> Download PDF
             </button>
@@ -450,9 +471,52 @@ export default function PlanAnalysis() {
           </div>
         </section>
 
-        {/* 3a. Credit Consumption Audit */}
+        {/* 3a. Full Narration Cost Per Tour */}
         <section className="mb-8">
-          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3a. Credit Consumption Audit — Every User Action</h2>
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3a. Full Narration Cost Per Tour (All Tabs)</h2>
+          <p className="text-xs print-muted mb-3">Each tour stop has 4 independent narration buttons (GenerateSpeech @ 1 credit / 50 chars). A "fully narrated tour" = narrating every tab at every stop + intro + conclusion.</p>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className={th}>Narration Component</th>
+                  <th className={`${th} ${num}`}>Typical Chars</th>
+                  <th className={`${th} ${num}`}>Credits</th>
+                  <th className={th}>Per</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td className={`${td} print-text`}>Ghost Story (narration_text)</td><td className={`${td} ${num} print-text`}>~300</td><td className={`${td} ${num} print-text`}>~6</td><td className={`${td} print-muted`}>stop</td></tr>
+                <tr><td className={`${td} print-text`}>History tab (historical_info)</td><td className={`${td} ${num} print-text`}>~1,000</td><td className={`${td} ${num} print-text`}>~20</td><td className={`${td} print-muted`}>stop</td></tr>
+                <tr><td className={`${td} print-text`}>Paranormal tab (paranormal_info)</td><td className={`${td} ${num} print-text`}>~1,000</td><td className={`${td} ${num} print-text`}>~20</td><td className={`${td} print-muted`}>stop</td></tr>
+                <tr><td className={`${td} print-text`}>Investigate tab (suggestions)</td><td className={`${td} ${num} print-text`}>~300</td><td className={`${td} ${num} print-text`}>~6</td><td className={`${td} print-muted`}>stop</td></tr>
+                <tr className="font-semibold border-t-2 border-border"><td className={`${td} print-text`}>Per-Stop Total</td><td className={`${td} ${num} print-text`}>~2,600</td><td className={`${td} ${num} print-text`}>~{NARRATION_PER_STOP}</td><td className={`${td} print-muted`}>stop</td></tr>
+                <tr><td className={`${td} print-text`}>Tour Introduction</td><td className={`${td} ${num} print-text`}>~500</td><td className={`${td} ${num} print-text`}>~10</td><td className={`${td} print-muted`}>tour</td></tr>
+                <tr><td className={`${td} print-text`}>Tour Conclusion</td><td className={`${td} ${num} print-text`}>~500</td><td className={`${td} ${num} print-text`}>~10</td><td className={`${td} print-muted`}>tour</td></tr>
+                <tr className="font-semibold border-t-2 border-primary/40 bg-primary/5"><td className={`${td} print-text`}>Full Tour ({AVG_STOPS_PER_TOUR} stops avg)</td><td className={`${td} ${num} print-text`}>~{(AVG_STOPS_PER_TOUR * 2600 + 1000).toLocaleString()}</td><td className={`${td} ${num} print-text`}>~{FULL_TOUR_NARRATION_CREDITS}</td><td className={`${td} print-muted`}>tour</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { plan: 'Explorer', narE: 500, tours: TOURS_PER_ENERGY(500) },
+              { plan: 'Investigator', narE: 1500, tours: TOURS_PER_ENERGY(1500) },
+              { plan: 'Trailblazer', narE: 2000, tours: TOURS_PER_ENERGY(2000) },
+            ].map(t => (
+              <div key={t.plan} className="p-3 rounded-lg bg-card/40 border border-border/40">
+                <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">{t.plan}</p>
+                <p className="text-lg font-bold text-foreground print-text">{t.narE} narration energy</p>
+                <p className="text-sm text-primary print-text">~{t.tours} fully narrated tours/mo</p>
+                <p className="text-[10px] text-muted-foreground print-muted">{t.narE} ÷ {FULL_TOUR_NARRATION_CREDITS} credits/tour</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs print-muted mt-2 italic">Cost per fully narrated tour: {FULL_TOUR_NARRATION_CREDITS} credits × ${COST_PER_CREDIT.toFixed(4)} = ${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Users who only narrate ghost stories (not all tabs) use ~{NARRATION_PER_STOP} credits/stop instead of ~{NARRATION_PER_STOP * 4} credits/stop, stretching energy ~4× further.</p>
+        </section>
+
+        {/* 3b. Credit Consumption Audit */}
+        <section className="mb-8">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3b. Credit Consumption Audit — Every User Action</h2>
           <p className="text-xs print-muted mb-3">Complete inventory of every action that costs integration credits. "Gated = No" means the action is currently unrestricted — any user can trigger it without spending energy.</p>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full min-w-[700px]">
@@ -574,7 +638,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">With the 15% store fee and shorter 30-month duration, Trailblazer yields a thin ~9% margin at 100% utilization. At 50% realistic usage, margin improves to ~47%. The 300-slot cap remains critical. At Apple's 30% rate (above $1M/yr), this tier returns to a loss even at 50% utilization.</p>
+          <p className="text-xs print-muted mt-2 italic">With 2000 narration energy/month over 30 months, Trailblazer is unprofitable at 100% utilization ({trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} loss). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap is essential. At Apple's 30% rate (above $1M/yr), this tier is deeply unprofitable even at 50% utilization.</p>
         </section>
 
         {/* 6. Aura Bundle Profit */}
@@ -730,8 +794,9 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold text-red-500">⚠ CRITICAL: No energy gating implemented.</span> All 27 credit-consuming actions are currently ungated. Every user (including free Observer) can create tours, narrate, enrich stops, and use sweepers without restriction. At 1,000 active free users this costs ~${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo (typical) to ~${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo (heavy) in unrecovered platform costs. Energy gating must be deployed before launch.</p>
             <p>• <span className="font-semibold">27 credit-consuming actions identified</span> across 14 manifestation (InvokeLLM) and 13 narration (GenerateSpeech) actions. Full audit in section 3a. Key hidden costs: stop enrichment (auto-fires on 1st stop view, 3–6 credits each) and Haunted Locations discovery (auto-fires on every search, 3 credits each).</p>
             <p>• <span className="font-semibold">Store fees (15%)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).</p>
-            <p>• <span className="font-semibold">Explorer</span> yields ~64% margin at full utilization; <span className="font-semibold">Investigator</span> ~43%. Both healthier when energy goes unused.</p>
-            <p>• <span className="font-semibold">Trailblazer</span> yields a thin ~{trailblazerAnalysis.margin.toFixed(0)}% margin at 100% utilization (30-month duration helps). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap remains critical.</p>
+            <p>• <span className="font-semibold">Full narration cost:</span> Each fully narrated tour (all 4 tabs per stop + intro + conclusion) costs ~{FULL_TOUR_NARRATION_CREDITS} credits = ${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Energy budgets support: Explorer ~{TOURS_PER_ENERGY(500)} tour/mo, Investigator ~{TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~{TOURS_PER_ENERGY(2000)} tours/mo.</p>
+            <p>• <span className="font-semibold">Explorer</span> yields ~{monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; <span className="font-semibold">Investigator</span> ~{monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.</p>
+            <p>• <span className="font-semibold text-red-500">⚠ Trailblazer is unprofitable at 100% utilization</span> ({trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} loss over 30 months). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap and realistic usage patterns are critical — consider reducing Trailblazer narration energy or raising price.</p>
             <p>• <span className="font-semibold">AdMob revenue</span> from free users meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
             <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal}.</p>
             <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
