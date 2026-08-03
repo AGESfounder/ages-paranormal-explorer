@@ -177,18 +177,22 @@ export default function LocationTermBank() {
               stop.hours_of_operation,
               ...(stop.investigation_suggestions || []),
               ...((stop.people || []).map(p => p.name ? `${p.name}: ${p.story}` : p.story)),
+              tour?.description,
+              tour?.introduction,
             ].filter(Boolean);
             const stopText = textParts.join('\n\n');
             if (stopText.trim().length > 30) {
               const res = await base44.integrations.Core.InvokeLLM({
                 prompt: `Analyze the following text from a paranormal tour stop and extract a word bank of terms for a "spirit communication" sweeper tool.
 
+ALL terms must come from the HISTORICAL and PARANORMAL history documented in the text below. Do NOT include generic words, filler, or terms unrelated to this stop's specific history and hauntings.
+
 Extract terms in these 5 categories:
-1. NAMES — proper nouns (people, places, buildings, ships) mentioned in the text
-2. MOST REPEATED NOUNS — nouns that appear most frequently in the text
-3. MOST REPEATED VERBS — action verbs that appear most frequently (EXCLUDE linking verbs and helping verbs)
-4. IMPORTANT PHRASES — meaningful 2-4 word phrases that capture key concepts from the text
-5. TIME-RELATED WORDS — dates, years, days of the week, months, and time references
+1. NAMES — proper nouns (people, places, buildings, ships) mentioned in the historical and paranormal text
+2. HISTORICAL NOUNS — nouns tied to this stop's history, era, landmarks, construction, events, occupations, and objects
+3. PARANORMAL TERMS — nouns and phrases tied to this stop's documented hauntings, reported phenomena, spirits, and local folklore
+4. IMPORTANT PHRASES — meaningful 2-4 word phrases that capture key concepts from the historical or paranormal history
+5. TIME-RELATED WORDS — dates, years, days of the week, months, and time references found in the text
 
 EXCLUDE these parts of speech entirely:
 - Articles (a, an, the)
