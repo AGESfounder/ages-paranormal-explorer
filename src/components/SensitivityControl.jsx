@@ -1,8 +1,8 @@
 import React from 'react';
-import { Sun, Home, Eye, Moon } from 'lucide-react';
+import { Sun, Home, Eye, Moon, Flashlight } from 'lucide-react';
 import { SENSITIVITY_LEVELS } from '@/hooks/useSensitivity';
 
-const ICONS = { 1: Sun, 2: Home, 3: Eye, 4: Moon };
+const ICONS = { 1: Sun, 2: Home, 3: Eye, 4: Moon, 5: Flashlight };
 
 // Segmented sensitivity selector shared by all 4 camera-based anomaly tools.
 // Level 1 (Daylight) = least sensitive; Level 4 (Dark) = most sensitive.
@@ -12,7 +12,7 @@ export default function SensitivityControl({ sensitivity, onChange }) {
       <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
         <Eye className="w-3 h-3" /> IR Sensitivity
       </p>
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-5 gap-1.5">
         {SENSITIVITY_LEVELS.map(level => {
           const Icon = ICONS[level.id];
           const isActive = sensitivity === level.id;

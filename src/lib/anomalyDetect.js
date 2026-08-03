@@ -32,6 +32,9 @@ const PRESETS = {
   2: { skinThreshold: 700, minBoxH: 36, minBoxW: 20, minR: 70, minG: 45, minB: 28, rMinusB: 22, rMinusG: 16, maxR: 248, maxG: 224 },
   3: { skinThreshold: 190, minBoxH: 17, minBoxW: 10, minR: 16, minG: 11, minB: 8,  rMinusB: 3,  rMinusG: 0,  maxR: 254, maxG: 242 },
   4: { skinThreshold: 150, minBoxH: 15, minBoxW: 8,  minR: 12, minG: 8,  minB: 5,  rMinusB: 2,  rMinusG: 0,  maxR: 255, maxG: 245 },
+  // Level 5 (Flashlight): torch illuminates the scene like daylight, so reuse
+  // the Daylight preset (least sensitive — avoids false positives from glare).
+  5: { skinThreshold: 800, minBoxH: 40, minBoxW: 22, minR: 80, minG: 50, minB: 30, rMinusB: 25, rMinusG: 18, maxR: 245, maxG: 220 },
 };
 
 export function detectFigures(imageData, width, height, sensitivity = 4) {
