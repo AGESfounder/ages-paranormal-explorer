@@ -179,19 +179,20 @@ const bundleAnalysis = AURA_BUNDLES.map(b => {
 });
 
 // Fixed operating costs
+// NOTE: Base44 Builder Plan ($40/mo) is NOT listed here as a fixed cost — it is already
+// embedded in the per-credit platform cost ($0.004/credit = $40/mo ÷ 10,000 credits).
+// Listing it separately would double-count the Base44 subscription fee.
 const fixedCostsFirstYear = [
   { item: 'Apple Developer Program', cost: APPLE_DEV_ANNUAL, period: 'Annual' },
   { item: 'Google Play Developer', cost: GOOGLE_DEV_ONE_TIME, period: 'One-time' },
   { item: 'Median.co (App Builder)', cost: MEDIAN_CO_FIRST_YEAR, period: 'Annual — Year 1' },
-  { item: 'Base44 Builder Plan', cost: BASE44_MONTHLY * 12, period: 'Annual ($' + BASE44_MONTHLY + '/mo)' },
 ];
 const fixedCostsOngoing = [
   { item: 'Apple Developer Program', cost: APPLE_DEV_ANNUAL, period: 'Annual' },
   { item: 'Median.co (App Builder)', cost: MEDIAN_CO_ANNUAL, period: 'Annual — Year 2+' },
-  { item: 'Base44 Builder Plan', cost: BASE44_MONTHLY * 12, period: 'Annual ($' + BASE44_MONTHLY + '/mo)' },
 ];
-const fixedFirstYearTotal = APPLE_DEV_ANNUAL + GOOGLE_DEV_ONE_TIME + MEDIAN_CO_FIRST_YEAR + (BASE44_MONTHLY * 12);
-const fixedOngoingAnnual = APPLE_DEV_ANNUAL + MEDIAN_CO_ANNUAL + (BASE44_MONTHLY * 12);
+const fixedFirstYearTotal = APPLE_DEV_ANNUAL + GOOGLE_DEV_ONE_TIME + MEDIAN_CO_FIRST_YEAR;
+const fixedOngoingAnnual = APPLE_DEV_ANNUAL + MEDIAN_CO_ANNUAL;
 const fixedOngoingMonthly = fixedOngoingAnnual / 12;
 
 // AdMob revenue projections at different free-user counts
@@ -282,7 +283,8 @@ function downloadPDF() {
   para(`Platform cost: $${COST_PER_CREDIT.toFixed(4)}/credit (Builder/Pro: $40-80/mo / 10k-20k credits)`);
   para(`App Store fee: ${(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (Apple & Google, small devs < $1M/yr). Apple jumps to ${(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%.`);
   para(`RevenueCat: ${(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above $${REVENUECAT_THRESHOLD.toLocaleString()}/mo`);
-  para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | Median.co: $${MEDIAN_CO_FIRST_YEAR} Year 1, $${MEDIAN_CO_ANNUAL}/yr after | Base44 Builder: $${BASE44_MONTHLY}/mo`);
+  para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | Median.co: $${MEDIAN_CO_FIRST_YEAR} Year 1, $${MEDIAN_CO_ANNUAL}/yr after`);
+  para(`Base44 Builder Plan ($${BASE44_MONTHLY}/mo) is NOT in fixed costs — it is already embedded in the per-credit platform cost ($${COST_PER_CREDIT.toFixed(4)}/credit = $${BASE44_MONTHLY}/mo ÷ 10,000 credits). Listing it separately would double-count.`);
   para(`AdMob: $${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
 
@@ -352,7 +354,7 @@ function downloadPDF() {
   para(`Explorer yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.`);
   para(`Trailblazer is UNPROFITABLE at 100% utilization (${trailblazerAnalysis.margin.toFixed(0)}% = $${trailblazerAnalysis.profit.toFixed(0)} loss over 30 months). At 50% realistic usage, margin improves to ~${trailblazer50.margin.toFixed(0)}%. The 300-slot cap is essential.`);
   para('AdMob revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
-  para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + '.');
+  para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing, excluding Base44 which is embedded in per-credit costs) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + '.');
   para('RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$' + revenuecatFee(7104).toFixed(0) + '/mo at the Mature scenario.');
   para('RISK: Apple fee jumps to 30% above $1M/yr revenue. At that point, Trailblazer becomes deeply unprofitable even at 50% utilization — revisit pricing before crossing $1M.');
   para('Annual plans improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).');
@@ -480,7 +482,8 @@ export default function PlanAnalysis() {
             <p className="print-text"><span className="font-semibold">Platform cost:</span> ${COST_PER_CREDIT.toFixed(4)}/credit (Builder plan: $40/mo, 10,000 included credits). Pro: $80/mo, 20,000 credits. Elite: custom. Credits are hard-capped — actions FAIL when exhausted, not pay-per-use.</p>
             <p className="print-text"><span className="font-semibold">App Store / Google Play fee:</span> {(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (both stores, small devs &lt; $1M/yr). Apple jumps to {(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%.</p>
             <p className="print-text"><span className="font-semibold">RevenueCat:</span> {(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above ${REVENUECAT_THRESHOLD.toLocaleString()}/mo</p>
-            <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · Median.co ${MEDIAN_CO_FIRST_YEAR} Year 1, ${MEDIAN_CO_ANNUAL}/yr after · Base44 Builder ${BASE44_MONTHLY}/mo (${BASE44_MONTHLY * 12}/yr)</p>
+            <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · Median.co ${MEDIAN_CO_FIRST_YEAR} Year 1, ${MEDIAN_CO_ANNUAL}/yr after</p>
+            <p className="print-text text-xs italic"><span className="font-semibold">Note:</span> Base44 Builder Plan (${BASE44_MONTHLY}/mo) is NOT listed as a fixed cost — it is already embedded in the per-credit platform cost (${COST_PER_CREDIT.toFixed(4)}/credit = ${BASE44_MONTHLY}/mo ÷ 10,000 credits). Listing it separately would double-count the subscription fee.</p>
             <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
             <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis shows 100% utilization (worst case) and 50–70% (realistic average).</p>
             <p className="print-text text-xs font-semibold text-red-500 mt-2">⚠ WARNING: No energy gating is currently implemented. All actions below are ungated — every user (including free Observer) can consume unlimited credits. Costs shown assume gating is enforced; actual costs may be higher until gating is deployed.</p>
@@ -785,7 +788,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Google Play's $25 is a one-time fee (not recurring). Median.co drops from $569 (Year 1) to $399/yr after. Base44 Builder plan ($40/mo) covers app hosting, database, auth, and integrations.</p>
+          <p className="text-xs print-muted mt-2 italic">Google Play's $25 is a one-time fee (not recurring). Median.co drops from $569 (Year 1) to $399/yr after. Base44 Builder plan ($40/mo) is not listed here — it is already embedded in the per-credit platform cost ($0.004/credit = $40/mo ÷ 10,000 credits) used throughout this analysis.</p>
         </section>
 
         {/* 8. AdMob Ad Revenue */}
@@ -868,7 +871,7 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold">Explorer</span> yields ~{monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; <span className="font-semibold">Investigator</span> ~{monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.</p>
             <p>• <span className="font-semibold text-red-500">⚠ Trailblazer is unprofitable at 100% utilization</span> ({trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} loss over 30 months). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap and realistic usage patterns are critical — consider reducing Trailblazer narration energy or raising price.</p>
             <p>• <span className="font-semibold">AdMob revenue</span> from free users meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
-            <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal}.</p>
+            <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing, excluding Base44 which is embedded in per-credit costs) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal}.</p>
             <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
             <p>• <span className="font-semibold">RISK:</span> Apple's fee jumps to 30% above $1M/yr revenue. At that point, Trailblazer becomes deeply unprofitable even at 50% utilization — revisit pricing before crossing $1M.</p>
             <p>• <span className="font-semibold">Annual plans</span> improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).</p>
