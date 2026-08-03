@@ -49,6 +49,55 @@ const ADS_PER_TOUR = 7;                // stops 2-8 on avg 8-stop tour (stop 1 i
 const TOURS_PER_FREE_USER_MO = 2;
 const AD_REV_PER_FREE_USER_MO = ADS_PER_TOUR * TOURS_PER_FREE_USER_MO * ADMOB_PER_IMPRESSION;
 
+// ===== CREDIT CONSUMPTION AUDIT =====
+// Every user action that consumes integration credits (InvokeLLM or GenerateSpeech).
+// "Gated" = currently restricted by the energy system. NOTE: No energy gating is
+// implemented yet — all actions are currently ungated (free for all users).
+const CREDIT_AUDIT = [
+  // --- Manifestation Energy (InvokeLLM) ---
+  { action: 'Custom Tour Creation', page: 'Home → Custom Tour', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–9', gated: 'No' },
+  { action: 'Haunted Locations → Create Tour', page: 'Home → Haunted Explorations', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–9', gated: 'No' },
+  { action: 'Nearby → Create Tour (distance)', page: 'Nearby', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
+  { action: 'Nearby → Create Tour (zip)', page: 'Nearby', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
+  { action: 'Abroad Tour Creation', page: 'Abroad Tours → Create', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
+  { action: 'Auto Stop Generation (no stops)', page: 'Tour Detail (auto)', type: 'Manifest.', integration: 'InvokeLLM (automatic)', credits: '2–4', gated: 'No' },
+  { action: 'Add Stops to Tour', page: 'Tour Card → Add Stops', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
+  { action: 'Stop Enrichment (thin content)', page: 'Stop Detail (auto, 1st view)', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–6', gated: 'No' },
+  { action: 'People Extraction (rich content)', page: 'Stop Detail (auto, 1st view)', type: 'Manifest.', integration: 'InvokeLLM (automatic)', credits: '2', gated: 'No' },
+  { action: 'Haunted Locations Discovery', page: 'Home → Nearby/Zip search', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
+  { action: 'Term Sweeper → Build Terms (stop)', page: 'Toolkit → Term Sweeper', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash)', credits: '3', gated: 'No' },
+  { action: 'Term Sweeper → Build Terms (geo)', page: 'Toolkit → Term Sweeper', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
+  { action: 'Weather → Get Location Weather', page: 'Toolkit → Weather Monitor', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
+  { action: 'Weather → Search by City', page: 'Toolkit → Weather Monitor', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'No' },
+  // --- Narration Energy (GenerateSpeech) ---
+  { action: 'Narrate Tour Description', page: 'Tour Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–20', gated: 'No' },
+  { action: 'Narrate Tour Introduction', page: 'Tour Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '10–40', gated: 'No' },
+  { action: 'Narrate Tour Conclusion', page: 'Tour Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '8–32', gated: 'No' },
+  { action: 'Narrate Stop Ghost Story', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–12', gated: 'No' },
+  { action: 'Narrate Stop Paranormal Info', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '20–80', gated: 'No' },
+  { action: 'Narrate Stop Historical Info', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '20–80', gated: 'No' },
+  { action: 'Narrate Investigation Suggestions', page: 'Stop Detail', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–10', gated: 'No' },
+  { action: 'Narrate Person Story', page: 'Stop Detail → Tap name', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '6–20', gated: 'No' },
+  { action: 'Narrate Location Summary', page: 'Home → Haunted Explorations', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '4–20', gated: 'No' },
+  { action: 'Narrate Equipment Guide', page: 'Toolkit → Equipment Guide', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '20–80', gated: 'No' },
+  { action: 'Sweeper Trigger Voice (Alphabet)', page: 'Toolkit → Alphabet Sweeper', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '1 each', gated: 'No' },
+  { action: 'Sweeper Trigger Voice (Term)', page: 'Toolkit → Term Sweeper', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '1 each', gated: 'No' },
+  { action: 'Sweeper Trigger Voice (Yes/No)', page: 'Toolkit → Yes/No Sweeper', type: 'Narration', integration: 'GenerateSpeech (storm)', credits: '1 each', gated: 'No' },
+];
+
+// Ungated worst-case monthly cost per active user (no energy gating implemented)
+const UNGATED_WORST_CASE = {
+  manifestationCalls: 32, narrationCalls: 40, narrationAvgCredits: 20,
+  totalCredits: 32 * 3 + 40 * 20, // 896
+  monthlyCost: (32 * 3 + 40 * 20) * COST_PER_CREDIT,
+};
+// Typical (not worst-case) ungated monthly cost per active user
+const UNGATED_TYPICAL = {
+  manifestationCalls: 10, narrationCalls: 10, narrationAvgCredits: 15,
+  totalCredits: 10 * 3 + 10 * 15, // 180
+  monthlyCost: (10 * 3 + 10 * 15) * COST_PER_CREDIT,
+};
+
 function calcCosts(manE, narE, months) {
   const credits = (manE * CREDITS_PER_MANIFESTATION + narE * CREDITS_PER_NARRATION) * months;
   const platformCost = credits * COST_PER_CREDIT;
@@ -214,6 +263,15 @@ function downloadPDF() {
   para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | Median.co: $${MEDIAN_CO_FIRST_YEAR} Year 1, $${MEDIAN_CO_ANNUAL}/yr after | Base44 Builder: $${BASE44_MONTHLY}/mo`);
   para(`AdMob: $${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
+
+  heading('3a. Credit Consumption Audit');
+  para('CRITICAL: No energy gating is implemented. All 27 actions are ungated — every user can consume unlimited credits.');
+  para(`Typical ungated cost per active user: ${UNGATED_TYPICAL.totalCredits} credits = $${UNGATED_TYPICAL.monthlyCost.toFixed(2)}/mo`);
+  para(`Heavy ungated cost per active user: ${UNGATED_WORST_CASE.totalCredits} credits = $${UNGATED_WORST_CASE.monthlyCost.toFixed(2)}/mo`);
+  para(`At 1,000 free users: ~$${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo (typical) to ~$${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo (heavy) in unrecovered costs.`);
+  table(['Action', 'Page', 'Type', 'Integration', 'Credits', 'Gated'],
+    CREDIT_AUDIT.map(a => [a.action, a.page, a.type, a.integration, a.credits, a.gated]),
+    [120, 100, 50, 120, 50, 40]);
 
   heading('4. Per-Plan Profit - Monthly, 100% Utilization');
   table(['Plan', 'Price', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
@@ -388,6 +446,58 @@ export default function PlanAnalysis() {
             <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · Median.co ${MEDIAN_CO_FIRST_YEAR} Year 1, ${MEDIAN_CO_ANNUAL}/yr after · Base44 Builder ${BASE44_MONTHLY}/mo (${BASE44_MONTHLY * 12}/yr)</p>
             <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
             <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis shows 100% utilization (worst case) and 50–70% (realistic average).</p>
+            <p className="print-text text-xs font-semibold text-red-500 mt-2">⚠ WARNING: No energy gating is currently implemented. All actions below are ungated — every user (including free Observer) can consume unlimited credits. Costs shown assume gating is enforced; actual costs may be higher until gating is deployed.</p>
+          </div>
+        </section>
+
+        {/* 3a. Credit Consumption Audit */}
+        <section className="mb-8">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3a. Credit Consumption Audit — Every User Action</h2>
+          <p className="text-xs print-muted mb-3">Complete inventory of every action that costs integration credits. "Gated = No" means the action is currently unrestricted — any user can trigger it without spending energy.</p>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr>
+                  <th className={th}>Action</th>
+                  <th className={th}>Page / Location</th>
+                  <th className={th}>Type</th>
+                  <th className={th}>Integration</th>
+                  <th className={`${th} ${num}`}>Credits</th>
+                  <th className={`${th} ${num}`}>Gated?</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CREDIT_AUDIT.map((item, i) => (
+                  <tr key={i} className={item.type === 'Narration' ? 'bg-accent/5' : ''}>
+                    <td className={`${td} text-xs print-text`}>{item.action}</td>
+                    <td className={`${td} text-xs print-muted`}>{item.page}</td>
+                    <td className={`${td} text-xs print-text`}>{item.type}</td>
+                    <td className={`${td} text-xs print-muted`}>{item.integration}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{item.credits}</td>
+                    <td className={`${td} ${num} text-xs font-semibold text-red-500 print-text`}>{item.gated}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/5 p-4 space-y-2">
+            <p className="text-sm font-semibold text-red-500 print-text">Ungated Cost Risk (No Energy Gating)</p>
+            <p className="text-xs print-text">Since no energy gating is implemented, every active user can consume credits freely. Estimated monthly platform cost per active user:</p>
+            <div className="grid grid-cols-2 gap-4 mt-2">
+              <div className="p-3 rounded-lg bg-card/40 border border-border/40">
+                <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Typical User</p>
+                <p className="text-lg font-bold text-foreground print-text">{UNGATED_TYPICAL.totalCredits} credits</p>
+                <p className="text-sm text-primary print-text">${UNGATED_TYPICAL.monthlyCost.toFixed(2)}/mo</p>
+                <p className="text-[10px] text-muted-foreground print-muted">~1 tour + 8 enrichments + 1 weather + 10 narrations</p>
+              </div>
+              <div className="p-3 rounded-lg bg-card/40 border border-border/40">
+                <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Heavy User</p>
+                <p className="text-lg font-bold text-foreground print-text">{UNGATED_WORST_CASE.totalCredits} credits</p>
+                <p className="text-sm text-primary print-text">${UNGATED_WORST_CASE.monthlyCost.toFixed(2)}/mo</p>
+                <p className="text-[10px] text-muted-foreground print-muted">3 tours + 24 enrichments + 40 narrations + 20 sweeper triggers</p>
+              </div>
+            </div>
+            <p className="text-xs text-red-500 print-text mt-2">At 1,000 active free users (typical usage): ~${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo in unrecovered platform costs. At heavy usage: ~${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo.</p>
           </div>
         </section>
 
@@ -617,6 +727,8 @@ export default function PlanAnalysis() {
         <section className="mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">10. Key Takeaways</h2>
           <div className="rounded-lg border border-border bg-card/40 print-block p-4 space-y-2 text-sm print-text">
+            <p>• <span className="font-semibold text-red-500">⚠ CRITICAL: No energy gating implemented.</span> All 27 credit-consuming actions are currently ungated. Every user (including free Observer) can create tours, narrate, enrich stops, and use sweepers without restriction. At 1,000 active free users this costs ~${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo (typical) to ~${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo (heavy) in unrecovered platform costs. Energy gating must be deployed before launch.</p>
+            <p>• <span className="font-semibold">27 credit-consuming actions identified</span> across 14 manifestation (InvokeLLM) and 13 narration (GenerateSpeech) actions. Full audit in section 3a. Key hidden costs: stop enrichment (auto-fires on 1st stop view, 3–6 credits each) and Haunted Locations discovery (auto-fires on every search, 3 credits each).</p>
             <p>• <span className="font-semibold">Store fees (15%)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).</p>
             <p>• <span className="font-semibold">Explorer</span> yields ~64% margin at full utilization; <span className="font-semibold">Investigator</span> ~43%. Both healthier when energy goes unused.</p>
             <p>• <span className="font-semibold">Trailblazer</span> yields a thin ~{trailblazerAnalysis.margin.toFixed(0)}% margin at 100% utilization (30-month duration helps). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap remains critical.</p>
