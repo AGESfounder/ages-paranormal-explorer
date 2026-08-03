@@ -187,12 +187,15 @@ export default function LocationTermBank() {
 
 ALL terms must come from the HISTORICAL and PARANORMAL history documented in the text below. Do NOT include generic words, filler, or terms unrelated to this stop's specific history and hauntings.
 
-Extract terms in these 5 categories:
+IMPORTANT: Do NOT include ghost hunting terms, paranormal investigation jargon, or equipment names (e.g. EMF, EVP, spirit box, ghost, haunting, paranormal, investigation, recorder, camera, sensor, meter, sweep, detection). Terms should be ordinary words drawn from the stop's own history and stories — not investigator vocabulary.
+
+Extract terms in these 6 categories:
 1. NAMES — proper nouns (people, places, buildings, ships) mentioned in the historical and paranormal text
-2. HISTORICAL NOUNS — nouns tied to this stop's history, era, landmarks, construction, events, occupations, and objects
-3. PARANORMAL TERMS — nouns and phrases tied to this stop's documented hauntings, reported phenomena, spirits, and local folklore
-4. IMPORTANT PHRASES — meaningful 2-4 word phrases that capture key concepts from the historical or paranormal history
-5. TIME-RELATED WORDS — dates, years, days of the week, months, and time references found in the text
+2. NOUNS — nouns tied to this stop's history, era, landmarks, construction, events, occupations, objects, and documented stories
+3. VERBS — action verbs that appear in the text (EXCLUDE linking verbs and helping verbs)
+4. ADJECTIVES — descriptive adjectives found in the text
+5. FEELINGS & ONOMATOPOEIA — emotions, sensations, and sound words (e.g. scream, whisper, bang, crash, cold, dread) that appear in or are evoked by the text
+6. TIME-RELATED WORDS — dates, years, days of the week, months, and time references found in the text
 
 EXCLUDE these parts of speech entirely:
 - Articles (a, an, the)
@@ -200,7 +203,7 @@ EXCLUDE these parts of speech entirely:
 - Linking verbs (is, are, was, were, be, been, being, seem, appear, become)
 - Helping verbs (have, has, had, do, does, did, will, would, can, could, should, shall, may, might, must)
 
-Return 40-60 terms total, mixing all 5 categories. Each term should be a single word or short phrase (no full sentences). Return as JSON.
+Return 40-60 terms total, mixing all 6 categories. Each term should be a single word or short phrase (no full sentences). Return as JSON.
 
 STOP TEXT:
 ${stopText}`,
