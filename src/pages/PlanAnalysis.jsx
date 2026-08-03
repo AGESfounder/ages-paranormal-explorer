@@ -24,7 +24,14 @@ const AURA_BUNDLES = [
 // ===== COST ASSUMPTIONS =====
 const CREDITS_PER_MANIFESTATION = 3;   // 1 InvokeLLM call (Automatic model) = ~3 credits
 const CREDITS_PER_NARRATION = 1;       // 1 narration energy = 1 GenerateSpeech credit
-const COST_PER_CREDIT = 0.004;         // Builder/Pro plan: $40-80/mo ÷ 10k-20k credits
+const COST_PER_CREDIT = 0.004;         // Builder plan: $40/mo ÷ 10,000 included credits
+
+// Base44 plan tiers and their monthly integration credit allowances
+const BASE44_PLANS = [
+  { name: 'Builder', monthlyCost: 40, credits: 10000, costPerCredit: 40 / 10000 },
+  { name: 'Pro', monthlyCost: 80, credits: 20000, costPerCredit: 80 / 20000 },
+  { name: 'Elite', monthlyCost: 200, credits: 50000, costPerCredit: 200 / 50000 }, // estimated
+];
 
 // App Store / Google Play IAP fees (replaces Wix/Stripe for digital content)
 const STORE_FEE_PCT = 0.15;            // Apple & Google: 15% for small devs (<$1M/yr)
@@ -279,7 +286,15 @@ function downloadPDF() {
   para(`AdMob: $${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
 
-  heading('3a. Full Narration Cost Per Tour (All Tabs)');
+  heading('3a. Base44 Credit Capacity — When to Upgrade');
+  para('Integration credits are hard-capped per plan. Actions FAIL when exhausted — no pay-per-credit overflow.');
+  para('Builder ($40/mo, 10k credits): ~19 Explorer, ~6 Investigator, ~4 Trailblazer users at 100% utilization');
+  para('Pro ($80/mo, 20k credits): ~38 Explorer, ~12 Investigator, ~9 Trailblazer users at 100% utilization');
+  para('At 50% realistic utilization: Builder supports ~38 Explorer, ~12 Investigator, ~9 Trailblazer');
+  para('Free Observer users also consume ~180 credits/mo each if ungated — ~55 free users exhaust Builder alone');
+  para('Upgrade Builder→Pro at ~19 active Explorer users; Pro→Elite at ~38');
+
+  heading('3b. Full Narration Cost Per Tour (All Tabs)');
   para(`Per stop: Ghost Story ~6 credits + History ~20 + Paranormal ~20 + Investigate ~6 = ${NARRATION_PER_STOP} credits/stop`);
   para(`Tour intro ~10 + conclusion ~10. Average tour (${AVG_STOPS_PER_TOUR} stops): ${FULL_TOUR_NARRATION_CREDITS} credits = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour`);
   para(`Explorer: ${TOURS_PER_ENERGY(500)} tours/mo | Investigator: ${TOURS_PER_ENERGY(1500)} tours/mo | Trailblazer: ${TOURS_PER_ENERGY(2000)} tours/mo`);
@@ -331,6 +346,7 @@ function downloadPDF() {
     [100, 45, 45, 50, 50, 40, 40, 40, 50, 50, 45]);
 
   heading('10. Key Takeaways');
+  para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~4 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free users burn ~180 credits/mo each if ungated. Must upgrade plans to scale.');
   para('Store fees (15%) are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).');
   para(`Full narration cost: ~${FULL_TOUR_NARRATION_CREDITS} credits/tour = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour. Explorer ~${TOURS_PER_ENERGY(500)} tour/mo, Investigator ~${TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~${TOURS_PER_ENERGY(2000)} tours/mo.`);
   para(`Explorer yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.`);
@@ -461,7 +477,7 @@ export default function PlanAnalysis() {
           <div className="rounded-lg border border-border bg-card/40 print-block p-4 space-y-2 text-sm">
             <p className="print-text"><span className="font-semibold">Manifestation Energy:</span> 1 unit = 1 InvokeLLM call (Automatic model) ≈ {CREDITS_PER_MANIFESTATION} integration credits</p>
             <p className="print-text"><span className="font-semibold">Narration Energy:</span> 1 unit = 1 GenerateSpeech credit (1 credit / 50 chars of audio)</p>
-            <p className="print-text"><span className="font-semibold">Platform cost:</span> ${COST_PER_CREDIT.toFixed(4)}/credit (Builder/Pro plan: $40–80/mo ÷ 10k–20k credits)</p>
+            <p className="print-text"><span className="font-semibold">Platform cost:</span> ${COST_PER_CREDIT.toFixed(4)}/credit (Builder plan: $40/mo, 10,000 included credits). Pro: $80/mo, 20,000 credits. Elite: custom. Credits are hard-capped — actions FAIL when exhausted, not pay-per-use.</p>
             <p className="print-text"><span className="font-semibold">App Store / Google Play fee:</span> {(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (both stores, small devs &lt; $1M/yr). Apple jumps to {(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%.</p>
             <p className="print-text"><span className="font-semibold">RevenueCat:</span> {(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above ${REVENUECAT_THRESHOLD.toLocaleString()}/mo</p>
             <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · Median.co ${MEDIAN_CO_FIRST_YEAR} Year 1, ${MEDIAN_CO_ANNUAL}/yr after · Base44 Builder ${BASE44_MONTHLY}/mo (${BASE44_MONTHLY * 12}/yr)</p>
@@ -471,7 +487,60 @@ export default function PlanAnalysis() {
           </div>
         </section>
 
-        {/* 3a. Full Narration Cost Per Tour */}
+        {/* 3a. Base44 Credit Capacity — When to Upgrade */}
+        <section className="mb-8">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3a. Base44 Credit Capacity — When to Upgrade</h2>
+          <p className="text-xs print-muted mb-3">Integration credits are hard-capped per plan tier. When exhausted, all AI actions (narration, tour generation, enrichment) FAIL with an error until the next monthly reset. You must upgrade plans to support more users — there is no pay-per-credit overflow.</p>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr>
+                  <th className={th}>Base44 Plan</th>
+                  <th className={`${th} ${num}`}>$/mo</th>
+                  <th className={`${th} ${num}`}>Credits/mo</th>
+                  <th className={`${th} ${num}`}>$/credit</th>
+                  <th className={`${th} ${num}`}>Explorer users (100%)</th>
+                  <th className={`${th} ${num}`}>Investigator users (100%)</th>
+                  <th className={`${th} ${num}`}>Trailblazer users (100%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {BASE44_PLANS.map(p => {
+                  const explorerCredits = 5 * 3 + 500; // 515
+                  const investigatorCredits = 15 * 3 + 1500; // 1545
+                  const trailblazerCredits = 25 * 3 + 2000; // 2075
+                  return (
+                    <tr key={p.name}>
+                      <td className={`${td} font-semibold print-text`}>{p.name}</td>
+                      <td className={`${td} ${num} print-text`}>${p.monthlyCost}</td>
+                      <td className={`${td} ${num} print-text`}>{p.credits.toLocaleString()}</td>
+                      <td className={`${td} ${num} print-muted`}>${p.costPerCredit.toFixed(4)}</td>
+                      <td className={`${td} ${num} print-text`}>~{Math.floor(p.credits / explorerCredits)}</td>
+                      <td className={`${td} ${num} print-text`}>~{Math.floor(p.credits / investigatorCredits)}</td>
+                      <td className={`${td} ${num} print-text`}>~{Math.floor(p.credits / trailblazerCredits)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="p-3 rounded-lg bg-card/40 border border-border/40">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">At 50% Realistic Utilization</p>
+              <p className="text-sm print-text mt-1">Builder (10k credits) supports: ~{Math.floor(10000 / (515 * 0.5))} Explorer, ~{Math.floor(10000 / (1545 * 0.5))} Investigator, ~{Math.floor(10000 / (2075 * 0.5))} Trailblazer users</p>
+              <p className="text-sm print-text">Pro (20k credits) supports: ~{Math.floor(20000 / (515 * 0.5))} Explorer, ~{Math.floor(20000 / (1545 * 0.5))} Investigator, ~{Math.floor(20000 / (2075 * 0.5))} Trailblazer users</p>
+            </div>
+            <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/30">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-red-500">Upgrade Triggers (100% Util)</p>
+              <p className="text-sm print-text mt-1"><span className="font-semibold">Builder → Pro:</span> At ~19 Explorer, ~6 Investigator, or ~4 Trailblazer active users</p>
+              <p className="text-sm print-text"><span className="font-semibold">Pro → Elite:</span> At ~38 Explorer, ~12 Investigator, or ~9 Trailblazer active users</p>
+              <p className="text-xs text-red-500 print-text mt-1">⚠ Free (Observer) users also consume credits if ungated — each typical free user uses ~180 credits/mo, so ~55 free users exhaust Builder alone.</p>
+            </div>
+          </div>
+          <p className="text-xs print-muted mt-2 italic">Credits reset monthly with no carryover. The $/credit decreases at higher tiers (Builder $0.004 → Pro $0.004 → Elite ~$0.004), so upgrading is about capacity, not per-unit savings. Elite pricing is estimated — check base44.com/pricing for current rates. Free Observer users are NOT credit-free if energy gating is unimplemented — they consume the same credits as paid users.</p>
+        </section>
+
+        {/* 3b. Full Narration Cost Per Tour */}
         <section className="mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3a. Full Narration Cost Per Tour (All Tabs)</h2>
           <p className="text-xs print-muted mb-3">Each tour stop has 4 independent narration buttons (GenerateSpeech @ 1 credit / 50 chars). A "fully narrated tour" = narrating every tab at every stop + intro + conclusion.</p>
@@ -516,7 +585,7 @@ export default function PlanAnalysis() {
 
         {/* 3b. Credit Consumption Audit */}
         <section className="mb-8">
-          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3b. Credit Consumption Audit — Every User Action</h2>
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3c. Credit Consumption Audit — Every User Action</h2>
           <p className="text-xs print-muted mb-3">Complete inventory of every action that costs integration credits. "Gated = No" means the action is currently unrestricted — any user can trigger it without spending energy.</p>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full min-w-[700px]">
@@ -791,8 +860,9 @@ export default function PlanAnalysis() {
         <section className="mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">10. Key Takeaways</h2>
           <div className="rounded-lg border border-border bg-card/40 print-block p-4 space-y-2 text-sm print-text">
+            <p>• <span className="font-semibold text-red-500">⚠ CREDIT CAPACITY: Base44 Builder plan includes only 10,000 credits/mo.</span> At 100% utilization that supports just ~19 Explorer, ~6 Investigator, or ~4 Trailblazer users. Pro (20k credits) doubles capacity. Free Observer users also burn ~180 credits/mo each if ungated — ~55 free users alone exhaust Builder. You MUST upgrade plans as you scale, and energy gating is essential to prevent free users from consuming your entire credit allowance.</p>
             <p>• <span className="font-semibold text-red-500">⚠ CRITICAL: No energy gating implemented.</span> All 27 credit-consuming actions are currently ungated. Every user (including free Observer) can create tours, narrate, enrich stops, and use sweepers without restriction. At 1,000 active free users this costs ~${(1000 * UNGATED_TYPICAL.monthlyCost).toFixed(0)}/mo (typical) to ~${(1000 * UNGATED_WORST_CASE.monthlyCost).toFixed(0)}/mo (heavy) in unrecovered platform costs. Energy gating must be deployed before launch.</p>
-            <p>• <span className="font-semibold">27 credit-consuming actions identified</span> across 14 manifestation (InvokeLLM) and 13 narration (GenerateSpeech) actions. Full audit in section 3a. Key hidden costs: stop enrichment (auto-fires on 1st stop view, 3–6 credits each) and Haunted Locations discovery (auto-fires on every search, 3 credits each).</p>
+            <p>• <span className="font-semibold">27 credit-consuming actions identified</span> across 14 manifestation (InvokeLLM) and 13 narration (GenerateSpeech) actions. Full audit in section 3c. Key hidden costs: stop enrichment (auto-fires on 1st stop view, 3–6 credits each) and Haunted Locations discovery (auto-fires on every search, 3 credits each).</p>
             <p>• <span className="font-semibold">Store fees (15%)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30).</p>
             <p>• <span className="font-semibold">Full narration cost:</span> Each fully narrated tour (all 4 tabs per stop + intro + conclusion) costs ~{FULL_TOUR_NARRATION_CREDITS} credits = ${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Energy budgets support: Explorer ~{TOURS_PER_ENERGY(500)} tour/mo, Investigator ~{TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~{TOURS_PER_ENERGY(2000)} tours/mo.</p>
             <p>• <span className="font-semibold">Explorer</span> yields ~{monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; <span className="font-semibold">Investigator</span> ~{monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.</p>
