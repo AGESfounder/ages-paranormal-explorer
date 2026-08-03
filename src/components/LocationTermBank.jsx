@@ -18,6 +18,27 @@ function formatDuration(sec) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// Convert 4-digit years to a spoken format so TTS says "eighteen eighty-seven"
+// instead of "one thousand eight hundred eighty-seven".
+const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const sayPair = (n) => {
+  if (n < 20) return ONES[n];
+  const t = Math.floor(n / 10), o = n % 10;
+  return o ? `${TENS[t]}-${ONES[o]}` : TENS[t];
+};
+const formatForSpeech = (word) => {
+  if (typeof word !== 'string') return word;
+  const match = word.match(/^(\d{4})$/);
+  if (match) {
+    const year = parseInt(match[1]);
+    const first = Math.floor(year / 100), second = year % 100;
+    if (second === 0) return `${sayPair(first)} hundred`;
+    return `${sayPair(first)} ${sayPair(second)}`;
+  }
+  return word;
+};
+
 export default function LocationTermBank() {
   const [phase, setPhase] = useState('idle'); // idle | loading | ready | running | stopped
   const [terms, setTerms] = useState([]);
@@ -42,7 +63,7 @@ export default function LocationTermBank() {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
       const synth = window.speechSynthesis;
       try { synth.getVoices(); } catch {}
-      const u = new SpeechSynthesisUtterance(word);
+      const u = new SpeechSynthesisUtterance(formatForSpeech(word));
       u.lang = 'en-US';
       u.rate = 0.9;
       u.pitch = 1;
@@ -293,7 +314,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     speechStartedRef.current = false;
     // Let the female voice finish the current word, then speak male
     const speakMale = () => {
-      try { speak(word, {}); } catch {}
+      try { speak(formatForSpeech(word), {}); } catch {}
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
