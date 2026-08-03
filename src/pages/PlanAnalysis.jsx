@@ -232,8 +232,28 @@ const scenarios = [
   const fixedCost = fixedOngoingMonthly;
   const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
   const profit = totalRev - totalCost;
-  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100) };
+  // Total credits consumed by paid users at 70% utilization
+  const totalCredits = Math.round(
+    s.mix.explorer * calcCosts(5 * 0.7, 500 * 0.7, 1).credits
+    + s.mix.investigator * calcCosts(15 * 0.7, 1500 * 0.7, 1).credits
+    + s.mix.trailblazer * calcCosts(15 * 0.7, 1500 * 0.7, 1).credits
+  );
+  // Credits consumed by free users if ungated (typical ~180/mo each)
+  const freeCredits = s.freeUsers * UNGATED_TYPICAL.totalCredits;
+  const totalCreditsWithFree = totalCredits + freeCredits;
+  const base44Plan = requiredBase44Plan(totalCredits);
+  const base44PlanWithFree = requiredBase44Plan(totalCreditsWithFree);
+  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, freeCredits, totalCreditsWithFree, base44Plan, base44PlanWithFree };
 });
+
+// Determine which Base44 plan(s) are needed for a given monthly credit volume
+function requiredBase44Plan(credits) {
+  if (credits <= 10000) return { plan: 'Builder', plans: 1, cost: 40 };
+  if (credits <= 20000) return { plan: 'Pro', plans: 1, cost: 80 };
+  if (credits <= 50000) return { plan: 'Elite', plans: 1, cost: 200 };
+  const eliteCount = Math.ceil(credits / 50000);
+  return { plan: `${eliteCount}× Elite`, plans: eliteCount, cost: eliteCount * 200 };
+}
 
 const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -346,6 +366,13 @@ function downloadPDF() {
   table(['Scenario', 'Sub Rev', 'Ad Rev', 'Total Rev', 'Platform', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
     scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.adRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts.toFixed(0), '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
     [100, 45, 45, 50, 50, 40, 40, 40, 50, 50, 45]);
+
+  heading('9a. Base44 Plan Required Per Scenario');
+  para('Total monthly integration credits consumed by paid users (70% utilization) and the minimum Base44 plan needed. "With ungated free users" assumes no energy gating — free users consume ~180 credits/mo each.');
+  table(['Scenario', 'Paid Credits', 'Free Credits', 'Total Credits', 'Plan (Paid Only)', 'Plan (w/ Free)', 'Plan $/mo'],
+    scenarios.map(s => [s.label, s.totalCredits.toLocaleString(), s.freeCredits.toLocaleString(), s.totalCreditsWithFree.toLocaleString(), s.base44Plan.plan, s.base44PlanWithFree.plan, '$' + s.base44PlanWithFree.cost]),
+    [100, 55, 55, 55, 70, 70, 50]);
+  para('Base44 plan costs are IN ADDITION to per-credit platform costs in the scenarios above. Without energy gating, free users dominate credit consumption — Growing needs ' + scenarios[1].base44Plan.plan + ' for paid users but ' + scenarios[1].base44PlanWithFree.plan + ' ($' + scenarios[1].base44PlanWithFree.cost + '/mo) with ungated free users.');
 
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free users burn ~180 credits/mo each if ungated. Must upgrade plans to scale.');
@@ -857,6 +884,65 @@ export default function PlanAnalysis() {
             </table>
           </div>
           <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
+
+          {/* 9a. Base44 Plan Required Per Scenario */}
+          <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <h3 className="font-heading text-sm font-semibold text-foreground mb-3 print-text">9a. Base44 Plan Required Per Scenario</h3>
+            <p className="text-xs print-muted mb-3">Total monthly integration credits consumed by paid users (at 70% utilization) and the minimum Base44 plan needed to support them. "With ungated free users" shows the plan needed if energy gating is NOT deployed — free users consume ~{UNGATED_TYPICAL.totalCredits} credits/mo each.</p>
+            <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+              <table className="w-full min-w-[700px]">
+                <thead>
+                  <tr>
+                    <th className={th}>Scenario</th>
+                    <th className={`${th} ${num}`}>Paid Credits/mo</th>
+                    <th className={`${th} ${num}`}>Free Credits/mo</th>
+                    <th className={`${th} ${num}`}>Total Credits/mo</th>
+                    <th className={th}>Base44 Plan (Paid Only)</th>
+                    <th className={th}>Base44 Plan (w/ Free Users)</th>
+                    <th className={`${th} ${num}`}>Plan Cost/mo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scenarios.map(s => (
+                    <tr key={s.label}>
+                      <td className={`${td} font-semibold print-text whitespace-nowrap`}>{s.label}</td>
+                      <td className={`${td} ${num} print-text`}>{s.totalCredits.toLocaleString()}</td>
+                      <td className={`${td} ${num} print-muted`}>{s.freeCredits.toLocaleString()}</td>
+                      <td className={`${td} ${num} print-text`}>{s.totalCreditsWithFree.toLocaleString()}</td>
+                      <td className={`${td} print-text`}>
+                        <span className="font-semibold">{s.base44Plan.plan}</span>
+                        <span className="text-[10px] print-muted block">{s.base44Plan.plans > 1 ? `${s.base44Plan.plans} plans` : ''}</span>
+                      </td>
+                      <td className={`${td} print-text`}>
+                        <span className={`font-semibold ${s.base44PlanWithFree.plans > 1 ? 'text-red-500' : ''}`}>{s.base44PlanWithFree.plan}</span>
+                        <span className="text-[10px] print-muted block">{s.base44PlanWithFree.plans > 1 ? `${s.base44PlanWithFree.plans} plans` : ''}</span>
+                      </td>
+                      <td className={`${td} ${num} print-text`}>${s.base44PlanWithFree.cost}/mo</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 rounded-lg bg-card/40 border border-border/40">
+                <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Builder Plan</p>
+                <p className="text-sm print-text mt-1">10,000 credits/mo — $40/mo</p>
+                <p className="text-[10px] print-muted">Supports ~19 Explorer or ~6 Investigator users at 100% utilization</p>
+              </div>
+              <div className="p-3 rounded-lg bg-card/40 border border-border/40">
+                <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Pro Plan</p>
+                <p className="text-sm print-text mt-1">20,000 credits/mo — $80/mo</p>
+                <p className="text-[10px] print-muted">Supports ~38 Explorer or ~12 Investigator users at 100% utilization</p>
+              </div>
+              <div className="p-3 rounded-lg bg-card/40 border border-border/40">
+                <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Elite Plan</p>
+                <p className="text-sm print-text mt-1">50,000 credits/mo — $200/mo</p>
+                <p className="text-[10px] print-muted">Supports ~96 Explorer or ~32 Investigator users at 100% utilization</p>
+              </div>
+            </div>
+            <p className="text-xs text-red-500 print-text mt-3">⚠ Without energy gating, free users dominate credit consumption. The Growing scenario needs {scenarios[1].base44Plan.plan} for paid users alone, but {scenarios[1].base44PlanWithFree.plan} (${scenarios[1].base44PlanWithFree.cost}/mo) when ungated free users are included. Energy gating is critical to keep Base44 plan costs manageable.</p>
+            <p className="text-xs print-muted mt-1 italic">Base44 plan costs shown here are IN ADDITION to the per-credit platform costs already embedded in the Revenue Scenarios table above. The per-credit rate ($0.004) assumes Builder plan pricing; higher tiers reduce the effective per-credit rate. Elite pricing is estimated — check base44.com/pricing for current rates.</p>
+          </div>
         </section>
 
         {/* 10. Key Takeaways */}
