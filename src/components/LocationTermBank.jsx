@@ -96,6 +96,7 @@ export default function LocationTermBank() {
 
   const rotRef = useRef(null);
   const drawRef = useRef(null);
+  const shuffleBagRef = useRef([]); // no-repeat-until-all-used shuffle bag
   const canvasRef = useRef(null);
   const motionHandlerRef = useRef(null);
   const orientHandlerRef = useRef(null);
@@ -200,11 +201,11 @@ IMPORTANT: Do NOT include ghost hunting terms, paranormal investigation jargon, 
 
 PRIORITY ORDER — when selecting terms, you MUST favor higher-priority categories and fill the list with them first, only using lower-priority categories to round out the count:
 1. (HIGHEST) NAMES — proper nouns: people's names, surnames, place names, building/landmark names, ship names, street names. These are the MOST important terms and MUST make up the largest share of the list. Never omit a name that appears in the text. Include full names AND first names when available.
-2. (HIGH) ACTION VERBS — dynamic, concrete action verbs that appear in the text (e.g. screamed, burned, fell, vanished, murdered, built, fled). EXCLUDE linking verbs and helping verbs. Prioritize vivid, specific verbs over generic ones.
-3. (HIGH) FEELINGS & EMOTIONS — words tied to emotions, sensations, and feelings (e.g. dread, grief, terror, sorrow, rage, despair, cold, anguish, hope, love) that appear in or are evoked by the text.
-4. (MEDIUM) NOUNS — nouns tied to this stop's history, era, landmarks, construction, events, occupations, objects, and documented stories.
-5. (MEDIUM) ONOMATOPOEIA & SOUND WORDS — sound words (e.g. scream, whisper, bang, crash, moan, creak) that appear in or are evoked by the text.
-6. (LOWER) ADJECTIVES — descriptive adjectives found in the text.
+2. (HIGH) ADJECTIVES — descriptive adjectives found in the text (e.g. haunted, bloody, dark, ancient, cold, silent, restless). Prioritize vivid, evocative adjectives over generic ones.
+3. (HIGH) ACTION VERBS — dynamic, concrete action verbs that appear in the text (e.g. screamed, burned, fell, vanished, murdered, built, fled). EXCLUDE linking verbs and helping verbs. Prioritize vivid, specific verbs over generic ones.
+4. (HIGH) FEELINGS & EMOTIONS — words tied to emotions, sensations, and feelings (e.g. dread, grief, terror, sorrow, rage, despair, cold, anguish, hope, love) that appear in or are evoked by the text.
+5. (MEDIUM) NOUNS — nouns tied to this stop's history, era, landmarks, construction, events, occupations, objects, and documented stories.
+6. (MEDIUM) ONOMATOPOEIA & SOUND WORDS — sound words (e.g. scream, whisper, bang, crash, moan, creak) that appear in or are evoked by the text.
 7. (LOWER) TIME-RELATED WORDS — dates, years, days of the week, months, and time references found in the text.
 
 EXCLUDE these parts of speech entirely:
@@ -303,18 +304,35 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     }
   };
 
+  const pickNextWord = () => {
+    const pool = termsRef.current;
+    if (!pool.length) return '';
+    // Refill the shuffle bag once it's empty so no word repeats until every
+    // word has been shown at least once.
+    if (shuffleBagRef.current.length === 0) {
+      shuffleBagRef.current = [...pool];
+      // Fisher-Yates shuffle
+      for (let i = shuffleBagRef.current.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffleBagRef.current[i], shuffleBagRef.current[j]] = [shuffleBagRef.current[j], shuffleBagRef.current[i]];
+      }
+    }
+    return shuffleBagRef.current.pop();
+  };
+
   const startRotation = () => {
     if (rotRef.current) clearInterval(rotRef.current);
+    shuffleBagRef.current = []; // fresh bag on each session/rotation start
     const pool = termsRef.current;
     if (pool.length) {
-      currentWordRef.current = pool[Math.floor(Math.random() * pool.length)];
+      currentWordRef.current = pickNextWord();
       speakNormal(currentWordRef.current);
     }
     rotRef.current = setInterval(() => {
       if (lockedRef.current) return;
       const p = termsRef.current;
       if (!p.length) return;
-      currentWordRef.current = p[Math.floor(Math.random() * p.length)];
+      currentWordRef.current = pickNextWord();
       speakNormal(currentWordRef.current);
     }, ROTATION_MS);
   };
