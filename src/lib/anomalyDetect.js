@@ -28,9 +28,9 @@ export const BASE_SKELETON = [
 // rMinusG = red-green saturation gap (skin has strong red dominance over green;
 // warm-toned walls/wood have a much smaller gap — this is the key daylight filter).
 const PRESETS = {
-  1: { skinThreshold: 800, minBoxH: 40, minBoxW: 22, minR: 80, minG: 50, minB: 30, rMinusB: 25, rMinusG: 18, maxR: 245, maxG: 220 },
-  2: { skinThreshold: 700, minBoxH: 36, minBoxW: 20, minR: 70, minG: 45, minB: 28, rMinusB: 22, rMinusG: 16, maxR: 248, maxG: 224 },
-  3: { skinThreshold: 190, minBoxH: 17, minBoxW: 10, minR: 16, minG: 11, minB: 8,  rMinusB: 3,  rMinusG: 0,  maxR: 254, maxG: 242 },
+  1: { skinThreshold: 1200, minBoxH: 50, minBoxW: 28, minR: 90, minG: 55, minB: 32, rMinusB: 35, rMinusG: 28, maxR: 240, maxG: 215 },
+  2: { skinThreshold: 1000, minBoxH: 44, minBoxW: 24, minR: 80, minG: 50, minB: 30, rMinusB: 30, rMinusG: 22, maxR: 244, maxG: 218 },
+  3: { skinThreshold: 400,  minBoxH: 26, minBoxW: 14, minR: 30, minG: 18, minB: 12, rMinusB: 10, rMinusG: 6,  maxR: 252, maxG: 238 },
   4: { skinThreshold: 150, minBoxH: 15, minBoxW: 8,  minR: 12, minG: 8,  minB: 5,  rMinusB: 2,  rMinusG: 0,  maxR: 255, maxG: 245 },
   // Level 5 (Torch): torch illuminates the scene like daylight, so reuse
   // the Daylight preset (least sensitive — avoids false positives from glare).
