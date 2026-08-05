@@ -71,3 +71,48 @@ export async function showInterstitial() {
   // Web preview / no native bridge — simulate ad display duration
   return new Promise((resolve) => setTimeout(resolve, 2500));
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// REWARDED ADS (paid users earn energy by watching a 30-second ad)
+// ─────────────────────────────────────────────────────────────────────
+// Same native-bridge pattern as showInterstitial(). When published via
+// Capacitor with @capacitor-community/admob installed, showRewardedAd()
+// auto-detects and uses the real AdMob rewarded video. In web preview it
+// resolves after a short delay so the full UX flow can be tested.
+//
+//   npm install @capacitor-community/admob
+//   npx cap sync
+//
+// Then set your real AdMob rewarded ad-unit IDs below.
+// ─────────────────────────────────────────────────────────────────────
+
+// Replace these with your real AdMob rewarded ad-unit IDs before publishing.
+export const REWARDED_AD_ID_IOS = 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX';
+export const REWARDED_AD_ID_ANDROID = 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX';
+
+/**
+ * Show a rewarded video ad via the native AdMob plugin if available.
+ * Returns a Promise that resolves with { rewarded: boolean }.
+ * In web preview mode (no native bridge) it resolves after a short delay
+ * so the full UX flow can be tested end-to-end.
+ */
+export async function showRewardedAd() {
+  // Capacitor — @capacitor-community/admob
+  if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.AdMob) {
+    const { AdMob } = window.Capacitor.Plugins;
+    const platform = window.Capacitor.getPlatform?.();
+    const adId = platform === 'ios' ? REWARDED_AD_ID_IOS : REWARDED_AD_ID_ANDROID;
+    try {
+      await AdMob.prepareRewardVideoAd({ adId });
+      const result = await AdMob.showRewardVideoAd();
+      // AdMob plugin returns reward info on completion
+      return { rewarded: true, amount: result?.amount || 0 };
+    } catch (e) {
+      console.warn('AdMob rewarded ad failed:', e);
+      return { rewarded: false };
+    }
+  }
+
+  // Web preview / no native bridge — simulate a short ad (real ads are ~30s)
+  return new Promise((resolve) => setTimeout(() => resolve({ rewarded: true }), 3000));
+}

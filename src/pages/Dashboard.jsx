@@ -9,6 +9,7 @@ import EnergyMeter from '@/components/EnergyMeter';
 import TierToolkitAccess from '@/components/TierToolsComparison';
 import { base44 } from '@/api/base44Client';
 import { PLANS, AURA_BUNDLES, PLAN_ORDER } from '@/lib/plans';
+import AdRewardCard from '@/components/AdRewardCard';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -192,6 +193,22 @@ export default function Dashboard() {
             <p className="text-sm text-muted-foreground font-heading">No energy allocated</p>
             <p className="text-xs text-muted-foreground/60 mt-1">Upgrade to a paid plan to unlock AI features</p>
           </div>
+        )}
+
+        {/* ── Ad Rewards (paid users only) ── */}
+        {isPaid && (
+          <AdRewardCard
+            user={user}
+            onRewardGranted={(data) => {
+              setUser(prev => ({
+                ...prev,
+                aura_narration_energy: data.aura_narration_energy,
+                aura_manifestation_energy: data.aura_manifestation_energy,
+                ad_rewards_count: (prev?.ad_rewards_count || 0) + 1,
+                ad_rewards_date: new Date().toISOString().split('T')[0],
+              }));
+            }}
+          />
         )}
 
         {/* ── Upgrade Plans ── */}

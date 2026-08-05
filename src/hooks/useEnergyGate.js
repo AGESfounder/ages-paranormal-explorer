@@ -32,6 +32,16 @@ export function useEnergyGate() {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
 
+  // Listen for ad reward events — refresh user state so earned energy is
+  // immediately usable without a page reload.
+  useEffect(() => {
+    const handleAdReward = () => {
+      base44.auth.me().then(setUser).catch(() => {});
+    };
+    window.addEventListener('ad-reward-granted', handleAdReward);
+    return () => window.removeEventListener('ad-reward-granted', handleAdReward);
+  }, []);
+
   const isAdmin = user?.role === 'admin';
   const isPaid = isAdmin || (user?.plan && user.plan !== 'observer');
   const manEnergy = user?.manifestation_energy || 0;

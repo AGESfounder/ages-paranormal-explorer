@@ -70,6 +70,16 @@
       "type": "string",
       "format": "date-time",
       "description": "When the current plan expires. For Trailblazer (3-year), this is 3 years from purchase. For subscriptions, updated on renewal."
+    },
+    "ad_rewards_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of rewarded ads watched today. Resets when ad_rewards_date changes."
+    },
+    "ad_rewards_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The date (YYYY-MM-DD) for the current ad_rewards_count. Used to reset the daily counter."
     }
   },
   "required": [
