@@ -1,6 +1,7 @@
 import { base44 } from '@/api/base44Client';
 
 const MAX_STOPS = 12;
+const COLD_SPOT_MAX_STOPS = 4; // cold_spot = 1-4 stops at a single location
 
 // Adds additional haunted stops to an existing tour, inserting each new stop
 // at the position that makes the most geographic/routing sense. Caps the tour
@@ -9,11 +10,13 @@ export async function addTourStops(tour) {
   const existingStops = await base44.entities.TourStop.filter({ tour_id: tour.id });
   existingStops.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
 
-  if (existingStops.length >= MAX_STOPS) {
+  const maxStops = tour.tour_category === 'cold_spot' ? COLD_SPOT_MAX_STOPS : MAX_STOPS;
+
+  if (existingStops.length >= maxStops) {
     return { added: 0, capped: true, reason: 'max' };
   }
 
-  const slotsAvailable = MAX_STOPS - existingStops.length;
+  const slotsAvailable = maxStops - existingStops.length;
 
   const existingSummary = existingStops
     .map((s, i) => `Stop ${s.stop_number || i + 1}: ${s.name} | coords: ${s.latitude}, ${s.longitude} | travel: ${s.travel_method || 'walking'}`)
@@ -184,12 +187,12 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
   }
 
   // Cap at MAX_STOPS and renumber.
-  const finalOrdered = dedupedOrdered.slice(0, MAX_STOPS);
+  const finalOrdered = dedupedOrdered.slice(0, maxStops);
   const actualAdded = newStops.length - orphanedNewIds.length;
   const updates = finalOrdered.map((s, i) => ({ id: s.id, stop_number: i + 1 }));
   if (updates.length > 0) {
     await base44.entities.TourStop.bulkUpdate(updates);
   }
 
-  return { added: actualAdded, capped: existingStops.length + newStops.length > MAX_STOPS };
+  return { added: actualAdded, capped: existingStops.length + newStops.length > maxStops };
 }
