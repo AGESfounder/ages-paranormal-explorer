@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Volume2, Zap, Gift, Crown, Check, Loader2, Calendar, TrendingUp, Ghost, FileText } from 'lucide-react';
+import { Sparkles, Volume2, Zap, Gift, Crown, Check, Loader2, Calendar, TrendingUp, Ghost, FileText, Code2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import NavBar from '@/components/NavBar';
@@ -77,9 +77,14 @@ export default function Dashboard() {
         subtitle="Subscription & Energy"
         showBack
         rightAction={
-          <Link to="/plan-analysis" className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/60 text-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-card hover:border-primary/40 transition-colors min-h-[44px]">
-            <FileText className="w-3.5 h-3.5 text-primary" /> Plan PDF
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/dev-docs" className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/60 text-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-card hover:border-primary/40 transition-colors min-h-[44px]">
+              <Code2 className="w-3.5 h-3.5 text-primary" /> Dev Docs
+            </Link>
+            <Link to="/plan-analysis" className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/60 text-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-card hover:border-primary/40 transition-colors min-h-[44px]">
+              <FileText className="w-3.5 h-3.5 text-primary" /> Plan PDF
+            </Link>
+          </div>
         }
       />
       <div className="px-4 pb-28 space-y-5 pt-3">
