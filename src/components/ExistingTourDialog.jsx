@@ -7,7 +7,7 @@ import { toast } from '@/components/ui/use-toast';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
 import AccessTypeBadge from '@/components/AccessTypeBadge';
 
-export default function ExistingTourDialog({ tour, onClose }) {
+export default function ExistingTourDialog({ tour, onClose, mode = 'exists' }) {
   const [addingStops, setAddingStops] = useState(false);
   const navigate = useNavigate();
 
@@ -65,13 +65,19 @@ export default function ExistingTourDialog({ tour, onClose }) {
                 <Ghost className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <h2 className="font-heading text-base font-semibold text-foreground">Tour Already Exists</h2>
-                <p className="text-[10px] text-muted-foreground font-heading uppercase tracking-wider">This Location Is Already Covered</p>
+                <h2 className="font-heading text-base font-semibold text-foreground">
+                  {mode === 'no_new' ? 'No New Tours Available' : 'Tour Already Exists'}
+                </h2>
+                <p className="text-[10px] text-muted-foreground font-heading uppercase tracking-wider">
+                  {mode === 'no_new' ? 'All Nearby Areas Already Covered' : 'This Location Is Already Covered'}
+                </p>
               </div>
             </div>
 
             <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-              A paranormal tour for this location already exists in our database. You can view the existing tour or add more haunted stops to it.
+              {mode === 'no_new'
+                ? "We couldn't find a new area or cold spot to create a tour for in this range — every nearby location is already covered. Would you like to explore this existing tour instead?"
+                : 'A paranormal tour for this location already exists in our database. You can view the existing tour or add more haunted stops to it.'}
             </p>
 
             <div className="rounded-lg border border-border/40 bg-card/40 p-3 mb-4">

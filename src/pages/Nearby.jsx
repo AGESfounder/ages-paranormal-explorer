@@ -11,7 +11,7 @@ import PullToRefresh from '@/components/PullToRefresh';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
 import TourListItem from '@/components/TourListItem';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
-import { findExistingTour } from '@/lib/generateTour';
+import { generateNewNearbyTour } from '@/lib/nearbyTourGenerator';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 
@@ -25,6 +25,7 @@ export default function Nearby() {
   const [error, setError] = useState('');
   const [generatingRange, setGeneratingRange] = useState(null);
   const [existingTour, setExistingTour] = useState(null);
+  const [dialogMode, setDialogMode] = useState('exists');
 
   const [zipCode, setZipCode] = useState('');
   const [zipMode, setZipMode] = useState(false);
@@ -37,93 +38,31 @@ export default function Nearby() {
   const [selectedRange, setSelectedRange] = useState(distanceRanges[0]);
 
   const generateTourForRange = async (range) => {
-    const category = 'area';
     if (!coords || generatingRange) return;
     if (!gateManifestation()) return;
     setGeneratingRange(range.label);
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Generate exactly 1 paranormal tour with a start location ${range.min}-${range.max} miles from these coordinates: (${coords.lat}, ${coords.lng}). The tour's start_latitude and start_longitude MUST place it ${range.min}-${range.max} miles away — pick a real town or city in that distance band.
-Tour category: ${category} — ${category === 'landmark' ? 'one specific property, all stops on the same site, walking tour' : category === 'area' ? 'walking or close driving, different locations 1-3 miles apart' : 'driving tour with 5+ miles between stops, wider region'}.
-
-Include:
-- title: a creative, spooky tour name
-- tour_category: "${category}"
-- city: the town/city where the tour starts
-- state: full state name
-- tour_type: "walking", "driving", or "mixed"
-- description: 2-3 compelling sentences about the tour's haunted locations
-- introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "AGES (Accessible Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
-- conclusion: closing paragraph ending with "Thank you for exploring with AGES — Accessible Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
-- difficulty: "easy", "moderate", or "challenging"
-- estimated_duration: e.g. "2-3 hours"
-- total_distance: e.g. "1.5 miles"
-- start_location_name, start_latitude, start_longitude (real coordinates at a location ${range.min}-${range.max} miles from (${coords.lat}, ${coords.lng}))
-- tags: array of relevant tags
-- safety_info: important safety notes
-- best_time: "Dusk to midnight"
-
-ROUTING & ACCESS RULES — FOLLOW EXACTLY:
-
-1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. Arrange stops in the most efficient order possible — shortest total route wins.
-
-2. WALKING TOURS: Walking tours form a logical loop — stops start and end near the same point with no crisscrossing. Route proceeds in an efficient circle so investigators return to their starting point.
-
-3. DRIVING-ONLY TOURS: Stops follow a logical linear progression — each stop advances in a single direction with no doubling back. Minimize total driving distance.
-
-4. MIXED TOURS: The tour can start by driving to a parking area near a walking cluster, then walking stops form a logical loop (≤0.33 miles between stops, returning to that parking area). Remaining driving stops continue in a linear progression. Use this pattern when it makes the most logical sense — drive to where the walking cluster is, walk the loop, then drive to remaining stops. Minimize both walking and driving distances.
-
-5. PUBLIC ACCESS AFTER 7 PM: ALL locations must be publicly accessible after 7 PM. Ghost hunts occur at night. Do NOT use locations that close before 7 PM, have locked gates, or prohibit nighttime access (e.g. national battlefields, state parks closing at sunset, gated cemeteries, museums closing at 5 PM). At minimum, investigators must be able to be outside the building after 7 PM. Verify nighttime access for every location.
-
-6. MOST POPULAR STOPS: Include the most popular, most talked-about paranormal hotspots — the locations where paranormal activity and ghosts have been observed, recorded, and discussed most. Prioritize locations with the richest documented paranormal history and famous ghost sightings. Do NOT include obscure or unknown locations.
-
-Use real locations with documented paranormal history only.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            tours: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  tour_category: { type: "string" },
-                  city: { type: "string" },
-                  state: { type: "string" },
-                  tour_type: { type: "string" },
-                  description: { type: "string" },
-                  introduction: { type: "string" },
-                  conclusion: { type: "string" },
-                  difficulty: { type: "string" },
-                  estimated_duration: { type: "string" },
-                  total_distance: { type: "string" },
-                  start_location_name: { type: "string" },
-                  start_latitude: { type: "number" },
-                  start_longitude: { type: "number" },
-                  tags: { type: "array", items: { type: "string" } },
-                  safety_info: { type: "string" },
-                  best_time: { type: "string" }
-                }
-              }
-            }
-          }
-        },
-        model: "gemini_3_flash",
-        add_context_from_internet: true
-      });
-
-      const tourData = result.tours?.[0];
-      if (!tourData) throw new Error('No tour generated');
-      const existing = await findExistingTour(tourData.title, tourData.state, category, undefined, tourData.city);
-      if (existing) {
-        setExistingTour(existing);
+      const locationContext = `${range.min}-${range.max} miles from these coordinates: (${coords.lat}, ${coords.lng}). The tour's start_latitude and start_longitude MUST place it ${range.min}-${range.max} miles away — pick a real town or city in that distance band`;
+      const result = await generateNewNearbyTour(locationContext);
+      if (result.status === 'created') {
+        spendManifestation();
         setGeneratingRange(null);
-        return;
+        navigate(`/tour/${result.tour.id}`);
+      } else {
+        setGeneratingRange(null);
+        const closest = tours
+          .filter((t) => t.distance >= range.min && t.distance <= range.max)
+          .sort((a, b) => a.distance - b.distance)[0];
+        if (closest) {
+          setDialogMode('no_new');
+          setExistingTour(closest);
+        } else if (result.existingTours.length > 0) {
+          setDialogMode('no_new');
+          setExistingTour(result.existingTours[0]);
+        } else {
+          setError('No new tours could be created in this range, and no existing tours were found nearby.');
+        }
       }
-      const saved = await base44.entities.Tour.create({ ...tourData, tour_category: category });
-      spendManifestation();
-      setGeneratingRange(null);
-      navigate(`/tour/${saved.id}`);
     } catch (err) {
       setGeneratingRange(null);
       setError(err.message || 'Failed to generate tour. Please try again.');
@@ -131,7 +70,6 @@ Use real locations with documented paranormal history only.`,
   };
 
   const generateTourForZip = async (zipCodeParam) => {
-    const category = 'area';
     if (!zipCodeParam || !zipCodeParam.trim() || zipCodeParam.length < 5) return;
     if (!gateManifestation()) return;
     setGeneratingRange('Custom Zip Code');
@@ -151,90 +89,23 @@ Use real locations with documented paranormal history only.`,
         setError('Could not find that zip code. Please check and try again.');
         return;
       }
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Generate exactly 1 paranormal tour within a 30-mile radius of ${zipLabel} (latitude ${zipLat}, longitude ${zipLon}, zip code ${zipCodeParam.trim()}). Find a real haunted location within 30 miles of these coordinates.
-Tour category: ${category} — ${category === 'landmark' ? 'one specific property, all stops on the same site, walking tour' : category === 'area' ? 'walking or close driving, different locations 1-3 miles apart' : 'driving tour with 5+ miles between stops, wider region'}.
-
-Include:
-- title: a creative, spooky tour name
-- tour_category: "${category}"
-- city: the town/city where the tour starts
-- state: full state name
-- tour_type: "walking", "driving", or "mixed"
-- description: 2-3 compelling sentences about the tour's haunted locations
-- introduction: historical overview + paranormal overview (each 3-4 paragraphs, rich with dates, specific events, eyewitness accounts, local legends) + safety info. Mention "AGES (Accessible Ghost Exploration Solutions) encourages explorers to conduct respectful paranormal investigations while preserving historic locations."
-- conclusion: closing paragraph ending with "Thank you for exploring with AGES — Accessible Ghost Exploration Solutions. Remember that every legend has a story, every location has a history, and every investigation adds to the mystery."
-- difficulty: "easy", "moderate", or "challenging"
-- estimated_duration: e.g. "2-3 hours"
-- total_distance: e.g. "1.5 miles"
-- start_location_name, start_latitude, start_longitude (real coordinates within 30 miles of ${zipLabel} (${zipLat}, ${zipLon}))
-- tags: array of relevant tags
-- safety_info: important safety notes
-- best_time: "Dusk to midnight"
-
-ROUTING & ACCESS RULES — FOLLOW EXACTLY:
-
-1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. Arrange stops in the most efficient order possible — shortest total route wins.
-
-2. WALKING TOURS: Walking tours form a logical loop — stops start and end near the same point with no crisscrossing. Route proceeds in an efficient circle so investigators return to their starting point.
-
-3. DRIVING-ONLY TOURS: Stops follow a logical linear progression — each stop advances in a single direction with no doubling back. Minimize total driving distance.
-
-4. MIXED TOURS: The tour can start by driving to a parking area near a walking cluster, then walking stops form a logical loop (≤0.33 miles between stops, returning to that parking area). Remaining driving stops continue in a linear progression. Use this pattern when it makes the most logical sense — drive to where the walking cluster is, walk the loop, then drive to remaining stops. Minimize both walking and driving distances.
-
-5. PUBLIC ACCESS AFTER 7 PM: ALL locations must be publicly accessible after 7 PM. Ghost hunts occur at night. Do NOT use locations that close before 7 PM, have locked gates, or prohibit nighttime access (e.g. national battlefields, state parks closing at sunset, gated cemeteries, museums closing at 5 PM). At minimum, investigators must be able to be outside the building after 7 PM. Verify nighttime access for every location.
-
-6. MOST POPULAR STOPS: Include the most popular, most talked-about paranormal hotspots — the locations where paranormal activity and ghosts have been observed, recorded, and discussed most. Prioritize locations with the richest documented paranormal history and famous ghost sightings. Do NOT include obscure or unknown locations.
-
-Use real locations with documented paranormal history only.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            tours: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  tour_category: { type: "string" },
-                  city: { type: "string" },
-                  state: { type: "string" },
-                  tour_type: { type: "string" },
-                  description: { type: "string" },
-                  introduction: { type: "string" },
-                  conclusion: { type: "string" },
-                  difficulty: { type: "string" },
-                  estimated_duration: { type: "string" },
-                  total_distance: { type: "string" },
-                  start_location_name: { type: "string" },
-                  start_latitude: { type: "number" },
-                  start_longitude: { type: "number" },
-                  tags: { type: "array", items: { type: "string" } },
-                  safety_info: { type: "string" },
-                  best_time: { type: "string" }
-                }
-              }
-            }
-          }
-        },
-        model: "gemini_3_flash",
-        add_context_from_internet: true
-      });
-
-      const tourData = result.tours?.[0];
-      if (!tourData) throw new Error('No tour generated');
-      const existing = await findExistingTour(tourData.title, tourData.state, category, undefined, tourData.city);
-      if (existing) {
-        setExistingTour(existing);
+      const locationContext = `within a 30-mile radius of ${zipLabel} (latitude ${zipLat}, longitude ${zipLon}, zip code ${zipCodeParam.trim()}). Find a real haunted location within 30 miles of these coordinates`;
+      const result = await generateNewNearbyTour(locationContext);
+      if (result.status === 'created') {
+        spendManifestation();
         setGeneratingRange(null);
-        return;
+        setZipCode('');
+        setZipMode(false);
+        navigate(`/tour/${result.tour.id}`);
+      } else {
+        setGeneratingRange(null);
+        if (result.existingTours.length > 0) {
+          setDialogMode('no_new');
+          setExistingTour(result.existingTours[0]);
+        } else {
+          setError('No new tours could be created near this zip code, and no existing tours were found.');
+        }
       }
-      const saved = await base44.entities.Tour.create({ ...tourData, tour_category: category });
-      spendManifestation();
-      setGeneratingRange(null);
-      setZipCode('');
-      setZipMode(false);
-      navigate(`/tour/${saved.id}`);
     } catch (err) {
       setGeneratingRange(null);
       setError(err.message || 'Failed to generate tour. Please try again.');
@@ -454,7 +325,7 @@ Use real locations with documented paranormal history only.`,
         )}
       </div>
       </PullToRefresh>
-      <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
+      <ExistingTourDialog tour={existingTour} onClose={() => { setExistingTour(null); setDialogMode('exists'); }} mode={dialogMode} />
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
       <NavBar />
     </PageContainer>
