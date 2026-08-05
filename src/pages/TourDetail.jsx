@@ -17,6 +17,8 @@ import TourAccessInfo from '@/components/TourAccessInfo';
 import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
+import NarrationLengthSelector from '@/components/NarrationLengthSelector';
+import { getNarrationLength, saveNarrationLength, truncateText } from '@/lib/narrationLength';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -102,6 +104,15 @@ export default function TourDetail() {
     rawNarrate(text, opts);
     spendNarration(estimateNarrationCost(text));
   };
+
+  const [narrationLength, setNarrationLengthState] = useState(getNarrationLength());
+  const handleNarrationLengthChange = (value) => {
+    setNarrationLengthState(value);
+    saveNarrationLength(value);
+  };
+  const displayDescription = useMemo(() => truncateText(tour?.description, narrationLength), [tour?.description, narrationLength]);
+  const displayIntroduction = useMemo(() => truncateText(tour?.introduction, narrationLength), [tour?.introduction, narrationLength]);
+  const displayConclusion = useMemo(() => truncateText(tour?.conclusion, narrationLength), [tour?.conclusion, narrationLength]);
 
   const totalDistance = useMemo(() => {
     if (stops.length < 2) return 0;
@@ -382,12 +393,13 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
             )}
           </div>
           <div className="flex items-start justify-between gap-3">
-            <p className="text-log text-sm text-foreground/80 leading-relaxed">{tour.description}</p>
-            <button onClick={() => narrate(tour.description)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-              {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={tour.description} /></>}
+            <p className="text-log text-sm text-foreground/80 leading-relaxed">{displayDescription}</p>
+            <button onClick={() => narrate(displayDescription)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+              {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={displayDescription} /></>}
             </button>
           </div>
           {tour.best_time && <p className="text-xs text-primary flex items-center gap-1"><Zap className="w-3 h-3" /> Best time: {tour.best_time}</p>}
+          <NarrationLengthSelector value={narrationLength} onChange={handleNarrationLengthChange} />
         </div>
 
         <TourAccessInfo tour={tour} stops={stops} />
@@ -396,11 +408,11 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
           <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-primary">Introduction</h3>
-              <button onClick={() => narrate(tour.introduction)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={tour.introduction} /></>}
+              <button onClick={() => narrate(displayIntroduction)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={displayIntroduction} /></>}
               </button>
             </div>
-            <p className="text-log text-xs text-foreground/70 leading-relaxed">{tour.introduction}</p>
+            <p className="text-log text-xs text-foreground/70 leading-relaxed">{displayIntroduction}</p>
           </div>
         )}
 
@@ -479,7 +491,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
                                   {stop.hours_of_operation && <Info className="w-3 h-3 text-amber-400" />}
                                 </div>
                               )}
-                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); narrate(stop.narration_text || stop.paranormal_info); }} className={`p-1.5 rounded-md shrink-0 transition-colors ${isSpeaking || isGenerating ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}>
+                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); narrate(truncateText(stop.narration_text || stop.paranormal_info, narrationLength)); }} className={`p-1.5 rounded-md shrink-0 transition-colors ${isSpeaking || isGenerating ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}>
                                 {isSpeaking || isGenerating ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
                               </button>
                               <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
@@ -500,11 +512,11 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
           <div id="conclusion" className="p-4 rounded-xl border border-dim-purple/20 bg-dim-purple/5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-dim-purple">Conclusion</h3>
-              <button onClick={() => { narrate(tour.conclusion); setConclusionRead(true); }} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
-                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={tour.conclusion} /></>}
+              <button onClick={() => { narrate(displayConclusion); setConclusionRead(true); }} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={displayConclusion} /></>}
               </button>
             </div>
-            <p className="text-log text-xs text-foreground/70 leading-relaxed" onScroll={() => setConclusionRead(true)}>{tour.conclusion}</p>
+            <p className="text-log text-xs text-foreground/70 leading-relaxed" onScroll={() => setConclusionRead(true)}>{displayConclusion}</p>
             <button onClick={() => setConclusionRead(true)} className="text-[10px] text-dim-purple/60 underline underline-offset-2 hover:text-dim-purple transition-colors">
               I've read the conclusion
             </button>
