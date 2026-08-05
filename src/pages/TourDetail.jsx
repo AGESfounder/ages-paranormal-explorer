@@ -19,6 +19,7 @@ import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
 import { getNarrationLength, saveNarrationLength, truncateText } from '@/lib/narrationLength';
+import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -110,9 +111,14 @@ export default function TourDetail() {
     setNarrationLengthState(value);
     saveNarrationLength(value);
   };
-  const displayDescription = useMemo(() => truncateText(tour?.description, narrationLength), [tour?.description, narrationLength]);
-  const displayIntroduction = useMemo(() => truncateText(tour?.introduction, narrationLength), [tour?.introduction, narrationLength]);
-  const displayConclusion = useMemo(() => truncateText(tour?.conclusion, narrationLength), [tour?.conclusion, narrationLength]);
+  const condensed = useCondensedTexts({
+    description: tour?.description,
+    introduction: tour?.introduction,
+    conclusion: tour?.conclusion,
+  }, narrationLength);
+  const displayDescription = condensed.description || truncateText(tour?.description, narrationLength);
+  const displayIntroduction = condensed.introduction || truncateText(tour?.introduction, narrationLength);
+  const displayConclusion = condensed.conclusion || truncateText(tour?.conclusion, narrationLength);
 
   const totalDistance = useMemo(() => {
     if (stops.length < 2) return 0;

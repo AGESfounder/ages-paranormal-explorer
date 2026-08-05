@@ -19,6 +19,7 @@ import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from 
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import { getNarrationLength, truncateText } from '@/lib/narrationLength';
+import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -53,9 +54,14 @@ export default function StopDetail() {
   };
 
   const [narrationLength] = useState(getNarrationLength());
-  const displayNarrationText = useMemo(() => truncateText(stop?.narration_text, narrationLength), [stop?.narration_text, narrationLength]);
-  const displayParanormalInfo = useMemo(() => truncateText(stop?.paranormal_info, narrationLength), [stop?.paranormal_info, narrationLength]);
-  const displayHistoricalInfo = useMemo(() => truncateText(stop?.historical_info, narrationLength), [stop?.historical_info, narrationLength]);
+  const condensed = useCondensedTexts({
+    narration_text: stop?.narration_text,
+    paranormal_info: stop?.paranormal_info,
+    historical_info: stop?.historical_info,
+  }, narrationLength);
+  const displayNarrationText = condensed.narration_text || truncateText(stop?.narration_text, narrationLength);
+  const displayParanormalInfo = condensed.paranormal_info || truncateText(stop?.paranormal_info, narrationLength);
+  const displayHistoricalInfo = condensed.historical_info || truncateText(stop?.historical_info, narrationLength);
 
   // Lazily enrich a stop the first time it is viewed. Tour creation stores only
   // lightweight summaries, so the full rich historical/paranormal detail and
