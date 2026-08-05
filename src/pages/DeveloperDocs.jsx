@@ -149,8 +149,8 @@ registerPlugin(AdMob::class.java)`} />
         {/* ── Rewarded Ad Flow ── */}
         <Section icon={Zap} title="Rewarded Ad → Energy Grant Flow">
           <Info>
-            Paid users who run out of energy can watch a rewarded ad to earn 20 energy (16 narration +
-            4 manifestation). The flow spans the client bridge, a backend function, and the User entity.
+            Paid users who run out of energy can watch a rewarded ad to earn 10 energy (8 narration +
+            2 manifestation). The flow spans the client bridge, a backend function, and the User entity.
           </Info>
           <CodeBlock label="Client flow (UpgradePrompt.jsx & AdRewardCard.jsx)" code={`// 1. Show the rewarded ad via the native bridge
 const result = await showRewardedAd();  // src/lib/adService.js
@@ -169,9 +169,9 @@ window.dispatchEvent(new CustomEvent('ad-reward-granted'));`} />
           <CodeBlock label="grant-ad-reward/entry.ts — what it does" code={`// - Reads the authenticated user via base44.auth.me()
 // - Only paid users (or admins) can earn rewards (403 otherwise)
 // - Enforces a 5/day cap using ad_rewards_count + ad_rewards_date
-// - Grants 20 energy to the aura (rollover) pool:
-//     80% narration  → aura_narration_energy  (+16)
-//     20% manifestation → aura_manifestation_energy (+4)
+// - Grants 10 energy to the aura (rollover) pool:
+//     80% narration  → aura_narration_energy  (+8)
+//     20% manifestation → aura_manifestation_energy (+2)
 // - Updates the User record as service role
 // - Returns { success, granted, remaining, aura_narration_energy, aura_manifestation_energy }`} />
           <Info>
@@ -179,7 +179,7 @@ window.dispatchEvent(new CustomEvent('ad-reward-granted'));`} />
             <code className="text-primary">base44/shared/adRewards.js</code> (backend) and{' '}
             <code className="text-primary">src/lib/adRewards.js</code> (frontend display copy):
           </Info>
-          <CodeBlock label="base44/shared/adRewards.js" code={`export const AD_REWARD_ENERGY = 20;        // energy per ad
+          <CodeBlock label="base44/shared/adRewards.js" code={`export const AD_REWARD_ENERGY = 10;        // energy per ad
 export const AD_REWARD_DAILY_LIMIT = 5;     // max ads/day
 export const AD_REWARD_NARRATION_PCT = 0.8; // 80% → narration
 export const AD_REWARD_MANIFESTATION_PCT = 0.2; // 20% → manifestation`} />

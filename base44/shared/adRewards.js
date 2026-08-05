@@ -1,7 +1,7 @@
 // Ad reward constants — shared by backend functions.
 // Frontend has its own copy in src/lib/adRewards.js for display.
 
-export const AD_REWARD_ENERGY = 20;
+export const AD_REWARD_ENERGY = 10;
 export const AD_REWARD_DAILY_LIMIT = 5;
 export const AD_REWARD_NARRATION_PCT = 0.8;
 export const AD_REWARD_MANIFESTATION_PCT = 0.2;
