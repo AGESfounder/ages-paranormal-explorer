@@ -56,6 +56,23 @@ const ADS_PER_TOUR = 7;                // stops 2-8 on avg 8-stop tour (stop 1 i
 const TOURS_PER_FREE_USER_MO = 2;
 const AD_REV_PER_FREE_USER_MO = ADS_PER_TOUR * TOURS_PER_FREE_USER_MO * ADMOB_PER_IMPRESSION;
 
+// AdMob Rewarded ads (paid users earn 20 energy per ad, up to 5/day)
+// Granted energy is consumed as credits — model both the ad revenue and the
+// platform cost of the consumed energy. Net impact is usually a small cost
+// per paid user, but it improves retention by preventing churn at energy gates.
+const ADMOB_REWARDED_ECPM = 20;        // $20 per 1,000 rewarded impressions (higher engagement)
+const ADMOB_REWARDED_PER_IMPRESSION = ADMOB_REWARDED_ECPM / 1000;
+const ADS_PER_PAID_USER_MO = 5;        // realistic: users watch ~5 ads/mo when hitting energy gates
+const AD_REWARD_ENERGY = 20;           // energy granted per ad (matches base44/shared/adRewards.js)
+const AD_REWARD_NARRATION = 16;       // 80% narration
+const AD_REWARD_MANIFESTATION = 4;    // 20% manifestation
+const AD_REWARD_CREDITS_PER_AD = AD_REWARD_NARRATION * CREDITS_PER_NARRATION
+  + AD_REWARD_MANIFESTATION * CREDITS_PER_MANIFESTATION; // 16 + 12 = 28 credits if fully consumed
+const AD_REWARD_UTILIZATION = 0.7;    // % of granted energy actually consumed by the user
+const AD_REWARD_REV_PER_PAID_USER_MO = ADS_PER_PAID_USER_MO * ADMOB_REWARDED_PER_IMPRESSION;
+const AD_REWARD_COST_PER_PAID_USER_MO = ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION * COST_PER_CREDIT;
+const AD_REWARD_NET_PER_PAID_USER_MO = AD_REWARD_REV_PER_PAID_USER_MO - AD_REWARD_COST_PER_PAID_USER_MO;
+
 // ===== FULL NARRATION COST PER TOUR =====
 // Each stop has 4 independent narration buttons (GenerateSpeech @ 1 credit/50 chars):
 //   Ghost Story (narration_text):  ~300 chars → ~6 credits
@@ -217,7 +234,7 @@ const fixedFirstYearTotal = APPLE_DEV_ANNUAL + GOOGLE_DEV_ONE_TIME + MEDIAN_CO_F
 const fixedOngoingAnnual = APPLE_DEV_ANNUAL + MEDIAN_CO_ANNUAL;
 const fixedOngoingMonthly = fixedOngoingAnnual / 12;
 
-// AdMob revenue projections at different free-user counts
+// AdMob interstitial revenue projections at different free-user counts
 const adMobScenarios = [
   { label: '250 free users', users: 250 },
   { label: '1,000 free users', users: 1000 },
@@ -227,6 +244,23 @@ const adMobScenarios = [
   ...s,
   monthlyRev: s.users * AD_REV_PER_FREE_USER_MO,
   annualRev: s.users * AD_REV_PER_FREE_USER_MO * 12,
+}));
+
+// AdMob rewarded ad projections at different paid-user counts
+// Each ad: $0.020 ad revenue, 20 energy granted (28 credits if fully consumed,
+// ~19.6 at 70% utilization = $0.078 platform cost). Net = $0.020 - $0.078 = -$0.058/ad.
+// The net cost is a retention investment — keeps users engaged at energy gates.
+const rewardedAdScenarios = [
+  { label: '50 paid users', users: 50 },
+  { label: '200 paid users', users: 200 },
+  { label: '500 paid users', users: 500 },
+  { label: '1,000 paid users', users: 1000 },
+].map(s => ({
+  ...s,
+  monthlyAdRev: s.users * AD_REWARD_REV_PER_PAID_USER_MO,
+  monthlyEnergyCost: s.users * AD_REWARD_COST_PER_PAID_USER_MO,
+  monthlyNet: s.users * AD_REWARD_NET_PER_PAID_USER_MO,
+  monthlyCredits: Math.round(s.users * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION),
 }));
 
 // Revenue scenarios (monthly, 70% avg utilization, includes ad revenue + all costs)
@@ -240,13 +274,20 @@ const scenarios = [
   const investigatorRev = s.mix.investigator * 11.99;
   const trailblazerRev = s.mix.trailblazer * (239.99 / 30);
   const subRev = explorerRev + investigatorRev + trailblazerRev;
-  const adRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
+  const totalPaidUsers = s.mix.explorer + s.mix.investigator + s.mix.trailblazer;
+  // Interstitial ad revenue (free users) + rewarded ad revenue (paid users)
+  const interstitialAdRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
+  const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
+  const adRev = interstitialAdRev + rewardedAdRev;
   const totalRev = subRev + adRev;
-  // Total credits consumed by paid users at 70% utilization
+  // Credits from ad-reward energy consumed by paid users (added to plan-tier calc)
+  const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
+  // Total credits consumed by paid users at 70% utilization + ad-reward credits
   const totalCredits = Math.round(
     s.mix.explorer * calcCosts(5 * 0.7, 500 * 0.7, 1).credits
     + s.mix.investigator * calcCosts(15 * 0.7, 1500 * 0.7, 1).credits
     + s.mix.trailblazer * calcCosts(15 * 0.7, 1500 * 0.7, 1).credits
+    + rewardedAdCredits
   );
   const base44Plan = requiredBase44Plan(totalCredits);
   // Platform cost = actual Base44 plan tier cost (fixed monthly, not per-credit)
@@ -259,7 +300,7 @@ const scenarios = [
   const fixedCost = fixedOngoingMonthly;
   const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
   const profit = totalRev - totalCost;
-  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, base44Plan };
+  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, rewardedAdRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, base44Plan };
 });
 
 // Determine which Base44 plan(s) are needed for a given monthly credit volume
@@ -321,7 +362,8 @@ function downloadPDF() {
   para(`RevenueCat: ${(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above $${REVENUECAT_THRESHOLD.toLocaleString()}/mo`);
   para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | Median.co: $${MEDIAN_CO_FIRST_YEAR} Year 1, $${MEDIAN_CO_ANNUAL}/yr after`);
   para(`Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by total credits consumed. The per-credit rate ($${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4-6.`);
-  para(`AdMob: $${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
+  para(`AdMob Interstitial: $${ADMOB_ECPM}/1k impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
+  para(`AdMob Rewarded: $${ADMOB_REWARDED_ECPM}/1k impressions. Paid users watch ~${ADS_PER_PAID_USER_MO} ads/mo for +${AD_REWARD_ENERGY} energy each. Ad rev: $${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Energy cost: ${AD_REWARD_CREDITS_PER_AD} credits/ad × ${Math.round(AD_REWARD_UTILIZATION * 100)}% utilization × $${COST_PER_CREDIT.toFixed(4)} = $${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Net: $${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(3)}/paid user/mo (retention investment, not profit).`);
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
 
   heading('3a. Base44 Credit Capacity — When to Upgrade');
@@ -382,23 +424,29 @@ function downloadPDF() {
      ['Ongoing Annual Total', '$' + fixedOngoingAnnual, '$' + fixedOngoingMonthly.toFixed(2) + '/mo']],
     [160, 60, 120]);
 
-  heading('8. AdMob Ad Revenue (Free Users)');
+  heading('8a. AdMob Interstitial Ad Revenue (Free Users)');
   table(['Free Users', 'Monthly Rev', 'Annual Rev'],
     adMobScenarios.map(s => [s.label, '$' + s.monthlyRev.toFixed(2), '$' + s.annualRev.toFixed(2)]),
     [120, 80, 80]);
   para(`Model: ${ADS_PER_TOUR} ads/tour x ${TOURS_PER_FREE_USER_MO} tours/mo x $${ADMOB_PER_IMPRESSION.toFixed(3)}/impression = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo. Stop 1 paranormal history is free; stops 2+ show interstitial ads.`);
 
+  heading('8b. AdMob Rewarded Ad Revenue (Paid Users — Energy Top-Ups)');
+  table(['Paid Users', 'Ad Rev/mo', 'Energy Cost/mo', 'Net/mo', 'Credits/mo'],
+    rewardedAdScenarios.map(s => [s.label, '$' + s.monthlyAdRev.toFixed(2), '$' + s.monthlyEnergyCost.toFixed(2), '$' + s.monthlyNet.toFixed(2), s.monthlyCredits.toLocaleString()]),
+    [90, 70, 70, 60, 60]);
+  para(`Model: ${ADS_PER_PAID_USER_MO} ads/paid user/mo x $${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)}/impression = $${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(3)} ad rev. Energy cost: ${ADS_PER_PAID_USER_MO} x ${AD_REWARD_CREDITS_PER_AD} credits x ${Math.round(AD_REWARD_UTILIZATION * 100)}% utilization x $${COST_PER_CREDIT.toFixed(4)}/credit = $${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Net is a retention investment — ad-reward credits are included in the Base44 plan-tier calculation in section 9a.`);
+
   heading('9. Revenue Scenarios (Monthly, 70% Utilization)');
-  table(['Scenario', 'Sub Rev', 'Ad Rev', 'Total Rev', 'B44 Plan', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
-    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.adRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
-    [80, 35, 35, 40, 40, 35, 35, 30, 40, 40, 35]);
+  table(['Scenario', 'Sub Rev', 'Interstitial', 'Rewarded', 'Total Rev', 'B44 Plan', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
+    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.interstitialAdRev.toFixed(0), '$' + s.rewardedAdRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
+    [75, 35, 35, 35, 40, 35, 30, 30, 30, 35, 35, 30]);
 
   heading('9a. Base44 Plan Required Per Scenario');
-  para('Total monthly integration credits consumed by paid users (70% utilization) and the minimum Base44 plan needed to support them. Free (Observer) users are gated and consume 0 credits.');
-  table(['Scenario', 'Paid Credits', 'Base44 Plan', 'Plan $/mo'],
-    scenarios.map(s => [s.label, s.totalCredits.toLocaleString(), s.base44Plan.plan, '$' + s.base44Plan.cost]),
-    [100, 55, 70, 50]);
-  para('Base44 plan costs in section 9 ("B44 Plan" column) are the actual fixed monthly plan tier costs. Free (Observer) users are gated and consume 0 credits, so only paid-user credits determine the required plan tier.');
+  para('Total monthly integration credits consumed by paid users (70% utilization) plus credits from consumed ad-reward energy, and the minimum Base44 plan needed to support them. Free (Observer) users are gated and consume 0 credits.');
+  table(['Scenario', 'Paid Credits', 'Ad-Reward Cr', 'Base44 Plan', 'Plan $/mo'],
+    scenarios.map(s => [s.label, (s.totalCredits - s.rewardedAdCredits).toLocaleString(), s.rewardedAdCredits.toLocaleString(), s.base44Plan.plan, '$' + s.base44Plan.cost]),
+    [85, 50, 50, 60, 45]);
+  para('Base44 plan costs in section 9 ("B44 Plan" column) are the actual fixed monthly plan tier costs. Ad-reward credits (from paid users watching rewarded ads for energy top-ups) are included in the total and can push the required plan tier higher. Free (Observer) users are gated and consume 0 credits.');
 
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free (Observer) users are gated (0 credits). Must upgrade plans to scale.');
@@ -406,7 +454,8 @@ function downloadPDF() {
   para(`Full narration cost: ~${FULL_TOUR_NARRATION_CREDITS} credits/tour = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour. Explorer ~${TOURS_PER_ENERGY(500)} tour/mo, Investigator ~${TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~${TOURS_PER_ENERGY(1500)} tours/mo.`);
   para(`Explorer yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.`);
   para(`Trailblazer is profitable at 100% utilization (~${trailblazerAnalysis.margin.toFixed(0)}% margin = $${trailblazerAnalysis.profit.toFixed(0)} profit over 30 months). At 50% realistic usage, margin improves to ~${trailblazer50.margin.toFixed(0)}%. The 300-slot cap protects against credit cost exposure.`);
-  para('AdMob revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
+  para('AdMob interstitial revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
+  para(`Rewarded ads (paid users) generate ~$${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but granted energy costs ~$${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~$${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a retention investment, not a profit center — it keeps paid users engaged at energy gates. Ad-reward credits are included in the Base44 plan-tier calculation (section 9a).`);
   para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + '. Base44 plan costs are now shown as actual tier costs in section 9, not per-credit estimates.');
   para('RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$' + revenuecatFee(7104).toFixed(0) + '/mo at the Mature scenario.');
   para('RISK: Apple fee jumps to 30% above $1M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing $1M.');
@@ -901,7 +950,9 @@ export default function PlanAnalysis() {
 
         {/* 8. AdMob Ad Revenue */}
         <section className="mb-8">
-          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">8. AdMob Ad Revenue (Free Users)</h2>
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">8. AdMob Ad Revenue</h2>
+
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 print-text">8a. Interstitial Ads (Free Users)</h3>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -923,6 +974,34 @@ export default function PlanAnalysis() {
             </table>
           </div>
           <p className="text-xs print-muted mt-2 italic">Model: {ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo × ${ADMOB_PER_IMPRESSION.toFixed(3)}/impression = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo. Stop 1 paranormal history is free; stops 2+ show interstitial ads. Ad revenue is not subject to store fees.</p>
+
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">8b. Rewarded Ads (Paid Users — Energy Top-Ups)</h3>
+          <p className="text-xs print-muted mb-3">Paid users who hit an energy gate can watch a rewarded ad for +{AD_REWARD_ENERGY} energy (up to {5}/day). Each ad generates ${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)} in ad revenue, but the granted energy costs {AD_REWARD_CREDITS_PER_AD} credits ({Math.round(AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION)} at {Math.round(AD_REWARD_UTILIZATION * 100)}% utilization) = ${((AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION * COST_PER_CREDIT)).toFixed(3)} in platform costs when consumed. <span className="font-semibold">Net: ${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(3)}/paid user/mo</span> — a small retention cost that prevents churn at energy gates.</p>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr>
+                  <th className={th}>Paid Users</th>
+                  <th className={`${th} ${num}`}>Ad Rev/mo</th>
+                  <th className={`${th} ${num}`}>Energy Cost/mo</th>
+                  <th className={`${th} ${num}`}>Net/mo</th>
+                  <th className={`${th} ${num}`}>Credits/mo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rewardedAdScenarios.map(s => (
+                  <tr key={s.label}>
+                    <td className={`${td} font-semibold print-text`}>{s.label}</td>
+                    <td className={`${td} ${num} print-text`}>${s.monthlyAdRev.toFixed(2)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.monthlyEnergyCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} font-semibold print-text`}>${s.monthlyNet.toFixed(2)}</td>
+                    <td className={`${td} ${num} print-muted`}>{s.monthlyCredits.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs print-muted mt-2 italic">Model: {ADS_PER_PAID_USER_MO} ads/paid user/mo × ${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)}/impression = ${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(3)} ad rev/paid user/mo. Energy cost: {ADS_PER_PAID_USER_MO} ads × {AD_REWARD_CREDITS_PER_AD} credits × {Math.round(AD_REWARD_UTILIZATION * 100)}% utilization × ${COST_PER_CREDIT.toFixed(4)}/credit = ${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. The net cost is a retention investment — ad-reward credits are included in the Base44 plan-tier calculation in section 9a.</p>
         </section>
 
         {/* 9. Revenue Scenarios */}
@@ -934,7 +1013,8 @@ export default function PlanAnalysis() {
                 <tr>
                   <th className={th}>Scenario</th>
                   <th className={`${th} ${num}`}>Sub Rev</th>
-                  <th className={`${th} ${num}`}>Ad Rev</th>
+                  <th className={`${th} ${num}`}>Interstitial</th>
+                  <th className={`${th} ${num}`}>Rewarded</th>
                   <th className={`${th} ${num}`}>Total Rev</th>
                   <th className={`${th} ${num}`}>Base44 Plan</th>
                   <th className={`${th} ${num}`}>Store 15%</th>
@@ -943,8 +1023,6 @@ export default function PlanAnalysis() {
                   <th className={`${th} ${num}`}>Total Cost</th>
                   <th className={`${th} ${num}`}>Profit</th>
                   <th className={`${th} ${num}`}>Margin</th>
-                  <th className={`${th} ${num}`}>Profit w/ Free</th>
-                  <th className={`${th} ${num}`}>Margin w/ Free</th>
                 </tr>
               </thead>
               <tbody>
@@ -952,7 +1030,8 @@ export default function PlanAnalysis() {
                   <tr key={s.label}>
                     <td className={`${td} font-semibold print-text whitespace-nowrap`}>{s.label}</td>
                     <td className={`${td} ${num} print-text`}>${s.subRev.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>${s.adRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-muted`}>${s.interstitialAdRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-muted`}>${s.rewardedAdRev.toFixed(0)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${s.totalRev.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.platformCosts}</td>
                     <td className={`${td} ${num} print-text`}>${s.storeCosts.toFixed(0)}</td>
@@ -966,18 +1045,20 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). Free (Observer) users are gated and consume 0 credits. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). Ad revenue = interstitial (free users) + rewarded (paid users). Rewarded ad credits from consumed ad-reward energy are included in the Base44 plan-tier calculation. Free (Observer) users are gated and consume 0 credits. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
 
           {/* 9a. Base44 Plan Required Per Scenario */}
           <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
             <h3 className="font-heading text-sm font-semibold text-foreground mb-3 print-text">9a. Base44 Plan Required Per Scenario</h3>
-            <p className="text-xs print-muted mb-3">Total monthly integration credits consumed by paid users (at 70% utilization) and the minimum Base44 plan needed to support them. Free (Observer) users are gated and consume 0 credits.</p>
+            <p className="text-xs print-muted mb-3">Total monthly integration credits consumed by paid users (at 70% utilization) plus credits from consumed ad-reward energy, and the minimum Base44 plan needed to support them. Free (Observer) users are gated and consume 0 credits.</p>
             <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
               <table className="w-full min-w-[700px]">
                 <thead>
                   <tr>
                     <th className={th}>Scenario</th>
-                    <th className={`${th} ${num}`}>Paid Credits/mo</th>
+                    <th className={`${th} ${num}`}>Subscription Credits</th>
+                    <th className={`${th} ${num}`}>Ad-Reward Credits</th>
+                    <th className={`${th} ${num}`}>Total Credits</th>
                     <th className={th}>Base44 Plan</th>
                     <th className={`${th} ${num}`}>Plan Cost/mo</th>
                   </tr>
@@ -986,7 +1067,9 @@ export default function PlanAnalysis() {
                   {scenarios.map(s => (
                     <tr key={s.label}>
                       <td className={`${td} font-semibold print-text whitespace-nowrap`}>{s.label}</td>
-                      <td className={`${td} ${num} print-text`}>{s.totalCredits.toLocaleString()}</td>
+                      <td className={`${td} ${num} print-text`}>{(s.totalCredits - s.rewardedAdCredits).toLocaleString()}</td>
+                      <td className={`${td} ${num} print-muted`}>{s.rewardedAdCredits.toLocaleString()}</td>
+                      <td className={`${td} ${num} font-semibold print-text`}>{s.totalCredits.toLocaleString()}</td>
                       <td className={`${td} print-text`}>
                         <span className="font-semibold">{s.base44Plan.plan}</span>
                         <span className="text-[10px] print-muted block">{s.base44Plan.plans > 1 ? `${s.base44Plan.plans} plans` : ''}</span>
@@ -1015,7 +1098,7 @@ export default function PlanAnalysis() {
               </div>
             </div>
             <p className="text-xs text-green-500 print-text mt-3">✓ Energy gating is deployed — free (Observer) users consume 0 credits. Only paid-user credits determine the required Base44 plan tier.</p>
-            <p className="text-xs print-muted mt-1 italic">Base44 plan costs in section 9 ("Base44 Plan" column) are the actual fixed monthly plan tier costs. Elite pricing is estimated — check base44.com/pricing for current rates.</p>
+            <p className="text-xs print-muted mt-1 italic">"Ad-Reward Credits" = credits from consumed ad-reward energy (paid users watching rewarded ads for +{AD_REWARD_ENERGY} energy top-ups). These are included in the total and can push the required Base44 plan tier higher. Base44 plan costs in section 9 are the actual fixed monthly plan tier costs. Elite pricing is estimated — check base44.com/pricing for current rates.</p>
           </div>
         </section>
 
@@ -1030,7 +1113,8 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold">Full narration cost:</span> Each fully narrated tour (all 4 tabs per stop + intro + conclusion) costs ~{FULL_TOUR_NARRATION_CREDITS} credits = ${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Energy budgets support: Explorer ~{TOURS_PER_ENERGY(500)} tour/mo, Investigator ~{TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~{TOURS_PER_ENERGY(1500)} tours/mo.</p>
             <p>• <span className="font-semibold">Explorer</span> yields ~{monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; <span className="font-semibold">Investigator</span> ~{monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.</p>
             <p>• <span className="font-semibold text-green-500">✓ Trailblazer is profitable at all utilization levels</span> (~{trailblazerAnalysis.margin.toFixed(0)}% margin at 100% = ${trailblazerAnalysis.profit.toFixed(0)} profit over 30 months; ~{trailblazer50.margin.toFixed(0)}% at 50% realistic usage). The 300-slot cap protects against credit cost exposure. Trailblazer matches Investigator energy at a locked-in discount.</p>
-            <p>• <span className="font-semibold">AdMob revenue</span> from free users meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
+            <p>• <span className="font-semibold">AdMob revenue</span> from free users (interstitial) meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
+            <p>• <span className="font-semibold">Rewarded ads</span> (paid users) generate ~${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but the granted energy costs ~${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a <span className="font-semibold">retention investment</span>, not a profit center — it keeps paid users engaged at energy gates instead of churning. Ad-reward credits are included in the Base44 plan-tier calculation (section 9a), so high ad-reward usage can push the required plan tier higher.</p>
             <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal}. Base44 plan costs are now shown as actual tier costs in section 9, not per-credit estimates.</p>
             <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
             <p>• <span className="font-semibold">RISK:</span> Apple's fee jumps to 30% above $1M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing $1M.</p>
