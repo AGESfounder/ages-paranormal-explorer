@@ -19,15 +19,29 @@ export async function addTourStops(tour) {
     .map((s, i) => `Stop ${s.stop_number || i + 1}: ${s.name} | coords: ${s.latitude}, ${s.longitude} | travel: ${s.travel_method || 'walking'}`)
     .join('\n');
 
+  const category = tour.tour_category || 'area';
+
+  const locationConstraint = category === 'landmark' || category === 'ship'
+    ? `ALL new stops MUST be on the SAME ${category === 'landmark' ? 'property/site' : 'vessel'} as the existing stops. Do NOT add stops in the surrounding area or neighborhood — every new stop must be a different room, building, floor, wing, or area WITHIN the same ${category === 'landmark' ? 'property grounds' : 'vessel'}. Use the existing stops' coordinates as the reference — new stops must be within 0.1 miles of those coordinates.`
+    : category === 'cold_spot'
+    ? `ALL new stops MUST be at the SAME specific haunted location as the existing stops. Do NOT add stops in the surrounding area — new stops must be within 0.1 miles of the existing stops' coordinates (e.g., different spots within the same building or immediate grounds).`
+    : category === 'road_trip'
+    ? `New stops must be along the road trip route in ${tour.state}, with 5+ miles between most stops. Each must be a distinct haunted location, NOT duplicating existing stops.`
+    : `New stops must be different properties/locations within the ${tour.city} area — NOT on the same property as existing stops. Each must be a distinct haunted location in ${tour.city}, ${tour.state}.`;
+
   const prompt = `You are adding new haunted stops to an existing paranormal ghost hunting tour in ${tour.city}, ${tour.state}.
 
 TOUR TITLE: ${tour.title}
 TOUR TYPE: ${tour.tour_type}
+TOUR CATEGORY: ${category}
 
 EXISTING STOPS (in current order):
 ${existingSummary || '(none yet)'}
 
-Generate up to ${Math.min(slotsAvailable, 2)} NEW haunted stops near ${tour.city}, ${tour.state} that are NOT already in the existing stops. Each must be a real, well-documented haunted location that is publicly accessible after 7 PM.
+LOCATION CONSTRAINT — FOLLOW EXACTLY:
+${locationConstraint}
+
+Generate up to ${Math.min(slotsAvailable, 2)} NEW haunted stops that are NOT already in the existing stops. Each must be a real, well-documented haunted location that is publicly accessible after 7 PM.
 
 For each new stop, specify "insert_after_stop_number" — the existing stop number after which this new stop should be placed to minimize travel distance and maintain routing logic. Use 0 to insert at the very beginning (before stop 1).
 
