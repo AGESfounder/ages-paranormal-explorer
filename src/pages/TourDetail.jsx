@@ -233,8 +233,24 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         tourData.tour_type = correctedType;
         setTour({ ...tourData, tour_type: correctedType });
       }
-      const created = [];
+      // DEDUP: Remove duplicate stops by normalized name and address. The LLM
+      // sometimes returns the same physical location twice (same address,
+      // slightly different name) — both would get created without this check.
+      const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+      const seenNames = new Set();
+      const seenAddrs = new Set();
+      const deduped = [];
       for (const stop of processed) {
+        const nameKey = normKey(stop.name);
+        const addrKey = normKey(stop.address);
+        if (nameKey && seenNames.has(nameKey)) continue;
+        if (addrKey && seenAddrs.has(addrKey)) continue;
+        if (nameKey) seenNames.add(nameKey);
+        if (addrKey) seenAddrs.add(addrKey);
+        deduped.push(stop);
+      }
+      const created = [];
+      for (const stop of deduped) {
         const saved = await base44.entities.TourStop.create({ ...stop, tour_id: tourId });
         created.push(saved);
       }

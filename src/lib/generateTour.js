@@ -12,7 +12,7 @@ function normalizeStateName(state) {
   return s;
 }
 
-export async function findExistingTour(destination, state, category, accessType) {
+export async function findExistingTour(destination, state, category, accessType, city) {
   const normalizedState = normalizeStateName(state);
   const destLower = destination.trim().toLowerCase();
   const existingTours = await base44.entities.Tour.filter({ state: normalizedState });
@@ -37,7 +37,17 @@ export async function findExistingTour(destination, state, category, accessType)
       if (normAccess(accessType) !== normAccess(t.access_type)) return false;
     }
 
-    // Match on TITLE only — multiple tours in the same city are valid
+    // CITY-LEVEL REDUNDANCY: For area tours, an existing area tour in the same
+    // city is likely covering the same haunted locations. Creative tour titles
+    // differ ("Shadows of Savannah" vs "Savannah Ghost Walk"), so title matching
+    // alone misses these near-duplicates. Only applies to area-vs-area matches.
+    if (city && category === 'area' && t.tour_category === 'area') {
+      if ((t.city || '').toLowerCase().trim() === city.toLowerCase().trim()) {
+        return true;
+      }
+    }
+
+    // Match on TITLE — multiple tours in the same city are valid
     // (e.g., a landmark-specific tour vs. a city walking tour that
     // includes that landmark as one stop). Only flag a true duplicate
     // when the destination matches the tour's actual name/title.

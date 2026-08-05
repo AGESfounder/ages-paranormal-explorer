@@ -114,7 +114,7 @@ Use real locations with documented paranormal history only.`,
 
       const tourData = result.tours?.[0];
       if (!tourData) throw new Error('No tour generated');
-      const existing = await findExistingTour(tourData.title, tourData.state, category);
+      const existing = await findExistingTour(tourData.title, tourData.state, category, undefined, tourData.city);
       if (existing) {
         setExistingTour(existing);
         setGeneratingRange(null);
@@ -223,7 +223,7 @@ Use real locations with documented paranormal history only.`,
 
       const tourData = result.tours?.[0];
       if (!tourData) throw new Error('No tour generated');
-      const existing = await findExistingTour(tourData.title, tourData.state, category);
+      const existing = await findExistingTour(tourData.title, tourData.state, category, undefined, tourData.city);
       if (existing) {
         setExistingTour(existing);
         setGeneratingRange(null);
