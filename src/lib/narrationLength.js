@@ -5,7 +5,7 @@ import { callJson } from '@/lib/llmJson';
 export const NARRATION_LENGTHS = [
   { value: 'whisper', label: 'Glimpse into the Past', description: '⅓ the full story' },
   { value: 'echo', label: 'Uncover the Mystery', description: '⅔ the full story' },
-  { value: 'manifestation', label: 'Relive the Past', description: 'The complete story' },
+  { value: 'manifestation', label: 'Relive the Legend', description: 'The complete story' },
 ];
 
 const STORAGE_KEY = 'ages_narration_length';
