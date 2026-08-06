@@ -62,7 +62,7 @@ Each new stop needs:
 - name: string (the haunted location's name)
 - latitude: number (real coordinates)
 - longitude: number (real coordinates)
-- address: string (real street address)
+- address: string — ALWAYS a COMPLETE STREET ADDRESS with street number (e.g. "123 Main St, Lewes, DE 19958"). NEVER use just a city name, an intersection ("X & Y"), or "near"/"vicinity". Must be GPS-searchable — typeable into Google Maps and arriving at the exact location.
 - historical_info: 2-3 sentences
 - paranormal_info: 2-3 sentences
 - investigation_suggestions: array of 3-5 strings

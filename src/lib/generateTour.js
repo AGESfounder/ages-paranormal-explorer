@@ -131,7 +131,7 @@ PLUS a "stops" array (${category === 'cold_spot' ? '1-4 stops' : '8-10 stops'}) 
 - name: for a PROPERTY tour, a specific area/building/room within the location; for AREA or ROAD TRIP tours, the name of that distinct haunted location
 - latitude: real coordinates (number) — for a PROPERTY tour all stops share the destination's coordinates (areas within one site); for AREA or ROAD TRIP tours each stop has its OWN distinct coordinates
 - longitude: real coordinates (number)
-- address: for a PROPERTY tour, the full street address of "${dest}" (same for all stops); for AREA or ROAD TRIP tours, each stop's own real street address
+- address: ALWAYS a COMPLETE STREET ADDRESS with a street number (e.g. "123 Main St, Lewes, DE 19958"). For a PROPERTY tour, the full street address of "${dest}" (same for all stops); for AREA or ROAD TRIP tours, each stop's own real street address. NEVER use just a city name, an intersection ("X & Y"), or "near"/"vicinity". Must be GPS-searchable — typeable into Google Maps and arriving at the exact location.
 - historical_info: 2-3 sentences summarizing the key history (construction dates, notable figures, major events). Brief summary only.
 - paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
 - investigation_suggestions: 3-5 specific items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"

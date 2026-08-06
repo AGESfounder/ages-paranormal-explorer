@@ -111,10 +111,7 @@ export default function TourDetail() {
   // Runs in the background — user sees the tour immediately, coordinates get
   // corrected automatically a few seconds later.
   const geocodeExistingStops = async (stopsList) => {
-    // Re-geocode stops that haven't been verified OR have intersection addresses
-    // (intersection addresses like "Main St & Elm St" resolve to the intersection
-    // point, not the actual landmark — name-based geocoding fixes these)
-    const needsGeocoding = stopsList.filter(s => s.address && (!s.geocoded || /\s&\s/.test(s.address)));
+    const needsGeocoding = stopsList.filter(s => !s.geocoded && s.address);
     if (needsGeocoding.length === 0) return;
     // Use enhanced geocoding with stop names — finds actual landmarks
     // instead of intersection points when addresses are vague
@@ -241,6 +238,7 @@ export default function TourDetail() {
 Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand when a user opens the stop, so keep these fields brief:
 - stop_number: 1-10 in logical route order
 - name, latitude, longitude (real GPS), address
+- address: ALWAYS provide a COMPLETE STREET ADDRESS with a street number (e.g. "123 Main St, Lewes, DE 19958"). NEVER use just a city name, an intersection ("X & Y"), or words like "near", "vicinity", "various". If the location has no street address (e.g. a park), use the park entrance address or nearest street address. This address must be GPS-searchable — a user should be able to type it into Google Maps and arrive at the exact location.
 - historical_info: 2-3 sentences summarizing the key history (dates, notable figures, major events). Brief summary only.
 - paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
 - investigation_suggestions: 3-5 items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
