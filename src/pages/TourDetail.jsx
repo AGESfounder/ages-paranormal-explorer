@@ -110,13 +110,13 @@ export default function TourDetail() {
   // Lazily geocode existing stops whose GPS coordinates haven't been verified.
   // Runs in the background — user sees the tour immediately, coordinates get
   // corrected automatically a few seconds later.
-  const geocodeExistingStops = async (stopsList) => {
+  const geocodeExistingStops = async (stopsList, tourData) => {
     const needsGeocoding = stopsList.filter(s => !s.geocoded && s.address);
     if (needsGeocoding.length === 0) return;
     // Use enhanced geocoding with stop names — finds actual landmarks
     // instead of intersection points when addresses are vague
     const stopsForGeocoding = needsGeocoding.map(s => ({
-      id: s.id, name: s.name, address: s.address, city: tour?.city, state: tour?.state
+      id: s.id, name: s.name, address: s.address, city: tourData?.city, state: tourData?.state
     }));
     const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding);
     const updates = [];
@@ -133,11 +133,31 @@ export default function TourDetail() {
         } catch (e) {}
       }
     }
-    if (updates.length > 0) {
-      setStops(prev => prev.map(s => {
-        const u = updates.find(x => x.id === s.id);
-        return u ? { ...s, latitude: u.lat, longitude: u.lon, geocoded: true } : s;
-      }));
+    if (updates.length === 0) return;
+
+    // Merge corrected coordinates into the full stop list
+    const updatedStops = stopsList.map(s => {
+      const u = updates.find(x => x.id === s.id);
+      return u ? { ...s, latitude: u.lat, longitude: u.lon, geocoded: true } : s;
+    });
+
+    // Re-order stops by proximity using the NOW-correct coordinates.
+    // The initial ordering ran on stale/wrong LLM coordinates, so it must be
+    // re-evaluated after geocoding to form proper walking loops / linear routes.
+    // Skip for tours the user manually reordered — respect their custom order.
+    if (tourData && !tourData.user_reordered) {
+      const reordered = enforceWalkingDistance(updatedStops, tourData.tour_type);
+      for (const s of reordered) {
+        const existing = updatedStops.find(ts => ts.id === s.id);
+        if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
+          try {
+            await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
+          } catch (e) {}
+        }
+      }
+      setStops(reordered);
+    } else {
+      setStops(updatedStops);
     }
   };
 
@@ -190,7 +210,7 @@ export default function TourDetail() {
         // Respect the user's manual stop order — do not re-sort by proximity
         const sortedStops = tourStops.sort((a, b) => a.stop_number - b.stop_number);
         setStops(sortedStops);
-        geocodeExistingStops(sortedStops).catch(console.error);
+        geocodeExistingStops(sortedStops, tourData[0]).catch(console.error);
       } else {
         const reordered = enforceWalkingDistance(tourStops, tourData[0].tour_type);
         // Update stop_numbers in the database if they changed
@@ -209,7 +229,7 @@ export default function TourDetail() {
           tourData[0].tour_type = correctedType;
         }
         setStops(reordered);
-        geocodeExistingStops(reordered).catch(console.error);
+        geocodeExistingStops(reordered, tourData[0]).catch(console.error);
       }
     }
     } catch (err) {
