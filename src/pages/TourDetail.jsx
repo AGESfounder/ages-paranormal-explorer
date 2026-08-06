@@ -442,6 +442,11 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         if (addrKey) seenAddrs.add(addrKey);
         deduped.push(stop);
       }
+      // Renumber sequentially to close any gaps left by dedup removing
+      // duplicates after enforceWalkingDistance assigned stop_numbers.
+      for (let i = 0; i < deduped.length; i++) {
+        deduped[i].stop_number = i + 1;
+      }
       if (isLandmarkOrShip) {
         // For landmark/ship tours, trust the LLM's web-searched coordinates —
         // address geocoding would collapse all stops to one point since they

@@ -253,8 +253,8 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
     };
 
     const isLandmarkOrShip = correctedCategory === 'landmark' || correctedCategory === 'ship';
-    const stopRecords = validStops.map(({ s, name, stop_number }) => ({
-      stop_number,
+    const stopRecords = validStops.map(({ s, name }, i) => ({
+      stop_number: i + 1,
       name,
       latitude: toNum(s.latitude) || (useCoords ? coords.lat : null),
       longitude: toNum(s.longitude) || (useCoords ? coords.lng : null),
