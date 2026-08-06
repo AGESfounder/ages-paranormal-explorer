@@ -20,6 +20,7 @@ import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
 import { getNarrationLength, saveNarrationLength, truncateText } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
+import { geocodeAddresses } from '@/lib/geocodeStops';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -106,6 +107,36 @@ export default function TourDetail() {
     spendNarration(estimateNarrationCost(text));
   };
 
+  // Lazily geocode existing stops whose GPS coordinates haven't been verified.
+  // Runs in the background — user sees the tour immediately, coordinates get
+  // corrected automatically a few seconds later.
+  const geocodeExistingStops = async (stopsList) => {
+    const needsGeocoding = stopsList.filter(s => !s.geocoded && s.address);
+    if (needsGeocoding.length === 0) return;
+    const addresses = [...new Set(needsGeocoding.map(s => s.address))];
+    const geocodeMap = await geocodeAddresses(addresses);
+    const updates = [];
+    for (const stop of needsGeocoding) {
+      const geo = geocodeMap[stop.address];
+      if (geo) {
+        try {
+          await base44.entities.TourStop.update(stop.id, {
+            latitude: geo.lat,
+            longitude: geo.lon,
+            geocoded: true,
+          });
+          updates.push({ id: stop.id, lat: geo.lat, lon: geo.lon });
+        } catch (e) {}
+      }
+    }
+    if (updates.length > 0) {
+      setStops(prev => prev.map(s => {
+        const u = updates.find(x => x.id === s.id);
+        return u ? { ...s, latitude: u.lat, longitude: u.lon, geocoded: true } : s;
+      }));
+    }
+  };
+
   const [narrationLength, setNarrationLengthState] = useState(getNarrationLength());
   const handleNarrationLengthChange = (value) => {
     setNarrationLengthState(value);
@@ -153,7 +184,9 @@ export default function TourDetail() {
         await generateStops(tourData[0]);
       } else if (tourData[0].user_reordered) {
         // Respect the user's manual stop order — do not re-sort by proximity
-        setStops(tourStops.sort((a, b) => a.stop_number - b.stop_number));
+        const sortedStops = tourStops.sort((a, b) => a.stop_number - b.stop_number);
+        setStops(sortedStops);
+        geocodeExistingStops(sortedStops).catch(console.error);
       } else {
         const reordered = enforceWalkingDistance(tourStops, tourData[0].tour_type);
         // Update stop_numbers in the database if they changed
@@ -172,6 +205,7 @@ export default function TourDetail() {
           tourData[0].tour_type = correctedType;
         }
         setStops(reordered);
+        geocodeExistingStops(reordered).catch(console.error);
       }
     }
     } catch (err) {
@@ -266,9 +300,22 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         if (addrKey) seenAddrs.add(addrKey);
         deduped.push(stop);
       }
+      // Geocode stops for accurate GPS coordinates (LLM coordinates are often wrong)
+      const addresses = deduped.map(s => s.address).filter(Boolean);
+      const geocodeMap = addresses.length > 0 ? await geocodeAddresses(addresses) : {};
+      const geocodedAddrs = new Set();
+      for (const stop of deduped) {
+        const geo = stop.address ? geocodeMap[stop.address] : null;
+        if (geo) {
+          stop.latitude = geo.lat;
+          stop.longitude = geo.lon;
+          geocodedAddrs.add(stop.address);
+        }
+      }
+
       const created = [];
       for (const stop of deduped) {
-        const saved = await base44.entities.TourStop.create({ ...stop, tour_id: tourId });
+        const saved = await base44.entities.TourStop.create({ ...stop, tour_id: tourId, geocoded: geocodedAddrs.has(stop.address) });
         created.push(saved);
       }
       spendManifestationEnergy();

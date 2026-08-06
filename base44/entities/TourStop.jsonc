@@ -73,6 +73,11 @@
           }
         }
       }
+    },
+    "geocoded": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the GPS coordinates have been verified via real address geocoding (Nominatim). False = LLM-generated coordinates that may be inaccurate."
     }
   },
   "required": [

@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { geocodeAddresses } from '@/lib/geocodeStops';
 
 const MAX_STOPS = 12;
 const COLD_SPOT_MAX_STOPS = 4; // cold_spot = 1-4 stops at a single location
@@ -116,6 +117,19 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
     return { added: 0, capped: false, reason: 'none' };
   }
 
+  // Geocode new stops for accurate GPS coordinates (LLM coordinates are often wrong)
+  const newAddresses = newStops.map(s => s.address).filter(Boolean);
+  const newGeocodeMap = newAddresses.length > 0 ? await geocodeAddresses(newAddresses) : {};
+  const newGeocodedAddrs = new Set();
+  for (const ns of newStops) {
+    const geo = ns.address ? newGeocodeMap[ns.address] : null;
+    if (geo) {
+      ns.latitude = geo.lat;
+      ns.longitude = geo.lon;
+      newGeocodedAddrs.add(ns.address);
+    }
+  }
+
   // Create new stops in the database with a temporary stop number.
   const createdStops = [];
   for (const ns of newStops) {
@@ -126,6 +140,7 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
       latitude: typeof ns.latitude === 'number' ? ns.latitude : parseFloat(ns.latitude) || null,
       longitude: typeof ns.longitude === 'number' ? ns.longitude : parseFloat(ns.longitude) || null,
       address: ns.address || '',
+      geocoded: newGeocodedAddrs.has(ns.address),
       historical_info: ns.historical_info || '',
       paranormal_info: ns.paranormal_info || '',
       investigation_suggestions: Array.isArray(ns.investigation_suggestions) ? ns.investigation_suggestions.filter((x) => typeof x === 'string' && x.trim()) : [],
