@@ -1,6 +1,18 @@
-import React from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import React, { useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
+
+// Auto-fit the map to show all stops. Without this the map uses a fixed zoom
+// centered on the midpoint, so stops at the edges fall off-screen.
+function FitBounds({ bounds }) {
+  const map = useMap();
+  useEffect(() => {
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+    }
+  }, [bounds, map]);
+  return null;
+}
 
 function makeStopIcon(stopNumber) {
   return new L.DivIcon({
@@ -55,6 +67,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
+        <FitBounds bounds={bounds} />
         {bounds && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
         {validStops.map((stop) => (
           <Marker
