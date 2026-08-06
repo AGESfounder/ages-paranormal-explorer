@@ -107,16 +107,22 @@ function validateStops(stops, tour) {
     if (count > 1) return { compliant: false, reason: `${count} stops collapsed at same coordinates` };
   }
   // For area tours, check that no consecutive stops (after proximity
-  // ordering) are more than 1 mile apart — the goal is walkable clusters.
+  // ordering) are more than 1 mile apart, AND that the total route distance
+  // is no more than 2.5 miles — the goal is a walkable local cluster.
   if (tour.tour_category === 'area') {
     const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
     if (withCoords.length >= 2) {
       const ordered = orderStopsByProximity(withCoords);
+      let totalDist = 0;
       for (let i = 1; i < ordered.length; i++) {
         const dist = haversineDistance(ordered[i - 1].latitude, ordered[i - 1].longitude, ordered[i].latitude, ordered[i].longitude);
+        totalDist += dist;
         if (dist > 1) {
           return { compliant: false, reason: `stops are ${dist.toFixed(1)} miles apart (max 1 mile for area tours)` };
         }
+      }
+      if (totalDist > 2.5) {
+        return { compliant: false, reason: `total route is ${totalDist.toFixed(1)} miles (max 2.5 miles for area tours)` };
       }
     }
   }
@@ -339,7 +345,7 @@ Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand 
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
-1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. Arrange stops in the most efficient order possible — shortest total route wins.
+1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. The TOTAL route distance MUST be ≤2.5 miles. Arrange stops in the most efficient order possible — shortest total route wins.
 
 2. WALKING TOURS: Stops must form a logical loop — start and end near the same point (${tourData.start_location_name}). Route must be efficient with NO crisscrossing. Stops proceed in a circle so investigators return to their starting point naturally.
 

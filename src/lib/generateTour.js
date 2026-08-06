@@ -79,7 +79,7 @@ export async function generateLocationTour(destination, state, coords, category 
     : category === 'landmark'
     ? `This is a LOCATION/PROPERTY tour — one specific haunted property (e.g. an asylum, hotel, bridge, cemetery, museum, prison, battlefield, furnace, mansion). ALL stops must be specific areas, rooms, buildings, wings, or sections within or on the grounds of that one location, and all stops share the same street address. Set tour_type to "walking". Generate 8-10 stops.`
     : category === 'area'
-    ? `This is an AREA tour — a city, town, or local area where walking or close driving is required. Different locations/properties are the stops. Plan for 1-3 miles of walking, a little more if nearby driving is needed. Set tour_type to "walking" or "mixed". Each stop is a different haunted location with its own real street address and its own real GPS coordinates, spread across the area. Generate 8-10 stops.`
+    ? `This is an AREA tour — a city, town, or local area where walking or close driving is required. Different locations/properties are the stops. The TOTAL route distance MUST be ≤2.5 miles — plan for a tight walkable cluster, not a sprawling city-wide tour. Set tour_type to "walking" or "mixed". Each stop is a different haunted location with its own real street address and its own real GPS coordinates, spread across the area. Generate 8-10 stops.`
     : category === 'ship'
     ? `This is a SHIP tour — a haunted ship or vessel. ALL stops must be specific decks, cabins, rooms, or areas within or on the vessel. All stops share the same vessel. Set tour_type to "walking". Generate 8-10 stops.`
     : `This is a ROAD TRIP tour — driving between most locations with a higher total mileage. There MUST be considerable driving between stops — at least 5 miles between consecutive stops. Combine different locations and areas into one driving tour. Set tour_type to "driving" or "mixed". Each stop is a different haunted location or area spread across a wider geographic region, each with its own real street address and GPS coordinates. Generate 8-10 stops.`;
@@ -96,7 +96,7 @@ ${categoryText}${accessTypeText}
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
-1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. For driving/mixed tours, arrange stops in the most efficient order with the shortest total driving distance — linear progression, no doubling back.
+1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. For AREA tours, the TOTAL route distance MUST be ≤2.5 miles. For driving/mixed tours, arrange stops in the most efficient order with the shortest total driving distance — linear progression, no doubling back.
 
 2. WALKING TOURS (single landmark, or a tight walkable cluster within a region): Stops form a logical loop — start and end near the same point. Route proceeds in an efficient circle so investigators return to their starting point. Every stop ≤0.33 miles from the previous.
 
