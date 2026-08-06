@@ -97,16 +97,94 @@ function enforceWalkingDistance(stops, tourType) {
     });
   }
 
-  // MIXED TOURS: reorder by proximity (nearest-neighbor) so the walking
-  // cluster stays together and far stops (driving) land at the end. Label
-  // travel_method by distance between consecutive stops.
-  const ordered = orderStopsByProximity(stops);
-  return ordered.map((s, i) => {
-    if (i === 0) return { ...s, travel_method: 'walking', stop_number: i + 1 };
-    const prev = ordered[i - 1];
-    const dist = haversineDistance(prev.latitude, prev.longitude, s.latitude, s.longitude);
-    return { ...s, travel_method: dist <= WALKING_LIMIT ? 'walking' : 'driving', stop_number: i + 1 };
-  });
+  // MIXED TOURS: Separate stops into a walking cluster (the largest group
+  // of stops within WALKING_LIMIT of each other) and driving stops. Order
+  // the walking cluster as a loop (2-opt with return-to-start) so the first
+  // and last stops are near each other — the user parks, walks a circle,
+  // and returns to their car. The loop's start/end point is chosen as the
+  // stop closest to the nearest driving stop, so after the loop the user is
+  // positioned near the next driving destination. Driving stops are then
+  // appended in linear (nearest-neighbor) order.
+  const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
+  const noCoords = stops.filter(s => s.latitude == null || s.longitude == null);
+
+  // Build connected components: stops linked when within WALKING_LIMIT.
+  // Uses a head-index queue (not shift) to avoid O(n²) on larger stop sets.
+  const visited = new Array(withCoords.length).fill(false);
+  const components = [];
+  for (let i = 0; i < withCoords.length; i++) {
+    if (visited[i]) continue;
+    const comp = [];
+    const queue = [i];
+    let head = 0;
+    visited[i] = true;
+    while (head < queue.length) {
+      const idx = queue[head++];
+      comp.push(withCoords[idx]);
+      for (let j = 0; j < withCoords.length; j++) {
+        if (!visited[j]) {
+          const d = haversineDistance(withCoords[idx].latitude, withCoords[idx].longitude, withCoords[j].latitude, withCoords[j].longitude);
+          if (d <= WALKING_LIMIT) { visited[j] = true; queue.push(j); }
+        }
+      }
+    }
+    components.push(comp);
+  }
+  components.sort((a, b) => b.length - a.length);
+
+  // Largest component (2+ stops) = walking cluster; everything else = driving
+  const walkingCluster = components[0] && components[0].length > 1 ? components[0] : [];
+  const drivingStops = (walkingCluster.length > 0 ? components.slice(1) : components).flat();
+
+  // Order the walking cluster as a loop (2-opt with return-to-start)
+  const orderedCluster = walkingCluster.length > 1
+    ? orderStopsByProximity(walkingCluster, true)
+    : walkingCluster.slice();
+
+  // Rotate the loop so the stop closest to the nearest driving stop is
+  // first/last — this positions the user near their car for the drive out.
+  if (orderedCluster.length > 1 && drivingStops.length > 0) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < orderedCluster.length; i++) {
+      for (const ds of drivingStops) {
+        const d = haversineDistance(orderedCluster[i].latitude, orderedCluster[i].longitude, ds.latitude, ds.longitude);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+    }
+    if (bestIdx > 0) {
+      const rotated = [...orderedCluster.slice(bestIdx), ...orderedCluster.slice(0, bestIdx)];
+      orderedCluster.length = 0;
+      orderedCluster.push(...rotated);
+    }
+  }
+
+  // Order driving stops linearly, starting from the one closest to the
+  // end of the walking cluster so the drive-out is as short as possible.
+  const clusterEnd = orderedCluster[orderedCluster.length - 1];
+  const orderedDriving = [];
+  if (drivingStops.length > 0) {
+    const ref = clusterEnd || withCoords[0];
+    let startIdx = 0;
+    let startDist = Infinity;
+    for (let i = 0; i < drivingStops.length; i++) {
+      if (ref) {
+        const d = haversineDistance(ref.latitude, ref.longitude, drivingStops[i].latitude, drivingStops[i].longitude);
+        if (d < startDist) { startDist = d; startIdx = i; }
+      }
+    }
+    const sorted = [drivingStops[startIdx], ...drivingStops.filter((_, i) => i !== startIdx)];
+    orderedDriving.push(...orderStopsByProximity(sorted, false));
+  }
+
+  // Final order: walking cluster loop + driving stops + no-coords stops
+  const clusterSet = new Set(orderedCluster);
+  const final = [...orderedCluster, ...orderedDriving, ...noCoords];
+  return final.map((s, i) => ({
+    ...s,
+    travel_method: clusterSet.has(s) ? 'walking' : 'driving',
+    stop_number: i + 1,
+  }));
 }
 
 // Bump this when validation rules change — all tours with an older version
