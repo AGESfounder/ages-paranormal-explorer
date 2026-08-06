@@ -47,7 +47,9 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   const sortedLngs = [...validStops].map(s => s.longitude).sort((a, b) => a - b);
   const medianLat = sortedLats[Math.floor(sortedLats.length / 2)];
   const medianLon = sortedLngs[Math.floor(sortedLngs.length / 2)];
-  const maxDist = tour?.tour_category === 'road_trip' ? 200 : 5;
+  const maxDist = tour?.tour_category === 'road_trip' ? 200
+    : (tour?.tour_category === 'cold_spot' || tour?.tour_category === 'ship') ? 0.5
+    : 5;
   const haversine = (lat1, lon1, lat2, lon2) => {
     const R = 3958.8;
     const dLat = (lat2 - lat1) * Math.PI / 180;
