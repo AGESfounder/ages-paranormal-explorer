@@ -32,43 +32,12 @@ function makeStopIcon(stopNumber) {
   });
 }
 
-// Spread stops that share the exact same coordinates (landmark/ship tours
-// where all stops geocode to one address) into a small spiral so each marker
-// is visible on the map instead of stacking on top of each other.
-function spreadOverlappingStops(stops) {
-  const roundKey = (lat, lon) => `${lat.toFixed(4)},${lon.toFixed(4)}`;
-  const groups = {};
-  for (const s of stops) {
-    const key = roundKey(s.latitude, s.longitude);
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(s);
-  }
-  const offsetMap = {};
-  for (const [key, group] of Object.entries(groups)) {
-    if (group.length < 2) continue;
-    const [baseLat, baseLon] = key.split(',').map(Number);
-    group.forEach((s, i) => {
-      const angle = (i * 2 * Math.PI) / group.length;
-      const radius = 0.0012 * (1 + i * 0.4); // spiral outward
-      offsetMap[s.id] = {
-        latitude: baseLat + radius * Math.sin(angle),
-        longitude: baseLon + radius * Math.cos(angle) * Math.cos(baseLat * Math.PI / 180),
-      };
-    });
-  }
-  return stops.map(s => {
-    const off = offsetMap[s.id];
-    return off ? { ...s, latitude: off.latitude, longitude: off.longitude } : s;
-  });
-}
-
 export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64' }) {
   if (!stops || stops.length === 0) return null;
 
-  // Find map center from stops, spreading any that share identical coordinates
-  const rawValid = stops.filter(s => s.latitude && s.longitude);
-  if (rawValid.length === 0) return null;
-  const validStops = spreadOverlappingStops(rawValid);
+  // Find map center from stops
+  const validStops = stops.filter(s => s.latitude && s.longitude);
+  if (validStops.length === 0) return null;
 
   const lats = validStops.map(s => s.latitude);
   const lngs = validStops.map(s => s.longitude);
