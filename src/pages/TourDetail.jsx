@@ -111,7 +111,10 @@ export default function TourDetail() {
   // Runs in the background — user sees the tour immediately, coordinates get
   // corrected automatically a few seconds later.
   const geocodeExistingStops = async (stopsList) => {
-    const needsGeocoding = stopsList.filter(s => !s.geocoded && s.address);
+    // Re-geocode stops that haven't been verified OR have intersection addresses
+    // (intersection addresses like "Main St & Elm St" resolve to the intersection
+    // point, not the actual landmark — name-based geocoding fixes these)
+    const needsGeocoding = stopsList.filter(s => s.address && (!s.geocoded || /\s&\s/.test(s.address)));
     if (needsGeocoding.length === 0) return;
     // Use enhanced geocoding with stop names — finds actual landmarks
     // instead of intersection points when addresses are vague
