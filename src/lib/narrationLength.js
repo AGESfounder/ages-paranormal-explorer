@@ -3,9 +3,9 @@ import { callJson } from '@/lib/llmJson';
 // Stored in localStorage so it persists across sessions without a schema change.
 
 export const NARRATION_LENGTHS = [
-  { value: 'whisper', label: 'Whisper', description: '⅓ the full story' },
-  { value: 'echo', label: 'Echo', description: '⅔ the full story' },
-  { value: 'manifestation', label: 'Manifestation', description: 'The complete story' },
+  { value: 'whisper', label: 'Glimpse into the Past', description: '⅓ the full story' },
+  { value: 'echo', label: 'Uncover the Mystery', description: '⅔ the full story' },
+  { value: 'manifestation', label: 'Relive the Past', description: 'The complete story' },
 ];
 
 const STORAGE_KEY = 'ages_narration_length';
