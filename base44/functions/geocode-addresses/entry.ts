@@ -46,8 +46,11 @@ async function geocodeStop(stop) {
   }
 
   // Strategy 2: Landmark name + city/state (best for vague addresses)
+  // Strip parenthetical additions like "(Approach)" or "(Site vicinity)"
+  // that confuse Nominatim's landmark search.
   if (name && cityState) {
-    const nameQuery = `${name}, ${cityState}`;
+    const cleanName = name.replace(/\s*\([^)]*\)\s*/g, '').trim();
+    const nameQuery = `${cleanName}, ${cityState}`;
     try {
       const r = await geocodeQuery(nameQuery);
       if (r) { results.name = r; return { coords: r, strategy: 'name' }; }
