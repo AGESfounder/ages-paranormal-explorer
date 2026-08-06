@@ -221,5 +221,16 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
     await base44.entities.TourStop.bulkUpdate(updates);
   }
 
+  // For landmark/ship tours, verify all coordinates via OpenStreetMap Overpass
+  // API — LLM-generated coordinates for new stops may be in water or at wrong
+  // locations. This also reorders by proximity using verified coordinates.
+  if (isLandmarkOrShip) {
+    try {
+      await base44.functions.invoke('fix-collapsed-coords', { tourId: tour.id });
+    } catch (e) {
+      console.error('Coordinate verification failed (stops still added):', e);
+    }
+  }
+
   return { added: actualAdded, capped: existingStops.length + newStops.length > maxStops };
 }

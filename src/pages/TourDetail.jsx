@@ -358,7 +358,22 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         created.push(saved);
       }
       spendManifestationEnergy();
-      setStops(created.sort((a, b) => a.stop_number - b.stop_number));
+
+      // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
+      // API — LLM-generated coordinates are unreliable (often in water or at
+      // wrong locations). Uses real mapped features for accuracy.
+      if (isLandmarkOrShip) {
+        try {
+          await base44.functions.invoke('fix-collapsed-coords', { tourId });
+          const verifiedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+          setStops(verifiedStops.sort((a, b) => a.stop_number - b.stop_number));
+        } catch (e) {
+          console.error('Coordinate verification failed:', e);
+          setStops(created.sort((a, b) => a.stop_number - b.stop_number));
+        }
+      } else {
+        setStops(created.sort((a, b) => a.stop_number - b.stop_number));
+      }
       setGeneratingStops(false);
     } catch (err) {
       setStopsError(err.message || 'Failed to generate stops. Please try again.');

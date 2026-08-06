@@ -313,6 +313,17 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
   try {
     const stopRecords = processed.stopRecords.map((r) => ({ ...r, tour_id: newTour.id }));
     await base44.entities.TourStop.bulkCreate(stopRecords);
+
+    // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
+    // API — LLM-generated coordinates are unreliable (often in water or at
+    // wrong locations). Uses real mapped features for accuracy.
+    if (processed.correctedCategory === 'landmark' || processed.correctedCategory === 'ship') {
+      try {
+        await base44.functions.invoke('fix-collapsed-coords', { tourId: newTour.id });
+      } catch (e) {
+        console.error('Coordinate verification failed (tour still created):', e);
+      }
+    }
   } catch (e) {
     // Stop creation failure must not block the tour; TourDetail backfills stops.
     console.error('Stop creation failed (tour still created):', e);
