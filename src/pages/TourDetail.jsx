@@ -65,23 +65,16 @@ function enforceWalkingDistance(stops, tourType) {
     });
   }
 
-  // MIXED TOURS: keep original stop order from LLM, label travel_method by proximity
-  // Stops within 0.33 miles of their neighbor in the sequence are walking, others driving
-  const sorted = [...stops].sort((a, b) => a.stop_number - b.stop_number);
-  const labeled = sorted.map((s, i) => {
-    if (i === sorted.length - 1) {
-      // Last stop: same method as previous if close, otherwise driving
-      const prev = i > 0 ? sorted[i - 1] : null;
-      if (prev && haversineDistance(prev.latitude, prev.longitude, s.latitude, s.longitude) <= WALKING_LIMIT) {
-        return { ...s, travel_method: 'walking' };
-      }
-      return { ...s, travel_method: 'driving' };
-    }
-    const nextDist = haversineDistance(s.latitude, s.longitude, sorted[i + 1].latitude, sorted[i + 1].longitude);
-    return { ...s, travel_method: nextDist <= WALKING_LIMIT ? 'walking' : 'driving' };
+  // MIXED TOURS: reorder by proximity (nearest-neighbor) so the walking
+  // cluster stays together and far stops (driving) land at the end. Label
+  // travel_method by distance between consecutive stops.
+  const ordered = orderStopsByProximity(stops);
+  return ordered.map((s, i) => {
+    if (i === 0) return { ...s, travel_method: 'walking', stop_number: i + 1 };
+    const prev = ordered[i - 1];
+    const dist = haversineDistance(prev.latitude, prev.longitude, s.latitude, s.longitude);
+    return { ...s, travel_method: dist <= WALKING_LIMIT ? 'walking' : 'driving', stop_number: i + 1 };
   });
-
-  return labeled.map((s, i) => ({ ...s, stop_number: i + 1 }));
 }
 
 export default function TourDetail() {
