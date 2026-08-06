@@ -26,7 +26,7 @@ export async function addTourStops(tour) {
   const category = tour.tour_category || 'area';
 
   const locationConstraint = category === 'landmark' || category === 'ship'
-    ? `ALL new stops MUST be on the SAME ${category === 'landmark' ? 'property/site' : 'vessel'} as the existing stops. Do NOT add stops in the surrounding area or neighborhood — every new stop must be a different room, building, floor, wing, or area WITHIN the same ${category === 'landmark' ? 'property grounds' : 'vessel'}. Use the existing stops' coordinates as the reference — new stops must be within 0.1 miles of those coordinates.`
+    ? `ALL new stops MUST be on the SAME ${category === 'landmark' ? 'property/site' : 'vessel'} as the existing stops. Do NOT add stops in the surrounding area or neighborhood — every new stop must be a different room, building, floor, wing, or area WITHIN the same ${category === 'landmark' ? 'property grounds' : 'vessel'}. Look up the REAL GPS coordinates of each specific area using web search — each stop must have its OWN distinct coordinates reflecting its actual physical location within the site. Do NOT use the same coordinates for all stops.`
     : category === 'cold_spot'
     ? `ALL new stops MUST be at the SAME specific haunted location as the existing stops. Do NOT add stops in the surrounding area — new stops must be within 0.1 miles of the existing stops' coordinates (e.g., different spots within the same building or immediate grounds).`
     : category === 'road_trip'
@@ -119,16 +119,26 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
     return { added: 0, capped: false, reason: 'none' };
   }
 
-  // Geocode new stops for accurate GPS coordinates (LLM coordinates are often wrong)
-  const newAddresses = newStops.map(s => s.address).filter(Boolean);
-  const newGeocodeMap = newAddresses.length > 0 ? await geocodeAddresses(newAddresses) : {};
+  const isLandmarkOrShip = tour.tour_category === 'landmark' || tour.tour_category === 'ship';
   const newGeocodedAddrs = new Set();
-  for (const ns of newStops) {
-    const geo = ns.address ? newGeocodeMap[ns.address] : null;
-    if (geo) {
-      ns.latitude = geo.lat;
-      ns.longitude = geo.lon;
-      newGeocodedAddrs.add(ns.address);
+  if (isLandmarkOrShip) {
+    // For landmark/ship tours, trust the LLM's web-searched coordinates —
+    // address geocoding would collapse all stops to one point since they
+    // share the same street address.
+    for (const ns of newStops) {
+      if (ns.address) newGeocodedAddrs.add(ns.address);
+    }
+  } else {
+    // Geocode new stops for accurate GPS coordinates (LLM coordinates are often wrong)
+    const newAddresses = newStops.map(s => s.address).filter(Boolean);
+    const newGeocodeMap = newAddresses.length > 0 ? await geocodeAddresses(newAddresses) : {};
+    for (const ns of newStops) {
+      const geo = ns.address ? newGeocodeMap[ns.address] : null;
+      if (geo) {
+        ns.latitude = geo.lat;
+        ns.longitude = geo.lon;
+        newGeocodedAddrs.add(ns.address);
+      }
     }
   }
 

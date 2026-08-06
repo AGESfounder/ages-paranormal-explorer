@@ -104,6 +104,9 @@ export default function TourDetail() {
   // Runs in the background — user sees the tour immediately, coordinates get
   // corrected automatically a few seconds later.
   const geocodeExistingStops = async (stopsList, tourData) => {
+    // For landmark/ship tours, don't geocode by address — all stops share one
+    // address, so address geocoding collapses them to a single point.
+    if (tourData && (tourData.tour_category === 'landmark' || tourData.tour_category === 'ship')) return;
     const needsGeocoding = stopsList.filter(s => !s.geocoded && s.address);
     if (needsGeocoding.length === 0) return;
     // Use enhanced geocoding with stop names — finds actual landmarks
@@ -246,8 +249,12 @@ export default function TourDetail() {
     setGeneratingStops(true);
     setStopsError('');
     try {
+      const isLandmarkOrShip = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship';
+      const coordInstruction = isLandmarkOrShip
+        ? '\nCOORDINATES — CRITICAL: EACH stop must have its OWN distinct, real GPS coordinates. Look up the actual GPS coordinates of that specific area/building/room within the property or vessel using web search (e.g., search "Battery 519 Fort Miles Lewes DE" to find its real location). Do NOT use the same coordinates for all stops — each area within the property has a different real-world location. The address is the same for all stops, but the coordinates must be different for each.'
+        : '';
       const prompt = `Generate 8-10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
-
+${coordInstruction}
 Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand when a user opens the stop, so keep these fields brief:
 - stop_number: 1-10 in logical route order
 - name, latitude, longitude (real GPS), address
@@ -283,11 +290,11 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
 
       let result = null;
       try {
-        result = await callJson(prompt, { useWeb: false });
+        result = await callJson(prompt, { useWeb: isLandmarkOrShip });
       } catch (e) { console.error('Stop generation failed:', e); }
       if (!result || !result.stops || result.stops.length === 0) {
         try {
-          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: false });
+          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: isLandmarkOrShip });
         } catch (e) { console.error('Stop generation (concise) failed:', e); }
       }
       if (!result || !result.stops || result.stops.length === 0) {
@@ -320,18 +327,27 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         if (addrKey) seenAddrs.add(addrKey);
         deduped.push(stop);
       }
-      // Geocode stops for accurate GPS coordinates using enhanced multi-strategy
-      // geocoding (name + address + city/state) — finds actual landmarks
-      const stopsForGeocoding = deduped.map((s, i) => ({
-        id: `temp_${i}`, name: s.name, address: s.address, city: tourData.city, state: tourData.state
-      }));
-      const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding) : {};
-      for (let i = 0; i < deduped.length; i++) {
-        const geo = geocodeMap[`temp_${i}`];
-        if (geo) {
-          deduped[i].latitude = geo.lat;
-          deduped[i].longitude = geo.lon;
-          deduped[i]._geocoded = true;
+      if (isLandmarkOrShip) {
+        // For landmark/ship tours, trust the LLM's web-searched coordinates —
+        // address geocoding would collapse all stops to one point since they
+        // share the same street address.
+        for (const stop of deduped) {
+          stop._geocoded = true;
+        }
+      } else {
+        // Geocode stops for accurate GPS coordinates using enhanced multi-strategy
+        // geocoding (name + address + city/state) — finds actual landmarks
+        const stopsForGeocoding = deduped.map((s, i) => ({
+          id: `temp_${i}`, name: s.name, address: s.address, city: tourData.city, state: tourData.state
+        }));
+        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding) : {};
+        for (let i = 0; i < deduped.length; i++) {
+          const geo = geocodeMap[`temp_${i}`];
+          if (geo) {
+            deduped[i].latitude = geo.lat;
+            deduped[i].longitude = geo.lon;
+            deduped[i]._geocoded = true;
+          }
         }
       }
 

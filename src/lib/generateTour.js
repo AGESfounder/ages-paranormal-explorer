@@ -129,7 +129,7 @@ Return a JSON object with:
 PLUS a "stops" array (${category === 'cold_spot' ? '1-4 stops' : '8-10 stops'}) — each a LIGHTWEIGHT skeleton (full detail is generated later, so keep these fields brief):
 - stop_number: starting from 1
 - name: for a PROPERTY tour, a specific area/building/room within the location; for AREA or ROAD TRIP tours, the name of that distinct haunted location
-- latitude: real coordinates (number) — for a PROPERTY tour all stops share the destination's coordinates (areas within one site); for AREA or ROAD TRIP tours each stop has its OWN distinct coordinates
+- latitude: real coordinates (number) — EACH stop must have its OWN distinct, real GPS coordinates. For a PROPERTY tour, look up the actual coordinates of that specific area/building within the property (e.g., search "Battery 519 Fort Miles Lewes DE") — do NOT use the same coordinates for all stops. For AREA or ROAD TRIP tours, each stop has its own real coordinates at its own address.
 - longitude: real coordinates (number)
 - address: ALWAYS a COMPLETE STREET ADDRESS with a street number (e.g. "123 Main St, Lewes, DE 19958"). For a PROPERTY tour, the full street address of "${dest}" (same for all stops); for AREA or ROAD TRIP tours, each stop's own real street address. NEVER use just a city name, an intersection ("X & Y"), or "near"/"vicinity". Must be GPS-searchable — typeable into Google Maps and arriving at the exact location.
 - historical_info: 2-3 sentences summarizing the key history (construction dates, notable figures, major events). Brief summary only.
@@ -150,7 +150,7 @@ ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
 
-Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a PROPERTY or COLD SPOT tour, every stop uses these same coordinates (areas within one site). For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
+Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a COLD SPOT tour, every stop uses these same coordinates (areas within one site). For a PROPERTY tour, use these as a reference but look up the ACTUAL distinct coordinates for each specific area/building within the property — each stop must reflect its real location within the site. For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
 
   // Coerce LLM output into the exact types/enums the schema expects. The LLM
   // often returns capitalized enums ("Moderate", "Walking") or tags as a string,
@@ -252,11 +252,12 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
       best_time: toStr(raw.best_time),
     };
 
+    const isLandmarkOrShip = correctedCategory === 'landmark' || correctedCategory === 'ship';
     const stopRecords = validStops.map(({ s, name, stop_number }) => ({
       stop_number,
       name,
-      latitude: useCoords ? coords.lat : toNum(s.latitude),
-      longitude: useCoords ? coords.lng : toNum(s.longitude),
+      latitude: toNum(s.latitude) || (useCoords ? coords.lat : null),
+      longitude: toNum(s.longitude) || (useCoords ? coords.lng : null),
       address: toStr(s.address),
       historical_info: toStr(s.historical_info),
       paranormal_info: toStr(s.paranormal_info),
@@ -269,6 +270,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
       travel_method: normEnum(s.travel_method, ['walking', 'driving'], 'walking'),
       hours_of_operation: toStr(s.hours_of_operation),
       entry_fee: toStr(s.entry_fee),
+      geocoded: isLandmarkOrShip,
     }));
 
     return { tourData, stopRecords, correctedCategory, validStops };
