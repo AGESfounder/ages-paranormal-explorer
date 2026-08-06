@@ -83,7 +83,7 @@ function enforceWalkingDistance(stops, tourType) {
 // - No two stops should share identical coordinates (collapsed markers)
 function validateStops(stops, tour) {
   if (!stops || stops.length === 0) return { compliant: false, reason: 'no stops' };
-  const maxDistMiles = tour.tour_category === 'road_trip' ? 200 : 50;
+  const maxDistMiles = tour.tour_category === 'road_trip' ? 200 : 5;
   const startLat = tour.start_latitude;
   const startLon = tour.start_longitude;
   if (startLat != null && startLon != null) {
@@ -105,6 +105,20 @@ function validateStops(stops, tour) {
   }
   for (const [key, count] of Object.entries(coordMap)) {
     if (count > 1) return { compliant: false, reason: `${count} stops collapsed at same coordinates` };
+  }
+  // For area tours, check that no consecutive stops (after proximity
+  // ordering) are more than 1 mile apart — the goal is walkable clusters.
+  if (tour.tour_category === 'area') {
+    const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
+    if (withCoords.length >= 2) {
+      const ordered = orderStopsByProximity(withCoords);
+      for (let i = 1; i < ordered.length; i++) {
+        const dist = haversineDistance(ordered[i - 1].latitude, ordered[i - 1].longitude, ordered[i].latitude, ordered[i].longitude);
+        if (dist > 1) {
+          return { compliant: false, reason: `stops are ${dist.toFixed(1)} miles apart (max 1 mile for area tours)` };
+        }
+      }
+    }
   }
   return { compliant: true };
 }
@@ -146,7 +160,7 @@ export default function TourDetail() {
     const stopsForGeocoding = needsGeocoding.map(s => ({
       id: s.id, name: s.name, address: s.address, city: tourData?.city, state: tourData?.state
     }));
-    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData?.start_latitude, lon: tourData?.start_longitude });
+    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData?.start_latitude, lon: tourData?.start_longitude, maxDistMiles: tourData?.tour_category === 'road_trip' ? 200 : 5 });
     const updates = [];
     for (const stop of needsGeocoding) {
       const geo = geocodeMap[stop.id];
@@ -395,7 +409,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         const stopsForGeocoding = deduped.map((s, i) => ({
           id: `temp_${i}`, name: s.name, address: s.address, city: tourData.city, state: tourData.state
         }));
-        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData.start_latitude, lon: tourData.start_longitude }) : {};
+        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: tourData.tour_category === 'road_trip' ? 200 : 5 }) : {};
         for (let i = 0; i < deduped.length; i++) {
           const geo = geocodeMap[`temp_${i}`];
           if (geo) {

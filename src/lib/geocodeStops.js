@@ -45,7 +45,7 @@ export async function geocodeStopsWithNames(stops, center) {
   for (let i = 0; i < unique.length; i += 10) {
     const batch = unique.slice(i, i + 10);
     try {
-      const response = await base44.functions.invoke('geocode-addresses', { stops: batch, center });
+      const response = await base44.functions.invoke('geocode-addresses', { stops: batch, center: center ? { lat: center.lat, lon: center.lon } : null, maxDistMiles: center?.maxDistMiles });
       const batchResults = response.data?.results || {};
       for (const [id, r] of Object.entries(batchResults)) {
         results[id] = r?.coords || null;

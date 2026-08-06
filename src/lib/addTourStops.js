@@ -135,7 +135,7 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
     const newStopsForGeocoding = newStops.map((s, i) => ({
       id: `temp_${i}`, name: s.name, address: s.address, city: tour.city, state: tour.state
     }));
-    const newGeocodeMap = newStopsForGeocoding.length > 0 ? await geocodeStopsWithNames(newStopsForGeocoding, { lat: tour.start_latitude, lon: tour.start_longitude }) : {};
+    const newGeocodeMap = newStopsForGeocoding.length > 0 ? await geocodeStopsWithNames(newStopsForGeocoding, { lat: tour.start_latitude, lon: tour.start_longitude, maxDistMiles: tour.tour_category === 'road_trip' ? 200 : 5 }) : {};
     for (let i = 0; i < newStops.length; i++) {
       const geo = newGeocodeMap[`temp_${i}`];
       if (geo) {
