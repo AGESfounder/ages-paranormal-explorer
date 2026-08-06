@@ -20,7 +20,7 @@ import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
 import { getNarrationLength, saveNarrationLength, truncateText } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
-import { geocodeAddresses } from '@/lib/geocodeStops';
+import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -113,11 +113,15 @@ export default function TourDetail() {
   const geocodeExistingStops = async (stopsList) => {
     const needsGeocoding = stopsList.filter(s => !s.geocoded && s.address);
     if (needsGeocoding.length === 0) return;
-    const addresses = [...new Set(needsGeocoding.map(s => s.address))];
-    const geocodeMap = await geocodeAddresses(addresses);
+    // Use enhanced geocoding with stop names — finds actual landmarks
+    // instead of intersection points when addresses are vague
+    const stopsForGeocoding = needsGeocoding.map(s => ({
+      id: s.id, name: s.name, address: s.address, city: tour?.city, state: tour?.state
+    }));
+    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding);
     const updates = [];
     for (const stop of needsGeocoding) {
-      const geo = geocodeMap[stop.address];
+      const geo = geocodeMap[stop.id];
       if (geo) {
         try {
           await base44.entities.TourStop.update(stop.id, {
@@ -300,22 +304,25 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         if (addrKey) seenAddrs.add(addrKey);
         deduped.push(stop);
       }
-      // Geocode stops for accurate GPS coordinates (LLM coordinates are often wrong)
-      const addresses = deduped.map(s => s.address).filter(Boolean);
-      const geocodeMap = addresses.length > 0 ? await geocodeAddresses(addresses) : {};
-      const geocodedAddrs = new Set();
-      for (const stop of deduped) {
-        const geo = stop.address ? geocodeMap[stop.address] : null;
+      // Geocode stops for accurate GPS coordinates using enhanced multi-strategy
+      // geocoding (name + address + city/state) — finds actual landmarks
+      const stopsForGeocoding = deduped.map((s, i) => ({
+        id: `temp_${i}`, name: s.name, address: s.address, city: tourData.city, state: tourData.state
+      }));
+      const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding) : {};
+      for (let i = 0; i < deduped.length; i++) {
+        const geo = geocodeMap[`temp_${i}`];
         if (geo) {
-          stop.latitude = geo.lat;
-          stop.longitude = geo.lon;
-          geocodedAddrs.add(stop.address);
+          deduped[i].latitude = geo.lat;
+          deduped[i].longitude = geo.lon;
+          deduped[i]._geocoded = true;
         }
       }
 
       const created = [];
       for (const stop of deduped) {
-        const saved = await base44.entities.TourStop.create({ ...stop, tour_id: tourId, geocoded: geocodedAddrs.has(stop.address) });
+        const { _geocoded, ...rest } = stop;
+        const saved = await base44.entities.TourStop.create({ ...rest, tour_id: tourId, geocoded: !!_geocoded });
         created.push(saved);
       }
       spendManifestationEnergy();
