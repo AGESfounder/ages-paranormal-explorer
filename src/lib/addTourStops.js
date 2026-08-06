@@ -74,6 +74,8 @@ Each new stop needs:
 - hours_of_operation: ALWAYS provide the location's public access hours (never leave blank; use "Exterior accessible 24/7" if freely accessible at all hours)
 - entry_fee: ALWAYS provide the admission cost (never leave blank; use "Free" if no charge)
 
+ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations from existing ghost tour companies, walking tours, or tourism websites, you MUST find the ACTUAL STREET ADDRESS of each location independently. Do NOT copy a tour company's meeting point, starting location, or vague area description — tour companies often list only where their tour GROUPS MEET (e.g., "2nd & Market St") rather than the actual haunted building's address. For every stop, look up the real street address where the actual haunted building, landmark, or site is located (e.g., "43 Cape Henlopen Dr, Lewes, DE 19958" for the ferry terminal, NOT "Near the intersection of 2nd & Market"). The address must be the physical location of the haunted site itself, not a tour company's gathering point.
+
 Output ONLY a valid JSON object with a "new_stops" array.`;
 
   const result = await base44.integrations.Core.InvokeLLM({
