@@ -85,6 +85,7 @@ function validateStops(stops, tour) {
   if (!stops || stops.length === 0) return { compliant: false, reason: 'no stops' };
   const maxDistMiles = tour.tour_category === 'road_trip' ? 200
     : (tour.tour_category === 'cold_spot' || tour.tour_category === 'ship') ? 0.5
+    : tour.tour_category === 'area' ? 2.5
     : 5;
   const startLat = tour.start_latitude;
   const startLon = tour.start_longitude;
@@ -168,7 +169,7 @@ export default function TourDetail() {
     const stopsForGeocoding = needsGeocoding.map(s => ({
       id: s.id, name: s.name, address: s.address, city: tourData?.city, state: tourData?.state
     }));
-    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData?.start_latitude, lon: tourData?.start_longitude, maxDistMiles: tourData?.tour_category === 'road_trip' ? 200 : (tourData?.tour_category === 'cold_spot' || tourData?.tour_category === 'ship') ? 0.5 : 5 });
+    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData?.start_latitude, lon: tourData?.start_longitude, maxDistMiles: tourData?.tour_category === 'road_trip' ? 200 : (tourData?.tour_category === 'cold_spot' || tourData?.tour_category === 'ship') ? 0.5 : tourData?.tour_category === 'area' ? 2.5 : 5 });
     const updates = [];
     for (const stop of needsGeocoding) {
       const geo = geocodeMap[stop.id];
@@ -417,7 +418,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         const stopsForGeocoding = deduped.map((s, i) => ({
           id: `temp_${i}`, name: s.name, address: s.address, city: tourData.city, state: tourData.state
         }));
-        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: tourData.tour_category === 'road_trip' ? 200 : (tourData.tour_category === 'cold_spot' || tourData.tour_category === 'ship') ? 0.5 : 5 }) : {};
+        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: tourData.tour_category === 'road_trip' ? 200 : (tourData.tour_category === 'cold_spot' || tourData.tour_category === 'ship') ? 0.5 : tourData.tour_category === 'area' ? 2.5 : 5 }) : {};
         for (let i = 0; i < deduped.length; i++) {
           const geo = geocodeMap[`temp_${i}`];
           if (geo) {
