@@ -30,7 +30,39 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function orderStopsByProximity(stops) {
+// 2-opt optimization: reverses route segments that reduce total distance.
+// Fixes backtracking patterns (e.g., out to a cluster, back, out again)
+// that nearest-neighbor alone produces. When includeReturn is true, the
+// return-to-start edge is included in the cost so walking tours form a
+// loop that brings the user back near where they parked.
+function optimizeRoute2Opt(route, includeReturn) {
+  if (route.length <= 3) return route;
+  const dist = (a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude);
+  let improved = true;
+  let iterations = 0;
+  while (improved && iterations < 50) {
+    improved = false;
+    iterations++;
+    for (let i = 1; i < route.length - 1; i++) {
+      for (let j = i + 1; j < route.length; j++) {
+        const a = route[i - 1];
+        const b = route[i];
+        const c = route[j];
+        const d = (j + 1 < route.length) ? route[j + 1] : (includeReturn ? route[0] : null);
+        const oldD = dist(a, b) + (d ? dist(c, d) : 0);
+        const newD = dist(a, c) + (d ? dist(b, d) : 0);
+        if (newD < oldD - 0.0001) {
+          const reversed = route.slice(i, j + 1).reverse();
+          route.splice(i, j - i + 1, ...reversed);
+          improved = true;
+        }
+      }
+    }
+  }
+  return route;
+}
+
+function orderStopsByProximity(stops, includeReturn = false) {
   if (stops.length <= 1) return stops;
   const ordered = [stops[0]];
   const remaining = stops.slice(1);
@@ -44,7 +76,7 @@ function orderStopsByProximity(stops) {
     }
     ordered.push(remaining.splice(nearestIdx, 1)[0]);
   }
-  return ordered;
+  return optimizeRoute2Opt(ordered, includeReturn);
 }
 
 function enforceWalkingDistance(stops, tourType) {
@@ -56,7 +88,7 @@ function enforceWalkingDistance(stops, tourType) {
   }
 
   if (tourType === 'walking') {
-    const ordered = orderStopsByProximity(stops);
+    const ordered = orderStopsByProximity(stops, true);
     return ordered.map((s, i) => {
       if (i === 0) return { ...s, travel_method: 'walking', stop_number: i + 1 };
       const prev = ordered[i - 1];
