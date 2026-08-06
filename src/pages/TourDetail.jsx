@@ -77,6 +77,38 @@ function enforceWalkingDistance(stops, tourType) {
   });
 }
 
+// Validate that a tour's stops comply with current guidelines:
+// - No stop should be unreasonably far from the tour's start coordinates
+//   (area/cold_spot/landmark/ship: 50 miles, road_trip: 200 miles)
+// - No two stops should share identical coordinates (collapsed markers)
+function validateStops(stops, tour) {
+  if (!stops || stops.length === 0) return { compliant: false, reason: 'no stops' };
+  const maxDistMiles = tour.tour_category === 'road_trip' ? 200 : 50;
+  const startLat = tour.start_latitude;
+  const startLon = tour.start_longitude;
+  if (startLat != null && startLon != null) {
+    for (const s of stops) {
+      if (s.latitude != null && s.longitude != null) {
+        const dist = haversineDistance(startLat, startLon, s.latitude, s.longitude);
+        if (dist > maxDistMiles) {
+          return { compliant: false, reason: `stop "${s.name}" is ${Math.round(dist)} miles from start` };
+        }
+      }
+    }
+  }
+  const coordMap = {};
+  for (const s of stops) {
+    if (s.latitude != null && s.longitude != null) {
+      const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
+      coordMap[key] = (coordMap[key] || 0) + 1;
+    }
+  }
+  for (const [key, count] of Object.entries(coordMap)) {
+    if (count > 1) return { compliant: false, reason: `${count} stops collapsed at same coordinates` };
+  }
+  return { compliant: true };
+}
+
 export default function TourDetail() {
   const { tourId } = useParams();
   const navigate = useNavigate();
@@ -114,7 +146,7 @@ export default function TourDetail() {
     const stopsForGeocoding = needsGeocoding.map(s => ({
       id: s.id, name: s.name, address: s.address, city: tourData?.city, state: tourData?.state
     }));
-    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding);
+    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData?.start_latitude, lon: tourData?.start_longitude });
     const updates = [];
     for (const stop of needsGeocoding) {
       const geo = geocodeMap[stop.id];
@@ -202,30 +234,50 @@ export default function TourDetail() {
       const tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
       if (tourStops.length === 0) {
         await generateStops(tourData[0]);
-      } else if (tourData[0].user_reordered) {
-        // Respect the user's manual stop order — do not re-sort by proximity
-        const sortedStops = tourStops.sort((a, b) => a.stop_number - b.stop_number);
-        setStops(sortedStops);
-        geocodeExistingStops(sortedStops, tourData[0]).catch(console.error);
       } else {
-        const reordered = enforceWalkingDistance(tourStops, tourData[0].tour_type);
-        // Update stop_numbers in the database if they changed
-        for (const s of reordered) {
-          const existing = tourStops.find(ts => ts.id === s.id);
-          if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
-            await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
+        // Auto-regenerate stops that don't comply with current guidelines
+        // (outlier coordinates, collapsed markers). One-time per tour.
+        let regenerated = false;
+        if (!tourData[0].stops_regenerated) {
+          const validation = validateStops(tourStops, tourData[0]);
+          if (!validation.compliant) {
+            for (const s of tourStops) {
+              await base44.entities.TourStop.delete(s.id);
+            }
+            await base44.entities.Tour.update(tourId, { stops_regenerated: true });
+            await generateStops(tourData[0], { systemRegen: true });
+            regenerated = true;
+          } else {
+            await base44.entities.Tour.update(tourId, { stops_regenerated: true });
           }
         }
-        // Auto-correct tour type if stops are now a mix of walking + driving
-        const methods = new Set(reordered.map(s => s.travel_method));
-        const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
-          : methods.has('driving') ? 'driving' : 'walking';
-        if (correctedType !== tourData[0].tour_type) {
-          await base44.entities.Tour.update(tourData[0].id, { tour_type: correctedType });
-          tourData[0].tour_type = correctedType;
+        if (!regenerated) {
+          if (tourData[0].user_reordered) {
+            // Respect the user's manual stop order — do not re-sort by proximity
+            const sortedStops = tourStops.sort((a, b) => a.stop_number - b.stop_number);
+            setStops(sortedStops);
+            geocodeExistingStops(sortedStops, tourData[0]).catch(console.error);
+          } else {
+            const reordered = enforceWalkingDistance(tourStops, tourData[0].tour_type);
+            // Update stop_numbers in the database if they changed
+            for (const s of reordered) {
+              const existing = tourStops.find(ts => ts.id === s.id);
+              if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
+                await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
+              }
+            }
+            // Auto-correct tour type if stops are now a mix of walking + driving
+            const methods = new Set(reordered.map(s => s.travel_method));
+            const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
+              : methods.has('driving') ? 'driving' : 'walking';
+            if (correctedType !== tourData[0].tour_type) {
+              await base44.entities.Tour.update(tourData[0].id, { tour_type: correctedType });
+              tourData[0].tour_type = correctedType;
+            }
+            setStops(reordered);
+            geocodeExistingStops(reordered, tourData[0]).catch(console.error);
+          }
         }
-        setStops(reordered);
-        geocodeExistingStops(reordered, tourData[0]).catch(console.error);
       }
     }
     } catch (err) {
@@ -238,13 +290,16 @@ export default function TourDetail() {
     setLoading(false);
   };
 
-  const generateStops = async (tourData) => {
-    const gate = await checkManifestationGate();
-    if (!gate.allowed) {
-      setStopsError(gate.reason === 'energy'
-        ? "You're out of manifestation energy. Buy an Aura Bundle or upgrade your plan."
-        : 'Upgrade to a paid plan to generate tour stops.');
-      return;
+  const generateStops = async (tourData, options = {}) => {
+    const { systemRegen = false } = options;
+    if (!systemRegen) {
+      const gate = await checkManifestationGate();
+      if (!gate.allowed) {
+        setStopsError(gate.reason === 'energy'
+          ? "You're out of manifestation energy. Buy an Aura Bundle or upgrade your plan."
+          : 'Upgrade to a paid plan to generate tour stops.');
+        return;
+      }
     }
     setGeneratingStops(true);
     setStopsError('');
@@ -340,7 +395,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         const stopsForGeocoding = deduped.map((s, i) => ({
           id: `temp_${i}`, name: s.name, address: s.address, city: tourData.city, state: tourData.state
         }));
-        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding) : {};
+        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData.start_latitude, lon: tourData.start_longitude }) : {};
         for (let i = 0; i < deduped.length; i++) {
           const geo = geocodeMap[`temp_${i}`];
           if (geo) {
@@ -357,7 +412,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         const saved = await base44.entities.TourStop.create({ ...rest, tour_id: tourId, geocoded: !!_geocoded });
         created.push(saved);
       }
-      spendManifestationEnergy();
+      if (!systemRegen) spendManifestationEnergy();
 
       // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
       // API — LLM-generated coordinates are unreliable (often in water or at

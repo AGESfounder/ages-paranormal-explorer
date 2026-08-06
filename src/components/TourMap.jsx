@@ -39,19 +39,38 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   const validStops = stops.filter(s => s.latitude && s.longitude);
   if (validStops.length === 0) return null;
 
-  const lats = validStops.map(s => s.latitude);
-  const lngs = validStops.map(s => s.longitude);
+  // Filter out geographic outliers so one bad coordinate can't zoom the
+  // map to a continental scale. Compute the median center, then keep only
+  // stops within a reasonable distance (50 mi normal, 200 mi road trips).
+  // Outliers are still shown as markers but excluded from bounds/route.
+  const sortedLats = [...validStops].map(s => s.latitude).sort((a, b) => a - b);
+  const sortedLngs = [...validStops].map(s => s.longitude).sort((a, b) => a - b);
+  const medianLat = sortedLats[Math.floor(sortedLats.length / 2)];
+  const medianLon = sortedLngs[Math.floor(sortedLngs.length / 2)];
+  const maxDist = tour?.tour_category === 'road_trip' ? 200 : 50;
+  const haversine = (lat1, lon1, lat2, lon2) => {
+    const R = 3958.8;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+  const inBounds = validStops.filter(s => haversine(medianLat, medianLon, s.latitude, s.longitude) <= maxDist);
+  const boundsStops = inBounds.length > 0 ? inBounds : validStops;
+
+  const lats = boundsStops.map(s => s.latitude);
+  const lngs = boundsStops.map(s => s.longitude);
   const center = [
     (Math.min(...lats) + Math.max(...lats)) / 2,
     (Math.min(...lngs) + Math.max(...lngs)) / 2,
   ];
 
-  const bounds = validStops.length > 1
+  const bounds = boundsStops.length > 1
     ? [[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]]
     : undefined;
 
-  const routeLine = validStops.length > 1
-    ? validStops.map(s => [s.latitude, s.longitude])
+  const routeLine = boundsStops.length > 1
+    ? boundsStops.map(s => [s.latitude, s.longitude])
     : undefined;
 
   return (

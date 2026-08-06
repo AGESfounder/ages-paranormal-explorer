@@ -27,7 +27,7 @@ export async function geocodeAddresses(addresses) {
  * @param {Array} stops — array of stop objects with {id, name, address, city, state}
  * @returns {Promise<Object>} { stopId: { lat, lon } | null }
  */
-export async function geocodeStopsWithNames(stops) {
+export async function geocodeStopsWithNames(stops, center) {
   if (!stops || stops.length === 0) return {};
   // Deduplicate by id
   const unique = [];
@@ -45,7 +45,7 @@ export async function geocodeStopsWithNames(stops) {
   for (let i = 0; i < unique.length; i += 10) {
     const batch = unique.slice(i, i + 10);
     try {
-      const response = await base44.functions.invoke('geocode-addresses', { stops: batch });
+      const response = await base44.functions.invoke('geocode-addresses', { stops: batch, center });
       const batchResults = response.data?.results || {};
       for (const [id, r] of Object.entries(batchResults)) {
         results[id] = r?.coords || null;

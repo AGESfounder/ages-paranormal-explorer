@@ -27,20 +27,34 @@ function isVagueAddress(addr) {
   return false;
 }
 
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // Geocode a stop using multiple strategies:
 // 1. Try the address (if not vague)
 // 2. Try "stop name, city, state" (landmark name often resolves better)
 // 3. Try simplified address (street + city + state, no cross-street)
-async function geocodeStop(stop) {
+// Each result is rejected if >maxDistMiles from center (when provided) —
+// prevents outliers like a stop geocoding to a different state entirely.
+async function geocodeStop(stop, center, maxDistMiles) {
   const { name, address, city, state } = stop;
   const cityState = [city, state].filter(Boolean).join(', ');
   const results = {};
+  const withinMaxDist = (coords) => {
+    if (!center || !coords) return true;
+    return haversine(center.lat, center.lon, coords.lat, coords.lon) <= maxDistMiles;
+  };
 
   // Strategy 1: Full address (if not vague)
   if (address && !isVagueAddress(address)) {
     try {
       const r = await geocodeQuery(address);
-      if (r) { results.address = r; return { coords: r, strategy: 'address' }; }
+      if (r && withinMaxDist(r)) { results.address = r; return { coords: r, strategy: 'address' }; }
     } catch (e) { console.error(`Address geocode failed for "${address}":`, e.message); }
     await sleep(1100);
   }
@@ -53,7 +67,7 @@ async function geocodeStop(stop) {
     const nameQuery = `${cleanName}, ${cityState}`;
     try {
       const r = await geocodeQuery(nameQuery);
-      if (r) { results.name = r; return { coords: r, strategy: 'name' }; }
+      if (r && withinMaxDist(r)) { results.name = r; return { coords: r, strategy: 'name' }; }
     } catch (e) { console.error(`Name geocode failed for "${name}":`, e.message); }
     await sleep(1100);
   }
@@ -64,7 +78,7 @@ async function geocodeStop(stop) {
     if (simplified && simplified !== address) {
       try {
         const r = await geocodeQuery(simplified);
-        if (r) { results.simplified = r; return { coords: r, strategy: 'simplified' }; }
+        if (r && withinMaxDist(r)) { results.simplified = r; return { coords: r, strategy: 'simplified' }; }
       } catch (e) { console.error(`Simplified geocode failed for "${simplified}":`, e.message); }
       await sleep(1100);
     }
@@ -74,7 +88,7 @@ async function geocodeStop(stop) {
   if (cityState) {
     try {
       const r = await geocodeQuery(cityState);
-      if (r) { results.centroid = r; return { coords: r, strategy: 'centroid' }; }
+      if (r && withinMaxDist(r)) { results.centroid = r; return { coords: r, strategy: 'centroid' }; }
     } catch (e) { console.error(`Centroid geocode failed for "${cityState}":`, e.message); }
   }
 
@@ -94,10 +108,12 @@ export default async function (req) {
       if (body.stops.length > 10) {
         return Response.json({ error: 'Max 10 stops per call' }, { status: 400 });
       }
+      const center = body.center || null;
+      const maxDistMiles = body.maxDistMiles || 50;
       const results = {};
       for (const stop of body.stops) {
         try {
-          const r = await geocodeStop(stop);
+          const r = await geocodeStop(stop, center, maxDistMiles);
           results[stop.id] = r;
         } catch (e) {
           console.error(`Geocode failed for stop "${stop.name}":`, e.message);

@@ -1,5 +1,5 @@
 import { base44 } from '@/api/base44Client';
-import { geocodeAddresses } from '@/lib/geocodeStops';
+import { geocodeStopsWithNames } from '@/lib/geocodeStops';
 
 const MAX_STOPS = 12;
 const COLD_SPOT_MAX_STOPS = 4; // cold_spot = 1-4 stops at a single location
@@ -129,15 +129,19 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
       if (ns.address) newGeocodedAddrs.add(ns.address);
     }
   } else {
-    // Geocode new stops for accurate GPS coordinates (LLM coordinates are often wrong)
-    const newAddresses = newStops.map(s => s.address).filter(Boolean);
-    const newGeocodeMap = newAddresses.length > 0 ? await geocodeAddresses(newAddresses) : {};
-    for (const ns of newStops) {
-      const geo = ns.address ? newGeocodeMap[ns.address] : null;
+    // Geocode new stops for accurate GPS coordinates using enhanced
+    // multi-strategy geocoding (name + address + city/state) with outlier
+    // detection — rejects results too far from the tour center.
+    const newStopsForGeocoding = newStops.map((s, i) => ({
+      id: `temp_${i}`, name: s.name, address: s.address, city: tour.city, state: tour.state
+    }));
+    const newGeocodeMap = newStopsForGeocoding.length > 0 ? await geocodeStopsWithNames(newStopsForGeocoding, { lat: tour.start_latitude, lon: tour.start_longitude }) : {};
+    for (let i = 0; i < newStops.length; i++) {
+      const geo = newGeocodeMap[`temp_${i}`];
       if (geo) {
-        ns.latitude = geo.lat;
-        ns.longitude = geo.lon;
-        newGeocodedAddrs.add(ns.address);
+        newStops[i].latitude = geo.lat;
+        newStops[i].longitude = geo.lon;
+        newGeocodedAddrs.add(newStops[i].address);
       }
     }
   }
