@@ -101,9 +101,9 @@
       "description": "State ranking: 1 = #1 Most Active, 2 = #2, 3 = #3. Null/undefined for unranked tours."
     },
     "stops_regenerated": {
-      "type": "boolean",
-      "default": false,
-      "description": "Whether stops have been validated against current guidelines. False/undefined = old stops that may not comply with distance/address rules and should be auto-validated (and regenerated if non-compliant) on first view."
+      "type": "number",
+      "default": 0,
+      "description": "Validation version of the stops. 0 = unvalidated. When validation rules change, STOPS_VALIDATION_VERSION is bumped in TourDetail.jsx, and all tours with an older version are re-validated (and regenerated if non-compliant) on next view at no energy cost. Boolean true (legacy) is treated as version 1."
     }
   },
   "required": [

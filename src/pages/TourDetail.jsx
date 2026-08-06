@@ -77,6 +77,11 @@ function enforceWalkingDistance(stops, tourType) {
   });
 }
 
+// Bump this when validation rules change — all tours with an older version
+// get re-validated (and regenerated if non-compliant) on next view, at no
+// energy cost to the user (system maintenance bypasses energy gating).
+const STOPS_VALIDATION_VERSION = 2;
+
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
 //   (area/cold_spot/landmark/ship: 50 miles, road_trip: 200 miles)
@@ -261,17 +266,17 @@ export default function TourDetail() {
         // Auto-regenerate stops that don't comply with current guidelines
         // (outlier coordinates, collapsed markers). One-time per tour.
         let regenerated = false;
-        if (!tourData[0].stops_regenerated) {
+        if ((tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION) {
           const validation = validateStops(tourStops, tourData[0]);
           if (!validation.compliant) {
             for (const s of tourStops) {
               await base44.entities.TourStop.delete(s.id);
             }
-            await base44.entities.Tour.update(tourId, { stops_regenerated: true });
+            await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
             await generateStops(tourData[0], { systemRegen: true });
             regenerated = true;
           } else {
-            await base44.entities.Tour.update(tourId, { stops_regenerated: true });
+            await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
           }
         }
         if (!regenerated) {
