@@ -296,9 +296,9 @@ export default function TourDetail() {
   // Runs in the background — user sees the tour immediately, coordinates get
   // corrected automatically a few seconds later.
   const geocodeExistingStops = async (stopsList, tourData) => {
-    // For landmark/ship tours, don't geocode by address — all stops share one
-    // address, so address geocoding collapses them to a single point.
-    if (tourData && (tourData.tour_category === 'landmark' || tourData.tour_category === 'ship')) return;
+    // For landmark/ship/cold_spot tours, don't geocode by address — all stops
+    // share one address, so address geocoding collapses them to a single point.
+    if (tourData && (tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot')) return;
     const needsGeocoding = stopsList.filter(s => !s.geocoded && s.address);
     if (needsGeocoding.length === 0) return;
     // Use enhanced geocoding with stop names — finds actual landmarks
@@ -489,7 +489,7 @@ export default function TourDetail() {
   // didn't include parking. Only generates for tours with walking stops.
   const generateParking = async (tourData, stopsList) => {
     const walkingStops = (stopsList || stops).filter(s => s.travel_method === 'walking' && s.latitude != null && s.longitude != null);
-    if (walkingStops.length < 2) return;
+    if (walkingStops.length < 1) return;
     try {
       const stopNames = walkingStops.map(s => `${s.name} (${s.address || 'no address'})`).join(', ');
       const cLat = walkingStops.reduce((sum, s) => sum + s.latitude, 0) / walkingStops.length;
@@ -503,6 +503,7 @@ Suggest a real, logical parking location where investigators can park their car 
 - Must be located between the first and last stop of the walking cluster
 - Must be publicly accessible at night (after 7 PM)
 - Must be within 0.3 miles of the walking cluster center
+- Must NOT be in water — parking must be on land
 
 Return JSON with:
 - parking_name: Name of the parking area (e.g., "Main Street Metered Parking", "City Lot #3")
@@ -514,22 +515,36 @@ Return JSON with:
 
 Output ONLY valid JSON. No markdown fences.`;
       const result = await callJson(prompt, { useWeb: true });
-      if (!result || !result.parking_latitude) return;
-      let lat = result.parking_latitude;
-      let lon = result.parking_longitude;
-      if (result.parking_address) {
-        const geoMap = await geocodeStopsWithNames([{
-          id: 'parking', name: result.parking_name, address: result.parking_address,
-          city: tourData.city, state: tourData.state
-        }], { lat: cLat, lon: cLon, maxDistMiles: 0.5, clusterRadius: 0.3 });
-        if (geoMap.parking) { lat = geoMap.parking.lat; lon = geoMap.parking.lon; }
+      // Default to the tour's start coordinates (verified on land by
+      // fix-collapsed-coords) so parking is NEVER in water, even if the LLM
+      // or geocoder fails. Parking must always exist — at the actual location
+      // if no separate parking spot can be found.
+      let lat = tourData.start_latitude;
+      let lon = tourData.start_longitude;
+      let parkingName = 'Parking Area';
+      let parkingAddress = tourData.start_location_name || '';
+      let parkingType = 'street';
+      let parkingCost = 'Free';
+      if (result) {
+        parkingName = result.parking_name || 'Parking Area';
+        parkingAddress = result.parking_address || parkingAddress;
+        parkingType = result.parking_type || parkingType;
+        parkingCost = result.parking_cost || parkingCost;
+        // Geocode the parking address — if it returns valid on-land coords,
+        // use them. If it fails (water/failed/null), keep the tour start coords.
+        if (result.parking_address) {
+          const geoMap = await geocodeStopsWithNames([{
+            id: 'parking', name: result.parking_name, address: result.parking_address,
+            city: tourData.city, state: tourData.state
+          }], { lat: cLat, lon: cLon, maxDistMiles: 0.5, clusterRadius: 0.3 });
+          if (geoMap.parking) { lat = geoMap.parking.lat; lon = geoMap.parking.lon; }
+        }
       }
       const parkingStopRecord = await base44.entities.TourStop.create({
         tour_id: tourData.id, stop_type: 'parking', stop_number: 0,
-        name: result.parking_name || 'Parking Area',
-        address: result.parking_address,
+        name: parkingName, address: parkingAddress,
         latitude: lat, longitude: lon,
-        parking_type: result.parking_type, parking_cost: result.parking_cost,
+        parking_type: parkingType, parking_cost: parkingCost,
         travel_method: 'walking', geocoded: true,
       });
       setStops(prev => [parkingStopRecord, ...prev.filter(s => s.stop_type !== 'parking')]);
@@ -552,8 +567,8 @@ Output ONLY valid JSON. No markdown fences.`;
     setGeneratingStops(true);
     setStopsError('');
     try {
-      const isLandmarkOrShip = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship';
-      const coordInstruction = isLandmarkOrShip
+      const needsCoordVerification = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
+      const coordInstruction = needsCoordVerification
         ? '\nCOORDINATES — CRITICAL: EACH stop must have its OWN distinct, real GPS coordinates. Look up the actual GPS coordinates of that specific area/building/room within the property or vessel using web search (e.g., search "Battery 519 Fort Miles Lewes DE" to find its real location). Do NOT use the same coordinates for all stops — each area within the property has a different real-world location. The address is the same for all stops, but the coordinates must be different for each.'
         : '';
       const prompt = `Generate 8-10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
@@ -607,11 +622,11 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
 
       let result = null;
       try {
-        result = await callJson(prompt, { useWeb: isLandmarkOrShip });
+        result = await callJson(prompt, { useWeb: needsCoordVerification });
       } catch (e) { console.error('Stop generation failed:', e); }
       if (!result || !result.stops || result.stops.length === 0) {
         try {
-          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: isLandmarkOrShip });
+          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: needsCoordVerification });
         } catch (e) { console.error('Stop generation (concise) failed:', e); }
       }
       if (!result || !result.stops || result.stops.length === 0) {
@@ -649,10 +664,11 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       for (let i = 0; i < deduped.length; i++) {
         deduped[i].stop_number = i + 1;
       }
-      if (isLandmarkOrShip) {
-        // For landmark/ship tours, trust the LLM's web-searched coordinates —
-        // address geocoding would collapse all stops to one point since they
-        // share the same street address.
+      if (needsCoordVerification) {
+        // For landmark/ship/cold_spot tours, trust the LLM's web-searched
+        // coordinates — address geocoding would collapse all stops to one
+        // point since they share the same street address. Coordinates are
+        // verified via Overpass API after creation (fix-collapsed-coords).
         for (const stop of deduped) {
           stop._geocoded = true;
         }
@@ -681,11 +697,19 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       }
       if (!systemRegen) spendManifestationEnergy();
 
-      // Create parking stop if the LLM provided it
-      if (result.parking && result.parking.parking_latitude) {
-        const p = result.parking;
-        let pLat = p.parking_latitude;
-        let pLon = p.parking_longitude;
+      // Create parking stop — always create one for walking tours. If the LLM
+      // provided parking, geocode its address for accurate on-land coords. If
+      // geocoding fails (water/failed), fall back to the tour's start coords
+      // (verified on land by fix-collapsed-coords). If the LLM didn't provide
+      // parking at all, create one at the tour's start location.
+      if (tourData.tour_type !== 'driving') {
+        const p = result.parking || {};
+        let pLat = tourData.start_latitude;
+        let pLon = tourData.start_longitude;
+        let pName = p.parking_name || 'Parking Area';
+        let pAddr = p.parking_address || tourData.start_location_name || '';
+        let pType = p.parking_type || 'street';
+        let pCost = p.parking_cost || 'Free';
         if (p.parking_address) {
           const geoMap = await geocodeStopsWithNames([{
             id: 'parking', name: p.parking_name, address: p.parking_address,
@@ -696,20 +720,19 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         try {
           const parkingStopRecord = await base44.entities.TourStop.create({
             tour_id: tourId, stop_type: 'parking', stop_number: 0,
-            name: p.parking_name || 'Parking Area',
-            address: p.parking_address,
+            name: pName, address: pAddr,
             latitude: pLat, longitude: pLon,
-            parking_type: p.parking_type, parking_cost: p.parking_cost,
+            parking_type: pType, parking_cost: pCost,
             travel_method: 'walking', geocoded: true,
           });
           created.push(parkingStopRecord);
         } catch (e) { console.error('Parking stop creation failed:', e); }
       }
 
-      // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
-      // API — LLM-generated coordinates are unreliable (often in water or at
-      // wrong locations). Uses real mapped features for accuracy.
-      if (isLandmarkOrShip) {
+      // For landmark/ship/cold_spot tours, verify coordinates via OpenStreetMap
+      // Overpass API — LLM-generated coordinates are unreliable (often in water
+      // or at wrong locations). Uses real mapped features for accuracy.
+      if (needsCoordVerification) {
         try {
           await base44.functions.invoke('fix-collapsed-coords', { tourId });
           const verifiedStops = await base44.entities.TourStop.filter({ tour_id: tourId });

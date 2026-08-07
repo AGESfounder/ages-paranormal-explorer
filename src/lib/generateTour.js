@@ -317,7 +317,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
     // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
     // API — LLM-generated coordinates are unreliable (often in water or at
     // wrong locations). Uses real mapped features for accuracy.
-    if (processed.correctedCategory === 'landmark' || processed.correctedCategory === 'ship') {
+    if (processed.correctedCategory === 'landmark' || processed.correctedCategory === 'ship' || processed.correctedCategory === 'cold_spot') {
       try {
         await base44.functions.invoke('fix-collapsed-coords', { tourId: newTour.id });
       } catch (e) {

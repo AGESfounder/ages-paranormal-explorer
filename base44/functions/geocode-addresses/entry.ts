@@ -35,6 +35,22 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Reverse geocode to check if a point is on land (not in water/ocean)
+async function reverseGeocode(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=17`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'AGES-Paranormal-Explorer/1.0' } });
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+function isOnLand(rev) {
+  if (!rev) return false;
+  const addr = rev.address || {};
+  return !!(addr.road || addr.building || addr.house_number || addr.neighbourhood ||
+    addr.suburb || addr.city || addr.town || addr.village || addr.amenity ||
+    addr.tourism || addr.historic || (rev.category && rev.category !== 'boundary'));
+}
+
 // Geocode a stop using multiple strategies:
 // 1. Try the address (if not vague)
 // 2. Try "stop name, city, state" (landmark name often resolves better)
@@ -148,6 +164,17 @@ export default async function (req) {
       for (const stop of body.stops) {
         try {
           const r = await geocodeStop(stop, center, maxDistMiles, clusterRadius);
+          // Water check: reject coordinates that reverse-geocode as water/ocean
+          if (r?.coords) {
+            try {
+              const rev = await reverseGeocode(r.coords.lat, r.coords.lon);
+              await sleep(1100);
+              if (!isOnLand(rev)) {
+                r.coords = null;
+                r.strategy = 'water';
+              }
+            } catch (e) { /* keep result if reverse geocode fails */ }
+          }
           results[stop.id] = r;
         } catch (e) {
           console.error(`Geocode failed for stop "${stop.name}":`, e.message);

@@ -23,9 +23,16 @@ async function reverseGeocode(lat, lon) {
 function isOnLand(rev) {
   if (!rev) return false;
   const addr = rev.address || {};
+  // Explicitly water — reject
+  if (addr.water || rev.category === 'water' || rev.class === 'water' || rev.type === 'water') return false;
+  // Display name mentions a water body with no land address fields — reject
+  if (rev.display_name && /\b(ocean|sea|gulf|strait|channel|bay|harbor|cove|inlet|lake|river|creek|stream|pond|reservoir)\b/i.test(rev.display_name)
+      && !addr.road && !addr.building && !addr.house_number && !addr.amenity && !addr.tourism && !addr.historic) return false;
+  // Any land indicator present — accept
   return !!(addr.road || addr.building || addr.house_number || addr.neighbourhood ||
     addr.suburb || addr.city || addr.town || addr.village || addr.amenity ||
-    addr.tourism || addr.historic || (rev.category && rev.category !== 'boundary'));
+    addr.tourism || addr.historic || addr.county || addr.state_district ||
+    addr.postcode || (rev.category && rev.category !== 'boundary' && rev.category !== 'natural'));
 }
 
 // Query Overpass API for named features + military/historic features near a point
@@ -144,8 +151,8 @@ export default async function (req) {
 
     const tour = await base44.asServiceRole.entities.Tour.get(tourId);
     if (!tour) return Response.json({ error: 'Tour not found' }, { status: 404 });
-    if (tour.tour_category !== 'landmark' && tour.tour_category !== 'ship') {
-      return Response.json({ error: 'Only landmark/ship tours supported' }, { status: 400 });
+    if (tour.tour_category !== 'landmark' && tour.tour_category !== 'ship' && tour.tour_category !== 'cold_spot') {
+      return Response.json({ error: 'Only landmark/ship/cold_spot tours supported' }, { status: 400 });
     }
     // Non-admins can only verify their own tours
     if (user.role !== 'admin' && tour.created_by_id !== user.id) {
@@ -162,7 +169,10 @@ export default async function (req) {
     // Step 1: Determine the property center. Always geocode the address first
     // (most reliable), then fall back to start coords. LLM-generated start
     // coords are often wrong (wrong location or in water), so the address
-    // is the preferred source.
+    // is the preferred source. If the address fails AND start coords are in
+    // water, try geocoding the tour's start_location_name (progressively
+    // shorter prefixes) + state — this finds landmarks like "Rackliffe House"
+    // that Nominatim knows by name but not by address.
     let centerLat = null;
     let centerLon = null;
 
@@ -171,6 +181,30 @@ export default async function (req) {
       if (geo) { centerLat = geo.lat; centerLon = geo.lon; }
       await sleep(1100);
     }
+
+    // Fallback: try geocoding the tour's start_location_name + state when
+    // address geocoding fails. Tries progressively shorter prefixes so
+    // "Rackliffe House Manor Facade" eventually tries "Rackliffe House".
+    const _debug = { addressTried: !!stops[0]?.address, addressResult: null, nameAttempts: [] };
+    if ((!centerLat || !centerLon) && tour.start_location_name) {
+      const stateName = tour.state || '';
+      const words = tour.start_location_name.split(/\s+/).filter(w => w.length > 0);
+      for (let len = words.length; len >= 2; len--) {
+        const prefix = words.slice(0, len).join(' ');
+        const query = `${prefix}, ${stateName}`;
+        const geo = await geocode(query);
+        _debug.nameAttempts.push({ query, geo });
+        await sleep(1100);
+        if (geo) {
+          const rev = await reverseGeocode(geo.lat, geo.lon);
+          const onLand = isOnLand(rev);
+          _debug.nameAttempts[_debug.nameAttempts.length - 1].rev = rev ? { category: rev.category, onLand } : null;
+          await sleep(1100);
+          if (onLand) { centerLat = geo.lat; centerLon = geo.lon; break; }
+        }
+      }
+    }
+
     if (!centerLat || !centerLon) {
       centerLat = tour.start_latitude;
       centerLon = tour.start_longitude;
@@ -178,7 +212,7 @@ export default async function (req) {
       if (centerLat && centerLon) {
         const rev = await reverseGeocode(centerLat, centerLon);
         if (!isOnLand(rev)) {
-          return Response.json({ tourId, updated: 0, reason: 'start coords in water and no valid address' });
+          return Response.json({ tourId, updated: 0, reason: 'start coords in water and no valid address', _debug });
         }
         await sleep(1100);
       }
@@ -186,6 +220,16 @@ export default async function (req) {
 
     if (!centerLat || !centerLon) {
       return Response.json({ tourId, updated: 0, reason: 'cannot determine property center' });
+    }
+
+    // If we found a valid center via name geocoding (different from the
+    // tour's start coords), update the tour's start coordinates so parking
+    // generation and other fallbacks use the corrected on-land location.
+    if (tour.start_latitude && tour.start_longitude &&
+        (Math.abs(centerLat - tour.start_latitude) > 0.001 || Math.abs(centerLon - tour.start_longitude) > 0.001)) {
+      await base44.asServiceRole.entities.Tour.update(tourId, {
+        start_latitude: centerLat, start_longitude: centerLon,
+      });
     }
 
     // Step 2: Query Overpass for named features near the center
