@@ -131,13 +131,17 @@ function parseDurationToMinutes(durationStr) {
   return [Math.round(low * multiplier), Math.round(high * multiplier)];
 }
 
+function roundTo5(m) {
+  return Math.max(5, Math.round(m / 5) * 5);
+}
+
 function formatMinutes(m) {
   if (m >= 60) {
     const h = m / 60;
     const rounded = Math.round(h * 2) / 2; // nearest 0.5 hr
     return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded} hr`;
   }
-  return `${m} min`;
+  return `${roundTo5(m)} min`;
 }
 
 // Returns the Glimpse-low to Relive-high range for display in tour lists/cards.
