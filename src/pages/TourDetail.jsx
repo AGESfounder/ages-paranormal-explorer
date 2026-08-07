@@ -82,6 +82,11 @@ function orderStopsByProximity(stops, includeReturn = false) {
 function enforceWalkingDistance(stops, tourType) {
   if (!stops.length) return stops;
   const WALKING_LIMIT = 0.33;
+  // Sort by stop_number so nearest-neighbor starts from the designated
+  // first stop (the tour start), not a random filter order. Without this,
+  // the 2-opt loop may start from a leaf node and produce driving segments
+  // in the middle of the route instead of at the end.
+  stops = [...stops].sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
 
   if (tourType === 'driving') {
     return orderStopsByProximity(stops).map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
