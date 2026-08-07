@@ -134,8 +134,8 @@ function parseDurationToMinutes(durationStr) {
 function formatMinutes(m) {
   if (m >= 60) {
     const h = m / 60;
-    const rounded = Math.round(h * 4) / 4; // nearest 0.25 hr
-    return `${rounded} hr`;
+    const rounded = Math.round(h * 2) / 2; // nearest 0.5 hr
+    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded} hr`;
   }
   return `${m} min`;
 }
