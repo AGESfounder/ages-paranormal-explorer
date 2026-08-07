@@ -14,7 +14,11 @@ export async function verifyStopLocation(stopId, tourId, latitude, longitude, us
   });
 
   const siblings = await base44.entities.TourStop.filter({ tour_id: tourId });
-  const allVerified = siblings.length > 0 && siblings.every(s => s.user_verified);
+  // The just-updated stop may not yet reflect user_verified: true in the
+  // filter result (read-after-write lag). Treat it as verified since we
+  // just set it — otherwise the tour's verified flag can flip to false
+  // when the last stop is verified.
+  const allVerified = siblings.length > 0 && siblings.every(s => s.user_verified || s.id === stopId);
   await base44.entities.Tour.update(tourId, { verified: allVerified });
 
   return { allVerified, totalStops: siblings.length };
