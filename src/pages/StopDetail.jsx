@@ -192,8 +192,8 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           toast({
             title: 'Vantage Point Marked!',
             description: result.allVerified
-              ? 'All stops verified — tour is now fully verified!'
-              : 'Stop location verified. Keep going!',
+              ? 'All stops validated — tour is now fully validated!'
+              : 'Stop location validated. Keep going!',
           });
         } catch (e) {
           toast({ title: 'Verification Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
@@ -215,8 +215,8 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       toast({
         title: 'Position Saved',
         description: result.allVerified
-          ? 'All stops verified — tour is now fully verified!'
-          : 'Stop location verified by admin.',
+          ? 'All stops validated — tour is now fully validated!'
+          : 'Stop location validated by admin.',
       });
     } catch (e) {
       toast({ title: 'Save Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
@@ -312,7 +312,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           <div className="flex items-center gap-2 p-3 rounded-xl border border-green-500/30 bg-green-500/5">
             <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
             <div>
-              <p className="text-xs font-heading uppercase tracking-wider text-green-400">Location Verified</p>
+              <p className="text-xs font-heading uppercase tracking-wider text-green-400">Location Validated</p>
               <p className="text-[10px] text-muted-foreground">A visitor confirmed this vantage point</p>
             </div>
           </div>
