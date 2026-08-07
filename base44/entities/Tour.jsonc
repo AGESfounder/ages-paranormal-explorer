@@ -109,6 +109,40 @@
       "type": "boolean",
       "default": false,
       "description": "Whether all stops on this tour have been user-verified (coordinates confirmed by a paid user or admin at the actual location). When new stops are added or regenerated, this drops back to false until the new stops are verified."
+    },
+    "parking_name": {
+      "type": "string",
+      "description": "Name of the parking area for the walking cluster (e.g., 'Main Street Metered Parking', 'City Lot #3'). Null for driving-only tours."
+    },
+    "parking_address": {
+      "type": "string",
+      "description": "Complete street address of the parking area."
+    },
+    "parking_latitude": {
+      "type": "number",
+      "description": "GPS latitude of the parking spot. Located between the first and last stop of the walking cluster."
+    },
+    "parking_longitude": {
+      "type": "number",
+      "description": "GPS longitude of the parking spot."
+    },
+    "parking_type": {
+      "type": "string",
+      "enum": [
+        "street",
+        "parking_lot",
+        "parking_garage"
+      ],
+      "description": "Type of parking: street = on-street parking, parking_lot = surface parking lot, parking_garage = multi-level parking structure."
+    },
+    "parking_cost": {
+      "type": "string",
+      "description": "Parking cost description (e.g., 'Free', 'Metered ($1.50/hr, free after 6pm)', 'Paid lot ($5 flat rate)')."
+    },
+    "parking_verified": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether a paid user or admin has confirmed the parking spot's coordinates at the actual location."
     }
   },
   "required": [

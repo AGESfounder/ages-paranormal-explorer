@@ -145,23 +145,23 @@ function formatMinutes(m) {
 }
 
 // Returns the Glimpse-low to Relive-high range for display in tour lists/cards.
-export function computeDurationRange(durationStr) {
+export function computeDurationRange(durationStr, extraMinutes = 0) {
   const parsed = parseDurationToMinutes(durationStr);
   if (!parsed) return durationStr || '';
   const [low, high] = parsed;
   const glimpseLow = Math.max(5, Math.round(low * DURATION_FACTORS.whisper));
-  const reliveHigh = Math.max(5, Math.round(high * DURATION_FACTORS.manifestation));
+  const reliveHigh = Math.max(5, Math.round(high * DURATION_FACTORS.manifestation) + extraMinutes);
   if (glimpseLow === reliveHigh) return formatMinutes(reliveHigh);
   return `${formatMinutes(glimpseLow)}\u2013${formatMinutes(reliveHigh)}`;
 }
 
-export function computeAdjustedDuration(durationStr, mode) {
+export function computeAdjustedDuration(durationStr, mode, extraMinutes = 0) {
   const parsed = parseDurationToMinutes(durationStr);
   if (!parsed) return durationStr || '';
   const [low, high] = parsed;
   const factor = DURATION_FACTORS[mode] || 1.0;
   const adjLow = Math.max(5, Math.round(low * factor));
-  const adjHigh = Math.max(5, Math.round(high * factor));
+  const adjHigh = Math.max(5, Math.round(high * factor) + extraMinutes);
   if (adjLow === adjHigh) return formatMinutes(adjLow);
   return `${formatMinutes(adjLow)}\u2013${formatMinutes(adjHigh)}`;
 }

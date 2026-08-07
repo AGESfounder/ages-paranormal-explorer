@@ -14,6 +14,24 @@ function FitBounds({ bounds }) {
   return null;
 }
 
+function makeParkingIcon() {
+  return new L.DivIcon({
+    className: 'parking-marker',
+    html: `<div style="
+      width: 28px; height: 28px;
+      background: hsl(45, 90%, 50%);
+      border-radius: 6px;
+      box-shadow: 0 0 12px hsl(45, 90%, 50%, 0.6), 0 0 24px hsl(45, 90%, 50%, 0.3);
+      border: 2px solid hsl(45, 90%, 50%);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 14px; font-weight: bold; font-family: 'Cinzel', serif;
+    ">P</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  });
+}
+
 function makeStopIcon(stopNumber) {
   return new L.DivIcon({
     className: 'stop-marker',
@@ -63,13 +81,16 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
 
   const lats = boundsStops.map(s => s.latitude);
   const lngs = boundsStops.map(s => s.longitude);
+  const hasParking = tour?.parking_latitude != null && tour?.parking_longitude != null;
+  const allLats = [...lats, ...(hasParking ? [tour.parking_latitude] : [])];
+  const allLngs = [...lngs, ...(hasParking ? [tour.parking_longitude] : [])];
   const center = [
-    (Math.min(...lats) + Math.max(...lats)) / 2,
-    (Math.min(...lngs) + Math.max(...lngs)) / 2,
+    (Math.min(...allLats) + Math.max(...allLats)) / 2,
+    (Math.min(...allLngs) + Math.max(...allLngs)) / 2,
   ];
 
-  const bounds = boundsStops.length > 1
-    ? [[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]]
+  const bounds = allLats.length > 1
+    ? [[Math.min(...allLats), Math.min(...allLngs)], [Math.max(...allLats), Math.max(...allLngs)]]
     : undefined;
 
   const routeLine = boundsStops.length > 1
@@ -91,6 +112,28 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
         />
         <FitBounds bounds={bounds} />
         {bounds && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
+        {hasParking && boundsStops.length > 0 && (
+          <Polyline
+            positions={[[tour.parking_latitude, tour.parking_longitude], [boundsStops[0].latitude, boundsStops[0].longitude]]}
+            color="hsl(45, 90%, 50%)"
+            weight={1.5}
+            opacity={0.4}
+            dashArray="4 4"
+          />
+        )}
+        {hasParking && (
+          <Marker
+            position={[tour.parking_latitude, tour.parking_longitude]}
+            icon={makeParkingIcon()}
+          >
+            <Popup>
+              <div className="text-xs font-heading">
+                <strong>Parking: {tour.parking_name || 'Parking Area'}</strong>
+                {tour.parking_cost && <><br /><span className="text-muted-foreground">{tour.parking_cost}</span></>}
+              </div>
+            </Popup>
+          </Marker>
+        )}
         {validStops.map((stop) => (
           <Marker
             key={stop.id}

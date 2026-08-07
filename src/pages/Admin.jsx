@@ -123,7 +123,7 @@ export default function Admin() {
                     <p className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />{tour.city}, {tour.state}</span>
                       <span className="flex items-center gap-1">{tour.tour_type === 'walking' ? <Footprints className="w-2.5 h-2.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-2.5 h-2.5" /><Car className="w-2 h-2" /></> : <Car className="w-2.5 h-2.5" />}{tour.tour_type}</span>
-                      <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{computeDurationRange(tour.estimated_duration) || '—'}</span>
+                      <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{computeDurationRange(tour.estimated_duration, tour.parking_latitude ? 5 : 0) || '—'}</span>
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">

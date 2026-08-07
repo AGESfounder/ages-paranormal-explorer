@@ -19,6 +19,7 @@ import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from 
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
+import ParkingInfo from '@/components/ParkingInfo';
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
@@ -211,7 +212,7 @@ function enforceWalkingDistance(stops, tourType, startCoords) {
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 3;
+const STOPS_VALIDATION_VERSION = 4;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -365,11 +366,19 @@ export default function TourDetail() {
   const totalDistance = useMemo(() => {
     if (stops.length < 2) return 0;
     let total = 0;
+    // Parking to first walking stop + last walking stop back to parking
+    const walkingStops = stops.filter(s => s.travel_method === 'walking' && s.latitude != null && s.longitude != null);
+    if (tour?.parking_latitude && walkingStops.length > 0) {
+      const firstWalk = walkingStops[0];
+      const lastWalk = walkingStops[walkingStops.length - 1];
+      total += haversineDistance(tour.parking_latitude, tour.parking_longitude, firstWalk.latitude, firstWalk.longitude);
+      total += haversineDistance(lastWalk.latitude, lastWalk.longitude, tour.parking_latitude, tour.parking_longitude);
+    }
     for (let i = 1; i < stops.length; i++) {
       total += haversineDistance(stops[i - 1].latitude, stops[i - 1].longitude, stops[i].latitude, stops[i].longitude);
     }
     return total;
-  }, [stops]);
+  }, [stops, tour]);
 
   const formatDistance = (mi) => mi < 1 ? `${Math.round(mi * 5280)} ft` : `${mi.toFixed(1)} mi`;
 
@@ -437,6 +446,10 @@ export default function TourDetail() {
             geocodeExistingStops(reordered, tourData[0]).catch(console.error);
           }
         }
+        // Lazily generate parking for existing tours that don't have it yet
+        if (tourData[0].tour_type !== 'driving' && !tourData[0].parking_latitude) {
+          generateParking(tourData[0], tourStops).catch(console.error);
+        }
       }
     }
     } catch (err) {
@@ -447,6 +460,61 @@ export default function TourDetail() {
       }
     }
     setLoading(false);
+  };
+
+  // Generate a parking spot for the walking cluster. Called lazily for existing
+  // tours that have stops but no parking yet, and as a fallback if stop generation
+  // didn't include parking. Only generates for tours with walking stops.
+  const generateParking = async (tourData, stopsList) => {
+    const walkingStops = (stopsList || stops).filter(s => s.travel_method === 'walking' && s.latitude != null && s.longitude != null);
+    if (walkingStops.length < 2) return;
+    try {
+      const stopNames = walkingStops.map(s => `${s.name} (${s.address || 'no address'})`).join(', ');
+      const cLat = walkingStops.reduce((sum, s) => sum + s.latitude, 0) / walkingStops.length;
+      const cLon = walkingStops.reduce((sum, s) => sum + s.longitude, 0) / walkingStops.length;
+      const prompt = `Generate a parking spot for a paranormal walking tour in ${tourData.city}, ${tourData.state}.
+The walking cluster covers these stops: ${stopNames}
+The cluster center is approximately at ${cLat.toFixed(5)}, ${cLon.toFixed(5)}.
+
+Suggest a real, logical parking location where investigators can park their car before walking the tour. Requirements:
+- Must be a real parking lot, parking garage, or street parking area near the walking cluster
+- Must be located between the first and last stop of the walking cluster
+- Must be publicly accessible at night (after 7 PM)
+- Must be within 0.3 miles of the walking cluster center
+
+Return JSON with:
+- parking_name: Name of the parking area (e.g., "Main Street Metered Parking", "City Lot #3")
+- parking_address: Complete street address of the parking area
+- parking_type: "street", "parking_lot", or "parking_garage"
+- parking_cost: e.g., "Free", "Metered ($1.50/hr, free after 6pm)", "Paid lot ($5 flat rate)"
+- parking_latitude: GPS latitude
+- parking_longitude: GPS longitude
+
+Output ONLY valid JSON. No markdown fences.`;
+      const result = await callJson(prompt, { useWeb: true });
+      if (!result || !result.parking_latitude) return;
+      let lat = result.parking_latitude;
+      let lon = result.parking_longitude;
+      if (result.parking_address) {
+        const geoMap = await geocodeStopsWithNames([{
+          id: 'parking', name: result.parking_name, address: result.parking_address,
+          city: tourData.city, state: tourData.state
+        }], { lat: cLat, lon: cLon, maxDistMiles: 0.5, clusterRadius: 0.3 });
+        if (geoMap.parking) { lat = geoMap.parking.lat; lon = geoMap.parking.lon; }
+      }
+      const parkingUpdate = {
+        parking_name: result.parking_name,
+        parking_address: result.parking_address,
+        parking_latitude: lat,
+        parking_longitude: lon,
+        parking_type: result.parking_type,
+        parking_cost: result.parking_cost,
+      };
+      await base44.entities.Tour.update(tourData.id, parkingUpdate);
+      setTour(prev => prev ? { ...prev, ...parkingUpdate } : prev);
+    } catch (e) {
+      console.error('Parking generation failed:', e);
+    }
   };
 
   const generateStops = async (tourData, options = {}) => {
@@ -500,7 +568,21 @@ ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
 
-Output ONLY a valid JSON object with a "stops" array. No markdown fences, no commentary.`;
+PARKING: Also include a "parking" object in the JSON for the walking cluster's parking spot. The parking should be:
+- A real parking lot, parking garage, or street parking area
+- Located between the first and last stop of the walking cluster
+- Publicly accessible at night (after 7 PM)
+- Within 0.3 miles of the walking cluster center
+Include these fields in the parking object:
+- parking_name: Name of the parking area (e.g., "Main Street Metered Parking", "City Lot #3")
+- parking_address: Complete street address of the parking area
+- parking_type: "street", "parking_lot", or "parking_garage"
+- parking_cost: e.g., "Free", "Metered ($1.50/hr, free after 6pm)", "Paid lot ($5 flat rate)"
+- parking_latitude: GPS latitude of the parking spot
+- parking_longitude: GPS longitude of the parking spot
+For driving-only tours (no walking cluster), omit the parking object.
+
+Output ONLY a valid JSON object with a "stops" array and optional "parking" object. No markdown fences, no commentary.`;
 
       let result = null;
       try {
@@ -577,6 +659,32 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         created.push(saved);
       }
       if (!systemRegen) spendManifestationEnergy();
+
+      // Save parking info if the LLM provided it
+      if (result.parking && result.parking.parking_latitude) {
+        const p = result.parking;
+        let pLat = p.parking_latitude;
+        let pLon = p.parking_longitude;
+        if (p.parking_address) {
+          const geoMap = await geocodeStopsWithNames([{
+            id: 'parking', name: p.parking_name, address: p.parking_address,
+            city: tourData.city, state: tourData.state
+          }], { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: 0.5, clusterRadius: 0.3 });
+          if (geoMap.parking) { pLat = geoMap.parking.lat; pLon = geoMap.parking.lon; }
+        }
+        const parkingUpdate = {
+          parking_name: p.parking_name,
+          parking_address: p.parking_address,
+          parking_latitude: pLat,
+          parking_longitude: pLon,
+          parking_type: p.parking_type,
+          parking_cost: p.parking_cost,
+        };
+        try {
+          await base44.entities.Tour.update(tourData.id, parkingUpdate);
+          setTour(prev => prev ? { ...prev, ...parkingUpdate } : prev);
+        } catch (e) { console.error('Parking save failed:', e); }
+      }
 
       // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
       // API — LLM-generated coordinates are unreliable (often in water or at
@@ -716,7 +824,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
               {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3.5 h-3.5" /><Car className="w-3 h-3" /></> : <Car className="w-3.5 h-3.5" />}
               {tour.tour_type === 'mixed' ? 'Walking + Driving' : tour.tour_type}
             </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {computeAdjustedDuration(tour.estimated_duration, narrationLength)}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {computeAdjustedDuration(tour.estimated_duration, narrationLength, tour?.parking_latitude ? 5 : 0)}</span>
             {totalDistance > 0 && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground"><Route className="w-3.5 h-3.5" /> {formatDistance(totalDistance)}</span>
             )}
@@ -732,6 +840,8 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         </div>
 
         <TourAccessInfo tour={tour} stops={stops} />
+
+        <ParkingInfo tour={tour} />
 
         {tour.introduction && (
           <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
