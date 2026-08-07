@@ -140,12 +140,15 @@ function formatMinutes(m) {
   return `${m} min`;
 }
 
-// Returns the full Glimpse-to-Relive range for display in tour lists/cards.
+// Returns the Glimpse-low to Relive-high range for display in tour lists/cards.
 export function computeDurationRange(durationStr) {
-  const glimpse = computeAdjustedDuration(durationStr, 'whisper');
-  const relive = computeAdjustedDuration(durationStr, 'manifestation');
-  if (glimpse === relive) return relive;
-  return `${glimpse}\u2013${relive}`;
+  const parsed = parseDurationToMinutes(durationStr);
+  if (!parsed) return durationStr || '';
+  const [low, high] = parsed;
+  const glimpseLow = Math.max(5, Math.round(low * DURATION_FACTORS.whisper));
+  const reliveHigh = Math.max(5, Math.round(high * DURATION_FACTORS.manifestation));
+  if (glimpseLow === reliveHigh) return formatMinutes(reliveHigh);
+  return `${formatMinutes(glimpseLow)}\u2013${formatMinutes(reliveHigh)}`;
 }
 
 export function computeAdjustedDuration(durationStr, mode) {
