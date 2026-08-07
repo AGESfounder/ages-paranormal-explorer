@@ -79,14 +79,29 @@ function orderStopsByProximity(stops, includeReturn = false) {
   return optimizeRoute2Opt(ordered, includeReturn);
 }
 
-function enforceWalkingDistance(stops, tourType) {
+function enforceWalkingDistance(stops, tourType, startCoords) {
   if (!stops.length) return stops;
   const WALKING_LIMIT = 0.33;
-  // Sort by stop_number so nearest-neighbor starts from the designated
-  // first stop (the tour start), not a random filter order. Without this,
-  // the 2-opt loop may start from a leaf node and produce driving segments
-  // in the middle of the route instead of at the end.
+  // Sort by stop_number for a consistent base order, then move the stop
+  // closest to the tour's start coordinates to the front so the
+  // nearest-neighbor begins from the tour's designated start. Without
+  // this, the 2-opt loop may start from a leaf node and produce driving
+  // segments in the middle of the route instead of at the end.
   stops = [...stops].sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+  if (startCoords && startCoords.lat != null && startCoords.lon != null) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < stops.length; i++) {
+      if (stops[i].latitude != null && stops[i].longitude != null) {
+        const d = haversineDistance(startCoords.lat, startCoords.lon, stops[i].latitude, stops[i].longitude);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+    }
+    if (bestIdx > 0) {
+      const startStop = stops.splice(bestIdx, 1)[0];
+      stops.unshift(startStop);
+    }
+  }
 
   if (tourType === 'driving') {
     return orderStopsByProximity(stops).map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
@@ -317,7 +332,7 @@ export default function TourDetail() {
     // re-evaluated after geocoding to form proper walking loops / linear routes.
     // Skip for tours the user manually reordered — respect their custom order.
     if (tourData && !tourData.user_reordered) {
-      const reordered = enforceWalkingDistance(updatedStops, tourData.tour_type);
+      const reordered = enforceWalkingDistance(updatedStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude });
       for (const s of reordered) {
         const existing = updatedStops.find(ts => ts.id === s.id);
         if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
@@ -401,7 +416,7 @@ export default function TourDetail() {
             setStops(sortedStops);
             geocodeExistingStops(sortedStops, tourData[0]).catch(console.error);
           } else {
-            const reordered = enforceWalkingDistance(tourStops, tourData[0].tour_type);
+            const reordered = enforceWalkingDistance(tourStops, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude });
             // Update stop_numbers in the database if they changed
             for (const s of reordered) {
               const existing = tourStops.find(ts => ts.id === s.id);
@@ -427,7 +442,7 @@ export default function TourDetail() {
       const cached = getOfflineTour(tourId);
       if (cached) {
         setTour(cached.tour);
-        setStops(enforceWalkingDistance(cached.stops || [], cached.tour.tour_type));
+        setStops(enforceWalkingDistance(cached.stops || [], cached.tour.tour_type, { lat: cached.tour.start_latitude, lon: cached.tour.start_longitude }));
       }
     }
     setLoading(false);
@@ -499,7 +514,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         throw new Error('Could not generate stops after multiple attempts. Please try again.');
       }
 
-      const processed = enforceWalkingDistance(result.stops || [], tourData.tour_type);
+      const processed = enforceWalkingDistance(result.stops || [], tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude });
       // Auto-correct tour type if stops are a mix of walking + driving
       const methods = new Set(processed.map(s => s.travel_method));
       const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
