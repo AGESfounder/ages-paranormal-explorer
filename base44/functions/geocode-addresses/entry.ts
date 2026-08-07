@@ -41,25 +41,46 @@ function haversine(lat1, lon1, lat2, lon2) {
 // 3. Try simplified address (street + city + state, no cross-street)
 // Each result is rejected if >maxDistMiles from center (when provided) —
 // prevents outliers like a stop geocoding to a different state entirely.
-async function geocodeStop(stop, center, maxDistMiles) {
+async function geocodeStop(stop, center, maxDistMiles, clusterRadius) {
   const { name, address, city, state } = stop;
   const cityState = [city, state].filter(Boolean).join(', ');
-  const results = {};
+  const distFromCenter = (coords) => {
+    if (!center || !coords) return Infinity;
+    return haversine(center.lat, center.lon, coords.lat, coords.lon);
+  };
   const withinMaxDist = (coords) => {
     if (!center || !coords) return true;
-    return haversine(center.lat, center.lon, coords.lat, coords.lon) <= maxDistMiles;
+    return distFromCenter(coords) <= maxDistMiles;
   };
+  // A result is "in cluster" if it's within clusterRadius of the tour center.
+  // When clusterRadius is set (area/cold_spot/ship tours), an address result
+  // that's within maxDistMiles but OUTSIDE the cluster is suspicious — it's
+  // likely a bad geocode (wrong street match). In that case we don't short-
+  // circuit; we fall through to the name strategy and pick the closest result.
+  const withinCluster = (coords) => {
+    if (!clusterRadius || !center || !coords) return true;
+    return distFromCenter(coords) <= clusterRadius;
+  };
+
+  let bestResult = null;
+  let bestDist = Infinity;
 
   // Strategy 1: Full address (if not vague)
   if (address && !isVagueAddress(address)) {
     try {
       const r = await geocodeQuery(address);
-      if (r && withinMaxDist(r)) { results.address = r; return { coords: r, strategy: 'address' }; }
+      if (r && withinMaxDist(r)) {
+        if (withinCluster(r)) return { coords: r, strategy: 'address' };
+        // Address result is within max but outside cluster — save as
+        // fallback and try the name strategy (often finds the real landmark).
+        bestResult = { coords: r, strategy: 'address' };
+        bestDist = distFromCenter(r);
+      }
     } catch (e) { console.error(`Address geocode failed for "${address}":`, e.message); }
     await sleep(1100);
   }
 
-  // Strategy 2: Landmark name + city/state (best for vague addresses)
+  // Strategy 2: Landmark name + city/state
   // Strip parenthetical additions like "(Approach)" or "(Site vicinity)"
   // that confuse Nominatim's landmark search.
   if (name && cityState) {
@@ -67,10 +88,19 @@ async function geocodeStop(stop, center, maxDistMiles) {
     const nameQuery = `${cleanName}, ${cityState}`;
     try {
       const r = await geocodeQuery(nameQuery);
-      if (r && withinMaxDist(r)) { results.name = r; return { coords: r, strategy: 'name' }; }
+      if (r && withinMaxDist(r)) {
+        if (withinCluster(r)) return { coords: r, strategy: 'name' };
+        const d = distFromCenter(r);
+        if (d < bestDist) { bestResult = { coords: r, strategy: 'name' }; bestDist = d; }
+      }
     } catch (e) { console.error(`Name geocode failed for "${name}":`, e.message); }
     await sleep(1100);
   }
+
+  // If we have a fallback (within max but outside cluster), return the best one.
+  // This means both address and name geocoded outside the cluster — we pick
+  // the closer result rather than discarding it entirely.
+  if (bestResult) return bestResult;
 
   // Strategy 3: Simplified address — strip cross-street info, keep main street
   if (address) {
@@ -78,7 +108,7 @@ async function geocodeStop(stop, center, maxDistMiles) {
     if (simplified && simplified !== address) {
       try {
         const r = await geocodeQuery(simplified);
-        if (r && withinMaxDist(r)) { results.simplified = r; return { coords: r, strategy: 'simplified' }; }
+        if (r && withinMaxDist(r)) return { coords: r, strategy: 'simplified' };
       } catch (e) { console.error(`Simplified geocode failed for "${simplified}":`, e.message); }
       await sleep(1100);
     }
@@ -88,7 +118,7 @@ async function geocodeStop(stop, center, maxDistMiles) {
   if (cityState) {
     try {
       const r = await geocodeQuery(cityState);
-      if (r && withinMaxDist(r)) { results.centroid = r; return { coords: r, strategy: 'centroid' }; }
+      if (r && withinMaxDist(r)) return { coords: r, strategy: 'centroid' };
     } catch (e) { console.error(`Centroid geocode failed for "${cityState}":`, e.message); }
   }
 
@@ -110,10 +140,11 @@ export default async function (req) {
       }
       const center = body.center || null;
       const maxDistMiles = body.maxDistMiles || 50;
+      const clusterRadius = body.clusterRadius || null;
       const results = {};
       for (const stop of body.stops) {
         try {
-          const r = await geocodeStop(stop, center, maxDistMiles);
+          const r = await geocodeStop(stop, center, maxDistMiles, clusterRadius);
           results[stop.id] = r;
         } catch (e) {
           console.error(`Geocode failed for stop "${stop.name}":`, e.message);

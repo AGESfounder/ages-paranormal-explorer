@@ -190,7 +190,7 @@ function enforceWalkingDistance(stops, tourType) {
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 2;
+const STOPS_VALIDATION_VERSION = 3;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -284,7 +284,7 @@ export default function TourDetail() {
     const stopsForGeocoding = needsGeocoding.map(s => ({
       id: s.id, name: s.name, address: s.address, city: tourData?.city, state: tourData?.state
     }));
-    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData?.start_latitude, lon: tourData?.start_longitude, maxDistMiles: tourData?.tour_category === 'road_trip' ? 200 : (tourData?.tour_category === 'cold_spot' || tourData?.tour_category === 'ship') ? 0.5 : tourData?.tour_category === 'area' ? 2.5 : 5 });
+    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData?.start_latitude, lon: tourData?.start_longitude, maxDistMiles: tourData?.tour_category === 'road_trip' ? 200 : (tourData?.tour_category === 'cold_spot' || tourData?.tour_category === 'ship') ? 0.5 : tourData?.tour_category === 'area' ? 2.5 : 5, clusterRadius: tourData?.tour_category === 'area' ? 0.5 : (tourData?.tour_category === 'cold_spot' || tourData?.tour_category === 'ship') ? 0.3 : null });
     const updates = [];
     for (const stop of needsGeocoding) {
       const geo = geocodeMap[stop.id];
@@ -538,7 +538,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
         const stopsForGeocoding = deduped.map((s, i) => ({
           id: `temp_${i}`, name: s.name, address: s.address, city: tourData.city, state: tourData.state
         }));
-        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: tourData.tour_category === 'road_trip' ? 200 : (tourData.tour_category === 'cold_spot' || tourData.tour_category === 'ship') ? 0.5 : tourData.tour_category === 'area' ? 2.5 : 5 }) : {};
+        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: tourData.tour_category === 'road_trip' ? 200 : (tourData.tour_category === 'cold_spot' || tourData.tour_category === 'ship') ? 0.5 : tourData.tour_category === 'area' ? 2.5 : 5, clusterRadius: tourData.tour_category === 'area' ? 0.5 : (tourData.tour_category === 'cold_spot' || tourData.tour_category === 'ship') ? 0.3 : null }) : {};
         for (let i = 0; i < deduped.length; i++) {
           const geo = geocodeMap[`temp_${i}`];
           if (geo) {
