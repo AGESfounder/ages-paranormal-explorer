@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapPin, Clock, Footprints, Car } from 'lucide-react';
 import TourCategoryBadge from './TourCategoryBadge';
 import AccessTypeBadge from './AccessTypeBadge';
+import VerificationBadge from './VerificationBadge';
 
 const RANK_STYLES = {
   1: 'bg-primary/15 text-primary border-b border-primary/20',
@@ -21,6 +22,7 @@ export default function TourListItem({ tour, distance }) {
   return (
     <Link to={`/tour/${tour.id}`} className="block group">
       <div className="rounded-xl border border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden hover:border-primary/40 hover:bg-card/60 transition-all duration-300">
+        <VerificationBadge verified={tour.verified} />
         {tour.rank && tour.rank <= 3 && (
           <div className={`px-4 py-1.5 text-center font-heading text-[11px] uppercase tracking-wider font-bold ${RANK_STYLES[tour.rank]}`}>
             #{tour.rank} Most Active

@@ -78,6 +78,20 @@
       "type": "boolean",
       "default": false,
       "description": "Whether the GPS coordinates have been verified via real address geocoding (Nominatim). False = LLM-generated coordinates that may be inaccurate."
+    },
+    "user_verified": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether a paid user or admin has confirmed this stop's coordinates by marking their GPS location (or dragging the marker) at the actual vantage point. Separate from 'geocoded' (machine-geocoded). When all stops on a tour are user_verified, the tour's 'verified' field is set to true."
+    },
+    "verified_by_id": {
+      "type": "string",
+      "description": "User ID of the person who verified this stop's coordinates."
+    },
+    "verified_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this stop's coordinates were user-verified."
     }
   },
   "required": [

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car, Info, DollarSign, ChevronDown } from 'lucide-react';
+import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car, Info, DollarSign, ChevronDown, Crosshair, CheckCircle2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageContainer from '../components/PageContainer';
 import SectionHeader from '../components/SectionHeader';
@@ -20,6 +20,8 @@ import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import { getNarrationLength, truncateText } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
+import { toast } from '@/components/ui/use-toast';
+import { verifyStopLocation } from '@/lib/verifyStop';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -43,7 +45,9 @@ export default function StopDetail() {
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
-  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
+  const isAdmin = user?.role === 'admin';
+  const [verifying, setVerifying] = useState(false);
 
   // Gated narration wrapper — checks energy before speaking, toggles off for free.
   const narrate = (text, opts = {}) => {
@@ -171,6 +175,54 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`, '_blank');
   };
 
+  // Paid users mark their current GPS position as the best vantage point.
+  // Admins can also drag the map marker to set the exact location.
+  const handleMarkVantagePoint = async () => {
+    if (!navigator.geolocation) {
+      toast({ title: 'GPS Unavailable', description: 'Your device does not support GPS.', variant: 'destructive' });
+      return;
+    }
+    setVerifying(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const result = await verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id);
+          setStop(prev => ({ ...prev, latitude, longitude, user_verified: true }));
+          toast({
+            title: 'Vantage Point Marked!',
+            description: result.allVerified
+              ? 'All stops verified — tour is now fully verified!'
+              : 'Stop location verified. Keep going!',
+          });
+        } catch (e) {
+          toast({ title: 'Verification Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
+        }
+        setVerifying(false);
+      },
+      () => {
+        toast({ title: 'Location Access Denied', description: 'Enable location permissions to mark this vantage point.', variant: 'destructive' });
+        setVerifying(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  const handleMarkerDragEnd = async (latlng) => {
+    try {
+      const result = await verifyStopLocation(stop.id, stop.tour_id, latlng.lat, latlng.lng, user?.id);
+      setStop(prev => ({ ...prev, latitude: latlng.lat, longitude: latlng.lng, user_verified: true }));
+      toast({
+        title: 'Position Saved',
+        description: result.allVerified
+          ? 'All stops verified — tour is now fully verified!'
+          : 'Stop location verified by admin.',
+      });
+    } catch (e) {
+      toast({ title: 'Save Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
+    }
+  };
+
   if (loading || !stop) {
     return (
       <PageContainer>
@@ -238,8 +290,38 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           </button>
         </div>
 
+        {isPaid && !stop.user_verified && (
+          <div className="p-3 rounded-xl border border-primary/30 bg-primary/5">
+            <button
+              onClick={handleMarkVantagePoint}
+              disabled={verifying}
+              className="w-full flex flex-col items-center gap-1 py-3 rounded-lg bg-primary/15 border border-primary/40 text-primary font-heading text-sm uppercase tracking-wider hover:bg-primary/25 transition-colors disabled:opacity-60"
+            >
+              {verifying ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> <span>Getting GPS Location...</span></>
+              ) : (
+                <><Crosshair className="w-5 h-5" /> <span>Mark Best Vantage Point</span></>
+              )}
+            </button>
+            <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+              {verifying ? 'Locking onto your GPS signal...' : 'Stand at the best viewing spot, then tap to mark your exact location'}
+            </p>
+          </div>
+        )}
+        {stop.user_verified && (
+          <div className="flex items-center gap-2 p-3 rounded-xl border border-green-500/30 bg-green-500/5">
+            <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+            <div>
+              <p className="text-xs font-heading uppercase tracking-wider text-green-400">Location Verified</p>
+              <p className="text-[10px] text-muted-foreground">A visitor confirmed this vantage point</p>
+            </div>
+          </div>
+        )}
         {stop.latitude && stop.longitude && (
-          <TourMap stops={[stop]} highlightedStopId={stop.id} height="h-52" />
+          <TourMap stops={[stop]} highlightedStopId={stop.id} height="h-52" draggable={isAdmin} onMarkerDragEnd={handleMarkerDragEnd} />
+        )}
+        {isAdmin && (
+          <p className="text-[10px] text-amber-400/70 text-center">Admin: drag the map marker to adjust the exact location</p>
         )}
 
         {stop.narration_text && (

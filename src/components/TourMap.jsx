@@ -32,7 +32,7 @@ function makeStopIcon(stopNumber) {
   });
 }
 
-export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64' }) {
+export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd }) {
   if (!stops || stops.length === 0) return null;
 
   // Find map center from stops
@@ -96,6 +96,8 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
             key={stop.id}
             position={[stop.latitude, stop.longitude]}
             icon={makeStopIcon(stop.stop_number)}
+            draggable={draggable}
+            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
           >
             <Popup>
               <div className="text-xs font-heading">

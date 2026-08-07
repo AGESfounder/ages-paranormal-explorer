@@ -236,5 +236,9 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
     }
   }
 
+  // New stops are unverified — drop the tour's verified status
+  if (actualAdded > 0) {
+    await base44.entities.Tour.update(tour.id, { verified: false });
+  }
   return { added: actualAdded, capped: existingStops.length + newStops.length > maxStops };
 }

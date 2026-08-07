@@ -104,6 +104,11 @@
       "type": "number",
       "default": 0,
       "description": "Validation version of the stops. 0 = unvalidated. When validation rules change, STOPS_VALIDATION_VERSION is bumped in TourDetail.jsx, and all tours with an older version are re-validated (and regenerated if non-compliant) on next view at no energy cost. Boolean true (legacy) is treated as version 1."
+    },
+    "verified": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether all stops on this tour have been user-verified (coordinates confirmed by a paid user or admin at the actual location). When new stops are added or regenerated, this drops back to false until the new stops are verified."
     }
   },
   "required": [
