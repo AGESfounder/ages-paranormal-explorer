@@ -12,7 +12,7 @@ export default function VerificationBadge({ verified }) {
         {verified ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
         {verified ? 'Validated' : 'Not Validated'}
       </div>
-      <span className="text-[9px] leading-tight opacity-80">{verified ? '— all stops accurately marked!' : '— Be the first to validate all stop locations!'}</span>
+      <span className="text-[11px] leading-tight opacity-80 truncate">{verified ? '— all stops accurately marked!' : '— Be the first to validate all stop locations!'}</span>
     </div>
   );
 }
