@@ -4,6 +4,7 @@ import { MapPin, Clock, Footprints, Car } from 'lucide-react';
 import TourCategoryBadge from './TourCategoryBadge';
 import AccessTypeBadge from './AccessTypeBadge';
 import VerificationBadge from './VerificationBadge';
+import { computeDurationRange } from '@/lib/narrationLength';
 
 const RANK_STYLES = {
   1: 'bg-primary/15 text-primary border-b border-primary/20',
@@ -53,7 +54,7 @@ export default function TourListItem({ tour, distance }) {
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{tour.description}</p>
           {/* Duration | Distance | Difficulty | Access Type */}
           <div className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {tour.estimated_duration || '—'}</span>
+            <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {computeDurationRange(tour.estimated_duration) || '—'}</span>
             <span className="flex items-center gap-1"><Footprints className="w-3 h-3" /> {tour.total_distance || '—'}</span>
             <span className={`font-heading uppercase tracking-wider font-bold ${DIFFICULTY_STYLES[tour.difficulty] || ''}`}>{tour.difficulty || '—'}</span>
             <AccessTypeBadge accessType={tour.access_type} className="text-[11px] px-1.5 py-0" />

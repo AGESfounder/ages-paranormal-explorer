@@ -140,6 +140,14 @@ function formatMinutes(m) {
   return `${m} min`;
 }
 
+// Returns the full Glimpse-to-Relive range for display in tour lists/cards.
+export function computeDurationRange(durationStr) {
+  const glimpse = computeAdjustedDuration(durationStr, 'whisper');
+  const relive = computeAdjustedDuration(durationStr, 'manifestation');
+  if (glimpse === relive) return relive;
+  return `${glimpse}\u2013${relive}`;
+}
+
 export function computeAdjustedDuration(durationStr, mode) {
   const parsed = parseDurationToMinutes(durationStr);
   if (!parsed) return durationStr || '';

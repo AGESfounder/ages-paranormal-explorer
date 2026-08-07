@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { computeDurationRange } from '@/lib/narrationLength';
 
 export default function Admin() {
   const [user, setUser] = useState(null);
@@ -122,7 +123,7 @@ export default function Admin() {
                     <p className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />{tour.city}, {tour.state}</span>
                       <span className="flex items-center gap-1">{tour.tour_type === 'walking' ? <Footprints className="w-2.5 h-2.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-2.5 h-2.5" /><Car className="w-2 h-2" /></> : <Car className="w-2.5 h-2.5" />}{tour.tour_type}</span>
-                      <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{tour.estimated_duration || '—'}</span>
+                      <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{computeDurationRange(tour.estimated_duration) || '—'}</span>
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
