@@ -392,6 +392,15 @@ export default function TourDetail() {
     return () => { /* hook handles its own cleanup */ };
   }, [tourId]);
 
+  // When a user navigates from the last stop via the "Conclusion" button,
+  // the URL carries #conclusion — auto-reveal the "Mark Tour Complete"
+  // button so they don't have to hunt for the "I've read the conclusion" link.
+  useEffect(() => {
+    if (window.location.hash === '#conclusion') {
+      setConclusionRead(true);
+    }
+  }, [tourId]);
+
   const loadTour = async () => {
     setLoading(true);
     try {
