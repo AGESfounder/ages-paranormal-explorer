@@ -22,6 +22,8 @@ import { getNarrationLength, truncateText } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { toast } from '@/components/ui/use-toast';
 import { verifyStopLocation } from '@/lib/verifyStop';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -140,7 +142,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         const currentStop = results[0];
         setStop(currentStop);
         setPeople(currentStop.people || []);
-        if (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0) ensureRichContent(currentStop);
+        if (currentStop.stop_type !== 'parking' && (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0)) ensureRichContent(currentStop);
         const siblings = await base44.entities.TourStop.filter({ tour_id: currentStop.tour_id });
         setAllStops(siblings.sort((a, b) => a.stop_number - b.stop_number));
         try {
@@ -229,6 +231,123 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         <SectionHeader title="Loading Stop" showBack />
         <div className="flex items-center justify-center h-[60vh]">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (stop.stop_type === 'parking') {
+    const handleParkingDetailChange = async (field, value) => {
+      try {
+        await base44.entities.TourStop.update(stop.id, { [field]: value });
+        setStop(prev => ({ ...prev, [field]: value }));
+      } catch (e) {
+        toast({ title: 'Update failed', variant: 'destructive' });
+      }
+    };
+
+    return (
+      <PageContainer>
+        <SectionHeader
+          title="Parking"
+          subtitle={stop.name}
+          showBack
+          onBack={() => navigate(`/tour/${stop.tour_id}`)}
+        />
+        <div className="px-4 pb-28 space-y-4 pt-3">
+          <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 shrink-0">
+                <span className="font-heading text-base font-bold text-amber-400">P</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-heading uppercase tracking-wider text-amber-400">Parking Area</p>
+                <p className="text-sm text-foreground truncate">{stop.name}</p>
+              </div>
+              {stop.user_verified && <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />}
+            </div>
+            {stop.address && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <MapPin className="w-3 h-3 shrink-0" /> {stop.address}
+              </p>
+            )}
+          </div>
+
+          <div className="p-4 rounded-xl border border-border/40 bg-card/40 space-y-3">
+            <div>
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">Parking Type</p>
+              <Select
+                value={stop.parking_type || ''}
+                onValueChange={(val) => handleParkingDetailChange('parking_type', val)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select parking type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="street">Street Parking</SelectItem>
+                  <SelectItem value="parking_lot">Parking Lot</SelectItem>
+                  <SelectItem value="parking_garage">Parking Garage</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">Parking Cost</p>
+              <Input
+                value={stop.parking_cost || ''}
+                onChange={(e) => handleParkingDetailChange('parking_cost', e.target.value)}
+                placeholder="e.g., Free, Metered ($1.50/hr), $5 flat rate"
+                className="w-full"
+              />
+            </div>
+          </div>
+
+          {isPaid && !stop.user_verified && (
+            <div className="p-3 rounded-xl border border-primary/30 bg-primary/5">
+              <button
+                onClick={handleMarkVantagePoint}
+                disabled={verifying}
+                className="w-full flex flex-col items-center gap-1 py-3 rounded-lg bg-primary/15 border border-primary/40 text-primary font-heading text-sm uppercase tracking-wider hover:bg-primary/25 transition-colors disabled:opacity-60"
+              >
+                {verifying ? (
+                  <><Loader2 className="w-5 h-5 animate-spin" /> <span>Getting GPS Location...</span></>
+                ) : (
+                  <><Crosshair className="w-5 h-5" /> <span>Mark Best Parking Spot</span></>
+                )}
+              </button>
+              <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+                {verifying ? 'Locking onto your GPS signal...' : 'Stand at the parking spot, then tap to confirm its location'}
+              </p>
+            </div>
+          )}
+          {stop.user_verified && (
+            <div className="flex items-center gap-2 p-3 rounded-xl border border-green-500/30 bg-green-500/5">
+              <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+              <div>
+                <p className="text-xs font-heading uppercase tracking-wider text-green-400">Parking Spot Validated</p>
+                <p className="text-[10px] text-muted-foreground">A visitor confirmed this parking location</p>
+              </div>
+            </div>
+          )}
+
+          {stop.latitude && stop.longitude && (
+            <TourMap stops={[stop]} height="h-52" draggable={isAdmin} onMarkerDragEnd={handleMarkerDragEnd} />
+          )}
+          {isAdmin && (
+            <p className="text-[10px] text-amber-400/70 text-center">Admin: drag the map marker to adjust the exact location</p>
+          )}
+
+          <button onClick={openInMaps} className="flex items-center justify-center gap-2 w-full py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm font-heading uppercase tracking-wider hover:bg-amber-500/20 transition-colors">
+            <Navigation className="w-4 h-4" /> Navigate to Parking
+          </button>
+
+          <div className="flex items-center gap-2">
+            <button onClick={() => prevStop && navigate(`/stop/${prevStop.id}`)} disabled={!prevStop} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border border-border/40 bg-card/30 text-sm font-heading uppercase tracking-wider disabled:opacity-30 hover:border-primary/30 transition-colors">
+              <ChevronLeft className="w-4 h-4" /> Previous
+            </button>
+            <button onClick={() => nextStop && navigate(`/stop/${nextStop.id}`)} disabled={!nextStop} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border border-primary/30 bg-primary/10 text-primary text-sm font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-30">
+              Next <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </PageContainer>
     );

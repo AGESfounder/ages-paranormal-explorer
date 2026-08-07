@@ -8,6 +8,15 @@
     "stop_number": {
       "type": "number"
     },
+    "stop_type": {
+      "type": "string",
+      "enum": [
+        "tour",
+        "parking"
+      ],
+      "default": "tour",
+      "description": "tour = a regular investigation stop, parking = the parking area stop (stop_number 0, shown before stop 1)"
+    },
     "name": {
       "type": "string"
     },
@@ -59,6 +68,19 @@
     },
     "entry_fee": {
       "type": "string"
+    },
+    "parking_type": {
+      "type": "string",
+      "enum": [
+        "street",
+        "parking_lot",
+        "parking_garage"
+      ],
+      "description": "For parking stops only: street = on-street parking, parking_lot = surface parking lot, parking_garage = multi-level parking structure."
+    },
+    "parking_cost": {
+      "type": "string",
+      "description": "For parking stops only: parking cost description (e.g., 'Free', 'Metered ($1.50/hr, free after 6pm)', 'Paid lot ($5 flat rate)')."
     },
     "people": {
       "type": "array",

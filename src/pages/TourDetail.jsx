@@ -19,7 +19,7 @@ import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from 
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
-import ParkingInfo from '@/components/ParkingInfo';
+
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
@@ -334,16 +334,18 @@ export default function TourDetail() {
     // re-evaluated after geocoding to form proper walking loops / linear routes.
     // Skip for tours the user manually reordered — respect their custom order.
     if (tourData && !tourData.user_reordered) {
-      const reordered = enforceWalkingDistance(updatedStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude });
+      const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking');
+      const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
+      const reordered = enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude });
       for (const s of reordered) {
-        const existing = updatedStops.find(ts => ts.id === s.id);
+        const existing = tourStopsOnly.find(ts => ts.id === s.id);
         if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
           try {
             await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
           } catch (e) {}
         }
       }
-      setStops(reordered);
+      setStops([...(parkingStop ? [parkingStop] : []), ...reordered]);
     } else {
       setStops(updatedStops);
     }
@@ -364,21 +366,23 @@ export default function TourDetail() {
   const displayConclusion = condensed.conclusion || truncateText(tour?.conclusion, narrationLength);
 
   const totalDistance = useMemo(() => {
-    if (stops.length < 2) return 0;
+    const tourStopsOnly = stops.filter(s => s.stop_type !== 'parking');
+    if (tourStopsOnly.length < 2) return 0;
     let total = 0;
+    const parkingStop = stops.find(s => s.stop_type === 'parking');
     // Parking to first walking stop + last walking stop back to parking
-    const walkingStops = stops.filter(s => s.travel_method === 'walking' && s.latitude != null && s.longitude != null);
-    if (tour?.parking_latitude && walkingStops.length > 0) {
+    const walkingStops = tourStopsOnly.filter(s => s.travel_method === 'walking' && s.latitude != null && s.longitude != null);
+    if (parkingStop?.latitude && walkingStops.length > 0) {
       const firstWalk = walkingStops[0];
       const lastWalk = walkingStops[walkingStops.length - 1];
-      total += haversineDistance(tour.parking_latitude, tour.parking_longitude, firstWalk.latitude, firstWalk.longitude);
-      total += haversineDistance(lastWalk.latitude, lastWalk.longitude, tour.parking_latitude, tour.parking_longitude);
+      total += haversineDistance(parkingStop.latitude, parkingStop.longitude, firstWalk.latitude, firstWalk.longitude);
+      total += haversineDistance(lastWalk.latitude, lastWalk.longitude, parkingStop.latitude, parkingStop.longitude);
     }
-    for (let i = 1; i < stops.length; i++) {
-      total += haversineDistance(stops[i - 1].latitude, stops[i - 1].longitude, stops[i].latitude, stops[i].longitude);
+    for (let i = 1; i < tourStopsOnly.length; i++) {
+      total += haversineDistance(tourStopsOnly[i - 1].latitude, tourStopsOnly[i - 1].longitude, tourStopsOnly[i].latitude, tourStopsOnly[i].longitude);
     }
     return total;
-  }, [stops, tour]);
+  }, [stops]);
 
   const formatDistance = (mi) => mi < 1 ? `${Math.round(mi * 5280)} ft` : `${mi.toFixed(1)} mi`;
 
@@ -403,13 +407,29 @@ export default function TourDetail() {
       if (tourStops.length === 0) {
         await generateStops(tourData[0]);
       } else {
+        // Lazy migration: if tour has parking on Tour entity but no parking TourStop, create one
+        let parkingStop = tourStops.find(s => s.stop_type === 'parking');
+        if (!parkingStop && tourData[0].parking_latitude) {
+          try {
+            parkingStop = await base44.entities.TourStop.create({
+              tour_id: tourId, stop_type: 'parking', stop_number: 0,
+              name: tourData[0].parking_name || 'Parking Area',
+              address: tourData[0].parking_address,
+              latitude: tourData[0].parking_latitude, longitude: tourData[0].parking_longitude,
+              parking_type: tourData[0].parking_type, parking_cost: tourData[0].parking_cost,
+              travel_method: 'walking', geocoded: true,
+              user_verified: tourData[0].parking_verified || false,
+            });
+          } catch (e) { console.error('Parking migration failed:', e); }
+        }
+        const tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking');
         // Auto-regenerate stops that don't comply with current guidelines
         // (outlier coordinates, collapsed markers). One-time per tour.
         let regenerated = false;
         if ((tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION) {
-          const validation = validateStops(tourStops, tourData[0]);
+          const validation = validateStops(tourStopsOnly, tourData[0]);
           if (!validation.compliant) {
-            for (const s of tourStops) {
+            for (const s of tourStopsOnly) {
               await base44.entities.TourStop.delete(s.id);
             }
             await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
@@ -422,14 +442,15 @@ export default function TourDetail() {
         if (!regenerated) {
           if (tourData[0].user_reordered) {
             // Respect the user's manual stop order — do not re-sort by proximity
-            const sortedStops = tourStops.sort((a, b) => a.stop_number - b.stop_number);
-            setStops(sortedStops);
-            geocodeExistingStops(sortedStops, tourData[0]).catch(console.error);
+            const sortedTourStops = tourStopsOnly.sort((a, b) => a.stop_number - b.stop_number);
+            const allStops = [...(parkingStop ? [parkingStop] : []), ...sortedTourStops];
+            setStops(allStops);
+            geocodeExistingStops(allStops, tourData[0]).catch(console.error);
           } else {
-            const reordered = enforceWalkingDistance(tourStops, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude });
+            const reordered = enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude });
             // Update stop_numbers in the database if they changed
             for (const s of reordered) {
-              const existing = tourStops.find(ts => ts.id === s.id);
+              const existing = tourStopsOnly.find(ts => ts.id === s.id);
               if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
                 await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
               }
@@ -442,13 +463,14 @@ export default function TourDetail() {
               await base44.entities.Tour.update(tourData[0].id, { tour_type: correctedType });
               tourData[0].tour_type = correctedType;
             }
-            setStops(reordered);
-            geocodeExistingStops(reordered, tourData[0]).catch(console.error);
+            const allStops = [...(parkingStop ? [parkingStop] : []), ...reordered];
+            setStops(allStops);
+            geocodeExistingStops(allStops, tourData[0]).catch(console.error);
           }
         }
-        // Lazily generate parking for existing tours that don't have it yet
-        if (tourData[0].tour_type !== 'driving' && !tourData[0].parking_latitude) {
-          generateParking(tourData[0], tourStops).catch(console.error);
+        // Lazily generate parking for tours that don't have it yet
+        if (!parkingStop && tourData[0].tour_type !== 'driving') {
+          generateParking(tourData[0], tourStopsOnly).catch(console.error);
         }
       }
     }
@@ -502,16 +524,15 @@ Output ONLY valid JSON. No markdown fences.`;
         }], { lat: cLat, lon: cLon, maxDistMiles: 0.5, clusterRadius: 0.3 });
         if (geoMap.parking) { lat = geoMap.parking.lat; lon = geoMap.parking.lon; }
       }
-      const parkingUpdate = {
-        parking_name: result.parking_name,
-        parking_address: result.parking_address,
-        parking_latitude: lat,
-        parking_longitude: lon,
-        parking_type: result.parking_type,
-        parking_cost: result.parking_cost,
-      };
-      await base44.entities.Tour.update(tourData.id, parkingUpdate);
-      setTour(prev => prev ? { ...prev, ...parkingUpdate } : prev);
+      const parkingStopRecord = await base44.entities.TourStop.create({
+        tour_id: tourData.id, stop_type: 'parking', stop_number: 0,
+        name: result.parking_name || 'Parking Area',
+        address: result.parking_address,
+        latitude: lat, longitude: lon,
+        parking_type: result.parking_type, parking_cost: result.parking_cost,
+        travel_method: 'walking', geocoded: true,
+      });
+      setStops(prev => [parkingStopRecord, ...prev.filter(s => s.stop_type !== 'parking')]);
     } catch (e) {
       console.error('Parking generation failed:', e);
     }
@@ -660,7 +681,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       }
       if (!systemRegen) spendManifestationEnergy();
 
-      // Save parking info if the LLM provided it
+      // Create parking stop if the LLM provided it
       if (result.parking && result.parking.parking_latitude) {
         const p = result.parking;
         let pLat = p.parking_latitude;
@@ -672,18 +693,17 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           }], { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: 0.5, clusterRadius: 0.3 });
           if (geoMap.parking) { pLat = geoMap.parking.lat; pLon = geoMap.parking.lon; }
         }
-        const parkingUpdate = {
-          parking_name: p.parking_name,
-          parking_address: p.parking_address,
-          parking_latitude: pLat,
-          parking_longitude: pLon,
-          parking_type: p.parking_type,
-          parking_cost: p.parking_cost,
-        };
         try {
-          await base44.entities.Tour.update(tourData.id, parkingUpdate);
-          setTour(prev => prev ? { ...prev, ...parkingUpdate } : prev);
-        } catch (e) { console.error('Parking save failed:', e); }
+          const parkingStopRecord = await base44.entities.TourStop.create({
+            tour_id: tourId, stop_type: 'parking', stop_number: 0,
+            name: p.parking_name || 'Parking Area',
+            address: p.parking_address,
+            latitude: pLat, longitude: pLon,
+            parking_type: p.parking_type, parking_cost: p.parking_cost,
+            travel_method: 'walking', geocoded: true,
+          });
+          created.push(parkingStopRecord);
+        } catch (e) { console.error('Parking stop creation failed:', e); }
       }
 
       // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
@@ -732,11 +752,13 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   const onDragEnd = async (result) => {
     document.body.style.overflow = '';
     if (!result.destination || result.source.index === result.destination.index) return;
-    const reordered = Array.from(stops);
+    const currentParking = stops.find(s => s.stop_type === 'parking');
+    const currentTourStops = stops.filter(s => s.stop_type !== 'parking');
+    const reordered = Array.from(currentTourStops);
     const [removed] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, removed);
     const withNumbers = reordered.map((s, i) => ({ ...s, stop_number: i + 1 }));
-    setStops(withNumbers);
+    setStops([...(currentParking ? [currentParking] : []), ...withNumbers]);
     for (const s of withNumbers) {
       await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number });
     }
@@ -772,6 +794,9 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     } catch (e) {}
     setCompletingTour(false);
   };
+
+  const parkingStop = stops.find(s => s.stop_type === 'parking');
+  const tourStops = stops.filter(s => s.stop_type !== 'parking');
 
   if (loading) {
     return (
@@ -824,7 +849,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
               {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3.5 h-3.5" /><Car className="w-3 h-3" /></> : <Car className="w-3.5 h-3.5" />}
               {tour.tour_type === 'mixed' ? 'Walking + Driving' : tour.tour_type}
             </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {computeAdjustedDuration(tour.estimated_duration, narrationLength, tour?.parking_latitude ? 5 : 0)}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {computeAdjustedDuration(tour.estimated_duration, narrationLength, parkingStop ? 5 : 0)}</span>
             {totalDistance > 0 && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground"><Route className="w-3.5 h-3.5" /> {formatDistance(totalDistance)}</span>
             )}
@@ -840,8 +865,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         </div>
 
         <TourAccessInfo tour={tour} stops={stops} />
-
-        <ParkingInfo tour={tour} />
 
         {tour.introduction && (
           <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
@@ -874,7 +897,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
 
         <div>
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
-            <Map className="w-4 h-4 text-primary" /> {stops.length} Investigation Stops
+            <Map className="w-4 h-4 text-primary" /> {tourStops.length} Investigation Stops
           </h3>
           {stopsError ? (
             <div className="flex flex-col items-center py-8 gap-3">
@@ -894,11 +917,28 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
               <BePatient />
             </div>
           ) : (
+            <>
+            {parkingStop && (
+              <div
+                onClick={() => navigate(`/stop/${parkingStop.id}`)}
+                className="flex items-center gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50 hover:bg-amber-500/10 transition-all group cursor-pointer mb-2"
+              >
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 font-heading text-sm font-bold shrink-0 text-amber-400">P</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate group-hover:text-amber-400 transition-colors">{parkingStop.name || 'Parking Area'}</p>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                    <MapPin className="w-2.5 h-2.5" /> <span className="truncate">{parkingStop.address || 'Parking'}</span>
+                  </p>
+                </div>
+                {parkingStop.user_verified && <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />}
+                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-amber-400 transition-colors shrink-0" />
+              </div>
+            )}
             <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
               <Droppable droppableId="stops">
                 {(provided) => (
                   <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
-                    {stops.map((stop, i) => (
+                    {tourStops.map((stop, i) => (
                       <Draggable key={stop.id} draggableId={stop.id} index={i}>
                         {(provided, snapshot) => (
                           <div
@@ -944,6 +984,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 )}
               </Droppable>
             </DragDropContext>
+            </>
           )}
         </div>
 

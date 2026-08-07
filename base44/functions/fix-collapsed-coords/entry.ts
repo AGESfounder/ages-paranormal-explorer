@@ -152,7 +152,10 @@ export default async function (req) {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const stops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
+    const allStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
+    // Exclude parking stops — they have their own coordinates and should not
+    // be reordered or matched to OSM features by the landmark/ship fixer.
+    const stops = allStops.filter(s => s.stop_type !== 'parking');
     stops.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
     if (stops.length < 1) return Response.json({ tourId, updated: 0, reason: 'no stops' });
 

@@ -53,16 +53,25 @@ function makeStopIcon(stopNumber) {
 export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd }) {
   if (!stops || stops.length === 0) return null;
 
-  // Find map center from stops
-  const validStops = stops.filter(s => s.latitude && s.longitude);
-  if (validStops.length === 0) return null;
+  // Find parking stop (from stops list, fallback to tour entity for legacy tours)
+  const parkingStop = stops.find(s => s.stop_type === 'parking' && s.latitude && s.longitude);
+  const parkingLat = parkingStop?.latitude || tour?.parking_latitude;
+  const parkingLon = parkingStop?.longitude || tour?.parking_longitude;
+  const parkingName = parkingStop?.name || tour?.parking_name;
+  const parkingCost = parkingStop?.parking_cost || tour?.parking_cost;
+  const hasParking = parkingLat != null && parkingLon != null;
+
+  // Tour stops only (exclude parking) for route line and stop markers
+  const validStops = stops.filter(s => s.latitude && s.longitude && s.stop_type !== 'parking');
+  if (validStops.length === 0 && !hasParking) return null;
 
   // Filter out geographic outliers so one bad coordinate can't zoom the
   // map to a continental scale. Compute the median center, then keep only
   // stops within a reasonable distance (50 mi normal, 200 mi road trips).
   // Outliers are still shown as markers but excluded from bounds/route.
-  const sortedLats = [...validStops].map(s => s.latitude).sort((a, b) => a - b);
-  const sortedLngs = [...validStops].map(s => s.longitude).sort((a, b) => a - b);
+  const allCoords = [...validStops, ...(hasParking ? [{ latitude: parkingLat, longitude: parkingLon }] : [])];
+  const sortedLats = allCoords.map(s => s.latitude).sort((a, b) => a - b);
+  const sortedLngs = allCoords.map(s => s.longitude).sort((a, b) => a - b);
   const medianLat = sortedLats[Math.floor(sortedLats.length / 2)];
   const medianLon = sortedLngs[Math.floor(sortedLngs.length / 2)];
   const maxDist = tour?.tour_category === 'road_trip' ? 200
@@ -81,9 +90,8 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
 
   const lats = boundsStops.map(s => s.latitude);
   const lngs = boundsStops.map(s => s.longitude);
-  const hasParking = tour?.parking_latitude != null && tour?.parking_longitude != null;
-  const allLats = [...lats, ...(hasParking ? [tour.parking_latitude] : [])];
-  const allLngs = [...lngs, ...(hasParking ? [tour.parking_longitude] : [])];
+  const allLats = [...lats, ...(hasParking ? [parkingLat] : [])];
+  const allLngs = [...lngs, ...(hasParking ? [parkingLon] : [])];
   const center = [
     (Math.min(...allLats) + Math.max(...allLats)) / 2,
     (Math.min(...allLngs) + Math.max(...allLngs)) / 2,
@@ -114,7 +122,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
         {bounds && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
         {hasParking && boundsStops.length > 0 && (
           <Polyline
-            positions={[[tour.parking_latitude, tour.parking_longitude], [boundsStops[0].latitude, boundsStops[0].longitude]]}
+            positions={[[parkingLat, parkingLon], [boundsStops[0].latitude, boundsStops[0].longitude]]}
             color="hsl(45, 90%, 50%)"
             weight={1.5}
             opacity={0.4}
@@ -123,13 +131,15 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
         )}
         {hasParking && (
           <Marker
-            position={[tour.parking_latitude, tour.parking_longitude]}
+            position={[parkingLat, parkingLon]}
             icon={makeParkingIcon()}
+            draggable={draggable}
+            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
           >
             <Popup>
               <div className="text-xs font-heading">
-                <strong>Parking: {tour.parking_name || 'Parking Area'}</strong>
-                {tour.parking_cost && <><br /><span className="text-muted-foreground">{tour.parking_cost}</span></>}
+                <strong>Parking: {parkingName || 'Parking Area'}</strong>
+                {parkingCost && <><br /><span className="text-muted-foreground">{parkingCost}</span></>}
               </div>
             </Popup>
           </Marker>
