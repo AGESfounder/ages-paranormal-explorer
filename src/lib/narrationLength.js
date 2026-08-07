@@ -101,3 +101,52 @@ Return a JSON object mapping each key to its condensed text. Output ONLY valid J
 
   return await callJson(prompt, { useWeb: false }) || {};
 }
+
+// ===== Adjusted duration =====
+// Scales the tour's estimated duration based on the selected story length.
+// Glimpse (whisper) is lowered beyond the 1/3 text fraction because users who
+// read less also tend to investigate less; Uncover (echo) ~60%; Relive full.
+
+const DURATION_FACTORS = {
+  whisper: 0.25,
+  echo: 0.6,
+  manifestation: 1.0,
+};
+
+function parseDurationToMinutes(durationStr) {
+  if (!durationStr) return null;
+  const str = String(durationStr).toLowerCase().trim();
+  const rangeMatch = str.match(/([\d.]+)\s*[-\u2013to]+\s*([\d.]+)/);
+  const singleMatch = str.match(/([\d.]+)/);
+  let low, high;
+  if (rangeMatch) {
+    low = parseFloat(rangeMatch[1]);
+    high = parseFloat(rangeMatch[2]);
+  } else if (singleMatch) {
+    low = high = parseFloat(singleMatch[1]);
+  } else {
+    return null;
+  }
+  const multiplier = (str.includes('min') || str.includes('minute')) ? 1 : 60;
+  return [Math.round(low * multiplier), Math.round(high * multiplier)];
+}
+
+function formatMinutes(m) {
+  if (m >= 60) {
+    const h = m / 60;
+    const rounded = Math.round(h * 4) / 4; // nearest 0.25 hr
+    return `${rounded} hr`;
+  }
+  return `${m} min`;
+}
+
+export function computeAdjustedDuration(durationStr, mode) {
+  const parsed = parseDurationToMinutes(durationStr);
+  if (!parsed) return durationStr || '';
+  const [low, high] = parsed;
+  const factor = DURATION_FACTORS[mode] || 1.0;
+  const adjLow = Math.max(5, Math.round(low * factor));
+  const adjHigh = Math.max(5, Math.round(high * factor));
+  if (adjLow === adjHigh) return formatMinutes(adjLow);
+  return `${formatMinutes(adjLow)}\u2013${formatMinutes(adjHigh)}`;
+}

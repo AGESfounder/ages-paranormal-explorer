@@ -19,7 +19,7 @@ import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from 
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
-import { getNarrationLength, saveNarrationLength, truncateText } from '@/lib/narrationLength';
+import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
 
@@ -716,7 +716,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
               {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3.5 h-3.5" /><Car className="w-3 h-3" /></> : <Car className="w-3.5 h-3.5" />}
               {tour.tour_type === 'mixed' ? 'Walking + Driving' : tour.tour_type}
             </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {tour.estimated_duration}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {computeAdjustedDuration(tour.estimated_duration, narrationLength)}</span>
             {totalDistance > 0 && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground"><Route className="w-3.5 h-3.5" /> {formatDistance(totalDistance)}</span>
             )}
@@ -728,7 +728,7 @@ Output ONLY a valid JSON object with a "stops" array. No markdown fences, no com
             </button>
           </div>
           {tour.best_time && <p className="text-xs text-primary flex items-center gap-1"><Zap className="w-3 h-3" /> Best time: {tour.best_time}</p>}
-          <NarrationLengthSelector value={narrationLength} onChange={handleNarrationLengthChange} />
+          <NarrationLengthSelector value={narrationLength} onChange={handleNarrationLengthChange} estimatedDuration={tour.estimated_duration} />
         </div>
 
         <TourAccessInfo tour={tour} stops={stops} />

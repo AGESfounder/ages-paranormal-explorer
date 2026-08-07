@@ -1,9 +1,9 @@
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollText } from 'lucide-react';
-import { NARRATION_LENGTHS } from '@/lib/narrationLength';
+import { NARRATION_LENGTHS, computeAdjustedDuration } from '@/lib/narrationLength';
 
-export default function NarrationLengthSelector({ value, onChange }) {
+export default function NarrationLengthSelector({ value, onChange, estimatedDuration }) {
   return (
     <div className="flex items-center gap-2">
       <ScrollText className="w-4 h-4 text-primary shrink-0" />
@@ -20,7 +20,10 @@ export default function NarrationLengthSelector({ value, onChange }) {
             <SelectItem key={l.value} value={l.value} className="py-2">
               <div className="flex flex-col gap-0.5">
                 <span className="font-heading text-sm">{l.label}</span>
-                <span className="text-[10px] text-muted-foreground">{l.description}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {l.description}
+                  {estimatedDuration && <span className="text-primary/70 ml-1">&middot; ~{computeAdjustedDuration(estimatedDuration, l.value)}</span>}
+                </span>
               </div>
             </SelectItem>
           ))}
