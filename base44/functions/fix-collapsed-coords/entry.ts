@@ -275,6 +275,30 @@ export default async function (req) {
       await base44.asServiceRole.entities.TourStop.bulkUpdate(updates);
     }
 
+    // Step 5b: Verify the parking stop. The LLM/geocoder often places parking
+    // at a nearby visitor center or road that's far from the property or on a
+    // narrow causeway that renders as water. If parking is more than 0.3 miles
+    // from the corrected center, or reverse-geocodes as water, move it to the
+    // verified on-land center so it sits with the tour stops.
+    const parkingStop = allStops.find(s => s.stop_type === 'parking');
+    if (parkingStop && parkingStop.latitude && parkingStop.longitude) {
+      const pDist = haversine(centerLat, centerLon, parkingStop.latitude, parkingStop.longitude);
+      let needsMove = pDist > 0.3;
+      if (!needsMove) {
+        const pRev = await reverseGeocode(parkingStop.latitude, parkingStop.longitude);
+        needsMove = !isOnLand(pRev);
+        await sleep(1100);
+      }
+      if (needsMove) {
+        // Place parking just south of the center so it doesn't overlap a stop
+        await base44.asServiceRole.entities.TourStop.update(parkingStop.id, {
+          latitude: centerLat - 0.0004,
+          longitude: centerLon,
+          geocoded: true,
+        });
+      }
+    }
+
     // Step 6: Reorder stops by proximity and set travel methods
     const updatedStops = stops.map((s) => {
       const u = updates.find((x) => x.id === s.id);
