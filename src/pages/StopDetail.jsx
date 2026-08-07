@@ -25,6 +25,8 @@ import { verifyStopLocation } from '@/lib/verifyStop';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
+import DeleteStopDialog from '@/components/DeleteStopDialog';
+import { Trash2 } from 'lucide-react';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -51,6 +53,8 @@ export default function StopDetail() {
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
   const isAdmin = user?.role === 'admin';
   const [verifying, setVerifying] = useState(false);
+  const [showDeleteStop, setShowDeleteStop] = useState(false);
+  const [deletingStop, setDeletingStop] = useState(false);
 
   // Gated narration wrapper — checks energy before speaking, toggles off for free.
   const narrate = (text, opts = {}) => {
@@ -179,6 +183,50 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
   const prevStop = currentIndex > 0 ? allStops[currentIndex - 1] : null;
   const nextStop = currentIndex < allStops.length - 1 ? allStops[currentIndex + 1] : null;
   const isLastStop = currentIndex === allStops.length - 1 && allStops.length > 0;
+
+  // Remove a stop that doesn't actually exist on the ground. Paid users and
+  // admins can invoke this. Deletes the stop, renumbers the remaining tour
+  // stops sequentially, strips premature conclusion phrases from the new
+  // final stop, and marks the tour unverified so it re-enters validation.
+  const handleDeleteStop = async () => {
+    if (!stop || stop.stop_type === 'parking') return;
+    setDeletingStop(true);
+    try {
+      const siblings = await base44.entities.TourStop.filter({ tour_id: stop.tour_id });
+      const tourStops = siblings
+        .filter(s => s.stop_type !== 'parking' && s.id !== stop.id)
+        .sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+      // Minimum-stop guard: cold_spot needs at least 1, others at least 2.
+      const minStops = 1;
+      if (tourStops.length < minStops) {
+        toast({ title: 'Cannot Remove', description: 'A tour must keep at least one stop. Edit the tour instead.', variant: 'destructive' });
+        setDeletingStop(false);
+        return;
+      }
+      await base44.entities.TourStop.delete(stop.id);
+      // Renumber remaining tour stops sequentially from 1.
+      const renumber = tourStops.map((s, i) => ({ id: s.id, stop_number: i + 1 }));
+      if (renumber.length) await base44.entities.TourStop.bulkUpdate(renumber);
+      // If the deleted stop was the last one, the new last stop becomes final —
+      // strip any premature conclusion phrases from it.
+      if (isLastStop && tourStops.length > 0) {
+        const newFinal = tourStops[renumber.length - 1];
+        const cleanPara = stripConclusionOpeners(newFinal.paranormal_info, true);
+        const cleanNarr = stripConclusionOpeners(newFinal.narration_text, true);
+        if (cleanPara !== newFinal.paranormal_info || cleanNarr !== newFinal.narration_text) {
+          await base44.entities.TourStop.update(newFinal.id, { paranormal_info: cleanPara, narration_text: cleanNarr });
+        }
+      }
+      // Mark the tour unverified since stops changed.
+      try { await base44.entities.Tour.update(stop.tour_id, { verified: false }); } catch (e) {}
+      toast({ title: 'Stop Removed', description: 'The tour has been updated and marked for re-validation.' });
+      navigate(`/tour/${stop.tour_id}`);
+    } catch (e) {
+      toast({ title: 'Remove Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
+    }
+    setDeletingStop(false);
+    setShowDeleteStop(false);
+  };
 
   const openInMaps = () => {
     if (!stop?.latitude || !stop?.longitude) return;
@@ -444,6 +492,14 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             </div>
           </div>
         )}
+        {(isPaid || isAdmin) && (
+          <button
+            onClick={() => setShowDeleteStop(true)}
+            className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive text-xs font-heading uppercase tracking-wider hover:bg-destructive/15 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" /> Stop Doesn’t Exist — Remove from Tour
+          </button>
+        )}
         {stop.latitude && stop.longitude && (
           <TourMap stops={[stop]} highlightedStopId={stop.id} height="h-52" draggable={isAdmin} onMarkerDragEnd={handleMarkerDragEnd} />
         )}
@@ -566,6 +622,14 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         onNarrate={() => selectedPerson && narrate(selectedPerson.story)}
       />
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
+      <DeleteStopDialog
+        open={showDeleteStop}
+        onOpenChange={setShowDeleteStop}
+        stop={stop}
+        remainingCount={allStops.filter(s => s.stop_type !== 'parking' && s.id !== stop.id).length}
+        onConfirm={handleDeleteStop}
+        deleting={deletingStop}
+      />
     </PageContainer>
   );
 }
