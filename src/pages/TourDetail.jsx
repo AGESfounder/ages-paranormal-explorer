@@ -23,6 +23,7 @@ import NarrationLengthSelector from '@/components/NarrationLengthSelector';
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
+import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -618,7 +619,7 @@ Include these fields in the parking object:
 - parking_longitude: GPS longitude of the parking spot
 For driving-only tours (no walking cluster), omit the parking object.
 
-Output ONLY a valid JSON object with a "stops" array and optional "parking" object. No markdown fences, no commentary.`;
+Output ONLY a valid JSON object with a "stops" array and optional "parking" object. No markdown fences, no commentary.${CONCLUSION_PHRASE_RULE}`;
 
       let result = null;
       try {
@@ -663,6 +664,12 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       // duplicates after enforceWalkingDistance assigned stop_numbers.
       for (let i = 0; i < deduped.length; i++) {
         deduped[i].stop_number = i + 1;
+      }
+      // Strip conclusion-like opening phrases from all non-final stops.
+      const lastIdx = deduped.length - 1;
+      for (let i = 0; i < deduped.length; i++) {
+        deduped[i].narration_text = stripConclusionOpeners(deduped[i].narration_text, i === lastIdx);
+        deduped[i].paranormal_info = stripConclusionOpeners(deduped[i].paranormal_info, i === lastIdx);
       }
       if (needsCoordVerification) {
         // For landmark/ship/cold_spot tours, trust the LLM's web-searched

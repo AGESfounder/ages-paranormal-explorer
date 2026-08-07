@@ -1,5 +1,6 @@
 import { base44 } from '@/api/base44Client';
 import { geocodeStopsWithNames } from '@/lib/geocodeStops';
+import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
 
 const MAX_STOPS = 12;
 const COLD_SPOT_MAX_STOPS = 4; // cold_spot = 1-4 stops at a single location
@@ -76,7 +77,7 @@ Each new stop needs:
 
 ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations from existing ghost tour companies, walking tours, or tourism websites, you MUST find the ACTUAL STREET ADDRESS of each location independently. Do NOT copy a tour company's meeting point, starting location, or vague area description — tour companies often list only where their tour GROUPS MEET (e.g., "2nd & Market St") rather than the actual haunted building's address. For every stop, look up the real street address where the actual haunted building, landmark, or site is located (e.g., "43 Cape Henlopen Dr, Lewes, DE 19958" for the ferry terminal, NOT "Near the intersection of 2nd & Market"). The address must be the physical location of the haunted site itself, not a tour company's gathering point.
 
-Output ONLY a valid JSON object with a "new_stops" array.`;
+Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RULE}`;
 
   const result = await base44.integrations.Core.InvokeLLM({
     prompt,
@@ -158,13 +159,13 @@ Output ONLY a valid JSON object with a "new_stops" array.`;
       address: ns.address || '',
       geocoded: newGeocodedAddrs.has(ns.address),
       historical_info: ns.historical_info || '',
-      paranormal_info: ns.paranormal_info || '',
+      paranormal_info: stripConclusionOpeners(ns.paranormal_info || '', false),
       investigation_suggestions: Array.isArray(ns.investigation_suggestions) ? ns.investigation_suggestions.filter((x) => typeof x === 'string' && x.trim()) : [],
       estimated_investigation_time: ns.estimated_investigation_time || '',
       construction_date: ns.construction_date || '',
       famous_people: ns.famous_people || '',
       image_url: '',
-      narration_text: ns.narration_text || '',
+      narration_text: stripConclusionOpeners(ns.narration_text || '', false),
       travel_method: String(ns.travel_method || '').toLowerCase() === 'driving' ? 'driving' : 'walking',
       hours_of_operation: ns.hours_of_operation || '',
       entry_fee: ns.entry_fee || '',

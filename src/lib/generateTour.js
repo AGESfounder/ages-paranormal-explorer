@@ -1,6 +1,7 @@
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { US_STATES } from '@/lib/statesData';
+import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
 
 function normalizeStateName(state) {
   if (!state) return '';
@@ -150,7 +151,7 @@ ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
 
-Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a COLD SPOT tour, every stop uses these same coordinates (areas within one site). For a PROPERTY tour, use these as a reference but look up the ACTUAL distinct coordinates for each specific area/building within the property — each stop must reflect its real location within the site. For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
+Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_PHRASE_RULE}${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a COLD SPOT tour, every stop uses these same coordinates (areas within one site). For a PROPERTY tour, use these as a reference but look up the ACTUAL distinct coordinates for each specific area/building within the property — each stop must reflect its real location within the site. For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
 
   // Coerce LLM output into the exact types/enums the schema expects. The LLM
   // often returns capitalized enums ("Moderate", "Walking") or tags as a string,
@@ -260,13 +261,13 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${useCoords ?
       longitude: toNum(s.longitude) || (useCoords ? coords.lng : null),
       address: toStr(s.address),
       historical_info: toStr(s.historical_info),
-      paranormal_info: toStr(s.paranormal_info),
+      paranormal_info: stripConclusionOpeners(toStr(s.paranormal_info), i === validStops.length - 1),
       investigation_suggestions: toStrArr(s.investigation_suggestions),
       estimated_investigation_time: toStr(s.estimated_investigation_time),
       construction_date: toStr(s.construction_date),
       famous_people: toStr(s.famous_people),
       image_url: toStr(s.image_url),
-      narration_text: toStr(s.narration_text),
+      narration_text: stripConclusionOpeners(toStr(s.narration_text), i === validStops.length - 1),
       travel_method: normEnum(s.travel_method, ['walking', 'driving'], 'walking'),
       hours_of_operation: toStr(s.hours_of_operation),
       entry_fee: toStr(s.entry_fee),

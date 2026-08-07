@@ -24,6 +24,7 @@ import { toast } from '@/components/ui/use-toast';
 import { verifyStopLocation } from '@/lib/verifyStop';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -73,7 +74,7 @@ export default function StopDetail() {
   // lightweight summaries, so the full rich historical/paranormal detail and
   // notable people are generated here per-stop (small, reliable calls) and
   // persisted. Stops that already have rich content only get people filled in.
-  const ensureRichContent = async (currentStop) => {
+  const ensureRichContent = async (currentStop, isFinalStop) => {
     const gate = await checkManifestationGate();
     if (!gate.allowed) return;
     const needsFull = isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info);
@@ -88,19 +89,20 @@ export default function StopDetail() {
 Stop name: ${currentStop.name}
 Address: ${currentStop.address || ''}
 Existing notes: ${(currentStop.historical_info || '')} ${(currentStop.paranormal_info || '')}
+${isFinalStop ? 'This is the FINAL stop on the tour — you may use conclusion-style wrap-up language.' : 'This is NOT the final stop on the tour — do NOT begin with conclusion or wrap-up phrases.'}
 
 Produce a JSON object with:
 - historical_info: 4-5 DETAILED paragraphs covering construction dates and architecture, major historical events that occurred there, notable figures who lived/worked/visited/died there, scandals/murders/tragedies, and the area's significance over time. Include specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters.
 - paranormal_info: 4-5 DETAILED paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, exact location), shadow figures, cold spots, poltergeist activity, residual vs intelligent hauntings, and local folklore. Include investigator testimonies and well-known paranormal events. Tell full ghost stories, not just names.
 - people: array of { name, story }. Include EVERY notable person mentioned in historical_info or paranormal_info. "name" MUST appear verbatim (same spelling/casing) in the text so it can be highlighted. "story": 4-6 detailed sentences — who they were, their role, fate (how they died if relevant), and their paranormal connection (sightings, apparitions, EVPs, phenomena).
-
+${CONCLUSION_PHRASE_RULE}
 Use real history and paranormal lore for this location. Output ONLY a valid JSON object. No markdown fences, no commentary.`;
         let data = null;
         try { data = await callJson(prompt, { useWeb: true }); } catch (e) { console.error('Enrich (web) failed:', e); }
         if (!data) { try { data = await callJson(prompt, { useWeb: false }); } catch (e) { console.error('Enrich (no-web) failed:', e); } }
         if (data) {
           if (data.historical_info) updates.historical_info = data.historical_info;
-          if (data.paranormal_info) updates.paranormal_info = data.paranormal_info;
+          if (data.paranormal_info) updates.paranormal_info = stripConclusionOpeners(data.paranormal_info, isFinalStop);
           generatedPeople = (data.people || []).filter(p => p.name && p.story);
           if (generatedPeople.length) updates.people = generatedPeople;
         }
@@ -142,9 +144,15 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         const currentStop = results[0];
         setStop(currentStop);
         setPeople(currentStop.people || []);
-        if (currentStop.stop_type !== 'parking' && (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0)) ensureRichContent(currentStop);
         const siblings = await base44.entities.TourStop.filter({ tour_id: currentStop.tour_id });
-        setAllStops(siblings.sort((a, b) => a.stop_number - b.stop_number));
+        const sortedSiblings = siblings.sort((a, b) => a.stop_number - b.stop_number);
+        setAllStops(sortedSiblings);
+        // Determine if this is the final tour stop (highest stop_number,
+        // excluding parking) so conclusion phrases are allowed only here.
+        const tourSiblings = sortedSiblings.filter(s => s.stop_type !== 'parking');
+        const maxStopNum = tourSiblings.length > 0 ? Math.max(...tourSiblings.map(s => s.stop_number || 0)) : 0;
+        const isFinalStop = currentStop.stop_type !== 'parking' && (currentStop.stop_number || 0) === maxStopNum && tourSiblings.length > 1;
+        if (currentStop.stop_type !== 'parking' && (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0)) ensureRichContent(currentStop, isFinalStop);
         try {
           const tours = await base44.entities.Tour.filter({ id: currentStop.tour_id });
           await base44.auth.updateMe({
