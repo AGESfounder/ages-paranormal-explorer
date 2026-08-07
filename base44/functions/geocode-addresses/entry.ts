@@ -97,12 +97,13 @@ async function geocodeStop(stop, center, maxDistMiles, clusterRadius) {
     await sleep(1100);
   }
 
-  // If the best result is still outside the cluster, reject it. A cluster
-  // outlier (e.g., 1.4mi from the boardwalk for a walking tour) is a bad
-  // geocode — accepting it corrupts the walking loop. Returning null lets
-  // the stop keep its LLM-generated coordinates, which are usually closer
-  // to the real landmark than a wrong address match.
-  if (bestResult) return { coords: null, strategy: 'rejected_outlier' };
+  // Return the best valid geocode found so far. For linear tours (e.g., a
+  // 1+ mile boardwalk), legitimate stops fall outside the cluster radius
+  // but are still correctly geocoded — rejecting them would leave the stop
+  // with inaccurate LLM coordinates. The cluster preference is already
+  // applied above (in-cluster results return immediately); this is the
+  // fallback for out-of-cluster but within-max-distance results.
+  if (bestResult) return bestResult;
 
   // Strategy 3: Simplified address — strip cross-street info, keep main street
   if (address) {
