@@ -2,6 +2,7 @@ import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { US_STATES } from '@/lib/statesData';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
+import { enforceWalkingDistance } from '@/lib/routeOptimizer';
 
 function normalizeStateName(state) {
   if (!state) return '';
@@ -318,10 +319,28 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
     );
   }
 
+  // Enforce proper route ordering BEFORE storing stops — driving stops go to
+  // the end, walking stops form a loop. This guarantees correct ordering at
+  // creation time, not just on view (TourDetail re-runs this on load, but
+  // only when stops need geocoding; already-geocoded tours would otherwise
+  // keep the LLM's original order with driving stops possibly in the middle).
+  const orderedStops = enforceWalkingDistance(
+    processed.stopRecords,
+    processed.tourData.tour_type,
+    { lat: processed.tourData.start_latitude, lon: processed.tourData.start_longitude }
+  );
+  // Auto-correct tour type if stops are a mix of walking + driving
+  const methods = new Set(orderedStops.map((s) => s.travel_method));
+  const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed'
+    : methods.has('driving') ? 'driving' : 'walking';
+  if (correctedType !== processed.tourData.tour_type) {
+    processed.tourData.tour_type = correctedType;
+  }
+
   const newTour = await base44.entities.Tour.create(processed.tourData);
 
   try {
-    const stopRecords = processed.stopRecords.map((r) => ({ ...r, tour_id: newTour.id }));
+    const stopRecords = orderedStops.map((r) => ({ ...r, tour_id: newTour.id }));
     await base44.entities.TourStop.bulkCreate(stopRecords);
 
     // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
