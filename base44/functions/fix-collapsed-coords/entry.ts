@@ -358,67 +358,13 @@ export default async function (req) {
 
     } else {
       // === MULTI-SITE LOGIC (area/road_trip) ===
-      // Stops are at different properties — query Overpass for named features
-      // and match by name. Unmatched stops keep their existing coordinates
-      // (no grid distribution — they're at different real-world locations).
+      // ONLY fix stops that are COLLAPSED (sharing identical coordinates with
+      // another stop) or IN WATER. Stops with unique, valid coordinates are
+      // left alone — they were geocoded to their physical addresses and must
+      // not be overridden by name-matching to potentially wrong OSM features.
+      // "Stops with physical addresses should be marked at those addresses."
 
-      if (tour.tour_category === 'road_trip') {
-        // Per-stop queries for road trips (stops are far apart, single query
-        // can't cover them all)
-        for (const stop of stops) {
-          if (!stop.latitude || !stop.longitude) continue;
-          try {
-            const stopFeatures = await queryOverpass(stop.latitude, stop.longitude, 0.015);
-            const feature = matchStopToFeature(stop.name, stopFeatures);
-            if (feature) {
-              updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
-              matched.add(stop.id);
-            }
-          } catch (e) {
-            console.error(`Overpass query failed for stop "${stop.name}":`, e.message);
-          }
-          await sleep(1000);
-        }
-      } else {
-        // Area tour: single Overpass query covering all stops' bounding box
-        const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
-        let features = [];
-        if (withCoords.length === 0) {
-          if (tour.start_latitude && tour.start_longitude) {
-            try {
-              features = await queryOverpass(tour.start_latitude, tour.start_longitude, 0.03, 500);
-            } catch (e) {
-              console.error('Overpass query failed:', e.message);
-            }
-          }
-        } else {
-          const minLat = Math.min(...withCoords.map(s => s.latitude));
-          const maxLat = Math.max(...withCoords.map(s => s.latitude));
-          const minLon = Math.min(...withCoords.map(s => s.longitude));
-          const maxLon = Math.max(...withCoords.map(s => s.longitude));
-          const cLat = (minLat + maxLat) / 2;
-          const cLon = (minLon + maxLon) / 2;
-          const span = Math.max(maxLat - minLat, maxLon - minLon);
-          const radiusDeg = Math.max(0.02, span / 2 + 0.01);
-          try {
-            features = await queryOverpass(cLat, cLon, radiusDeg, 500);
-          } catch (e) {
-            console.error('Overpass query failed:', e.message);
-          }
-        }
-
-        for (const stop of stops) {
-          const feature = matchStopToFeature(stop.name, features);
-          if (feature) {
-            updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
-            matched.add(stop.id);
-          }
-        }
-      }
-
-      // Check for collapsed coordinates (multiple stops at same point).
-      // For any collapsed stops that didn't get an OSM match, try a wider
-      // per-stop name search across the city area.
+      // Identify collapsed stops (sharing identical coordinates)
       const coordMap = {};
       for (const s of stops) {
         if (s.latitude == null || s.longitude == null) continue;
@@ -426,34 +372,82 @@ export default async function (req) {
         if (!coordMap[key]) coordMap[key] = [];
         coordMap[key].push(s);
       }
-      const collapsedGroups = Object.values(coordMap).filter(g => g.length > 1);
+      const collapsedStopIds = new Set();
+      for (const group of Object.values(coordMap)) {
+        if (group.length > 1) {
+          for (const s of group) collapsedStopIds.add(s.id);
+        }
+      }
 
-      if (collapsedGroups.length > 0 && tour.start_latitude && tour.start_longitude) {
-        // City-wide bounding box for wider name search
-        const cityBbox = `${(tour.start_latitude - 0.1).toFixed(6)},${(tour.start_longitude - 0.1).toFixed(6)},${(tour.start_latitude + 0.1).toFixed(6)},${(tour.start_longitude + 0.1).toFixed(6)}`;
-        for (const group of collapsedGroups) {
-          for (const stop of group) {
-            if (matched.has(stop.id)) continue;
-            const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
-            if (!cleanName || cleanName.length < 4) continue;
+      // Only fix collapsed stops or stops missing coordinates
+      const needsFix = stops.filter(s =>
+        collapsedStopIds.has(s.id) ||
+        s.latitude == null || s.longitude == null
+      );
+
+      if (needsFix.length > 0) {
+        if (tour.tour_category === 'road_trip') {
+          // Per-stop Overpass queries for road trips (stops are far apart)
+          for (const stop of needsFix) {
+            const searchLat = stop.latitude || tour.start_latitude;
+            const searchLon = stop.longitude || tour.start_longitude;
+            if (!searchLat || !searchLon) continue;
             try {
-              const nameMatches = await queryOverpassByName(cleanName, cityBbox);
-              const feature = matchStopToFeature(stop.name, nameMatches);
+              const stopFeatures = await queryOverpass(searchLat, searchLon, 0.015);
+              const feature = matchStopToFeature(stop.name, stopFeatures);
               if (feature) {
                 updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
                 matched.add(stop.id);
               }
             } catch (e) {
-              console.error(`Name search failed for "${stop.name}":`, e.message);
+              console.error(`Overpass query failed for stop "${stop.name}":`, e.message);
             }
             await sleep(1000);
           }
+        } else {
+          // Area tour: try address geocoding FIRST (physical address is most
+          // accurate), then fall back to OSM name search if geocoding fails
+          for (const stop of needsFix) {
+            let fixed = false;
+            // Step 1: Geocode the stop's physical address
+            if (stop.address) {
+              const geo = await geocode(`${stop.address}, ${tour.city || ''}, ${tour.state || ''}`);
+              await sleep(1100);
+              if (geo) {
+                const rev = await reverseGeocode(geo.lat, geo.lon);
+                await sleep(1100);
+                if (isOnLand(rev)) {
+                  updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true });
+                  matched.add(stop.id);
+                  fixed = true;
+                }
+              }
+            }
+            // Step 2: Fallback — OSM name search across the city area
+            if (!fixed && tour.start_latitude && tour.start_longitude) {
+              const cityBbox = `${(tour.start_latitude - 0.1).toFixed(6)},${(tour.start_longitude - 0.1).toFixed(6)},${(tour.start_latitude + 0.1).toFixed(6)},${(tour.start_longitude + 0.1).toFixed(6)}`;
+              const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
+              if (cleanName && cleanName.length >= 4) {
+                try {
+                  const nameMatches = await queryOverpassByName(cleanName, cityBbox);
+                  const feature = matchStopToFeature(stop.name, nameMatches);
+                  if (feature) {
+                    updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
+                    matched.add(stop.id);
+                  }
+                } catch (e) {
+                  console.error(`Name search failed for "${stop.name}":`, e.message);
+                }
+                await sleep(1000);
+              }
+            }
+          }
         }
-      }
 
-      // Apply coordinate updates
-      if (updates.length > 0) {
-        await base44.asServiceRole.entities.TourStop.bulkUpdate(updates);
+        // Apply coordinate updates
+        if (updates.length > 0) {
+          await base44.asServiceRole.entities.TourStop.bulkUpdate(updates);
+        }
       }
     }
 
