@@ -15,7 +15,10 @@ function normalizeStateName(state) {
 
 export async function findExistingTour(destination, state, category, accessType, city) {
   const normalizedState = normalizeStateName(state);
-  const destLower = destination.trim().toLowerCase();
+  // Normalize for comparison: lowercase + strip apostrophes/accents so
+  // "Harper's Ferry" matches "Harpers Ferry" and "St. Louis" matches "St Louis".
+  const norm = (s) => (s || '').toLowerCase().trim().replace(/[''`]/g, '').replace(/\./g, '');
+  const destLower = norm(destination);
   const existingTours = await base44.entities.Tour.filter({ state: normalizedState });
   const normAccess = (t) => (t === 'exterior_only' ? 'exterior_only' : 'exterior_interior');
   return existingTours.find((t) => {
@@ -41,9 +44,14 @@ export async function findExistingTour(destination, state, category, accessType,
     // CITY-LEVEL REDUNDANCY: For area tours, an existing area tour in the same
     // city is likely covering the same haunted locations. Creative tour titles
     // differ ("Shadows of Savannah" vs "Savannah Ghost Walk"), so title matching
-    // alone misses these near-duplicates. Only applies to area-vs-area matches.
-    if (city && category === 'area' && t.tour_category === 'area') {
-      if ((t.city || '').toLowerCase().trim() === city.toLowerCase().trim()) {
+    // alone misses these near-duplicates. Match on either the explicitly-passed
+    // city OR the destination string (which for area tours is often the city
+    // name itself — generateLocationTour doesn't have the city until after LLM
+    // generation, so dest is the best proxy we have pre-generation). Only
+    // applies to area-vs-area matches.
+    if (category === 'area' && t.tour_category === 'area') {
+      const tCity = norm(t.city);
+      if (tCity && ((city && tCity === norm(city)) || tCity === destLower)) {
         return true;
       }
     }
@@ -52,8 +60,9 @@ export async function findExistingTour(destination, state, category, accessType,
     // (e.g., a landmark-specific tour vs. a city walking tour that
     // includes that landmark as one stop). Only flag a true duplicate
     // when the destination matches the tour's actual name/title.
-    const titleMatch = (t.title || '').toLowerCase().includes(destLower);
-    const destInTitle = destLower.includes((t.title || '').toLowerCase().trim()) && (t.title || '').trim().length > 3;
+    const normTitle = norm(t.title || '');
+    const titleMatch = normTitle.includes(destLower);
+    const destInTitle = destLower.includes(normTitle.trim()) && normTitle.trim().length > 3;
     return titleMatch || destInTitle;
   }) || null;
 }
