@@ -69,12 +69,19 @@ async function queryOverpass(lat, lon, radiusDeg = 0.012, limit = 300) {
 }
 
 // Query Overpass for features matching a specific name pattern within a bbox
-async function queryOverpassByName(namePattern, bbox) {
-  const escaped = String(namePattern).replace(/["\\]/g, '\\$&');
+async function queryOverpassByName(stopName, bbox) {
+  const norm = normalizeName(stopName);
+  // Search by significant proper nouns, not the full name — "Piper House"
+  // must find "Piper Farmhouse", which a full-name regex would miss.
+  const commonWords = new Set(['house', 'farm', 'church', 'road', 'lane', 'inn', 'tavern', 'hotel', 'mill', 'bridge', 'fort', 'camp', 'site', 'area', 'park', 'building', 'grounds', 'section', 'room', 'wing']);
+  let words = norm.split(' ').filter(w => w.length > 3 && !commonWords.has(w));
+  if (words.length === 0) words = norm.split(' ').filter(w => w.length > 3);
+  if (words.length === 0) return [];
+  const pattern = words.map(w => w.replace(/["\\]/g, '\\$&')).join('|');
   const query = `[out:json][timeout:25];
   (
-    node["name"~"${escaped}",i](${bbox});
-    way["name"~"${escaped}",i](${bbox});
+    node["name"~"${pattern}",i](${bbox});
+    way["name"~"${pattern}",i](${bbox});
   );
   out center tags 50;`;
   const res = await fetch('https://overpass-api.de/api/interpreter', {
@@ -119,6 +126,8 @@ function isGenericPlace(feature) {
 // Check if two words are "close" — exact, plural/singular, or Levenshtein distance 1
 function wordsAreClose(w1, w2) {
   if (w1 === w2) return true;
+  // Substring match: "house" is part of "farmhouse", "mill" is part of "miller"
+  if (w1.length >= 4 && w2.length >= 4 && (w1.includes(w2) || w2.includes(w1))) return true;
   if (w1.length > 4 && w2.length > 4) {
     // Plural/singular: "harpers" → "harper"
     if (w1.replace(/s$/, '') === w2.replace(/s$/, '')) return true;
@@ -414,12 +423,19 @@ export default async function (req) {
               const geo = await geocode(`${stop.address}, ${tour.city || ''}, ${tour.state || ''}`);
               await sleep(1100);
               if (geo) {
-                const rev = await reverseGeocode(geo.lat, geo.lon);
-                await sleep(1100);
-                if (isOnLand(rev)) {
-                  updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true });
-                  matched.add(stop.id);
-                  fixed = true;
+                // Skip if geocoding returned the same coordinates that caused
+                // the collapse — address geocoding is what put them there.
+                // Fall through to OSM name search instead.
+                const sameCoords = stop.latitude != null && stop.longitude != null &&
+                  Math.abs(geo.lat - stop.latitude) < 0.001 && Math.abs(geo.lon - stop.longitude) < 0.001;
+                if (!sameCoords) {
+                  const rev = await reverseGeocode(geo.lat, geo.lon);
+                  await sleep(1100);
+                  if (isOnLand(rev)) {
+                    updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true });
+                    matched.add(stop.id);
+                    fixed = true;
+                  }
                 }
               }
             }
