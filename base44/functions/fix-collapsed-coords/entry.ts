@@ -35,9 +35,8 @@ function isOnLand(rev) {
     addr.postcode || (rev.category && rev.category !== 'boundary' && rev.category !== 'natural'));
 }
 
-// Query Overpass API for named features + military/historic features near a point
-async function queryOverpass(lat, lon, radiusDeg = 0.012) {
-  const r = radiusDeg.toFixed(6);
+// Query Overpass API for named features near a point
+async function queryOverpass(lat, lon, radiusDeg = 0.012, limit = 300) {
   const bbox = `${(lat - radiusDeg).toFixed(6)},${(lon - radiusDeg).toFixed(6)},${(lat + radiusDeg).toFixed(6)},${(lon + radiusDeg).toFixed(6)}`;
   const query = `[out:json][timeout:25];
   (
@@ -53,13 +52,37 @@ async function queryOverpass(lat, lon, radiusDeg = 0.012) {
     node["military"](${bbox});
     node["historic"](${bbox});
   );
-  out center tags 300;`;
+  out center tags ${limit};`;
   const res = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain', 'User-Agent': 'AGES-Paranormal-Explorer/1.0' },
     body: query,
   });
   if (!res.ok) throw new Error(`Overpass error: ${res.status}`);
+  const data = await res.json();
+  return (data.elements || []).map((e) => ({
+    lat: e.lat || e.center?.lat,
+    lon: e.lon || e.center?.lon,
+    name: e.tags?.name,
+    tags: e.tags,
+  })).filter((e) => e.lat && e.lon);
+}
+
+// Query Overpass for features matching a specific name pattern within a bbox
+async function queryOverpassByName(namePattern, bbox) {
+  const escaped = String(namePattern).replace(/["\\]/g, '\\$&');
+  const query = `[out:json][timeout:25];
+  (
+    node["name"~"${escaped}",i](${bbox});
+    way["name"~"${escaped}",i](${bbox});
+  );
+  out center tags 50;`;
+  const res = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain', 'User-Agent': 'AGES-Paranormal-Explorer/1.0' },
+    body: query,
+  });
+  if (!res.ok) return [];
   const data = await res.json();
   return (data.elements || []).map((e) => ({
     lat: e.lat || e.center?.lat,
@@ -81,6 +104,39 @@ function normalizeName(s) {
     .trim();
 }
 
+// Check if a feature is a generic place (town, city, etc.) that shouldn't
+// be matched as a specific landmark via partial substring matching.
+function isGenericPlace(feature) {
+  const tags = feature.tags || {};
+  if (tags.place && ['town', 'city', 'village', 'hamlet', 'suburb', 'neighbourhood', 'county', 'state', 'island'].includes(tags.place)) {
+    return true;
+  }
+  // Also reject boundary/administrative features — they're areas, not landmarks
+  if (tags.boundary === 'administrative' || tags.admin_level) return true;
+  return false;
+}
+
+// Check if two words are "close" — exact, plural/singular, or Levenshtein distance 1
+function wordsAreClose(w1, w2) {
+  if (w1 === w2) return true;
+  if (w1.length > 4 && w2.length > 4) {
+    // Plural/singular: "harpers" → "harper"
+    if (w1.replace(/s$/, '') === w2.replace(/s$/, '')) return true;
+  }
+  // Levenshtein distance 1 for words of similar length
+  if (Math.abs(w1.length - w2.length) <= 1 && w1.length > 4) {
+    let diff = 0;
+    const [shorter, longer] = w1.length <= w2.length ? [w1, w2] : [w2, w1];
+    let j = 0;
+    for (let i = 0; i < longer.length; i++) {
+      if (j < shorter.length && longer[i] === shorter[j]) { j++; }
+      else { diff++; if (diff > 1) return false; }
+    }
+    return true;
+  }
+  return false;
+}
+
 // Match a stop name to an OSM feature by fuzzy name matching
 function matchStopToFeature(stopName, features) {
   const stopNorm = normalizeName(stopName);
@@ -91,20 +147,38 @@ function matchStopToFeature(stopName, features) {
   for (const f of named) {
     if (normalizeName(f.name) === stopNorm) return f;
   }
-  // Partial match (one contains the other)
+  // Partial match — feature name contains stop name (more specific version
+  // of the same place, e.g. "Jefferson Rock Connector" contains "Jefferson Rock")
   for (const f of named) {
     const fNorm = normalizeName(f.name);
     if (fNorm.length < 4) continue;
-    if (stopNorm.includes(fNorm) || fNorm.includes(stopNorm)) return f;
+    if (fNorm.includes(stopNorm)) return f;
   }
-  // Keyword match — need at least 2 significant words in common
+  // Partial match — stop name contains feature name, but ONLY if the feature
+  // is NOT a generic place (town, city, etc.) — "Harpers Ferry Cemetery" should
+  // NOT match the "Harpers Ferry" town node.
+  for (const f of named) {
+    const fNorm = normalizeName(f.name);
+    if (fNorm.length < 4) continue;
+    if (isGenericPlace(f)) continue;
+    if (stopNorm.includes(fNorm)) return f;
+  }
+  // Keyword match — need at least 2 significant words in common (with
+  // fuzzy word matching to catch plurals like "Harpers" → "Harper")
   const stopWords = stopNorm.split(' ').filter((w) => w.length > 3);
   let best = null;
   let bestScore = 0;
   for (const f of named) {
+    if (isGenericPlace(f)) continue;
     const fNorm = normalizeName(f.name);
     if (fNorm.length < 4) continue;
-    const score = stopWords.filter((w) => fNorm.includes(w)).length;
+    const fWords = fNorm.split(' ').filter(w => w.length > 3);
+    let score = 0;
+    for (const sw of stopWords) {
+      for (const fw of fWords) {
+        if (wordsAreClose(sw, fw)) { score++; break; }
+      }
+    }
     if (score > bestScore) { bestScore = score; best = f; }
   }
   return bestScore >= 2 ? best : null;
@@ -135,10 +209,14 @@ function orderStopsByProximity(stops) {
   return ordered;
 }
 
-// Verifies and corrects stop coordinates for landmark/ship tours using
-// OpenStreetMap's Overpass API (real mapped features) instead of LLM guesses.
-// Also fixes collapsed coordinates and reorders by proximity.
-// Admins can verify any tour; regular users can only verify their own tours.
+// Verifies and corrects stop coordinates for ALL tour types using
+// OpenStreetMap's Overpass API (real mapped features) instead of Nominatim
+// guesses. For landmark/ship/cold_spot tours, all stops are on the same
+// property — uses a single center point and distributes unmatched stops
+// in a grid. For area/road_trip tours, stops are at different properties —
+// uses a broad query covering all stops and keeps unmatched stops at their
+// existing coordinates (no grid distribution). Collapsed coordinates
+// (multiple stops at same point) trigger a wider per-stop name search.
 export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
@@ -147,189 +225,268 @@ export default async function (req) {
 
     const body = await req.json();
     const tourId = body.tourId;
+    const skipReorder = body.skipReorder || false;
     if (!tourId) return Response.json({ error: 'tourId required' }, { status: 400 });
 
     const tour = await base44.asServiceRole.entities.Tour.get(tourId);
     if (!tour) return Response.json({ error: 'Tour not found' }, { status: 404 });
-    if (tour.tour_category !== 'landmark' && tour.tour_category !== 'ship' && tour.tour_category !== 'cold_spot') {
-      return Response.json({ error: 'Only landmark/ship/cold_spot tours supported' }, { status: 400 });
-    }
-    // Non-admins can only verify their own tours
-    if (user.role !== 'admin' && tour.created_by_id !== user.id) {
-      return Response.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
     const allStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
-    // Exclude parking stops — they have their own coordinates and should not
-    // be reordered or matched to OSM features by the landmark/ship fixer.
     const stops = allStops.filter(s => s.stop_type !== 'parking');
     stops.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
     if (stops.length < 1) return Response.json({ tourId, updated: 0, reason: 'no stops' });
 
-    // Step 1: Determine the property center. Always geocode the address first
-    // (most reliable), then fall back to start coords. LLM-generated start
-    // coords are often wrong (wrong location or in water), so the address
-    // is the preferred source. If the address fails AND start coords are in
-    // water, try geocoding the tour's start_location_name (progressively
-    // shorter prefixes) + state — this finds landmarks like "Rackliffe House"
-    // that Nominatim knows by name but not by address.
-    let centerLat = null;
-    let centerLon = null;
-
-    if (stops[0]?.address) {
-      const geo = await geocode(stops[0].address);
-      if (geo) { centerLat = geo.lat; centerLon = geo.lon; }
-      await sleep(1100);
-    }
-
-    // Fallback: try geocoding the tour's start_location_name + state when
-    // address geocoding fails. Tries progressively shorter prefixes so
-    // "Rackliffe House Manor Facade" eventually tries "Rackliffe House".
-    const _debug = { addressTried: !!stops[0]?.address, addressResult: null, nameAttempts: [] };
-    if ((!centerLat || !centerLon) && tour.start_location_name) {
-      const stateName = tour.state || '';
-      const words = tour.start_location_name.split(/\s+/).filter(w => w.length > 0);
-      for (let len = words.length; len >= 2; len--) {
-        const prefix = words.slice(0, len).join(' ');
-        const query = `${prefix}, ${stateName}`;
-        const geo = await geocode(query);
-        _debug.nameAttempts.push({ query, geo });
-        await sleep(1100);
-        if (geo) {
-          const rev = await reverseGeocode(geo.lat, geo.lon);
-          const onLand = isOnLand(rev);
-          _debug.nameAttempts[_debug.nameAttempts.length - 1].rev = rev ? { category: rev.category, onLand } : null;
-          await sleep(1100);
-          if (onLand) { centerLat = geo.lat; centerLon = geo.lon; break; }
-        }
-      }
-    }
-
-    if (!centerLat || !centerLon) {
-      centerLat = tour.start_latitude;
-      centerLon = tour.start_longitude;
-      // Verify start coords are on land; if not, we can't proceed safely
-      if (centerLat && centerLon) {
-        const rev = await reverseGeocode(centerLat, centerLon);
-        if (!isOnLand(rev)) {
-          return Response.json({ tourId, updated: 0, reason: 'start coords in water and no valid address', _debug });
-        }
-        await sleep(1100);
-      }
-    }
-
-    if (!centerLat || !centerLon) {
-      return Response.json({ tourId, updated: 0, reason: 'cannot determine property center' });
-    }
-
-    // If we found a valid center via name geocoding (different from the
-    // tour's start coords), update the tour's start coordinates so parking
-    // generation and other fallbacks use the corrected on-land location.
-    if (tour.start_latitude && tour.start_longitude &&
-        (Math.abs(centerLat - tour.start_latitude) > 0.001 || Math.abs(centerLon - tour.start_longitude) > 0.001)) {
-      await base44.asServiceRole.entities.Tour.update(tourId, {
-        start_latitude: centerLat, start_longitude: centerLon,
-      });
-    }
-
-    // Step 2: Query Overpass for named features near the center
-    let features = [];
-    try {
-      features = await queryOverpass(centerLat, centerLon, 0.015);
-    } catch (e) {
-      console.error('Overpass query failed:', e.message);
-    }
-
-    // Step 3: Match each stop to an OSM feature by name
-    const matched = new Set();
+    const isSingleSite = tour.tour_category === 'landmark' || tour.tour_category === 'ship' || tour.tour_category === 'cold_spot';
     const updates = [];
-    for (const stop of stops) {
-      const feature = matchStopToFeature(stop.name, features);
-      if (feature) {
-        updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
-        matched.add(stop.id);
-      }
-    }
+    const matched = new Set();
 
-    // Step 4: For unmatched stops, distribute around the center in a grid.
-    // Since all stops are within the same property/vessel, they should be
-    // within a few hundred feet of the center.
-    const unmatched = stops.filter((s) => !matched.has(s.id));
-    if (unmatched.length > 0) {
-      const offsetDeg = 0.0006; // ~200 feet
-      const cols = Math.ceil(Math.sqrt(unmatched.length));
-      unmatched.forEach((stop, i) => {
-        const row = Math.floor(i / cols);
-        const col = i % cols;
-        updates.push({
-          id: stop.id,
-          latitude: centerLat + (row - (cols - 1) / 2) * offsetDeg,
-          longitude: centerLon + (col - (cols - 1) / 2) * offsetDeg,
-          geocoded: true,
-        });
-      });
-    }
+    if (isSingleSite) {
+      // === SINGLE-SITE LOGIC (landmark/ship/cold_spot) ===
+      // All stops are on the same property — find the property center,
+      // query Overpass near it, match by name, distribute unmatched in a grid.
 
-    // Step 5: Apply coordinate updates
-    if (updates.length > 0) {
-      await base44.asServiceRole.entities.TourStop.bulkUpdate(updates);
-    }
+      let centerLat = null;
+      let centerLon = null;
 
-    // Step 5b: Verify the parking stop. The LLM/geocoder often places parking
-    // at a nearby visitor center or road that's far from the property or on a
-    // narrow causeway that renders as water. If parking is more than 0.3 miles
-    // from the corrected center, or reverse-geocodes as water, move it to the
-    // verified on-land center so it sits with the tour stops.
-    const parkingStop = allStops.find(s => s.stop_type === 'parking');
-    if (parkingStop && parkingStop.latitude && parkingStop.longitude) {
-      const pDist = haversine(centerLat, centerLon, parkingStop.latitude, parkingStop.longitude);
-      let needsMove = pDist > 0.3;
-      if (!needsMove) {
-        const pRev = await reverseGeocode(parkingStop.latitude, parkingStop.longitude);
-        needsMove = !isOnLand(pRev);
+      if (stops[0]?.address) {
+        const geo = await geocode(stops[0].address);
+        if (geo) { centerLat = geo.lat; centerLon = geo.lon; }
         await sleep(1100);
       }
-      if (needsMove) {
-        // Place parking just south of the center so it doesn't overlap a stop
-        await base44.asServiceRole.entities.TourStop.update(parkingStop.id, {
-          latitude: centerLat - 0.0004,
-          longitude: centerLon,
-          geocoded: true,
+
+      // Fallback: try geocoding the tour's start_location_name + state
+      const _debug = { addressTried: !!stops[0]?.address, addressResult: null, nameAttempts: [] };
+      if ((!centerLat || !centerLon) && tour.start_location_name) {
+        const stateName = tour.state || '';
+        const words = tour.start_location_name.split(/\s+/).filter(w => w.length > 0);
+        for (let len = words.length; len >= 2; len--) {
+          const prefix = words.slice(0, len).join(' ');
+          const query = `${prefix}, ${stateName}`;
+          const geo = await geocode(query);
+          _debug.nameAttempts.push({ query, geo });
+          await sleep(1100);
+          if (geo) {
+            const rev = await reverseGeocode(geo.lat, geo.lon);
+            const onLand = isOnLand(rev);
+            _debug.nameAttempts[_debug.nameAttempts.length - 1].rev = rev ? { category: rev.category, onLand } : null;
+            await sleep(1100);
+            if (onLand) { centerLat = geo.lat; centerLon = geo.lon; break; }
+          }
+        }
+      }
+
+      if (!centerLat || !centerLon) {
+        centerLat = tour.start_latitude;
+        centerLon = tour.start_longitude;
+        if (centerLat && centerLon) {
+          const rev = await reverseGeocode(centerLat, centerLon);
+          if (!isOnLand(rev)) {
+            return Response.json({ tourId, updated: 0, reason: 'start coords in water and no valid address', _debug });
+          }
+          await sleep(1100);
+        }
+      }
+
+      if (!centerLat || !centerLon) {
+        return Response.json({ tourId, updated: 0, reason: 'cannot determine property center' });
+      }
+
+      // Update tour start coords if we found a better center
+      if (tour.start_latitude && tour.start_longitude &&
+          (Math.abs(centerLat - tour.start_latitude) > 0.001 || Math.abs(centerLon - tour.start_longitude) > 0.001)) {
+        await base44.asServiceRole.entities.Tour.update(tourId, {
+          start_latitude: centerLat, start_longitude: centerLon,
         });
+      }
+
+      let features = [];
+      try {
+        features = await queryOverpass(centerLat, centerLon, 0.015);
+      } catch (e) {
+        console.error('Overpass query failed:', e.message);
+      }
+
+      for (const stop of stops) {
+        const feature = matchStopToFeature(stop.name, features);
+        if (feature) {
+          updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
+          matched.add(stop.id);
+        }
+      }
+
+      // Distribute unmatched stops in a grid around the center
+      const unmatched = stops.filter((s) => !matched.has(s.id));
+      if (unmatched.length > 0) {
+        const offsetDeg = 0.0006; // ~200 feet
+        const cols = Math.ceil(Math.sqrt(unmatched.length));
+        unmatched.forEach((stop, i) => {
+          const row = Math.floor(i / cols);
+          const col = i % cols;
+          updates.push({
+            id: stop.id,
+            latitude: centerLat + (row - (cols - 1) / 2) * offsetDeg,
+            longitude: centerLon + (col - (cols - 1) / 2) * offsetDeg,
+            geocoded: true,
+          });
+          matched.add(stop.id);
+        });
+      }
+
+      // Apply coordinate updates
+      if (updates.length > 0) {
+        await base44.asServiceRole.entities.TourStop.bulkUpdate(updates);
+      }
+
+      // Verify parking stop — move to center if too far or in water
+      const parkingStop = allStops.find(s => s.stop_type === 'parking');
+      if (parkingStop && parkingStop.latitude && parkingStop.longitude) {
+        const pDist = haversine(centerLat, centerLon, parkingStop.latitude, parkingStop.longitude);
+        let needsMove = pDist > 0.3;
+        if (!needsMove) {
+          const pRev = await reverseGeocode(parkingStop.latitude, parkingStop.longitude);
+          needsMove = !isOnLand(pRev);
+          await sleep(1100);
+        }
+        if (needsMove) {
+          await base44.asServiceRole.entities.TourStop.update(parkingStop.id, {
+            latitude: centerLat - 0.0004,
+            longitude: centerLon,
+            geocoded: true,
+          });
+        }
+      }
+
+    } else {
+      // === MULTI-SITE LOGIC (area/road_trip) ===
+      // Stops are at different properties — query Overpass for named features
+      // and match by name. Unmatched stops keep their existing coordinates
+      // (no grid distribution — they're at different real-world locations).
+
+      if (tour.tour_category === 'road_trip') {
+        // Per-stop queries for road trips (stops are far apart, single query
+        // can't cover them all)
+        for (const stop of stops) {
+          if (!stop.latitude || !stop.longitude) continue;
+          try {
+            const stopFeatures = await queryOverpass(stop.latitude, stop.longitude, 0.015);
+            const feature = matchStopToFeature(stop.name, stopFeatures);
+            if (feature) {
+              updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
+              matched.add(stop.id);
+            }
+          } catch (e) {
+            console.error(`Overpass query failed for stop "${stop.name}":`, e.message);
+          }
+          await sleep(1000);
+        }
+      } else {
+        // Area tour: single Overpass query covering all stops' bounding box
+        const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
+        let features = [];
+        if (withCoords.length === 0) {
+          if (tour.start_latitude && tour.start_longitude) {
+            try {
+              features = await queryOverpass(tour.start_latitude, tour.start_longitude, 0.03, 500);
+            } catch (e) {
+              console.error('Overpass query failed:', e.message);
+            }
+          }
+        } else {
+          const minLat = Math.min(...withCoords.map(s => s.latitude));
+          const maxLat = Math.max(...withCoords.map(s => s.latitude));
+          const minLon = Math.min(...withCoords.map(s => s.longitude));
+          const maxLon = Math.max(...withCoords.map(s => s.longitude));
+          const cLat = (minLat + maxLat) / 2;
+          const cLon = (minLon + maxLon) / 2;
+          const span = Math.max(maxLat - minLat, maxLon - minLon);
+          const radiusDeg = Math.max(0.02, span / 2 + 0.01);
+          try {
+            features = await queryOverpass(cLat, cLon, radiusDeg, 500);
+          } catch (e) {
+            console.error('Overpass query failed:', e.message);
+          }
+        }
+
+        for (const stop of stops) {
+          const feature = matchStopToFeature(stop.name, features);
+          if (feature) {
+            updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
+            matched.add(stop.id);
+          }
+        }
+      }
+
+      // Check for collapsed coordinates (multiple stops at same point).
+      // For any collapsed stops that didn't get an OSM match, try a wider
+      // per-stop name search across the city area.
+      const coordMap = {};
+      for (const s of stops) {
+        if (s.latitude == null || s.longitude == null) continue;
+        const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
+        if (!coordMap[key]) coordMap[key] = [];
+        coordMap[key].push(s);
+      }
+      const collapsedGroups = Object.values(coordMap).filter(g => g.length > 1);
+
+      if (collapsedGroups.length > 0 && tour.start_latitude && tour.start_longitude) {
+        // City-wide bounding box for wider name search
+        const cityBbox = `${(tour.start_latitude - 0.1).toFixed(6)},${(tour.start_longitude - 0.1).toFixed(6)},${(tour.start_latitude + 0.1).toFixed(6)},${(tour.start_longitude + 0.1).toFixed(6)}`;
+        for (const group of collapsedGroups) {
+          for (const stop of group) {
+            if (matched.has(stop.id)) continue;
+            const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
+            if (!cleanName || cleanName.length < 4) continue;
+            try {
+              const nameMatches = await queryOverpassByName(cleanName, cityBbox);
+              const feature = matchStopToFeature(stop.name, nameMatches);
+              if (feature) {
+                updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
+                matched.add(stop.id);
+              }
+            } catch (e) {
+              console.error(`Name search failed for "${stop.name}":`, e.message);
+            }
+            await sleep(1000);
+          }
+        }
+      }
+
+      // Apply coordinate updates
+      if (updates.length > 0) {
+        await base44.asServiceRole.entities.TourStop.bulkUpdate(updates);
       }
     }
 
-    // Step 6: Reorder stops by proximity and set travel methods
-    const updatedStops = stops.map((s) => {
-      const u = updates.find((x) => x.id === s.id);
-      return u ? { ...s, latitude: u.latitude, longitude: u.longitude } : s;
-    });
-    const ordered = orderStopsByProximity(updatedStops);
-    const WALK_LIMIT = 0.33;
-    const reorderUpdates = ordered.map((s, i) => {
-      let travel = 'walking';
-      if (i > 0) {
-        const prev = ordered[i - 1];
-        const dist = haversine(prev.latitude, prev.longitude, s.latitude, s.longitude);
-        travel = dist <= WALK_LIMIT ? 'walking' : 'driving';
-      }
-      return { id: s.id, stop_number: i + 1, travel_method: travel };
-    });
-    await base44.asServiceRole.entities.TourStop.bulkUpdate(reorderUpdates);
+    // === COMMON: Reorder stops by proximity and set travel methods ===
+    // Skip if user has manually reordered (respect their custom order)
+    if (!skipReorder) {
+      const updatedAllStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
+      const updatedStops = updatedAllStops.filter(s => s.stop_type !== 'parking');
+      const ordered = orderStopsByProximity(updatedStops);
+      const WALK_LIMIT = 0.33;
+      const reorderUpdates = ordered.map((s, i) => {
+        let travel = 'walking';
+        if (i > 0) {
+          const prev = ordered[i - 1];
+          const dist = haversine(prev.latitude, prev.longitude, s.latitude, s.longitude);
+          travel = dist <= WALK_LIMIT ? 'walking' : 'driving';
+        }
+        return { id: s.id, stop_number: i + 1, travel_method: travel };
+      });
+      await base44.asServiceRole.entities.TourStop.bulkUpdate(reorderUpdates);
 
-    // Update tour type if needed
-    const methods = new Set(reorderUpdates.map((u) => u.travel_method));
-    const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed'
-      : methods.has('driving') ? 'driving' : 'walking';
-    await base44.asServiceRole.entities.Tour.update(tourId, { tour_type: correctedType, user_reordered: false });
+      // Update tour type if needed
+      const methods = new Set(reorderUpdates.map((u) => u.travel_method));
+      const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed'
+        : methods.has('driving') ? 'driving' : 'walking';
+      await base44.asServiceRole.entities.Tour.update(tourId, { tour_type: correctedType, user_reordered: false });
+    }
 
     return Response.json({
       tourId,
       title: tour.title,
       matched: matched.size,
-      distributed: unmatched.length,
       total: stops.length,
-      featuresFound: features.length,
     });
   } catch (error) {
     console.error('fix-collapsed-coords error:', error);

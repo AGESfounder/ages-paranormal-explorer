@@ -29,7 +29,7 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 4;
+const STOPS_VALIDATION_VERSION = 5;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -140,11 +140,16 @@ export default function TourDetail() {
     }
     if (updates.length === 0) return;
 
-    // Merge corrected coordinates into the full stop list
-    const updatedStops = stopsList.map(s => {
-      const u = updates.find(x => x.id === s.id);
-      return u ? { ...s, latitude: u.lat, longitude: u.lon, geocoded: true } : s;
-    });
+    // Verify coordinates via Overpass API — corrects any collapsed/inaccurate
+    // Nominatim results by matching stops to real OSM features by name.
+    try {
+      await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered });
+    } catch (e) {
+      console.error('Overpass verification failed:', e);
+    }
+
+    // Reload stops with corrected coordinates
+    const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourData.id });
 
     // Re-order stops by proximity using the NOW-correct coordinates.
     // The initial ordering ran on stale/wrong LLM coordinates, so it must be
@@ -229,7 +234,7 @@ export default function TourDetail() {
       ]);
       setIsFavorite(favs.length > 0);
       if (completions.length > 0) { setIsCompleted(true); setConclusionRead(true); }
-      const tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+      let tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
       if (tourStops.length === 0) {
         await generateStops(tourData[0]);
       } else {
@@ -248,11 +253,24 @@ export default function TourDetail() {
             });
           } catch (e) { console.error('Parking migration failed:', e); }
         }
-        const tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking');
+        let tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking');
         // Auto-regenerate stops that don't comply with current guidelines
         // (outlier coordinates, collapsed markers). One-time per tour.
         let regenerated = false;
         if ((tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION) {
+          // First, verify coordinates via Overpass API for ALL tour types —
+          // corrects collapsed/inaccurate Nominatim coordinates by matching
+          // stops to real OSM features by name.
+          try {
+            await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData[0].user_reordered });
+          } catch (e) {
+            console.error('Overpass verification failed:', e);
+          }
+          // Reload stops with corrected coordinates
+          tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+          parkingStop = tourStops.find(s => s.stop_type === 'parking');
+          tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking');
+          // Now validate with corrected coordinates
           const validation = validateStops(tourStopsOnly, tourData[0]);
           if (!validation.compliant) {
             for (const s of tourStopsOnly) {
@@ -561,19 +579,16 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         } catch (e) { console.error('Parking stop creation failed:', e); }
       }
 
-      // For landmark/ship/cold_spot tours, verify coordinates via OpenStreetMap
-      // Overpass API — LLM-generated coordinates are unreliable (often in water
-      // or at wrong locations). Uses real mapped features for accuracy.
-      if (needsCoordVerification) {
-        try {
-          await base44.functions.invoke('fix-collapsed-coords', { tourId });
-          const verifiedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
-          setStops(verifiedStops.sort((a, b) => a.stop_number - b.stop_number));
-        } catch (e) {
-          console.error('Coordinate verification failed:', e);
-          setStops(created.sort((a, b) => a.stop_number - b.stop_number));
-        }
-      } else {
+      // Verify ALL tour types via Overpass API — corrects collapsed/inaccurate
+      // Nominatim coordinates by matching stops to real OSM features by name.
+      // For landmark/ship/cold_spot, also fixes water/land issues and
+      // distributes unmatched stops in a grid on the property.
+      try {
+        await base44.functions.invoke('fix-collapsed-coords', { tourId });
+        const verifiedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+        setStops(verifiedStops.sort((a, b) => a.stop_number - b.stop_number));
+      } catch (e) {
+        console.error('Coordinate verification failed:', e);
         setStops(created.sort((a, b) => a.stop_number - b.stop_number));
       }
       // New stops are unverified — drop the tour's verified status

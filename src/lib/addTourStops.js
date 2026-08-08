@@ -226,15 +226,12 @@ Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RUL
     await base44.entities.TourStop.bulkUpdate(updates);
   }
 
-  // For landmark/ship tours, verify all coordinates via OpenStreetMap Overpass
-  // API — LLM-generated coordinates for new stops may be in water or at wrong
-  // locations. This also reorders by proximity using verified coordinates.
-  if (isLandmarkOrShip) {
-    try {
-      await base44.functions.invoke('fix-collapsed-coords', { tourId: tour.id });
-    } catch (e) {
-      console.error('Coordinate verification failed (stops still added):', e);
-    }
+  // Verify ALL tour types via Overpass API — corrects collapsed/inaccurate
+  // Nominatim coordinates by matching stops to real OSM features by name.
+  try {
+    await base44.functions.invoke('fix-collapsed-coords', { tourId: tour.id, skipReorder: tour.user_reordered });
+  } catch (e) {
+    console.error('Coordinate verification failed (stops still added):', e);
   }
 
   // New stops are unverified — drop the tour's verified status
