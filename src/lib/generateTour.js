@@ -264,13 +264,14 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       }
     }
 
-    // CATEGORY CORRECTION: If all stops share the same street address, force
-    // to "landmark" (property) to prevent miscategorization.
+    // CATEGORY CORRECTION: If the user selected "landmark" and all stops
+    // share the same street address, confirm "landmark". Do NOT override an
+    // explicitly-chosen "area" or "road_trip" — the user knows they want
+    // multiple locations. If the LLM assigned same addresses to different
+    // locations, forcing "landmark" would cause fix-collapsed-coords to grid
+    // all stops around one point, placing them at the wrong locations.
     let correctedCategory = category;
-    // Don't override an explicitly-chosen cold_spot — its stops are expected
-    // to share one address, and reclassifying to 'landmark' would raise the
-    // minimum stop count from 1 to 5, blocking valid cold_spot creation.
-    if (validStops.length >= 2 && correctedCategory !== 'ship' && correctedCategory !== 'cold_spot') {
+    if (validStops.length >= 2 && correctedCategory === 'landmark') {
       const addrs = validStops.map((v) => normalizeAddr(v.s?.address)).filter(Boolean);
       if (addrs.length >= 2 && addrs.every((a) => a === addrs[0])) {
         correctedCategory = 'landmark';
