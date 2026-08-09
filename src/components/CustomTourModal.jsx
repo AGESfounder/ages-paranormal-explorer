@@ -39,7 +39,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
     setLoading(true);
 
     try {
-      const existing = await findExistingTour(dest, state, category, accessType);
+      const existing = await findExistingTour(dest, state, category, accessType, undefined, specificLocations);
       if (existing) {
         setExistingTour(existing);
         setLoading(false);

@@ -14,7 +14,7 @@ function normalizeStateName(state) {
   return s;
 }
 
-export async function findExistingTour(destination, state, category, accessType, city) {
+export async function findExistingTour(destination, state, category, accessType, city, specificLocations) {
   const normalizedState = normalizeStateName(state);
   // Normalize for comparison: lowercase + strip apostrophes/accents so
   // "Harper's Ferry" matches "Harpers Ferry" and "St. Louis" matches "St Louis".
@@ -22,6 +22,11 @@ export async function findExistingTour(destination, state, category, accessType,
   const destLower = norm(destination);
   const existingTours = await base44.entities.Tour.filter({ state: normalizedState });
   const normAccess = (t) => (t === 'exterior_only' ? 'exterior_only' : 'exterior_interior');
+  // If the user provided specific locations, they explicitly want stops that
+  // differ from any existing tour — skip city-level dedup so they can create
+  // a new area tour in a city that already has one (e.g., a bridge tour when a
+  // downtown walking tour already exists).
+  const hasSpecificLocations = specificLocations && specificLocations.trim().length > 0;
   return existingTours.find((t) => {
     // COLD SPOT REDUNDANCY RULE:
     // - Creating a Cold Spot: only block if an existing COLD SPOT tour matches
@@ -50,7 +55,7 @@ export async function findExistingTour(destination, state, category, accessType,
     // name itself — generateLocationTour doesn't have the city until after LLM
     // generation, so dest is the best proxy we have pre-generation). Only
     // applies to area-vs-area matches.
-    if (category === 'area' && t.tour_category === 'area') {
+    if (category === 'area' && t.tour_category === 'area' && !hasSpecificLocations) {
       const tCity = norm(t.city);
       if (tCity && ((city && tCity === norm(city)) || tCity === destLower)) {
         return true;
@@ -78,7 +83,7 @@ export async function generateLocationTour(destination, state, coords, category 
   // Pass the category so the Cold Spot redundancy rule is enforced (see
   // findExistingTour): Cold Spots only block other Cold Spots; non-Cold-Spots
   // ignore existing Cold Spots.
-  const existing = await findExistingTour(dest, state, category, accessType);
+  const existing = await findExistingTour(dest, state, category, accessType, undefined, specificLocations);
   if (existing) return existing;
 
   // CROSS-TOUR DEDUPLICATION: Fetch stops from existing tours in the same
