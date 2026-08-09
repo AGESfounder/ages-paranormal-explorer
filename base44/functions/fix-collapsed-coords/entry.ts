@@ -467,30 +467,10 @@ export default async function (req) {
       }
     }
 
-    // === COMMON: Reorder stops by proximity and set travel methods ===
-    // Skip if user has manually reordered (respect their custom order)
-    if (!skipReorder) {
-      const updatedAllStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
-      const updatedStops = updatedAllStops.filter(s => s.stop_type !== 'parking');
-      const ordered = orderStopsByProximity(updatedStops);
-      const WALK_LIMIT = 0.33;
-      const reorderUpdates = ordered.map((s, i) => {
-        let travel = 'walking';
-        if (i > 0) {
-          const prev = ordered[i - 1];
-          const dist = haversine(prev.latitude, prev.longitude, s.latitude, s.longitude);
-          travel = dist <= WALK_LIMIT ? 'walking' : 'driving';
-        }
-        return { id: s.id, stop_number: i + 1, travel_method: travel };
-      });
-      await base44.asServiceRole.entities.TourStop.bulkUpdate(reorderUpdates);
-
-      // Update tour type if needed
-      const methods = new Set(reorderUpdates.map((u) => u.travel_method));
-      const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed'
-        : methods.has('driving') ? 'driving' : 'walking';
-      await base44.asServiceRole.entities.Tour.update(tourId, { tour_type: correctedType, user_reordered: false });
-    }
+    // NOTE: Stop reordering is NOT done here. The frontend's enforceWalkingDistance
+    // is the single source of truth for stop order — it properly separates the
+    // walking cluster (near parking, first) from driving stops (at the end).
+    // Reordering here with orderStopsByProximity would undo that ordering.
 
     return Response.json({
       tourId,
