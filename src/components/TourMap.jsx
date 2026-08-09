@@ -76,7 +76,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   const medianLon = sortedLngs[Math.floor(sortedLngs.length / 2)];
   const maxDist = tour?.tour_category === 'road_trip' ? 200
     : (tour?.tour_category === 'cold_spot' || tour?.tour_category === 'ship') ? 0.5
-    : tour?.tour_category === 'area' ? 2.5
+    : tour?.tour_category === 'area' ? (tour?.tour_type === 'mixed' || tour?.tour_type === 'driving' ? 15 : 2.5)
     : 5;
   const haversine = (lat1, lon1, lat2, lon2) => {
     const R = 3958.8;
