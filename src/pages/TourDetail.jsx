@@ -29,7 +29,7 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 6;
+const STOPS_VALIDATION_VERSION = 7;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -574,6 +574,40 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
             deduped[i]._geocoded = true;
           }
         }
+      }
+
+      // COLLAPSE DETECTION: If address geocoding put multiple stops at the
+      // same point (common in tiny towns like Centralia where every address
+      // resolves to the same coordinates), fall back to web search to find
+      // each stop's real-world location — same approach as landmark tours.
+      const coordCounts = {};
+      for (const s of deduped) {
+        if (s.latitude != null && s.longitude != null) {
+          const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
+          coordCounts[key] = (coordCounts[key] || 0) + 1;
+        }
+      }
+      const hasCollapse = Object.values(coordCounts).some(c => c > 1);
+      if (hasCollapse) {
+        try {
+          const coordPrompt = `Look up the REAL GPS coordinates of each of these distinct locations in/near ${tourData.city}, ${tourData.state}. Each is a separate real-world place with its own coordinates — do NOT give them all the same coordinates. Search for each one individually.
+
+Stops:
+${deduped.map((s, i) => `${i + 1}. ${s.name} (${s.address})`).join('\n')}
+
+Return ONLY a JSON object with a "coordinates" array, each item having "name", "latitude", and "longitude". No markdown fences.`;
+          const coordResult = await callJson(coordPrompt, { useWeb: true });
+          if (coordResult && Array.isArray(coordResult.coordinates)) {
+            for (const item of coordResult.coordinates) {
+              const match = deduped.find(s => s.name === item.name || s.name.includes(item.name) || (item.name && item.name.includes(s.name)));
+              if (match && item.latitude != null && item.longitude != null) {
+                match.latitude = item.latitude;
+                match.longitude = item.longitude;
+                match._geocoded = true;
+              }
+            }
+          }
+        } catch (e) { console.error('Collapsed coordinate web search failed:', e); }
       }
 
       const created = [];
