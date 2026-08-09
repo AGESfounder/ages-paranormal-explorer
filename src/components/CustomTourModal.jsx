@@ -20,6 +20,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
   const [existingTour, setExistingTour] = useState(null);
   const [category, setCategory] = useState('');
   const [accessType, setAccessType] = useState('exterior_interior');
+  const [specificLocations, setSpecificLocations] = useState('');
   const navigate = useNavigate();
   const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
@@ -44,13 +45,14 @@ export default function CustomTourModal({ isOpen, onClose }) {
         setLoading(false);
         return;
       }
-      const newTour = await generateLocationTour(destination, state, undefined, category, accessType);
+      const newTour = await generateLocationTour(destination, state, undefined, category, accessType, specificLocations);
       spendManifestation();
       onClose();
       setDestination('');
       setState('');
       setCategory('');
       setAccessType('exterior_interior');
+      setSpecificLocations('');
       navigate(`/tour/${newTour.id}`);
     } catch (err) {
       console.error('Custom tour generation failed', err);
@@ -128,6 +130,22 @@ export default function CustomTourModal({ isOpen, onClose }) {
                 </label>
                 <TourCategoryPicker value={category} onChange={setCategory} />
               </div>
+
+              {(category === 'area' || category === 'road_trip') && (
+                <div>
+                  <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Specific Locations (Optional)
+                  </label>
+                  <textarea
+                    placeholder="e.g. Sachs Bridge, Eisenhower Bridge"
+                    value={specificLocations}
+                    onChange={e => setSpecificLocations(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors resize-none"
+                  />
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">List specific haunted locations you want included, separated by commas.</p>
+                </div>
+              )}
 
               {(category === 'cold_spot' || category === 'landmark') && (
                 <div>

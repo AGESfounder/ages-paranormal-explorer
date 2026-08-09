@@ -68,7 +68,7 @@ export async function findExistingTour(destination, state, category, accessType,
   }) || null;
 }
 
-export async function generateLocationTour(destination, state, coords, category = 'landmark', accessType) {
+export async function generateLocationTour(destination, state, coords, category = 'landmark', accessType, specificLocations) {
   const dest = destination.trim();
   const useCoords = coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
 
@@ -80,6 +80,40 @@ export async function generateLocationTour(destination, state, coords, category 
   // ignore existing Cold Spots.
   const existing = await findExistingTour(dest, state, category, accessType);
   if (existing) return existing;
+
+  // CROSS-TOUR DEDUPLICATION: Fetch stops from existing tours in the same
+  // area so we can tell the LLM to avoid them. Without this, the LLM picks
+  // the most popular haunted locations — which are likely already covered
+  // by other tours in the same city, creating duplicate stops across tours.
+  const norm = (s) => (s || '').toLowerCase().trim().replace(/[''`]/g, '').replace(/\./g, '');
+  const normalizedState = normalizeStateName(state);
+  const existingToursInState = await base44.entities.Tour.filter({ state: normalizedState });
+  const sameAreaTours = existingToursInState.filter(t =>
+    t.tour_category !== 'cold_spot' &&
+    (norm(t.city) === norm(dest) || norm(t.title).includes(norm(dest)) || norm(dest).includes(norm(t.city)))
+  );
+  const existingStopNames = new Set();
+  for (const t of sameAreaTours.slice(0, 5)) {
+    try {
+      const tStops = await base44.entities.TourStop.filter({ tour_id: t.id });
+      for (const s of tStops) {
+        if (s.stop_type !== 'parking' && s.name) {
+          existingStopNames.add(s.name.toLowerCase().trim());
+        }
+      }
+    } catch (e) { console.error('Failed to fetch stops for dedup:', e); }
+  }
+
+  // Build prompt sections for specific locations and existing stops
+  const specificLocationsList = specificLocations
+    ? specificLocations.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2)
+    : [];
+  const specificLocationsText = specificLocationsList.length > 0
+    ? `\nSPECIFIC LOCATIONS TO INCLUDE — FOLLOW EXACTLY: The user has specifically requested these locations be included as stops. You MUST include ALL of them:\n${specificLocationsList.map(s => `- ${s}`).join('\n')}\nThese are the PRIMARY stops the user wants. Fill the remaining stops with other haunted locations in the area that are NOT in the exclusion list below.\n`
+    : '';
+  const existingStopsText = existingStopNames.size > 0
+    ? `\nLOCATIONS ALREADY COVERED — DO NOT DUPLICATE: The following locations are already stops on other tours in this area. Do NOT include any of these as stops:\n${[...existingStopNames].slice(0, 25).map(n => `- ${n}`).join('\n')}\n`
+    : '';
 
   // Creation generates a LIGHTWEIGHT tour + stop skeletons. Full rich
   // historical/paranormal detail and notable people are generated lazily,
@@ -160,7 +194,7 @@ Use real locations and real coordinates for "${dest}". Keep every historical_inf
 ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations from existing ghost tour companies, walking tours, or tourism websites, you MUST find the ACTUAL STREET ADDRESS of each location independently. Do NOT copy a tour company's meeting point, starting location, or vague area description — tour companies often list only where their tour GROUPS MEET (e.g., "2nd & Market St") rather than the actual haunted building's address. For every stop, look up the real street address where the actual haunted building, landmark, or site is located (e.g., "43 Cape Henlopen Dr, Lewes, DE 19958" for the ferry terminal, NOT "Near the intersection of 2nd & Market"). The address must be the physical location of the haunted site itself, not a tour company's gathering point.
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
-
+${specificLocationsText}${existingStopsText}
 Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_PHRASE_RULE}${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a COLD SPOT tour, every stop uses these same coordinates (areas within one site). For a PROPERTY tour, use these as a reference but look up the ACTUAL distinct coordinates for each specific area/building within the property — each stop must reflect its real location within the site. For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
 
   // Coerce LLM output into the exact types/enums the schema expects. The LLM
@@ -217,6 +251,17 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       if (nameKey) seenStopNames.add(nameKey);
       if (dedupByAddr && addrKey) seenStopAddrs.add(addrKey);
       validStops.push(item);
+    }
+
+    // CROSS-TOUR DEDUPLICATION: Remove stops that match names already used
+    // on other tours in the same area. The LLM is told to avoid them, but
+    // this is a safety net in case it ignores the instruction.
+    if (existingStopNames && existingStopNames.size > 0) {
+      for (let i = validStops.length - 1; i >= 0; i--) {
+        if (existingStopNames.has(validStops[i].name.toLowerCase().trim())) {
+          validStops.splice(i, 1);
+        }
+      }
     }
 
     // CATEGORY CORRECTION: If all stops share the same street address, force
