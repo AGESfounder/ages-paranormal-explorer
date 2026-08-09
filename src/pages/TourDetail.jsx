@@ -281,12 +281,35 @@ export default function TourDetail() {
           // Now validate with corrected coordinates
           const validation = validateStops(tourStopsOnly, tourData[0]);
           if (!validation.compliant) {
-            for (const s of tourStops) {
-              await base44.entities.TourStop.delete(s.id);
+            // If an area tour's stops span too wide for a walkable cluster but
+            // are otherwise valid, reclassify as a road trip instead of
+            // regenerating — the LLM picked real haunted locations that are
+            // just spread out, and regenerating would likely produce the same
+            // spread.
+            if (tourData[0].tour_category === 'area') {
+              const roadTripCheck = validateStops(tourStopsOnly, { ...tourData[0], tour_category: 'road_trip' });
+              if (roadTripCheck.compliant) {
+                if (parkingStop) await base44.entities.TourStop.delete(parkingStop.id);
+                await base44.entities.Tour.update(tourId, { tour_category: 'road_trip', tour_type: 'driving', stops_regenerated: STOPS_VALIDATION_VERSION });
+                const reordered = orderStopsByProximity(tourStopsOnly);
+                for (let i = 0; i < reordered.length; i++) {
+                  await base44.entities.TourStop.update(reordered[i].id, { stop_number: i + 1, travel_method: 'driving' });
+                }
+                tourData[0].tour_category = 'road_trip';
+                tourData[0].tour_type = 'driving';
+                setTour({ ...tourData[0] });
+                setStops(reordered);
+                regenerated = true;
+              }
             }
-            await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
-            await generateStops(tourData[0], { systemRegen: true });
-            regenerated = true;
+            if (!regenerated) {
+              for (const s of tourStops) {
+                await base44.entities.TourStop.delete(s.id);
+              }
+              await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
+              await generateStops(tourData[0], { systemRegen: true });
+              regenerated = true;
+            }
           } else {
             await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
           }
