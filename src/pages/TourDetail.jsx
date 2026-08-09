@@ -235,6 +235,14 @@ export default function TourDetail() {
       setIsFavorite(favs.length > 0);
       if (completions.length > 0) { setIsCompleted(true); setConclusionRead(true); }
       let tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+      // Clean up duplicate parking stops (keep the first, delete the rest)
+      const allParking = tourStops.filter(s => s.stop_type === 'parking');
+      if (allParking.length > 1) {
+        for (let i = 1; i < allParking.length; i++) {
+          await base44.entities.TourStop.delete(allParking[i].id);
+        }
+        tourStops = tourStops.filter(s => !allParking.slice(1).some(p => p.id === s.id));
+      }
       if (tourStops.length === 0) {
         await generateStops(tourData[0]);
       } else {
@@ -273,7 +281,7 @@ export default function TourDetail() {
           // Now validate with corrected coordinates
           const validation = validateStops(tourStopsOnly, tourData[0]);
           if (!validation.compliant) {
-            for (const s of tourStopsOnly) {
+            for (const s of tourStops) {
               await base44.entities.TourStop.delete(s.id);
             }
             await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
