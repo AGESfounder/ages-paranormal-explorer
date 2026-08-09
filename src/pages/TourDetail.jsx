@@ -63,23 +63,52 @@ function validateStops(stops, tour) {
   for (const [key, count] of Object.entries(coordMap)) {
     if (count > 1) return { compliant: false, reason: `${count} stops collapsed at same coordinates` };
   }
-  // For area tours, check that no consecutive stops (after proximity
-  // ordering) are more than 1 mile apart, AND that the total route distance
-  // is no more than 2.5 miles — the goal is a walkable local cluster.
+  // For area tours, only validate the WALKING CLUSTER — the stops that form
+  // a connected component within 0.33 miles of each other. Driving stops in
+  // a mixed tour can be miles away and should NOT cause the tour to fail
+  // validation. This allows mixed area tours (walk a downtown cluster, then
+  // drive to spread-out locations). If there's no walking cluster at all,
+  // the tour doesn't work as an area tour and should be regenerated.
   if (tour.tour_category === 'area') {
     const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
     if (withCoords.length >= 2) {
-      const ordered = orderStopsByProximity(withCoords);
+      const WALKING_LIMIT = 0.33;
+      const visited = new Array(withCoords.length).fill(false);
+      const components = [];
+      for (let i = 0; i < withCoords.length; i++) {
+        if (visited[i]) continue;
+        const comp = [];
+        const queue = [i];
+        let head = 0;
+        visited[i] = true;
+        while (head < queue.length) {
+          const idx = queue[head++];
+          comp.push(withCoords[idx]);
+          for (let j = 0; j < withCoords.length; j++) {
+            if (!visited[j]) {
+              const d = haversineDistance(withCoords[idx].latitude, withCoords[idx].longitude, withCoords[j].latitude, withCoords[j].longitude);
+              if (d <= WALKING_LIMIT) { visited[j] = true; queue.push(j); }
+            }
+          }
+        }
+        components.push(comp);
+      }
+      components.sort((a, b) => b.length - a.length);
+      const walkingCluster = components[0] && components[0].length > 1 ? components[0] : [];
+      if (walkingCluster.length < 2) {
+        return { compliant: false, reason: 'no walkable cluster found (all stops are too far apart for an area tour)' };
+      }
+      const ordered = orderStopsByProximity(walkingCluster);
       let totalDist = 0;
       for (let i = 1; i < ordered.length; i++) {
         const dist = haversineDistance(ordered[i - 1].latitude, ordered[i - 1].longitude, ordered[i].latitude, ordered[i].longitude);
         totalDist += dist;
         if (dist > 1) {
-          return { compliant: false, reason: `stops are ${dist.toFixed(1)} miles apart (max 1 mile for area tours)` };
+          return { compliant: false, reason: `walking stops are ${dist.toFixed(1)} miles apart` };
         }
       }
       if (totalDist > 2.5) {
-        return { compliant: false, reason: `total route is ${totalDist.toFixed(1)} miles (max 2.5 miles for area tours)` };
+        return { compliant: false, reason: `walking route is ${totalDist.toFixed(1)} miles` };
       }
     }
   }
@@ -281,35 +310,12 @@ export default function TourDetail() {
           // Now validate with corrected coordinates
           const validation = validateStops(tourStopsOnly, tourData[0]);
           if (!validation.compliant) {
-            // If an area tour's stops span too wide for a walkable cluster but
-            // are otherwise valid, reclassify as a road trip instead of
-            // regenerating — the LLM picked real haunted locations that are
-            // just spread out, and regenerating would likely produce the same
-            // spread.
-            if (tourData[0].tour_category === 'area') {
-              const roadTripCheck = validateStops(tourStopsOnly, { ...tourData[0], tour_category: 'road_trip' });
-              if (roadTripCheck.compliant) {
-                if (parkingStop) await base44.entities.TourStop.delete(parkingStop.id);
-                await base44.entities.Tour.update(tourId, { tour_category: 'road_trip', tour_type: 'driving', stops_regenerated: STOPS_VALIDATION_VERSION });
-                const reordered = orderStopsByProximity(tourStopsOnly);
-                for (let i = 0; i < reordered.length; i++) {
-                  await base44.entities.TourStop.update(reordered[i].id, { stop_number: i + 1, travel_method: 'driving' });
-                }
-                tourData[0].tour_category = 'road_trip';
-                tourData[0].tour_type = 'driving';
-                setTour({ ...tourData[0] });
-                setStops(reordered);
-                regenerated = true;
-              }
+            for (const s of tourStops) {
+              await base44.entities.TourStop.delete(s.id);
             }
-            if (!regenerated) {
-              for (const s of tourStops) {
-                await base44.entities.TourStop.delete(s.id);
-              }
-              await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
-              await generateStops(tourData[0], { systemRegen: true });
-              regenerated = true;
-            }
+            await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
+            await generateStops(tourData[0], { systemRegen: true });
+            regenerated = true;
           } else {
             await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
           }
