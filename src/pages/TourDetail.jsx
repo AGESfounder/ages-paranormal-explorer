@@ -623,7 +623,20 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       try {
         await base44.functions.invoke('fix-collapsed-coords', { tourId });
         const verifiedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
-        setStops(verifiedStops.sort((a, b) => a.stop_number - b.stop_number));
+        // Re-run enforceWalkingDistance on the corrected coordinates —
+        // fix-collapsed-coords may have moved stops to their real-world
+        // positions, so the original order (from LLM coords) may no longer
+        // be optimal. This ensures walking cluster stays first, driving last.
+        const vParking = verifiedStops.find(s => s.stop_type === 'parking');
+        const vTourStops = verifiedStops.filter(s => s.stop_type !== 'parking');
+        const reordered = enforceWalkingDistance(vTourStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude });
+        for (const s of reordered) {
+          const existing = vTourStops.find(ts => ts.id === s.id);
+          if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
+            await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
+          }
+        }
+        setStops([...(vParking ? [vParking] : []), ...reordered]);
       } catch (e) {
         console.error('Coordinate verification failed:', e);
         setStops(created.sort((a, b) => a.stop_number - b.stop_number));
