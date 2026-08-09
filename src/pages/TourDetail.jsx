@@ -448,10 +448,7 @@ Output ONLY valid JSON. No markdown fences.`;
     setGeneratingStops(true);
     setStopsError('');
     try {
-      const needsCoordVerification = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
-      const coordInstruction = needsCoordVerification
-        ? '\nCOORDINATES — CRITICAL: EACH stop must have its OWN distinct, real GPS coordinates. Look up the actual GPS coordinates of that specific area/building/room within the property or vessel using web search (e.g., search "Battery 519 Fort Miles Lewes DE" to find its real location). Do NOT use the same coordinates for all stops — each area within the property has a different real-world location. The address is the same for all stops, but the coordinates must be different for each.'
-        : '';
+      const coordInstruction = '\nCOORDINATES — CRITICAL: Look up the REAL GPS coordinates of each stop using web search. Each stop is a distinct real-world location with its own coordinates — do NOT use the same coordinates for multiple stops. Search for each location individually (e.g., "Graffiti Highway Centralia PA coordinates") to find its actual GPS position.';
       const prompt = `Generate 8-10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
 ${coordInstruction}
 Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand when a user opens the stop, so keep these fields brief:
@@ -503,11 +500,11 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
 
       let result = null;
       try {
-        result = await callJson(prompt, { useWeb: needsCoordVerification });
+        result = await callJson(prompt, { useWeb: true });
       } catch (e) { console.error('Stop generation failed:', e); }
       if (!result || !result.stops || result.stops.length === 0) {
         try {
-          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: needsCoordVerification });
+          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: true });
         } catch (e) { console.error('Stop generation (concise) failed:', e); }
       }
       if (!result || !result.stops || result.stops.length === 0) {
@@ -551,63 +548,12 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         deduped[i].narration_text = stripConclusionOpeners(deduped[i].narration_text, i === lastIdx);
         deduped[i].paranormal_info = stripConclusionOpeners(deduped[i].paranormal_info, i === lastIdx);
       }
-      if (needsCoordVerification) {
-        // For landmark/ship/cold_spot tours, trust the LLM's web-searched
-        // coordinates — address geocoding would collapse all stops to one
-        // point since they share the same street address. Coordinates are
-        // verified via Overpass API after creation (fix-collapsed-coords).
-        for (const stop of deduped) {
-          stop._geocoded = true;
-        }
-      } else {
-        // Geocode stops for accurate GPS coordinates using enhanced multi-strategy
-        // geocoding (name + address + city/state) — finds actual landmarks
-        const stopsForGeocoding = deduped.map((s, i) => ({
-          id: `temp_${i}`, name: s.name, address: s.address, city: tourData.city, state: tourData.state
-        }));
-        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: tourData.tour_category === 'road_trip' ? 200 : (tourData.tour_category === 'cold_spot' || tourData.tour_category === 'ship') ? 0.5 : tourData.tour_category === 'area' ? 2.5 : 5, clusterRadius: tourData.tour_category === 'area' ? 0.5 : (tourData.tour_category === 'cold_spot' || tourData.tour_category === 'ship') ? 0.3 : null }) : {};
-        for (let i = 0; i < deduped.length; i++) {
-          const geo = geocodeMap[`temp_${i}`];
-          if (geo) {
-            deduped[i].latitude = geo.lat;
-            deduped[i].longitude = geo.lon;
-            deduped[i]._geocoded = true;
-          }
-        }
-      }
-
-      // COLLAPSE DETECTION: If address geocoding put multiple stops at the
-      // same point (common in tiny towns like Centralia where every address
-      // resolves to the same coordinates), fall back to web search to find
-      // each stop's real-world location — same approach as landmark tours.
-      const coordCounts = {};
-      for (const s of deduped) {
-        if (s.latitude != null && s.longitude != null) {
-          const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
-          coordCounts[key] = (coordCounts[key] || 0) + 1;
-        }
-      }
-      const hasCollapse = Object.values(coordCounts).some(c => c > 1);
-      if (hasCollapse) {
-        try {
-          const coordPrompt = `Look up the REAL GPS coordinates of each of these distinct locations in/near ${tourData.city}, ${tourData.state}. Each is a separate real-world place with its own coordinates — do NOT give them all the same coordinates. Search for each one individually.
-
-Stops:
-${deduped.map((s, i) => `${i + 1}. ${s.name} (${s.address})`).join('\n')}
-
-Return ONLY a JSON object with a "coordinates" array, each item having "name", "latitude", and "longitude". No markdown fences.`;
-          const coordResult = await callJson(coordPrompt, { useWeb: true });
-          if (coordResult && Array.isArray(coordResult.coordinates)) {
-            for (const item of coordResult.coordinates) {
-              const match = deduped.find(s => s.name === item.name || s.name.includes(item.name) || (item.name && item.name.includes(s.name)));
-              if (match && item.latitude != null && item.longitude != null) {
-                match.latitude = item.latitude;
-                match.longitude = item.longitude;
-                match._geocoded = true;
-              }
-            }
-          }
-        } catch (e) { console.error('Collapsed coordinate web search failed:', e); }
+      // Trust the LLM's web-searched coordinates — the LLM looks up each
+      // stop's real GPS position via web search, so no address geocoding
+      // or collapse detection is needed. Overpass API (fix-collapsed-coords)
+      // runs after creation as a safety net.
+      for (const stop of deduped) {
+        stop._geocoded = true;
       }
 
       const created = [];
@@ -625,25 +571,15 @@ Return ONLY a JSON object with a "coordinates" array, each item having "name", "
       // parking at all, create one at the tour's start location.
       if (tourData.tour_type !== 'driving') {
         const p = result.parking || {};
-        let pLat = tourData.start_latitude;
-        let pLon = tourData.start_longitude;
-        let pName = p.parking_name || 'Parking Area';
-        let pAddr = p.parking_address || tourData.start_location_name || '';
-        let pType = p.parking_type || 'street';
-        let pCost = p.parking_cost || 'Free';
-        if (p.parking_address) {
-          const geoMap = await geocodeStopsWithNames([{
-            id: 'parking', name: p.parking_name, address: p.parking_address,
-            city: tourData.city, state: tourData.state
-          }], { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: 0.5, clusterRadius: 0.3 });
-          if (geoMap.parking) { pLat = geoMap.parking.lat; pLon = geoMap.parking.lon; }
-        }
         try {
           const parkingStopRecord = await base44.entities.TourStop.create({
             tour_id: tourId, stop_type: 'parking', stop_number: 0,
-            name: pName, address: pAddr,
-            latitude: pLat, longitude: pLon,
-            parking_type: pType, parking_cost: pCost,
+            name: p.parking_name || 'Parking Area',
+            address: p.parking_address || tourData.start_location_name || '',
+            latitude: p.parking_latitude || tourData.start_latitude,
+            longitude: p.parking_longitude || tourData.start_longitude,
+            parking_type: p.parking_type || 'street',
+            parking_cost: p.parking_cost || 'Free',
             travel_method: 'walking', geocoded: true,
           });
           created.push(parkingStopRecord);
