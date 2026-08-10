@@ -338,12 +338,17 @@ export default async function (req) {
         // and GPS databases.
         for (const stop of unmatched) {
           const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
-          const prompt = `Search the web for the EXACT GPS coordinates of this specific location:
+          const isSameStructure = stop.same_structure === true;
+          const structureNote = isSameStructure
+            ? `\nThis stop is a ROOM or AREA WITHIN a single building/structure (same_structure: true). It is CORRECT for it to share the building's coordinates — multiple stops inside the same building stack at the same point on the map. Search for the BUILDING's real GPS coordinates and return those. Do NOT try to find separate coordinates for this individual room.`
+            : `\nThis stop is a DISTINCT building or structure on the property (same_structure: false). The coordinates must be the REAL location of "${cleanName}", not the property's general location. Search for this specific structure's coordinates.`;
+          const prompt = `Search the web for the EXACT GPS coordinates of this location:
 
 "${cleanName}"
 within "${tour.title}" at ${tour.start_location_name || tour.city || ''}, ${tour.state}.
+${structureNote}
 
-This is a distinct area, building, or structure within a single property (fort, park, asylum, ship, cemetery, etc.). Search for its exact coordinates using:
+Search for its coordinates using:
 - Official park/site maps (e.g., "${cleanName} ${tour.state} map GPS")
 - Historical registry listings (National Register of Historic Places)
 - Wikipedia articles with coordinates
@@ -353,8 +358,7 @@ This is a distinct area, building, or structure within a single property (fort, 
 
 CRITICAL RULES:
 1. Do NOT estimate, guess, or approximate. Only return coordinates you actually found via web search.
-2. The coordinates must be the REAL location of "${cleanName}", not the property's general location.
-3. If you cannot find the real coordinates via web search, return found: false. Do NOT guess.
+2. If you cannot find the real coordinates via web search, return found: false. Do NOT guess.
 
 Return a JSON object with:
 - found: true/false

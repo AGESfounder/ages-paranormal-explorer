@@ -29,7 +29,7 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 11;
+const STOPS_VALIDATION_VERSION = 12;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -453,7 +453,7 @@ Output ONLY valid JSON. No markdown fences.`;
     try {
       const needsCoordVerification = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
       const coordInstruction = needsCoordVerification
-        ? '\nCOORDINATES — CRITICAL: EACH stop must have its OWN distinct, real GPS coordinates. Look up the actual GPS coordinates of that specific area/building/room within the property or vessel using web search (e.g., search "Battery 519 Fort Miles Lewes DE" to find its real location). Do NOT use the same coordinates for all stops — each area within the property has a different real-world location. The address is the same for all stops, but the coordinates must be different for each.'
+        ? '\nCOORDINATES — CRITICAL: Look up the REAL GPS coordinates of each stop using web search. There are two cases:\n- DIFFERENT BUILDINGS/STRUCTURES on the property (e.g., separate buildings at Pennhurst Asylum, separate batteries at a fort): each MUST have its OWN distinct, real GPS coordinates. Search for each one individually (e.g., "Battery 519 Fort Miles Lewes DE").\n- ROOMS/AREAS WITHIN A SINGLE BUILDING (e.g., rooms in the Farnsworth House, floors of the Anthracite Hotel, Andy Gavin\'s mansion rooms): these stops SHOULD share the SAME coordinates — the building\'s real GPS coordinates. Set same_structure: true for these stops. It is CORRECT for them to stack at the same point on the map — they are all inside one structure.\nDo NOT invent fake distinct coordinates for rooms within one building. If all stops are inside the same building, they all get that building\'s real coordinates with same_structure: true.'
         : '\nCOORDINATES — Look up the REAL GPS coordinates of each stop using web search. Do NOT guess or estimate coordinates from training data — search for each location individually to find its actual coordinates. Each stop must have its own real coordinates at its real address.';
       const prompt = `Generate 8-10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
 ${coordInstruction}
