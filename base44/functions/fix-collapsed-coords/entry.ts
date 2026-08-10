@@ -235,6 +235,7 @@ export default async function (req) {
     const body = await req.json();
     const tourId = body.tourId;
     const skipReorder = body.skipReorder || false;
+    const verifyAll = body.verifyAll || false;
     if (!tourId) return Response.json({ error: 'tourId required' }, { status: 400 });
 
     const tour = await base44.asServiceRole.entities.Tour.get(tourId);
@@ -451,8 +452,9 @@ Return a JSON object with:
         }
       }
 
-      // Only fix collapsed stops or stops missing coordinates
-      const needsFix = stops.filter(s =>
+      // Only fix collapsed stops or stops missing coordinates — unless
+      // verifyAll is true, in which case verify ALL stops via web search.
+      const needsFix = verifyAll ? stops.filter(s => s.latitude != null && s.longitude != null) : stops.filter(s =>
         collapsedStopIds.has(s.id) ||
         s.latitude == null || s.longitude == null
       );
@@ -478,7 +480,9 @@ Return a JSON object with:
           }
         } else {
           // Area tour: try address geocoding FIRST (physical address is most
-          // accurate), then fall back to OSM name search if geocoding fails
+          // accurate), then OSM name search, then LLM web search as a final
+          // fallback. When verifyAll is true, every stop goes through this
+          // pipeline to confirm or correct its coordinates.
           for (const stop of needsFix) {
             let fixed = false;
             // Step 1: Geocode the stop's physical address
@@ -513,12 +517,71 @@ Return a JSON object with:
                   if (feature) {
                     updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
                     matched.add(stop.id);
+                    fixed = true;
                   }
                 } catch (e) {
                   console.error(`Name search failed for "${stop.name}":`, e.message);
                 }
                 await sleep(1000);
               }
+            }
+            // Step 3: Final fallback — LLM web search for the exact location
+            if (!fixed) {
+              const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
+              const prompt = `Search the web for the EXACT GPS coordinates of this specific location:
+
+"${cleanName}"
+${stop.address ? `Address: ${stop.address}` : ''}
+in ${tour.city || ''}, ${tour.state}.
+
+Search for its exact coordinates using:
+- Google Maps / OpenStreetMap listings for "${cleanName} ${tour.city || ''} ${tour.state}"
+- Wikipedia articles with coordinates
+- Historical registry listings (National Register of Historic Places)
+- Cemetery/landmark databases
+- Local tourism or historical society documents
+
+CRITICAL RULES:
+1. Do NOT estimate, guess, or approximate. Only return coordinates you actually found via web search.
+2. The coordinates must be the REAL location of "${cleanName}", not the town's general location.
+3. If you cannot find the real coordinates via web search, return found: false. Do NOT guess.
+
+Return a JSON object with:
+- found: true/false
+- latitude: (number, only if found)
+- longitude: (number, only if found)
+- source: brief description of where you found the coordinates (only if found)`;
+              try {
+                const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
+                  prompt,
+                  add_context_from_internet: true,
+                  model: 'gemini_3_flash',
+                  response_json_schema: {
+                    type: 'object',
+                    properties: {
+                      found: { type: 'boolean' },
+                      latitude: { type: 'number' },
+                      longitude: { type: 'number' },
+                      source: { type: 'string' },
+                    },
+                  },
+                });
+                if (llmResult.found && llmResult.latitude != null && llmResult.longitude != null) {
+                  // Sanity check: coordinate must be within 5 miles of tour start
+                  const dist = haversine(tour.start_latitude, tour.start_longitude, llmResult.latitude, llmResult.longitude);
+                  if (dist <= 5) {
+                    updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true });
+                    matched.add(stop.id);
+                    fixed = true;
+                  }
+                }
+              } catch (e) {
+                console.error(`LLM search failed for "${stop.name}":`, e.message);
+              }
+            }
+            // If still not fixed, mark as unverified (geocoded: false)
+            if (!fixed) {
+              updates.push({ id: stop.id, geocoded: false });
             }
           }
         }
