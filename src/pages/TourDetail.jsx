@@ -29,7 +29,7 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 8;
+const STOPS_VALIDATION_VERSION = 9;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -37,6 +37,27 @@ const STOPS_VALIDATION_VERSION = 8;
 // - No two stops should share identical coordinates (collapsed markers)
 function validateStops(stops, tour) {
   if (!stops || stops.length === 0) return { compliant: false, reason: 'no stops' };
+  // Stop count check — max 10 stops (cold_spot allows 1-4)
+  const maxStops = tour.tour_category === 'cold_spot' ? 4 : 10;
+  if (stops.length > maxStops) {
+    return { compliant: false, reason: `${stops.length} stops (max ${maxStops} for ${tour.tour_category})` };
+  }
+  // Duplicate name detection — fuzzy match (one normalized name contains
+  // another). Catches near-duplicates like "Frederick City Hall" vs
+  // "Frederick City Hall Main Floor" that slip through exact-match dedup.
+  const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+  const stopNames = stops.map(s => normName(s.name)).filter(n => n.length > 0);
+  for (let i = 0; i < stopNames.length; i++) {
+    for (let j = i + 1; j < stopNames.length; j++) {
+      if (stopNames[i] === stopNames[j]) {
+        return { compliant: false, reason: `duplicate stop: "${stops[i].name}"` };
+      }
+      if (stopNames[i].length >= 8 && stopNames[j].length >= 8 &&
+          (stopNames[i].includes(stopNames[j]) || stopNames[j].includes(stopNames[i]))) {
+        return { compliant: false, reason: `near-duplicate stops: "${stops[i].name}" / "${stops[j].name}"` };
+      }
+    }
+  }
   const maxDistMiles = tour.tour_category === 'road_trip' ? 200
     : (tour.tour_category === 'cold_spot' || tour.tour_category === 'ship') ? 0.5
     : tour.tour_category === 'area' ? 2.5
