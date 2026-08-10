@@ -330,86 +330,69 @@ export default async function (req) {
       // them with fake grid points.
       const unmatched = stops.filter((s) => !matched.has(s.id));
       if (unmatched.length > 0) {
-        let llmCoords = [];
-        try {
-          const stopList = unmatched.map((s, i) => `${i + 1}. ${s.name.replace(/\s*\([^)]*\)\s*/g, '').trim()}`).join('\n');
-          const prompt = `Search the web for the EXACT GPS coordinates of each of these specific locations within "${tour.title}" at ${tour.start_location_name || tour.city || ''}, ${tour.state}. These are distinct areas, buildings, or structures within a single property (fort, park, asylum, ship, etc.).
+        // Per-stop LLM web search — give the LLM full focus on each location
+        // individually. A single batch search often misses stops because the
+        // LLM can't give each one enough attention. Per-stop searches find
+        // far more real coordinates from park maps, historical registries,
+        // and GPS databases.
+        for (const stop of unmatched) {
+          const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
+          const prompt = `Search the web for the EXACT GPS coordinates of this specific location:
 
-For EACH location, search for its exact coordinates using:
-- Official park/site maps (e.g., "Fort Miles map GPS coordinates")
+"${cleanName}"
+within "${tour.title}" at ${tour.start_location_name || tour.city || ''}, ${tour.state}.
+
+This is a distinct area, building, or structure within a single property (fort, park, asylum, ship, cemetery, etc.). Search for its exact coordinates using:
+- Official park/site maps (e.g., "${cleanName} ${tour.state} map GPS")
 - Historical registry listings (National Register of Historic Places)
 - Wikipedia articles with coordinates
-- OpenStreetMap or Google Maps listings
+- OpenStreetMap or Google Maps listings for "${cleanName} ${tour.city || ''} ${tour.state}"
 - Historical preservation society documents
+- Fort/park brochures with labeled maps
 
 CRITICAL RULES:
-1. Do NOT estimate, guess, or approximate. Only return coordinates you found via web search.
-2. Each location MUST have DIFFERENT coordinates — they are distinct physical spots.
-3. If you cannot find a location's REAL coordinates via web search, OMIT it entirely. Returning nothing is better than returning a guess.
-4. Search for EACH location individually — do not batch-assume coordinates.
+1. Do NOT estimate, guess, or approximate. Only return coordinates you actually found via web search.
+2. The coordinates must be the REAL location of "${cleanName}", not the property's general location.
+3. If you cannot find the real coordinates via web search, return found: false. Do NOT guess.
 
-Locations:
-${stopList}
-
-Return a JSON object with a "coordinates" array, each item having "name" (the location name), "latitude", and "longitude" (real GPS coordinates found via web search). Omit any location you could not find.`;
-          const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
-            prompt,
-            add_context_from_internet: true,
-            model: 'gemini_3_flash',
-            response_json_schema: {
-              type: 'object',
-              properties: {
-                coordinates: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      name: { type: 'string' },
-                      latitude: { type: 'number' },
-                      longitude: { type: 'number' },
-                    },
-                  },
+Return a JSON object with:
+- found: true/false
+- latitude: (number, only if found)
+- longitude: (number, only if found)
+- source: brief description of where you found the coordinates (only if found)`;
+          try {
+            const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
+              prompt,
+              add_context_from_internet: true,
+              model: 'gemini_3_flash',
+              response_json_schema: {
+                type: 'object',
+                properties: {
+                  found: { type: 'boolean' },
+                  latitude: { type: 'number' },
+                  longitude: { type: 'number' },
+                  source: { type: 'string' },
                 },
               },
-            },
-          });
-          llmCoords = llmResult.coordinates || [];
-        } catch (e) {
-          console.error('LLM coordinate search failed:', e.message);
-        }
-
-        // Apply LLM-found coordinates to unmatched stops
-        const stillUnmatched = [];
-        for (const stop of unmatched) {
-          const cleanStopName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim().toLowerCase();
-          const llmMatch = llmCoords.find(c => {
-            if (c.latitude == null || c.longitude == null) return false;
-            const cleanCName = String(c.name || '').toLowerCase().trim();
-            return cleanCName === cleanStopName ||
-              cleanStopName.includes(cleanCName) || cleanCName.includes(cleanStopName);
-          });
-          if (llmMatch) {
-            // Sanity check: coordinate must be within 1 mile of property center
-            const dist = haversine(centerLat, centerLon, llmMatch.latitude, llmMatch.longitude);
-            if (dist <= 1) {
-              updates.push({ id: stop.id, latitude: llmMatch.latitude, longitude: llmMatch.longitude, geocoded: true });
-              matched.add(stop.id);
-              continue;
+            });
+            if (llmResult.found && llmResult.latitude != null && llmResult.longitude != null) {
+              // Sanity check: coordinate must be within 1 mile of property center
+              const dist = haversine(centerLat, centerLon, llmResult.latitude, llmResult.longitude);
+              if (dist <= 1) {
+                updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true });
+                matched.add(stop.id);
+              } else {
+                // Out of range — likely a wrong match. Don't use it.
+                updates.push({ id: stop.id, geocoded: false });
+              }
+            } else {
+              // LLM couldn't find it — don't guess. Mark unverified.
+              updates.push({ id: stop.id, geocoded: false });
             }
+          } catch (e) {
+            console.error(`Per-stop LLM search failed for "${stop.name}":`, e.message);
+            updates.push({ id: stop.id, geocoded: false });
           }
-          stillUnmatched.push(stop);
-        }
-
-        // For stops the LLM couldn't find: do NOT guess. Leave the stop's
-        // existing coordinates untouched and mark geocoded: false so it's
-        // clear the coordinates are unverified. The user can manually verify
-        // or drag the marker to the real spot. No center placement, no grid —
-        // no guessing.
-        for (const stop of stillUnmatched) {
-          updates.push({
-            id: stop.id,
-            geocoded: false,
-          });
         }
       }
 
