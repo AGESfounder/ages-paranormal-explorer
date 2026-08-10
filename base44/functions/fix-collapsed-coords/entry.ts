@@ -381,10 +381,18 @@ export default async function (req) {
         if (!coordMap[key]) coordMap[key] = [];
         coordMap[key].push(s);
       }
+      // Collapse detection — same_structure aware. Skip groups where ALL stops
+      // are same_structure: true (rooms/areas within one building legitimately
+      // share coordinates). Only flag as collapsed if at least one stop is NOT
+      // same_structure, indicating distinct buildings that were wrongly placed
+      // at the same point.
       const collapsedStopIds = new Set();
       for (const group of Object.values(coordMap)) {
         if (group.length > 1) {
-          for (const s of group) collapsedStopIds.add(s.id);
+          const allSameStructure = group.every(s => s.same_structure === true);
+          if (!allSameStructure) {
+            for (const s of group) collapsedStopIds.add(s.id);
+          }
         }
       }
 

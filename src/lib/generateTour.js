@@ -182,6 +182,7 @@ PLUS a "stops" array (${category === 'cold_spot' ? '1-4 stops' : '8-10 stops'}) 
 - latitude: real coordinates (number) — EACH stop must have its OWN distinct, real GPS coordinates. For a PROPERTY tour, look up the actual coordinates of that specific area/building within the property (e.g., search "Battery 519 Fort Miles Lewes DE") — do NOT use the same coordinates for all stops. For AREA or ROAD TRIP tours, each stop has its own real coordinates at its own address.
 - longitude: real coordinates (number)
 - address: ALWAYS a COMPLETE STREET ADDRESS with a street number (e.g. "123 Main St, Lewes, DE 19958"). For a PROPERTY tour, the full street address of "${dest}" (same for all stops); for AREA or ROAD TRIP tours, each stop's own real street address. NEVER use just a city name, an intersection ("X & Y"), or "near"/"vicinity". Must be GPS-searchable — typeable into Google Maps and arriving at the exact location.
+- same_structure: true if this stop is a room, area, or section WITHIN a single building or vessel (rooms in the Farnsworth House, decks on a ship, different areas of one cemetery); false if it is its own distinct building or structure on the property (separate buildings at Pennhurst Asylum, separate batteries at a fort). For AREA and ROAD TRIP tours, always false since each stop is a different property.
 - historical_info: 2-3 sentences summarizing the key history (construction dates, notable figures, major events). Brief summary only.
 - paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
 - investigation_suggestions: 3-5 specific items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
@@ -332,6 +333,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       travel_method: normEnum(s.travel_method, ['walking', 'driving'], 'walking'),
       hours_of_operation: toStr(s.hours_of_operation),
       entry_fee: toStr(s.entry_fee),
+      same_structure: s.same_structure === true,
       geocoded: isLandmarkOrShip,
     }));
 

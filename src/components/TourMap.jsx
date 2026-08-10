@@ -50,6 +50,22 @@ function makeStopIcon(stopNumber) {
   });
 }
 
+// Stacked marker for same_structure stops sharing identical coordinates
+// (rooms in one building, decks on a ship). Shows the first stop's number
+// with a purple count badge indicating how many stops are at this location.
+function makeStackedIcon(stopNumber, count) {
+  return new L.DivIcon({
+    className: 'stop-marker stacked',
+    html: `<div style="position:relative;width:28px;height:28px;">
+      <div style="width:28px;height:28px;background:hsl(199,89%,48%);border-radius:50%;box-shadow:0 0 12px hsl(199,89%,48%,0.6),0 0 24px hsl(199,89%,48%,0.3);border:2px solid hsl(199,89%,48%);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:bold;font-family:'Cinzel',serif;">${stopNumber}</div>
+      <div style="position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;background:hsl(270,40%,50%);border-radius:8px;border:1.5px solid hsl(222,47%,8%);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:bold;font-family:'Inter',sans-serif;line-height:1;">${count}</div>
+    </div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  });
+}
+
 export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd }) {
   if (!stops || stops.length === 0) return null;
 
@@ -105,6 +121,21 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
     ? boundsStops.map(s => [s.latitude, s.longitude])
     : undefined;
 
+  // Group stops by coordinates for stacked marker display. When multiple
+  // same_structure stops share identical coordinates (rooms in one building,
+  // decks on a ship), show a single marker with a count badge instead of
+  // overlapping markers that can't be tapped individually.
+  const coordGroups = {};
+  for (const stop of validStops) {
+    const key = `${stop.latitude.toFixed(5)},${stop.longitude.toFixed(5)}`;
+    if (!coordGroups[key]) coordGroups[key] = [];
+    coordGroups[key].push(stop);
+  }
+  const renderGroups = Object.values(coordGroups).map(group => ({
+    stops: group,
+    isStacked: group.length > 1 && group.every(s => s.same_structure === true),
+  }));
+
   return (
     <div className={`${height} rounded-xl overflow-hidden border border-border/40`}>
       <MapContainer
@@ -144,21 +175,44 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
             </Popup>
           </Marker>
         )}
-        {validStops.map((stop) => (
-          <Marker
-            key={stop.id}
-            position={[stop.latitude, stop.longitude]}
-            icon={makeStopIcon(stop.stop_number)}
-            draggable={draggable}
-            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
-          >
-            <Popup>
-              <div className="text-xs font-heading">
-                <strong>Stop {stop.stop_number}:</strong> {stop.name}
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+        {renderGroups.flatMap((group) => {
+          if (group.isStacked) {
+            const first = group.stops[0];
+            return (
+              <Marker
+                key={first.id}
+                position={[first.latitude, first.longitude]}
+                icon={makeStackedIcon(first.stop_number, group.stops.length)}
+                draggable={draggable}
+                eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
+              >
+                <Popup>
+                  <div className="text-xs font-heading">
+                    <strong>Stop {first.stop_number} (+{group.stops.length - 1} more):</strong>
+                    <ul className="mt-1 space-y-0.5 list-none p-0">
+                      {group.stops.map(s => <li key={s.id}>• {s.name}</li>)}
+                    </ul>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          }
+          return group.stops.map(stop => (
+            <Marker
+              key={stop.id}
+              position={[stop.latitude, stop.longitude]}
+              icon={makeStopIcon(stop.stop_number)}
+              draggable={draggable}
+              eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
+            >
+              <Popup>
+                <div className="text-xs font-heading">
+                  <strong>Stop {stop.stop_number}:</strong> {stop.name}
+                </div>
+              </Popup>
+            </Marker>
+          ));
+        })}
       </MapContainer>
     </div>
   );

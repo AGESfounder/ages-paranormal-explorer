@@ -29,7 +29,7 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 7;
+const STOPS_VALIDATION_VERSION = 8;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -53,15 +53,24 @@ function validateStops(stops, tour) {
       }
     }
   }
+  // Collapse detection — same_structure aware. Multiple stops at the same
+  // coordinates are only an error if NOT all of them are same_structure: true
+  // (rooms/areas within one building legitimately share coordinates).
   const coordMap = {};
   for (const s of stops) {
     if (s.latitude != null && s.longitude != null) {
       const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
-      coordMap[key] = (coordMap[key] || 0) + 1;
+      if (!coordMap[key]) coordMap[key] = [];
+      coordMap[key].push(s);
     }
   }
-  for (const [key, count] of Object.entries(coordMap)) {
-    if (count > 1) return { compliant: false, reason: `${count} stops collapsed at same coordinates` };
+  for (const [key, group] of Object.entries(coordMap)) {
+    if (group.length > 1) {
+      const allSameStructure = group.every(s => s.same_structure === true);
+      if (!allSameStructure) {
+        return { compliant: false, reason: `${group.length} stops collapsed at same coordinates` };
+      }
+    }
   }
   // For area tours, only validate the WALKING CLUSTER — the stops that form
   // a connected component within 0.33 miles of each other. Driving stops in
@@ -451,13 +460,14 @@ Output ONLY valid JSON. No markdown fences.`;
       const needsCoordVerification = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
       const coordInstruction = needsCoordVerification
         ? '\nCOORDINATES — CRITICAL: EACH stop must have its OWN distinct, real GPS coordinates. Look up the actual GPS coordinates of that specific area/building/room within the property or vessel using web search (e.g., search "Battery 519 Fort Miles Lewes DE" to find its real location). Do NOT use the same coordinates for all stops — each area within the property has a different real-world location. The address is the same for all stops, but the coordinates must be different for each.'
-        : '';
+        : '\nCOORDINATES — Look up the REAL GPS coordinates of each stop using web search. Do NOT guess or estimate coordinates from training data — search for each location individually to find its actual coordinates. Each stop must have its own real coordinates at its real address.';
       const prompt = `Generate 8-10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
 ${coordInstruction}
 Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand when a user opens the stop, so keep these fields brief:
 - stop_number: 1-10 in logical route order
 - name, latitude, longitude (real GPS), address
 - address: ALWAYS provide a COMPLETE STREET ADDRESS with a street number (e.g. "123 Main St, Lewes, DE 19958"). NEVER use just a city name, an intersection ("X & Y"), or words like "near", "vicinity", "various". If the location has no street address (e.g. a park), use the park entrance address or nearest street address. This address must be GPS-searchable — a user should be able to type it into Google Maps and arrive at the exact location.
+- same_structure: true if this stop is a room, area, or section WITHIN a single building or vessel (rooms in the Farnsworth House, decks on a ship, different areas of one cemetery); false if it is its own distinct building or structure on the property (separate buildings at Pennhurst Asylum, separate batteries at a fort). For AREA and ROAD TRIP tours, always false since each stop is a different property.
 - historical_info: 2-3 sentences summarizing the key history (dates, notable figures, major events). Brief summary only.
 - paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
 - investigation_suggestions: 3-5 items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
@@ -503,11 +513,11 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
 
       let result = null;
       try {
-        result = await callJson(prompt, { useWeb: needsCoordVerification });
+        result = await callJson(prompt, { useWeb: true });
       } catch (e) { console.error('Stop generation failed:', e); }
       if (!result || !result.stops || result.stops.length === 0) {
         try {
-          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: needsCoordVerification });
+          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: true });
         } catch (e) { console.error('Stop generation (concise) failed:', e); }
       }
       if (!result || !result.stops || result.stops.length === 0) {
@@ -580,14 +590,22 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       // same point (common in tiny towns like Centralia where every address
       // resolves to the same coordinates), fall back to web search to find
       // each stop's real-world location — same approach as landmark tours.
+      // Collapse detection — same_structure aware. Only treat as collapse
+      // if NOT all stops at the same coordinates are same_structure: true.
       const coordCounts = {};
+      const coordStops = {};
       for (const s of deduped) {
         if (s.latitude != null && s.longitude != null) {
           const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
           coordCounts[key] = (coordCounts[key] || 0) + 1;
+          if (!coordStops[key]) coordStops[key] = [];
+          coordStops[key].push(s);
         }
       }
-      const hasCollapse = Object.values(coordCounts).some(c => c > 1);
+      const hasCollapse = Object.entries(coordCounts).some(([key, count]) => {
+        if (count <= 1) return false;
+        return !coordStops[key].every(s => s.same_structure === true);
+      });
       if (hasCollapse) {
         try {
           const coordPrompt = `Look up the REAL GPS coordinates of each of these distinct locations in/near ${tourData.city}, ${tourData.state}. Each is a separate real-world place with its own coordinates — do NOT give them all the same coordinates. Search for each one individually.

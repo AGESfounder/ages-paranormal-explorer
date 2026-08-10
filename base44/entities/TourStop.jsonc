@@ -29,6 +29,11 @@
     "address": {
       "type": "string"
     },
+    "same_structure": {
+      "type": "boolean",
+      "default": false,
+      "description": "true = this stop is a room/area/section WITHIN a single building or vessel (rooms in the Farnsworth House, decks on a ship, different areas of one cemetery). false = its own distinct building/structure on the property (separate buildings at Pennhurst, separate batteries at a fort). For area/road_trip tours, always false. When true, multiple stops at the same coordinates are legitimate stacking, not a collapse error."
+    },
     "historical_info": {
       "type": "string"
     },

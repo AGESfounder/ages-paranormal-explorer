@@ -64,6 +64,7 @@ Each new stop needs:
 - latitude: number (real coordinates)
 - longitude: number (real coordinates)
 - address: string — ALWAYS a COMPLETE STREET ADDRESS with street number (e.g. "123 Main St, Lewes, DE 19958"). NEVER use just a city name, an intersection ("X & Y"), or "near"/"vicinity". Must be GPS-searchable — typeable into Google Maps and arriving at the exact location.
+- same_structure: boolean — true if this stop is a room/area/section WITHIN a single building or vessel; false if it is its own distinct building/structure. For AREA and ROAD TRIP tours, always false.
 - historical_info: 2-3 sentences
 - paranormal_info: 2-3 sentences
 - investigation_suggestions: array of 3-5 strings
@@ -104,6 +105,7 @@ Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RUL
               travel_method: { type: 'string' },
               hours_of_operation: { type: 'string' },
               entry_fee: { type: 'string' },
+              same_structure: { type: 'boolean' },
             },
           },
         },
@@ -169,6 +171,7 @@ Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RUL
       travel_method: String(ns.travel_method || '').toLowerCase() === 'driving' ? 'driving' : 'walking',
       hours_of_operation: ns.hours_of_operation || '',
       entry_fee: ns.entry_fee || '',
+      same_structure: ns.same_structure === true,
     });
     createdStops.push({ ...created, _insert_after: ns.insert_after_stop_number || 0 });
   }
