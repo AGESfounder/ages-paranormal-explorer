@@ -387,20 +387,19 @@ Return a JSON object with a "coordinates" array, each item having "name" (the lo
           stillUnmatched.push(stop);
         }
 
-        // Grid distribute only stops the LLM couldn't fix (last resort)
-        if (stillUnmatched.length > 0) {
-          const offsetDeg = 0.0006; // ~200 feet
-          const cols = Math.ceil(Math.sqrt(stillUnmatched.length));
-          stillUnmatched.forEach((stop, i) => {
-            const row = Math.floor(i / cols);
-            const col = i % cols;
-            updates.push({
-              id: stop.id,
-              latitude: centerLat + (row - (cols - 1) / 2) * offsetDeg,
-              longitude: centerLon + (col - (cols - 1) / 2) * offsetDeg,
-              geocoded: true,
-            });
-            matched.add(stop.id);
+        // For stops the LLM couldn't find, place them at the property center
+        // with geocoded: false. This is HONEST — the stop is on the property,
+        // we just don't know the exact location. No guessing with fake grid
+        // points. The user can manually verify/drag the marker to the real
+        // spot. same_structure: true prevents collapse detection from
+        // flagging these as errors (they're all on the same property).
+        for (const stop of stillUnmatched) {
+          updates.push({
+            id: stop.id,
+            latitude: centerLat,
+            longitude: centerLon,
+            geocoded: false,
+            same_structure: true,
           });
         }
       }
