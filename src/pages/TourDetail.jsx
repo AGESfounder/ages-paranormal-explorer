@@ -971,7 +971,12 @@ Return ONLY a JSON object with a "coordinates" array, each item having "name", "
                                 {stop.stop_number}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{stop.name}</p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{stop.name}</p>
+                                  {stop.geocoded === false && (
+                                    <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 text-[9px] font-heading uppercase tracking-wider">Est.</span>
+                                  )}
+                                </div>
                                 <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
                                   <Clock className="w-2.5 h-2.5" /> {stop.estimated_investigation_time}
                                   {stop.travel_method === 'driving' && <span className="flex items-center gap-0.5 text-amber-400"><Car className="w-2.5 h-2.5" /> Drive</span>}

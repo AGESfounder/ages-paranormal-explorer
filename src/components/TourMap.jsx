@@ -32,7 +32,19 @@ function makeParkingIcon() {
   });
 }
 
-function makeStopIcon(stopNumber) {
+function makeStopIcon(stopNumber, estimated = false) {
+  if (estimated) {
+    return new L.DivIcon({
+      className: 'stop-marker estimated',
+      html: `<div style="position:relative;width:28px;height:28px;">
+        <div style="width:28px;height:28px;background:hsl(35,90%,50%);border-radius:50%;box-shadow:0 0 12px hsl(35,90%,50%,0.6),0 0 24px hsl(35,90%,50%,0.3);border:2px dashed hsl(35,90%,50%);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:bold;font-family:'Cinzel',serif;">${stopNumber}</div>
+        <div style="position:absolute;top:-6px;right:-6px;min-width:18px;height:14px;padding:0 3px;background:hsl(35,90%,50%);border-radius:7px;border:1.5px solid hsl(222,47%,8%);display:flex;align-items:center;justify-content:center;color:white;font-size:8px;font-weight:bold;font-family:'Inter',sans-serif;line-height:1;letter-spacing:0.5px;">EST</div>
+      </div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -16],
+    });
+  }
   return new L.DivIcon({
     className: 'stop-marker',
     html: `<div style="
@@ -201,13 +213,14 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
             <Marker
               key={stop.id}
               position={[stop.latitude, stop.longitude]}
-              icon={makeStopIcon(stop.stop_number)}
+              icon={makeStopIcon(stop.stop_number, stop.geocoded === false)}
               draggable={draggable}
               eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
             >
               <Popup>
                 <div className="text-xs font-heading">
                   <strong>Stop {stop.stop_number}:</strong> {stop.name}
+                  {stop.geocoded === false && <div className="text-amber-400 text-[10px] mt-1">Estimated — needs verification</div>}
                 </div>
               </Popup>
             </Marker>
