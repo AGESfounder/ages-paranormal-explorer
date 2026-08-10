@@ -216,6 +216,9 @@ function looksLikeRoomOrArea(name) {
     'chapel', 'crypt', 'catacomb', 'ossuary', 'sepulchre',
     'promenade deck', 'lido deck', 'sun deck', 'boat deck',
     'engine room', 'boiler room', 'steerage', 'cargo hold',
+    // Added after "Main Bar" & "Apartment Landing" stops were scattered
+    // across the city by wrong web-search matches for generic room names
+    'bar', 'taproom', 'tap room', 'apartment', 'landing', 'storage',
   ];
   return roomWords.some((w) => n.includes(w));
 }
@@ -344,6 +347,14 @@ export default async function (req) {
       }
 
       for (const stop of stops) {
+        // If generation already marked this stop same_structure: true (a room
+        // within the building), use the building center — don't try Overpass,
+        // which would match it to an unrelated nearby feature.
+        if (stop.same_structure === true) {
+          updates.push({ id: stop.id, latitude: centerLat, longitude: centerLon, geocoded: true, same_structure: true });
+          matched.add(stop.id);
+          continue;
+        }
         const feature = matchStopToFeature(stop.name, features);
         if (feature) {
           updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
@@ -358,26 +369,34 @@ export default async function (req) {
       // them with fake grid points.
       const unmatched = stops.filter((s) => !matched.has(s.id));
       if (unmatched.length > 0) {
-        // Per-stop LLM web search — give the LLM full focus on each location
-        // individually. A single batch search often misses stops because the
-        // LLM can't give each one enough attention. Per-stop searches find
-        // far more real coordinates from park maps, historical registries,
-        // and GPS databases.
         for (const stop of unmatched) {
           const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
-          // Use the stored same_structure flag, but override it if the stop
-          // name clearly indicates a room/area within a building (the LLM
-          // often fails to set same_structure: true during generation).
           const looksLikeRoom = looksLikeRoomOrArea(cleanName);
-          const isSameStructure = stop.same_structure === true || looksLikeRoom;
-          const structureNote = isSameStructure
-            ? `\nThis stop is a ROOM or AREA WITHIN a single building/structure (same_structure: true). It is CORRECT for it to share the building's coordinates — multiple stops inside the same building stack at the same point on the map. Search for the BUILDING's real GPS coordinates and return those. Do NOT try to find separate coordinates for this individual room.`
-            : `\nThis stop is a DISTINCT building or structure on the property (same_structure: false). The coordinates must be the REAL location of "${cleanName}", not the property's general location. Search for this specific structure's coordinates.`;
+
+          // ROOM/AREA within the building — use the building's coordinates
+          // directly. Do NOT web search: a generic room name like "The Main
+          // Bar" or "The Dining Room" matches a DIFFERENT business elsewhere
+          // in the city, scattering markers. The room IS inside the building
+          // at the building's coordinates — that's accurate, not a guess.
+          if (looksLikeRoom) {
+            updates.push({
+              id: stop.id,
+              latitude: centerLat,
+              longitude: centerLon,
+              same_structure: true,
+              geocoded: true,
+            });
+            matched.add(stop.id);
+            continue;
+          }
+
+          // DISTINCT structure on the property — search for its real coords.
           const prompt = `Search the web for the EXACT GPS coordinates of this location:
 
 "${cleanName}"
 within "${tour.title}" at ${tour.start_location_name || tour.city || ''}, ${tour.state}.
-${structureNote}
+
+This stop is a DISTINCT building or structure on the property. The coordinates must be the REAL location of "${cleanName}", not the property's general location.
 
 Search for its coordinates using:
 - Official park/site maps (e.g., "${cleanName} ${tour.state} map GPS")
@@ -412,47 +431,22 @@ Return a JSON object with:
               },
             });
             if (llmResult.found && llmResult.latitude != null && llmResult.longitude != null) {
-              // Sanity check: coordinate must be within 1 mile of property center
+              // Sanity check: coordinate must be within 0.5 miles of property
+              // center (tightened from 1 mile — 1 mile let in wrong matches
+              // from different businesses with similar names across the city).
               const dist = haversine(centerLat, centerLon, llmResult.latitude, llmResult.longitude);
-              if (dist <= 1) {
+              if (dist <= 0.5) {
                 updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true });
                 matched.add(stop.id);
               } else {
-                // Out of range — likely a wrong match. Don't use it.
                 updates.push({ id: stop.id, geocoded: false });
               }
-            } else if (looksLikeRoom) {
-              // LLM couldn't find distinct coordinates, but the stop name
-              // indicates it's a room/area within the building. Use the
-              // building's coordinates (property center) and mark it as
-              // same_structure so the map stacks it correctly. This is
-              // accurate — the room IS inside the building at these coords.
-              updates.push({
-                id: stop.id,
-                latitude: centerLat,
-                longitude: centerLon,
-                same_structure: true,
-                geocoded: true,
-              });
-              matched.add(stop.id);
             } else {
-              // LLM couldn't find it — don't guess. Mark unverified.
               updates.push({ id: stop.id, geocoded: false });
             }
           } catch (e) {
             console.error(`Per-stop LLM search failed for "${stop.name}":`, e.message);
-            if (looksLikeRoom) {
-              updates.push({
-                id: stop.id,
-                latitude: centerLat,
-                longitude: centerLon,
-                same_structure: true,
-                geocoded: true,
-              });
-              matched.add(stop.id);
-            } else {
-              updates.push({ id: stop.id, geocoded: false });
-            }
+            updates.push({ id: stop.id, geocoded: false });
           }
         }
       }

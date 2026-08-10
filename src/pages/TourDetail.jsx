@@ -25,11 +25,12 @@ import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
+import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 12;
+const STOPS_VALIDATION_VERSION = 13;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -518,6 +519,31 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       }
       if (!result || !result.stops || result.stops.length === 0) {
         throw new Error('Could not generate stops after multiple attempts. Please try again.');
+      }
+
+      // === SINGLE-SITE COORDINATE ENFORCEMENT ===
+      // For landmark/ship/cold_spot tours, all stops are on ONE property. The
+      // LLM routinely IGNORES the same_structure instruction and invents fake
+      // distinct coordinates for rooms within one building, scattering markers
+      // across the city. Fix this programmatically — don't trust the LLM:
+      // 1. If ALL stops share the same street address → same building →
+      //    same_structure: true, use the building's verified start coordinates.
+      // 2. If a stop NAME looks like a room/area (bar, lobby, basement, etc.) →
+      //    same_structure: true, use the building's start coordinates.
+      // This ensures single-site tours are correct from generation, without
+      // depending on the LLM following same_structure instructions.
+      const isSingleSite = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
+      if (isSingleSite && result.stops) {
+        const normAddr = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+        const addresses = result.stops.map(s => normAddr(s.address)).filter(a => a.length > 0);
+        const allSameAddress = addresses.length > 0 && addresses.every(a => a === addresses[0]);
+        for (const stop of result.stops) {
+          if (allSameAddress || looksLikeRoomOrArea(stop.name)) {
+            stop.same_structure = true;
+            stop.latitude = tourData.start_latitude;
+            stop.longitude = tourData.start_longitude;
+          }
+        }
       }
 
       const processed = enforceWalkingDistance(result.stops || [], tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude });
