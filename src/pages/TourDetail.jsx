@@ -29,7 +29,7 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 10;
+const STOPS_VALIDATION_VERSION = 11;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -168,51 +168,23 @@ export default function TourDetail() {
     spendNarration(estimateNarrationCost(text));
   };
 
-  // Lazily geocode existing stops whose GPS coordinates haven't been verified.
-  // Runs in the background — user sees the tour immediately, coordinates get
-  // corrected automatically a few seconds later.
+  // Lazily verify existing stops whose GPS coordinates haven't been verified.
+  // Runs in the background — user sees the tour immediately. Uses per-stop LLM
+  // web search (fix-collapsed-coords) to confirm/correct coordinates, NOT
+  // Nominatim address geocoding, which collapses stops in tiny towns and
+  // overrides accurate LLM coordinates with generic address points.
   const geocodeExistingStops = async (stopsList, tourData) => {
-    // For landmark/ship/cold_spot tours, don't geocode by address — all stops
-    // share one address, so address geocoding collapses them to a single point.
-    if (tourData && (tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot')) return;
-    const needsGeocoding = stopsList.filter(s => !s.geocoded && s.address);
-    if (needsGeocoding.length === 0) return;
-    // Use enhanced geocoding with stop names — finds actual landmarks
-    // instead of intersection points when addresses are vague
-    const stopsForGeocoding = needsGeocoding.map(s => ({
-      id: s.id, name: s.name, address: s.address, city: tourData?.city, state: tourData?.state
-    }));
-    const geocodeMap = await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData?.start_latitude, lon: tourData?.start_longitude, maxDistMiles: tourData?.tour_category === 'road_trip' ? 200 : (tourData?.tour_category === 'cold_spot' || tourData?.tour_category === 'ship') ? 0.5 : tourData?.tour_category === 'area' ? 2.5 : 5, clusterRadius: tourData?.tour_category === 'area' ? 0.5 : (tourData?.tour_category === 'cold_spot' || tourData?.tour_category === 'ship') ? 0.3 : null });
-    const updates = [];
-    for (const stop of needsGeocoding) {
-      const geo = geocodeMap[stop.id];
-      if (geo) {
-        try {
-          await base44.entities.TourStop.update(stop.id, {
-            latitude: geo.lat,
-            longitude: geo.lon,
-            geocoded: true,
-          });
-          updates.push({ id: stop.id, lat: geo.lat, lon: geo.lon });
-        } catch (e) {}
-      }
-    }
-    if (updates.length === 0) return;
-
-    // Verify coordinates via Overpass API — corrects any collapsed/inaccurate
-    // Nominatim results by matching stops to real OSM features by name.
+    const needsVerification = stopsList.filter(s => s.stop_type !== 'parking' && s.geocoded === false);
+    if (needsVerification.length === 0) return;
     try {
-      await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered });
+      await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered, verifyAll: true });
     } catch (e) {
-      console.error('Overpass verification failed:', e);
+      console.error('Coordinate verification failed:', e);
+      return;
     }
-
     // Reload stops with corrected coordinates
     const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourData.id });
-
     // Re-order stops by proximity using the NOW-correct coordinates.
-    // The initial ordering ran on stale/wrong LLM coordinates, so it must be
-    // re-evaluated after geocoding to form proper walking loops / linear routes.
     // Skip for tours the user manually reordered — respect their custom order.
     if (tourData && !tourData.user_reordered) {
       const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking');
@@ -325,13 +297,14 @@ export default function TourDetail() {
         // (outlier coordinates, collapsed markers). One-time per tour.
         let regenerated = false;
         if ((tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION) {
-          // First, verify coordinates via Overpass API for ALL tour types —
-          // corrects collapsed/inaccurate Nominatim coordinates by matching
-          // stops to real OSM features by name.
+          // First, verify ALL coordinates via per-stop LLM web search
+          // (verifyAll: true) — confirms/corrects each stop's coordinates
+          // against real-world data. Catches inaccurate LLM coordinates from
+          // generation and collapsed Nominatim address geocoding.
           try {
-            await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData[0].user_reordered });
+            await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData[0].user_reordered, verifyAll: true });
           } catch (e) {
-            console.error('Overpass verification failed:', e);
+            console.error('Coordinate verification failed:', e);
           }
           // Reload stops with corrected coordinates
           tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
@@ -603,71 +576,14 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         deduped[i].narration_text = stripConclusionOpeners(deduped[i].narration_text, i === lastIdx);
         deduped[i].paranormal_info = stripConclusionOpeners(deduped[i].paranormal_info, i === lastIdx);
       }
-      if (needsCoordVerification) {
-        // For landmark/ship/cold_spot tours, trust the LLM's web-searched
-        // coordinates — address geocoding would collapse all stops to one
-        // point since they share the same street address. Coordinates are
-        // verified via Overpass API after creation (fix-collapsed-coords).
-        for (const stop of deduped) {
-          stop._geocoded = true;
-        }
-      } else {
-        // Geocode stops for accurate GPS coordinates using enhanced multi-strategy
-        // geocoding (name + address + city/state) — finds actual landmarks
-        const stopsForGeocoding = deduped.map((s, i) => ({
-          id: `temp_${i}`, name: s.name, address: s.address, city: tourData.city, state: tourData.state
-        }));
-        const geocodeMap = stopsForGeocoding.length > 0 ? await geocodeStopsWithNames(stopsForGeocoding, { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: tourData.tour_category === 'road_trip' ? 200 : (tourData.tour_category === 'cold_spot' || tourData.tour_category === 'ship') ? 0.5 : tourData.tour_category === 'area' ? 2.5 : 5, clusterRadius: tourData.tour_category === 'area' ? 0.5 : (tourData.tour_category === 'cold_spot' || tourData.tour_category === 'ship') ? 0.3 : null }) : {};
-        for (let i = 0; i < deduped.length; i++) {
-          const geo = geocodeMap[`temp_${i}`];
-          if (geo) {
-            deduped[i].latitude = geo.lat;
-            deduped[i].longitude = geo.lon;
-            deduped[i]._geocoded = true;
-          }
-        }
-      }
-
-      // COLLAPSE DETECTION: If address geocoding put multiple stops at the
-      // same point (common in tiny towns like Centralia where every address
-      // resolves to the same coordinates), fall back to web search to find
-      // each stop's real-world location — same approach as landmark tours.
-      // Collapse detection — same_structure aware. Only treat as collapse
-      // if NOT all stops at the same coordinates are same_structure: true.
-      const coordCounts = {};
-      const coordStops = {};
-      for (const s of deduped) {
-        if (s.latitude != null && s.longitude != null) {
-          const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
-          coordCounts[key] = (coordCounts[key] || 0) + 1;
-          if (!coordStops[key]) coordStops[key] = [];
-          coordStops[key].push(s);
-        }
-      }
-      const hasCollapse = Object.entries(coordCounts).some(([key, count]) => {
-        if (count <= 1) return false;
-        return !coordStops[key].every(s => s.same_structure === true);
-      });
-      if (hasCollapse) {
-        try {
-          const coordPrompt = `Look up the REAL GPS coordinates of each of these distinct locations in/near ${tourData.city}, ${tourData.state}. Each is a separate real-world place with its own coordinates — do NOT give them all the same coordinates. Search for each one individually.
-
-Stops:
-${deduped.map((s, i) => `${i + 1}. ${s.name} (${s.address})`).join('\n')}
-
-Return ONLY a JSON object with a "coordinates" array, each item having "name", "latitude", and "longitude". No markdown fences.`;
-          const coordResult = await callJson(coordPrompt, { useWeb: true });
-          if (coordResult && Array.isArray(coordResult.coordinates)) {
-            for (const item of coordResult.coordinates) {
-              const match = deduped.find(s => s.name === item.name || s.name.includes(item.name) || (item.name && item.name.includes(s.name)));
-              if (match && item.latitude != null && item.longitude != null) {
-                match.latitude = item.latitude;
-                match.longitude = item.longitude;
-                match._geocoded = true;
-              }
-            }
-          }
-        } catch (e) { console.error('Collapsed coordinate web search failed:', e); }
+      // ALL tour types: trust the LLM's web-searched coordinates from
+      // generation. Address geocoding (Nominatim) is NOT used as a primary
+      // method — it collapses stops in tiny towns (Centralia) and overrides
+      // accurate LLM coordinates with generic address points. Coordinates
+      // are verified/corrected via fix-collapsed-coords with verifyAll below,
+      // which runs per-stop LLM web search to confirm each stop's real location.
+      for (const stop of deduped) {
+        stop._geocoded = true;
       }
 
       const created = [];
@@ -710,12 +626,14 @@ Return ONLY a JSON object with a "coordinates" array, each item having "name", "
         } catch (e) { console.error('Parking stop creation failed:', e); }
       }
 
-      // Verify ALL tour types via Overpass API — corrects collapsed/inaccurate
-      // Nominatim coordinates by matching stops to real OSM features by name.
-      // For landmark/ship/cold_spot, also fixes water/land issues and
-      // distributes unmatched stops in a grid on the property.
+      // Verify ALL stops via per-stop LLM web search (verifyAll: true) —
+      // confirms or corrects each stop's coordinates against real-world data.
+      // For landmark/ship/cold_spot, also fixes water/land issues. For area/
+      // road_trip, runs the full verification pipeline (address geocode → OSM
+      // name search → LLM web search) on every stop to catch inaccurate LLM
+      // coordinates from generation.
       try {
-        await base44.functions.invoke('fix-collapsed-coords', { tourId });
+        await base44.functions.invoke('fix-collapsed-coords', { tourId, verifyAll: true });
         const verifiedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
         // Re-run enforceWalkingDistance on the corrected coordinates —
         // fix-collapsed-coords may have moved stops to their real-world
