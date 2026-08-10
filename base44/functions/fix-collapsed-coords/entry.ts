@@ -323,22 +323,86 @@ export default async function (req) {
         }
       }
 
-      // Distribute unmatched stops in a grid around the center
+      // For unmatched stops, try LLM web search to find real coordinates.
+      // Only grid-distribute as a last resort if LLM search fails or returns
+      // coordinates that are still collapsed. This preserves the LLM's
+      // web-searched coordinates from generation instead of overwriting
+      // them with fake grid points.
       const unmatched = stops.filter((s) => !matched.has(s.id));
       if (unmatched.length > 0) {
-        const offsetDeg = 0.0006; // ~200 feet
-        const cols = Math.ceil(Math.sqrt(unmatched.length));
-        unmatched.forEach((stop, i) => {
-          const row = Math.floor(i / cols);
-          const col = i % cols;
-          updates.push({
-            id: stop.id,
-            latitude: centerLat + (row - (cols - 1) / 2) * offsetDeg,
-            longitude: centerLon + (col - (cols - 1) / 2) * offsetDeg,
-            geocoded: true,
+        let llmCoords = [];
+        try {
+          const stopList = unmatched.map((s, i) => `${i + 1}. ${s.name.replace(/\s*\([^)]*\)\s*/g, '').trim()}`).join('\n');
+          const prompt = `Look up the REAL GPS coordinates of each of these specific locations within "${tour.title}" in ${tour.city || ''}, ${tour.state}. Each is a distinct area, building, or structure within the property. Search for each one individually to find its actual coordinates — do NOT give them all the same or similar coordinates. If you cannot find the exact location, provide the best estimate based on the property's known layout.
+
+Locations:
+${stopList}
+
+Return a JSON object with a "coordinates" array, each item having "name" (the location name), "latitude", and "longitude" (real GPS coordinates).`;
+          const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
+            prompt,
+            add_context_from_internet: true,
+            model: 'gemini_3_flash',
+            response_json_schema: {
+              type: 'object',
+              properties: {
+                coordinates: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      latitude: { type: 'number' },
+                      longitude: { type: 'number' },
+                    },
+                  },
+                },
+              },
+            },
           });
-          matched.add(stop.id);
-        });
+          llmCoords = llmResult.coordinates || [];
+        } catch (e) {
+          console.error('LLM coordinate search failed:', e.message);
+        }
+
+        // Apply LLM-found coordinates to unmatched stops
+        const stillUnmatched = [];
+        for (const stop of unmatched) {
+          const cleanStopName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim().toLowerCase();
+          const llmMatch = llmCoords.find(c => {
+            if (c.latitude == null || c.longitude == null) return false;
+            const cleanCName = String(c.name || '').toLowerCase().trim();
+            return cleanCName === cleanStopName ||
+              cleanStopName.includes(cleanCName) || cleanCName.includes(cleanStopName);
+          });
+          if (llmMatch) {
+            // Sanity check: coordinate must be within 1 mile of property center
+            const dist = haversine(centerLat, centerLon, llmMatch.latitude, llmMatch.longitude);
+            if (dist <= 1) {
+              updates.push({ id: stop.id, latitude: llmMatch.latitude, longitude: llmMatch.longitude, geocoded: true });
+              matched.add(stop.id);
+              continue;
+            }
+          }
+          stillUnmatched.push(stop);
+        }
+
+        // Grid distribute only stops the LLM couldn't fix (last resort)
+        if (stillUnmatched.length > 0) {
+          const offsetDeg = 0.0006; // ~200 feet
+          const cols = Math.ceil(Math.sqrt(stillUnmatched.length));
+          stillUnmatched.forEach((stop, i) => {
+            const row = Math.floor(i / cols);
+            const col = i % cols;
+            updates.push({
+              id: stop.id,
+              latitude: centerLat + (row - (cols - 1) / 2) * offsetDeg,
+              longitude: centerLon + (col - (cols - 1) / 2) * offsetDeg,
+              geocoded: true,
+            });
+            matched.add(stop.id);
+          });
+        }
       }
 
       // Apply coordinate updates

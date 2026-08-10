@@ -29,7 +29,7 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 9;
+const STOPS_VALIDATION_VERSION = 10;
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
