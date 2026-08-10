@@ -526,19 +526,15 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       // LLM routinely IGNORES the same_structure instruction and invents fake
       // distinct coordinates for rooms within one building, scattering markers
       // across the city. Fix this programmatically — don't trust the LLM:
-      // 1. If ALL stops share the same street address → same building →
-      //    same_structure: true, use the building's verified start coordinates.
-      // 2. If a stop NAME looks like a room/area (bar, lobby, basement, etc.) →
-      //    same_structure: true, use the building's start coordinates.
-      // This ensures single-site tours are correct from generation, without
-      // depending on the LLM following same_structure instructions.
+      // If a stop NAME looks like a room/area (bar, lobby, basement, etc.) →
+      //   same_structure: true, use the building's start coordinates.
+      // We do NOT use "all stops share the same address" as a signal because
+      // large properties (e.g. Pennhurst Asylum) can have distinct buildings
+      // that share the same mailing address — those need their own coordinates.
       const isSingleSite = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
       if (isSingleSite && result.stops) {
-        const normAddr = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-        const addresses = result.stops.map(s => normAddr(s.address)).filter(a => a.length > 0);
-        const allSameAddress = addresses.length > 0 && addresses.every(a => a === addresses[0]);
         for (const stop of result.stops) {
-          if (allSameAddress || looksLikeRoomOrArea(stop.name)) {
+          if (looksLikeRoomOrArea(stop.name)) {
             stop.same_structure = true;
             stop.latitude = tourData.start_latitude;
             stop.longitude = tourData.start_longitude;
