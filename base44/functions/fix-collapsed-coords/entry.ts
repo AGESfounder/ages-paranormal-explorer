@@ -193,6 +193,33 @@ function matchStopToFeature(stopName, features) {
   return bestScore >= 2 ? best : null;
 }
 
+// Detect if a stop name refers to a ROOM, AREA, or SECTION within a single
+// building/vessel rather than a distinct separate structure. Used to
+// auto-classify stops the LLM failed to tag as same_structure: true.
+// Matches names like "The Third Floor Hallway", "Guest Room 311",
+// "The Main Lobby & Grand Staircase", "The Canary Café", "The Front Portico".
+function looksLikeRoomOrArea(name) {
+  const n = String(name || '').toLowerCase();
+  const roomWords = [
+    'room', 'floor', 'hallway', 'hall', 'lobby', 'staircase', 'stairs',
+    'ballroom', 'café', 'cafe', 'dining', 'wing', 'level', 'basement',
+    'attic', 'kitchen', 'parlor', 'parlour', 'suite', 'chamber',
+    'corridor', 'portico', 'porch', 'exterior', 'interior', 'deck',
+    'cabin', 'hold', 'galley', 'bridge', 'lounge', 'library', 'office',
+    'mechanical', 'boiler', 'furnace', 'cellar', 'vault', 'tower room',
+    'tower floor', 'penthouse', 'balcony', 'veranda', 'verandah',
+    'foyer', 'vestibule', 'anteroom', 'anteroom', 'cloakroom',
+    'ballroom', 'conservatory', 'orangery', 'solarium', 'sunroom',
+    'study', 'den', 'sitting room', 'drawing room', 'morning room',
+    'servants hall', 'servants\' hall', 'butler\'s pantry', 'pantry',
+    'laundry', 'scullery', 'stillroom', 'dairy', 'brewery',
+    'chapel', 'crypt', 'catacomb', 'ossuary', 'sepulchre',
+    'promenade deck', 'lido deck', 'sun deck', 'boat deck',
+    'engine room', 'boiler room', 'steerage', 'cargo hold',
+  ];
+  return roomWords.some((w) => n.includes(w));
+}
+
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -338,7 +365,11 @@ export default async function (req) {
         // and GPS databases.
         for (const stop of unmatched) {
           const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
-          const isSameStructure = stop.same_structure === true;
+          // Use the stored same_structure flag, but override it if the stop
+          // name clearly indicates a room/area within a building (the LLM
+          // often fails to set same_structure: true during generation).
+          const looksLikeRoom = looksLikeRoomOrArea(cleanName);
+          const isSameStructure = stop.same_structure === true || looksLikeRoom;
           const structureNote = isSameStructure
             ? `\nThis stop is a ROOM or AREA WITHIN a single building/structure (same_structure: true). It is CORRECT for it to share the building's coordinates — multiple stops inside the same building stack at the same point on the map. Search for the BUILDING's real GPS coordinates and return those. Do NOT try to find separate coordinates for this individual room.`
             : `\nThis stop is a DISTINCT building or structure on the property (same_structure: false). The coordinates must be the REAL location of "${cleanName}", not the property's general location. Search for this specific structure's coordinates.`;
@@ -390,13 +421,38 @@ Return a JSON object with:
                 // Out of range — likely a wrong match. Don't use it.
                 updates.push({ id: stop.id, geocoded: false });
               }
+            } else if (looksLikeRoom) {
+              // LLM couldn't find distinct coordinates, but the stop name
+              // indicates it's a room/area within the building. Use the
+              // building's coordinates (property center) and mark it as
+              // same_structure so the map stacks it correctly. This is
+              // accurate — the room IS inside the building at these coords.
+              updates.push({
+                id: stop.id,
+                latitude: centerLat,
+                longitude: centerLon,
+                same_structure: true,
+                geocoded: true,
+              });
+              matched.add(stop.id);
             } else {
               // LLM couldn't find it — don't guess. Mark unverified.
               updates.push({ id: stop.id, geocoded: false });
             }
           } catch (e) {
             console.error(`Per-stop LLM search failed for "${stop.name}":`, e.message);
-            updates.push({ id: stop.id, geocoded: false });
+            if (looksLikeRoom) {
+              updates.push({
+                id: stop.id,
+                latitude: centerLat,
+                longitude: centerLon,
+                same_structure: true,
+                geocoded: true,
+              });
+              matched.add(stop.id);
+            } else {
+              updates.push({ id: stop.id, geocoded: false });
+            }
           }
         }
       }
