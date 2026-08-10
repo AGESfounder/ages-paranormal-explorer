@@ -491,6 +491,8 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
 6. MOST POPULAR STOPS: Include the most popular, most talked-about paranormal hotspots near ${tourData.city}, ${tourData.state} — the locations where paranormal activity and ghosts have been observed, recorded, and discussed most. Prioritize locations with the richest documented paranormal history, famous ghost sightings, and active investigations. Do NOT include obscure or unknown locations.
 
+7. UNIQUE STOPS ONLY: Each stop must be a DIFFERENT haunted location. Do NOT include the same building or site twice with slightly different names (e.g., "Frederick City Hall" and "Frederick City Hall Main Floor" are the same stop — combine them into one). Do NOT repeat stops. Generate exactly 8-10 stops, no more.
+
 ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations from existing ghost tour companies, walking tours, or tourism websites, you MUST find the ACTUAL STREET ADDRESS of each location independently. Do NOT copy a tour company's meeting point, starting location, or vague area description — tour companies often list only where their tour GROUPS MEET (e.g., "2nd & Market St") rather than the actual haunted building's address. For every stop, look up the real street address where the actual haunted building, landmark, or site is located (e.g., "43 Cape Henlopen Dr, Lewes, DE 19958" for the ferry terminal, NOT "Near the intersection of 2nd & Market"). The address must be the physical location of the haunted site itself, not a tour company's gathering point.
 
 BRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). If you mention the AGES brand anywhere in the text, always define it as "Accessible Ghost Exploration Solutions".
@@ -546,10 +548,29 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         const addrKey = normKey(stop.address);
         if (nameKey && seenNames.has(nameKey)) continue;
         if (addrKey && seenAddrs.has(addrKey)) continue;
+        // Fuzzy name dedup — catch near-duplicates like "Frederick City Hall"
+        // vs "Frederick City Hall Main Floor" (one normalized name contains
+        // the other). Prevents the LLM from padding with variations of the
+        // same location.
+        let isFuzzyDup = false;
+        if (nameKey && nameKey.length >= 8) {
+          for (const seen of seenNames) {
+            if (seen.length >= 8 && (seen.includes(nameKey) || nameKey.includes(seen))) {
+              isFuzzyDup = true;
+              break;
+            }
+          }
+        }
+        if (isFuzzyDup) continue;
         if (nameKey) seenNames.add(nameKey);
         if (addrKey) seenAddrs.add(addrKey);
         deduped.push(stop);
       }
+      // Cap at 10 stops — the prompt asks for 8-10, but the LLM sometimes
+      // returns 15+ with near-duplicate variations. Hard limit prevents
+      // oversized tours.
+      const MAX_STOPS = 10;
+      if (deduped.length > MAX_STOPS) deduped.length = MAX_STOPS;
       // Renumber sequentially to close any gaps left by dedup removing
       // duplicates after enforceWalkingDistance assigned stop_numbers.
       for (let i = 0; i < deduped.length; i++) {

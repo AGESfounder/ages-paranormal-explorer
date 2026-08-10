@@ -156,6 +156,8 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
 5. MOST POPULAR STOPS: Prioritize the most famous, most talked-about haunted locations in the area — the places where paranormal activity and ghosts have been observed and recorded most. Include stops that are widely discussed in paranormal circles.
 
+6. UNIQUE STOPS ONLY: Each stop must be a DIFFERENT haunted location. Do NOT include the same building or site twice with slightly different names (e.g., "Frederick City Hall" and "Frederick City Hall Main Floor" are the same stop — combine them into one). Do NOT repeat stops. Generate exactly 8-10 stops, no more.
+
 Return a JSON object with:
 - title: a creative, spooky tour name for "${dest}"
 - tour_category: "${category}"
@@ -246,14 +248,29 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
     // same address (areas within one site/vessel), so address dedup would
     // incorrectly discard all but the first stop — skip it for those.
     const dedupByAddr = category === 'area' || category === 'road_trip';
+    const normStopName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
     const seenStopNames = new Set();
     const seenStopAddrs = new Set();
     const validStops = [];
     for (const item of allValidStops) {
-      const nameKey = item.name.toLowerCase().trim();
+      const nameKey = normStopName(item.name);
       const addrKey = normalizeAddr(item.s?.address);
-      if (seenStopNames.has(nameKey)) continue;
+      if (nameKey && seenStopNames.has(nameKey)) continue;
       if (dedupByAddr && addrKey && seenStopAddrs.has(addrKey)) continue;
+      // Fuzzy name dedup — catch near-duplicates like "Frederick City Hall"
+      // vs "Frederick City Hall Main Floor" (one normalized name contains
+      // the other). Prevents the LLM from padding the tour with variations
+      // of the same location.
+      let isFuzzyDup = false;
+      if (nameKey && nameKey.length >= 8) {
+        for (const seen of seenStopNames) {
+          if (seen.length >= 8 && (seen.includes(nameKey) || nameKey.includes(seen))) {
+            isFuzzyDup = true;
+            break;
+          }
+        }
+      }
+      if (isFuzzyDup) continue;
       if (nameKey) seenStopNames.add(nameKey);
       if (dedupByAddr && addrKey) seenStopAddrs.add(addrKey);
       validStops.push(item);
@@ -268,6 +285,14 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
           validStops.splice(i, 1);
         }
       }
+    }
+
+    // Cap at 10 stops — the prompt asks for 8-10, but the LLM sometimes
+    // returns 15+ with near-duplicate variations of the same location.
+    // Hard limit after all dedup passes prevents oversized tours.
+    const MAX_GENERATED_STOPS = 10;
+    if (validStops.length > MAX_GENERATED_STOPS) {
+      validStops.length = MAX_GENERATED_STOPS;
     }
 
     // CATEGORY CORRECTION: If the user selected "landmark" and all stops
