@@ -333,12 +333,25 @@ export default async function (req) {
         let llmCoords = [];
         try {
           const stopList = unmatched.map((s, i) => `${i + 1}. ${s.name.replace(/\s*\([^)]*\)\s*/g, '').trim()}`).join('\n');
-          const prompt = `Look up the REAL GPS coordinates of each of these specific locations within "${tour.title}" in ${tour.city || ''}, ${tour.state}. Each is a distinct area, building, or structure within the property. Search for each one individually to find its actual coordinates — do NOT give them all the same or similar coordinates. If you cannot find the exact location, provide the best estimate based on the property's known layout.
+          const prompt = `Search the web for the EXACT GPS coordinates of each of these specific locations within "${tour.title}" at ${tour.start_location_name || tour.city || ''}, ${tour.state}. These are distinct areas, buildings, or structures within a single property (fort, park, asylum, ship, etc.).
+
+For EACH location, search for its exact coordinates using:
+- Official park/site maps (e.g., "Fort Miles map GPS coordinates")
+- Historical registry listings (National Register of Historic Places)
+- Wikipedia articles with coordinates
+- OpenStreetMap or Google Maps listings
+- Historical preservation society documents
+
+CRITICAL RULES:
+1. Do NOT estimate, guess, or approximate. Only return coordinates you found via web search.
+2. Each location MUST have DIFFERENT coordinates — they are distinct physical spots.
+3. If you cannot find a location's REAL coordinates via web search, OMIT it entirely. Returning nothing is better than returning a guess.
+4. Search for EACH location individually — do not batch-assume coordinates.
 
 Locations:
 ${stopList}
 
-Return a JSON object with a "coordinates" array, each item having "name" (the location name), "latitude", and "longitude" (real GPS coordinates).`;
+Return a JSON object with a "coordinates" array, each item having "name" (the location name), "latitude", and "longitude" (real GPS coordinates found via web search). Omit any location you could not find.`;
           const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
             prompt,
             add_context_from_internet: true,
@@ -387,19 +400,15 @@ Return a JSON object with a "coordinates" array, each item having "name" (the lo
           stillUnmatched.push(stop);
         }
 
-        // For stops the LLM couldn't find, place them at the property center
-        // with geocoded: false. This is HONEST — the stop is on the property,
-        // we just don't know the exact location. No guessing with fake grid
-        // points. The user can manually verify/drag the marker to the real
-        // spot. same_structure: true prevents collapse detection from
-        // flagging these as errors (they're all on the same property).
+        // For stops the LLM couldn't find: do NOT guess. Leave the stop's
+        // existing coordinates untouched and mark geocoded: false so it's
+        // clear the coordinates are unverified. The user can manually verify
+        // or drag the marker to the real spot. No center placement, no grid —
+        // no guessing.
         for (const stop of stillUnmatched) {
           updates.push({
             id: stop.id,
-            latitude: centerLat,
-            longitude: centerLon,
             geocoded: false,
-            same_structure: true,
           });
         }
       }
