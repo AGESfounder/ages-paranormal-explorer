@@ -613,7 +613,7 @@ Return a JSON object with:
               if (geo) {
                 const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
                 if (dist <= 5) {
-                  updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true });
+                  updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true, needs_placement: false });
                   matched.add(stop.id);
                   fixed = true;
                 }
@@ -647,7 +647,7 @@ Return a JSON object with:
                   if (geo) {
                     const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
                     if (dist <= 5) {
-                      updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: false });
+                      updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: false, needs_placement: false });
                       matched.add(stop.id);
                       fixed = true;
                     }
@@ -664,7 +664,7 @@ Return a JSON object with:
                   const nameMatches = await queryOverpassByName(cleanName, cityBbox);
                   const feature = matchStopToFeature(stop.name, nameMatches);
                   if (feature) {
-                    updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
+                    updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true, needs_placement: false });
                     matched.add(stop.id);
                     fixed = true;
                   }
@@ -719,7 +719,7 @@ Return a JSON object with:
                   // Sanity check: coordinate must be within 5 miles of tour start
                   const dist = haversine(tour.start_latitude, tour.start_longitude, llmResult.latitude, llmResult.longitude);
                   if (dist <= 5) {
-                    updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true });
+                    updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true, needs_placement: false });
                     matched.add(stop.id);
                     fixed = true;
                   }
