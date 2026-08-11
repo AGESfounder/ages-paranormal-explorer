@@ -625,17 +625,32 @@ Return a JSON object with:
             // Nominatim often can't resolve "1000 Church Rd" but CAN find
             // "Church Rd" itself. Place the marker on the road (estimated)
             // rather than leaving the LLM's random guessed coordinates.
+            // Also tries common spelling variants — the LLM often Americanizes
+            // British spellings (e.g. "Center St" → "Centre St" in Centralia).
             if (!fixed && stop.address) {
               const streetOnly = stop.address.replace(/^\d+\s+/, '').replace(/\s+\d{5}$/, '').trim();
               if (streetOnly && streetOnly !== stop.address) {
-                const geo = await geocode(`${streetOnly}, ${tour.city || ''}, ${tour.state || ''}`);
-                await sleep(1100);
-                if (geo) {
-                  const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
-                  if (dist <= 5) {
-                    updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: false });
-                    matched.add(stop.id);
-                    fixed = true;
+                const variants = [streetOnly];
+                const subs = [
+                  [/\bcenter\b/gi, 'Centre'],
+                  [/\btheater\b/gi, 'Theatre'],
+                  [/\bharbor\b/gi, 'Harbour'],
+                  [/\bcolor\b/gi, 'Colour'],
+                ];
+                for (const [re, repl] of subs) {
+                  if (re.test(streetOnly)) variants.push(streetOnly.replace(re, repl));
+                }
+                for (const variant of variants) {
+                  if (fixed) break;
+                  const geo = await geocode(`${variant}, ${tour.city || ''}, ${tour.state || ''}`);
+                  await sleep(1100);
+                  if (geo) {
+                    const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
+                    if (dist <= 5) {
+                      updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: false });
+                      matched.add(stop.id);
+                      fixed = true;
+                    }
                   }
                 }
               }
