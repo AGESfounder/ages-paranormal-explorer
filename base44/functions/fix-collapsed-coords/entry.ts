@@ -591,6 +591,14 @@ Return a JSON object with:
           // accurate), then OSM name search, then LLM web search as a final
           // fallback. When verifyAll is true, every stop goes through this
           // pipeline to confirm or correct its coordinates.
+          // ABSOLUTE LAST RESORT: if all methods fail (e.g. ghost towns where
+          // streets no longer exist in any map database), place the stop near
+          // the parking area with a pink "Needs Placement" marker so a visitor
+          // can drag it to the correct spot.
+          const parkingStopData = allStops.find(s => s.stop_type === 'parking');
+          const areaPlacementLat = parkingStopData?.latitude || tour.start_latitude;
+          const areaPlacementLon = parkingStopData?.longitude || tour.start_longitude;
+          let areaNeedsPlacementIdx = 0;
           for (const stop of needsFix) {
             let fixed = false;
             // Step 1: Geocode the stop's physical address — the address is the
@@ -705,9 +713,24 @@ Return a JSON object with:
                 console.error(`LLM search failed for "${stop.name}":`, e.message);
               }
             }
-            // If still not fixed, mark as unverified (geocoded: false)
+            // ABSOLUTE LAST RESORT: all geocoding methods failed (e.g. ghost
+            // towns like Centralia where streets no longer exist in any map
+            // database). Place the stop near the parking area with a pink
+            // "Needs Placement" marker in a circular arrangement so a visitor
+            // can drag it to the correct spot.
             if (!fixed) {
-              updates.push({ id: stop.id, geocoded: false });
+              const radius = 0.0015; // ~150 meters
+              const angle = areaNeedsPlacementIdx * 2.39996; // golden angle
+              const offsetLat = radius * Math.cos(angle);
+              const offsetLon = radius * Math.sin(angle);
+              updates.push({
+                id: stop.id,
+                latitude: areaPlacementLat + offsetLat,
+                longitude: areaPlacementLon + offsetLon,
+                geocoded: false,
+                needs_placement: true,
+              });
+              areaNeedsPlacementIdx++;
             }
           }
         }
