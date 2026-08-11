@@ -26,5 +26,8 @@ const ROOM_WORDS = [
 
 export function looksLikeRoomOrArea(name) {
   const n = String(name || '').toLowerCase();
-  return ROOM_WORDS.some((w) => n.includes(w));
+  return ROOM_WORDS.some((w) => {
+    const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('\\b' + escaped + '\\b').test(n);
+  });
 }
