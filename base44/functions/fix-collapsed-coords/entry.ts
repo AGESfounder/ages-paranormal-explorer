@@ -359,24 +359,32 @@ export default async function (req) {
         // within the building), use the building center — don't try Overpass,
         // which would match it to an unrelated nearby feature.
         if (stop.same_structure === true) {
-          updates.push({ id: stop.id, latitude: centerLat, longitude: centerLon, geocoded: true, same_structure: true });
+          updates.push({ id: stop.id, latitude: centerLat, longitude: centerLon, geocoded: true, same_structure: true, needs_placement: false });
           matched.add(stop.id);
           continue;
         }
         const feature = matchStopToFeature(stop.name, features);
         if (feature) {
-          updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
+          updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true, needs_placement: false });
           matched.add(stop.id);
         }
       }
 
       // For unmatched stops, try LLM web search to find real coordinates.
-      // Only grid-distribute as a last resort if LLM search fails or returns
-      // coordinates that are still collapsed. This preserves the LLM's
-      // web-searched coordinates from generation instead of overwriting
-      // them with fake grid points.
+      // For large properties (parks, forts, farms, battlefields), do NOT
+      // trust the LLM's original generation coordinates — they are often
+      // wrong (user confirmed markers at Fort Miles are in incorrect spots).
+      // Every unmatched stop must be verified via LLM web search. If no
+      // definitive location is found, the stop is placed near the parking
+      // area with a pink "Needs Placement" marker so a visitor can drag it
+      // to the correct spot. For small properties, trust existing coords
+      // within the verify radius (0.5 miles) — only search for outliers.
       const unmatched = stops.filter((s) => !matched.has(s.id));
       if (unmatched.length > 0) {
+        let needsPlacementIdx = 0;
+        const parkingStopData = allStops.find(s => s.stop_type === 'parking');
+        const placementLat = (parkingStopData?.latitude || centerLat);
+        const placementLon = (parkingStopData?.longitude || centerLon);
         for (const stop of unmatched) {
           const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
           const looksLikeRoom = looksLikeRoomOrArea(cleanName);
@@ -393,21 +401,21 @@ export default async function (req) {
               longitude: centerLon,
               same_structure: true,
               geocoded: true,
+              needs_placement: false,
             });
             matched.add(stop.id);
             continue;
           }
 
-          // DISTINCT structure — trust the LLM's web-searched coordinates from
-          // generation IF they're within the verify radius of the property
-          // center. Large properties (parks, forts, farms, battlefields) use
-          // a 2-mile radius because structures can be spread far apart. Small
-          // properties use a 0.5-mile radius — stops outside that were likely
-          // scattered by bad LLM coordinates and need per-stop web search.
-          if (stop.latitude != null && stop.longitude != null) {
+          // DISTINCT structure — for small properties, trust the LLM's
+          // web-searched coordinates from generation IF they're within the
+          // verify radius (0.5 miles). For large properties, do NOT trust
+          // existing coords — go straight to LLM web search (the user has
+          // confirmed LLM-generated coords at Fort Miles are wrong).
+          if (!largeProp && stop.latitude != null && stop.longitude != null) {
             const dist = haversine(centerLat, centerLon, stop.latitude, stop.longitude);
             if (dist <= verifyRadius) {
-              updates.push({ id: stop.id, geocoded: true, same_structure: false });
+              updates.push({ id: stop.id, geocoded: true, same_structure: false, needs_placement: false });
               matched.add(stop.id);
               continue;
             }
@@ -438,6 +446,7 @@ Return a JSON object with:
 - latitude: (number, only if found)
 - longitude: (number, only if found)
 - source: brief description of where you found the coordinates (only if found)`;
+          let definitive = false;
           try {
             const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
               prompt,
@@ -454,23 +463,39 @@ Return a JSON object with:
               },
             });
             if (llmResult.found && llmResult.latitude != null && llmResult.longitude != null) {
-              // Sanity check: coordinate must be within the verify radius of
-              // the property center. Room-like stops are already handled before
-              // this search (they use the building center directly), so this
-              // search only runs for DISTINCT structures on the property.
               const dist = haversine(centerLat, centerLon, llmResult.latitude, llmResult.longitude);
               if (dist <= verifyRadius) {
-                updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true });
+                updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true, needs_placement: false });
                 matched.add(stop.id);
-              } else {
-                updates.push({ id: stop.id, geocoded: false });
+                definitive = true;
               }
-            } else {
-              updates.push({ id: stop.id, geocoded: false });
             }
           } catch (e) {
             console.error(`Per-stop LLM search failed for "${stop.name}":`, e.message);
-            updates.push({ id: stop.id, geocoded: false });
+          }
+
+          // No definitive location found.
+          // For large properties: place near the parking area with a small
+          // offset (unstacked) and mark as needs_placement (pink "Needs
+          // Placement" marker). A visitor can drag it to the correct spot,
+          // which clears needs_placement and turns it blue.
+          // For small properties: mark as unverified (geocoded: false).
+          if (!definitive) {
+            if (largeProp) {
+              const offsetLat = 0.0004 + Math.floor(needsPlacementIdx / 4) * 0.0004;
+              const offsetLon = ((needsPlacementIdx % 4) - 1.5) * 0.0005;
+              updates.push({
+                id: stop.id,
+                latitude: placementLat + offsetLat,
+                longitude: placementLon + offsetLon,
+                geocoded: false,
+                needs_placement: true,
+                same_structure: false,
+              });
+              needsPlacementIdx++;
+            } else {
+              updates.push({ id: stop.id, geocoded: false, needs_placement: false });
+            }
           }
         }
       }

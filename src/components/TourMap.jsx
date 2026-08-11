@@ -78,6 +78,19 @@ function makeStackedIcon(stopNumber, count) {
   });
 }
 
+function makeNeedsPlacementIcon(stopNumber) {
+  return new L.DivIcon({
+    className: 'stop-marker needs-placement',
+    html: `<div style="position:relative;width:28px;height:28px;">
+      <div style="width:28px;height:28px;background:hsl(330,80%,55%);border-radius:50%;box-shadow:0 0 12px hsl(330,80%,55%,0.6),0 0 24px hsl(330,80%,55%,0.3);border:2px dashed hsl(330,80%,55%);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:bold;font-family:'Cinzel',serif;">${stopNumber}</div>
+      <div style="position:absolute;top:-6px;right:-6px;min-width:22px;height:14px;padding:0 3px;background:hsl(330,80%,55%);border-radius:7px;border:1.5px solid hsl(222,47%,8%);display:flex;align-items:center;justify-content:center;color:white;font-size:7px;font-weight:bold;font-family:'Inter',sans-serif;line-height:1;letter-spacing:0.3px;">PLACE</div>
+    </div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  });
+}
+
 export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd }) {
   if (!stops || stops.length === 0) return null;
 
@@ -90,14 +103,15 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   const hasParking = parkingLat != null && parkingLon != null;
 
   // Tour stops only (exclude parking) for route line and stop markers
-  const validStops = stops.filter(s => s.latitude && s.longitude && s.stop_type !== 'parking');
-  if (validStops.length === 0 && !hasParking) return null;
+  const validStops = stops.filter(s => s.latitude && s.longitude && s.stop_type !== 'parking' && !s.needs_placement);
+  const needsPlacementStops = stops.filter(s => s.latitude && s.longitude && s.stop_type !== 'parking' && s.needs_placement);
+  if (validStops.length === 0 && !hasParking && needsPlacementStops.length === 0) return null;
 
   // Filter out geographic outliers so one bad coordinate can't zoom the
   // map to a continental scale. Compute the median center, then keep only
   // stops within a reasonable distance (50 mi normal, 200 mi road trips).
   // Outliers are still shown as markers but excluded from bounds/route.
-  const allCoords = [...validStops, ...(hasParking ? [{ latitude: parkingLat, longitude: parkingLon }] : [])];
+  const allCoords = [...validStops, ...needsPlacementStops, ...(hasParking ? [{ latitude: parkingLat, longitude: parkingLon }] : [])];
   const sortedLats = allCoords.map(s => s.latitude).sort((a, b) => a - b);
   const sortedLngs = allCoords.map(s => s.longitude).sort((a, b) => a - b);
   const medianLat = sortedLats[Math.floor(sortedLats.length / 2)];
@@ -118,8 +132,8 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
 
   const lats = boundsStops.map(s => s.latitude);
   const lngs = boundsStops.map(s => s.longitude);
-  const allLats = [...lats, ...(hasParking ? [parkingLat] : [])];
-  const allLngs = [...lngs, ...(hasParking ? [parkingLon] : [])];
+  const allLats = [...lats, ...needsPlacementStops.map(s => s.latitude), ...(hasParking ? [parkingLat] : [])];
+  const allLngs = [...lngs, ...needsPlacementStops.map(s => s.longitude), ...(hasParking ? [parkingLon] : [])];
   const center = [
     (Math.min(...allLats) + Math.max(...allLats)) / 2,
     (Math.min(...allLngs) + Math.max(...allLngs)) / 2,
@@ -226,6 +240,22 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
             </Marker>
           ));
         })}
+        {needsPlacementStops.map(stop => (
+          <Marker
+            key={stop.id}
+            position={[stop.latitude, stop.longitude]}
+            icon={makeNeedsPlacementIcon(stop.stop_number)}
+            draggable={draggable}
+            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
+          >
+            <Popup>
+              <div className="text-xs font-heading">
+                <strong>Stop {stop.stop_number}:</strong> {stop.name}
+                <div className="text-pink-400 text-[10px] mt-1">Needs Placement — drag to correct location</div>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
       </MapContainer>
     </div>
   );
