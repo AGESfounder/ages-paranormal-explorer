@@ -63,15 +63,28 @@ export default function DeveloperDocs() {
         @media print {
           body { background: white !important; color: black !important; }
           .no-print { display: none !important; }
+          /* Hide the fixed dark background overlay so it doesn't cover/blank the first pages */
+          .fixed.inset-0.z-0 { display: none !important; }
+          /* Neutralize the page container's dark background */
+          .min-h-screen.bg-background { background: white !important; }
+          /* Make the sticky section header static so it doesn't clip or overlap page 1 */
+          .sticky.top-0 { position: static !important; backdrop-filter: none !important; background: white !important; border-color: #ccc !important; }
+          .sticky.top-0 h1 { color: black !important; }
+          .sticky.top-0 p { color: #555 !important; }
+          /* Hide ghost footsteps animations inside the header */
+          .sticky.top-0 svg { display: none !important; }
           .devdocs-section-content { display: block !important; }
           .devdocs-section-toggle { display: none !important; }
           .devdocs-section { border: 1px solid #ccc !important; background: white !important; box-shadow: none !important; break-inside: avoid; margin-bottom: 12px; border-radius: 6px; }
           .devdocs-section h2 { color: black !important; font-size: 14px !important; padding: 8px 12px; border-bottom: 1px solid #ddd; margin: 0; }
+          .devdocs-section .bg-primary\\/10 { background: #eef !important; border-color: #ccd !important; }
+          .devdocs-section .text-primary { color: #006 !important; }
           .devdocs-code { background: #f5f5f5 !important; border: 1px solid #ddd !important; color: #222 !important; }
           .devdocs-code pre { color: #222 !important; }
           .devdocs-code button { display: none !important; }
           .devdocs-info { color: #333 !important; }
           .devdocs-info code { color: #006 !important; background: #eef !important; padding: 1px 3px; border-radius: 2px; }
+          .devdocs-info .text-foreground { color: #111 !important; }
           .devdocs-print-header { display: block !important; margin-bottom: 16px; }
           .devdocs-print-header h1 { font-size: 20px; color: black !important; margin: 0; }
           .devdocs-print-header p { font-size: 11px; color: #555 !important; margin: 4px 0 0; }
