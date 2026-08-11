@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { isLargeProperty } from '../../shared/largeProperty.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -282,6 +283,8 @@ export default async function (req) {
     if (stops.length < 1) return Response.json({ tourId, updated: 0, reason: 'no stops' });
 
     const isSingleSite = tour.tour_category === 'landmark' || tour.tour_category === 'ship' || tour.tour_category === 'cold_spot';
+    const largeProp = isLargeProperty(tour);
+    const verifyRadius = largeProp ? 2 : 0.5;
     const updates = [];
     const matched = new Set();
 
@@ -396,13 +399,14 @@ export default async function (req) {
           }
 
           // DISTINCT structure — trust the LLM's web-searched coordinates from
-          // generation. Per-stop LLM re-search is too slow (200+ seconds for 8
-          // stops) and usually returns the same coordinates. Only do LLM web
-          // search if the stop has NO coordinates or is an outlier (>2mi from
-          // center), which indicates bad data that needs correction.
+          // generation IF they're within the verify radius of the property
+          // center. Large properties (parks, forts, farms, battlefields) use
+          // a 2-mile radius because structures can be spread far apart. Small
+          // properties use a 0.5-mile radius — stops outside that were likely
+          // scattered by bad LLM coordinates and need per-stop web search.
           if (stop.latitude != null && stop.longitude != null) {
             const dist = haversine(centerLat, centerLon, stop.latitude, stop.longitude);
-            if (dist <= 2) {
+            if (dist <= verifyRadius) {
               updates.push({ id: stop.id, geocoded: true, same_structure: false });
               matched.add(stop.id);
               continue;
@@ -450,15 +454,12 @@ Return a JSON object with:
               },
             });
             if (llmResult.found && llmResult.latitude != null && llmResult.longitude != null) {
-              // Sanity check: coordinate must be within 2 miles of property
-              // center. Room-like stops are already handled before this search
-              // (they use the building center directly), so this search only
-              // runs for DISTINCT structures on the property. Large properties
-              // like Fort Miles spread structures over 1.5+ miles — 0.5 miles
-              // was too tight and rejected correct coordinates, marking real
-              // locations as unverified "Est." guesses.
+              // Sanity check: coordinate must be within the verify radius of
+              // the property center. Room-like stops are already handled before
+              // this search (they use the building center directly), so this
+              // search only runs for DISTINCT structures on the property.
               const dist = haversine(centerLat, centerLon, llmResult.latitude, llmResult.longitude);
-              if (dist <= 2) {
+              if (dist <= verifyRadius) {
                 updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true });
                 matched.add(stop.id);
               } else {

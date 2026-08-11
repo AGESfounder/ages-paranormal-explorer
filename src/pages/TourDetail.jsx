@@ -26,11 +26,12 @@ import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
+import { isLargeProperty } from '@/lib/largeProperty';
 
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 15;
+const STOPS_VALIDATION_VERSION = 16;
 
 // Walking threshold for stop clustering. Single-site tours (landmark/ship/
 // cold_spot) are large properties where you walk between structures that can
@@ -38,7 +39,10 @@ const STOPS_VALIDATION_VERSION = 15;
 // ordered as a loop. Area tours use 0.33 miles (downtown walking tours).
 const getWalkingLimit = (tour) => {
   const cat = tour?.tour_category;
-  return (cat === 'landmark' || cat === 'ship' || cat === 'cold_spot') ? 1.0 : 0.33;
+  if (cat === 'landmark' || cat === 'ship' || cat === 'cold_spot') {
+    return isLargeProperty(tour) ? 1.0 : 0.33;
+  }
+  return 0.33;
 };
 
 // Validate that a tour's stops comply with current guidelines:
@@ -71,7 +75,7 @@ function validateStops(stops, tour) {
   const maxDistMiles = tour.tour_category === 'road_trip' ? 200
     : (tour.tour_category === 'cold_spot' || tour.tour_category === 'ship') ? 0.5
     : tour.tour_category === 'area' ? 2.5
-    : 5;
+    : isLargeProperty(tour) ? 5 : 1;
   const startLat = tour.start_latitude;
   const startLon = tour.start_longitude;
   if (startLat != null && startLon != null) {
