@@ -307,8 +307,10 @@ export default function TourDetail() {
           } catch (e) { console.error('Parking migration failed:', e); }
         }
         let tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking');
-        // Auto-regenerate stops that don't comply with current guidelines
-        // (outlier coordinates, collapsed markers). One-time per tour.
+        // Re-validate stops when validation rules change. fix-collapsed-coords
+        // runs first to verify/correct coordinates, then validateStops checks
+        // compliance. Stops are NEVER deleted — needs_placement handles
+        // unverified stops instead of destructive regeneration.
         let regenerated = false;
         if ((tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION) {
           // First, verify ALL coordinates via per-stop LLM web search
@@ -324,18 +326,15 @@ export default function TourDetail() {
           tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
           parkingStop = tourStops.find(s => s.stop_type === 'parking');
           tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking');
-          // Now validate with corrected coordinates
+          // Now validate with corrected coordinates. If still not compliant,
+          // DO NOT delete and regenerate — that destroys stops the user may
+          // have verified. The needs_placement system handles unverified
+          // stops. Just log the issue and mark the version as current.
           const validation = validateStops(tourStopsOnly, tourData[0]);
           if (!validation.compliant) {
-            for (const s of tourStops) {
-              await base44.entities.TourStop.delete(s.id);
-            }
-            await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
-            await generateStops(tourData[0], { systemRegen: true });
-            regenerated = true;
-          } else {
-            await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
+            console.warn(`Tour ${tourId} validation: ${validation.reason}. Stops preserved — fix-collapsed-coords already ran.`);
           }
+          await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
         }
         if (!regenerated) {
           if (tourData[0].user_reordered) {
