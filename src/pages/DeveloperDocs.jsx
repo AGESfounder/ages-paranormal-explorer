@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronDown, Code2, Zap, Megaphone, CreditCard, Database, Smartphone, Shield, FileCode, Copy, Check } from 'lucide-react';
+import { ChevronDown, Code2, Zap, Megaphone, CreditCard, Database, Smartphone, Shield, FileCode, Copy, Check, Printer } from 'lucide-react';
 import PageContainer from '@/components/PageContainer';
 import SectionHeader from '@/components/SectionHeader';
 
@@ -12,7 +11,7 @@ function CodeBlock({ code, label }) {
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <div className="relative rounded-lg border border-border bg-background/60 overflow-hidden">
+    <div className="devdocs-code relative rounded-lg border border-border bg-background/60 overflow-hidden">
       {label && (
         <div className="px-3 py-1.5 border-b border-border/50 bg-card/40 text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
           {label}
@@ -35,10 +34,10 @@ function CodeBlock({ code, label }) {
 function Section({ icon: Icon, title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-xl border border-border/40 bg-card/30 overflow-hidden">
+    <div className="devdocs-section rounded-xl border border-border/40 bg-card/30 overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 p-4 text-left hover:bg-card/50 transition-colors"
+        className="devdocs-section-toggle w-full flex items-center gap-3 p-4 text-left hover:bg-card/50 transition-colors"
       >
         <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 shrink-0">
           <Icon className="w-4 h-4 text-primary" />
@@ -46,30 +45,62 @@ function Section({ icon: Icon, title, children, defaultOpen = false }) {
         <h2 className="flex-1 font-heading text-sm font-semibold tracking-wide text-foreground uppercase">{title}</h2>
         <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="px-4 pb-4 space-y-3"
-        >
-          {children}
-        </motion.div>
-      )}
+      <div className={`px-4 pb-4 space-y-3 devdocs-section-content ${open ? '' : 'hidden'}`}>
+        {children}
+      </div>
     </div>
   );
 }
 
 function Info({ children }) {
-  return <p className="text-xs text-muted-foreground leading-relaxed">{children}</p>;
+  return <p className="devdocs-info text-xs text-muted-foreground leading-relaxed">{children}</p>;
 }
 
 export default function DeveloperDocs() {
   return (
     <PageContainer>
-      <SectionHeader title="Developer Docs" subtitle="Native bridge & integration reference" showBack />
+      <style>{`
+        @media print {
+          body { background: white !important; color: black !important; }
+          .no-print { display: none !important; }
+          .devdocs-section-content { display: block !important; }
+          .devdocs-section-toggle { display: none !important; }
+          .devdocs-section { border: 1px solid #ccc !important; background: white !important; box-shadow: none !important; break-inside: avoid; margin-bottom: 12px; border-radius: 6px; }
+          .devdocs-section h2 { color: black !important; font-size: 14px !important; padding: 8px 12px; border-bottom: 1px solid #ddd; margin: 0; }
+          .devdocs-code { background: #f5f5f5 !important; border: 1px solid #ddd !important; color: #222 !important; }
+          .devdocs-code pre { color: #222 !important; }
+          .devdocs-code button { display: none !important; }
+          .devdocs-info { color: #333 !important; }
+          .devdocs-info code { color: #006 !important; background: #eef !important; padding: 1px 3px; border-radius: 2px; }
+          .devdocs-print-header { display: block !important; margin-bottom: 16px; }
+          .devdocs-print-header h1 { font-size: 20px; color: black !important; margin: 0; }
+          .devdocs-print-header p { font-size: 11px; color: #555 !important; margin: 4px 0 0; }
+          .devdocs-intro { border: 1px solid #ccc !important; background: white !important; }
+          .devdocs-intro p { color: #333 !important; }
+          * { text-shadow: none !important; }
+        }
+        .devdocs-print-header { display: none; }
+      `}</style>
+      <div className="devdocs-print-header">
+        <h1>AGES — Developer Docs</h1>
+        <p>Native bridge &amp; integration reference · {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+      </div>
+      <SectionHeader
+        title="Developer Docs"
+        subtitle="Native bridge & integration reference"
+        showBack
+        rightAction={
+          <button
+            onClick={() => window.print()}
+            className="no-print flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card/40 text-foreground hover:bg-card/60 transition-colors text-xs font-heading uppercase tracking-wider"
+          >
+            <Printer className="w-3.5 h-3.5" /> Print
+          </button>
+        }
+      />
       <div className="px-4 pb-28 pt-3 space-y-3 max-w-2xl mx-auto">
 
-        <div className="p-4 rounded-xl border border-primary/20 bg-primary/5">
+        <div className="devdocs-intro p-4 rounded-xl border border-primary/20 bg-primary/5">
           <p className="text-xs text-foreground/80 leading-relaxed">
             This page is a technical reference for the developer handling the Capacitor export,
             AdMob plugin, and in-app purchase migration. All file paths, function names, entity
