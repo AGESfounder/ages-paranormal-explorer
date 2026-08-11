@@ -775,7 +775,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
             {generatingStops ? <Ghost className="w-12 h-12 text-primary" /> : <Loader2 className="w-8 h-8 text-primary" />}
           </motion.div>
           <p className="text-sm text-muted-foreground font-heading tracking-wide">
-            {generatingStops ? 'Mapping paranormal hotspots...' : 'Loading...'}
+            {generatingStops ? 'Be Patient: Complex Tour Build in Progress…' : 'Loading...'}
           </p>
         </div>
         <NavBar />
@@ -881,7 +881,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
                 <Ghost className="w-10 h-10 text-primary" />
               </motion.div>
-              <p className="text-xs text-muted-foreground">Mapping paranormal hotspots...</p>
+              <p className="text-xs text-muted-foreground">Be Patient: Complex Tour Build in Progress…</p>
               <BePatient />
             </div>
           ) : (
