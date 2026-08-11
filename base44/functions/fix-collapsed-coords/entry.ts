@@ -631,14 +631,31 @@ Return a JSON object with:
               const streetOnly = stop.address.replace(/^\d+\s+/, '').replace(/\s+\d{5}$/, '').trim();
               if (streetOnly && streetOnly !== stop.address) {
                 const variants = [streetOnly];
-                const subs = [
-                  [/\bcenter\b/gi, 'Centre'],
-                  [/\btheater\b/gi, 'Theatre'],
-                  [/\bharbor\b/gi, 'Harbour'],
-                  [/\bcolor\b/gi, 'Colour'],
+                // Common American↔British spelling pairs for street names.
+                // Try BOTH directions — the LLM may use either spelling while
+                // the map database uses the other.
+                const spellingPairs = [
+                  ['Center', 'Centre'],
+                  ['Theater', 'Theatre'],
+                  ['Harbor', 'Harbour'],
+                  ['Color', 'Colour'],
+                  ['Labor', 'Labour'],
+                  ['Neighbor', 'Neighbour'],
+                  ['Honor', 'Honour'],
+                  ['Armor', 'Armour'],
+                  ['Favor', 'Favour'],
+                  ['Defense', 'Defence'],
+                  ['Offense', 'Offence'],
+                  ['Pretense', 'Pretence'],
+                  ['License', 'Licence'],
+                  ['Splendor', 'Splendour'],
+                  ['Rumor', 'Rumour'],
                 ];
-                for (const [re, repl] of subs) {
-                  if (re.test(streetOnly)) variants.push(streetOnly.replace(re, repl));
+                for (const [us, uk] of spellingPairs) {
+                  const usRe = new RegExp(`\\b${us}\\b`, 'gi');
+                  const ukRe = new RegExp(`\\b${uk}\\b`, 'gi');
+                  if (usRe.test(streetOnly)) variants.push(streetOnly.replace(usRe, uk));
+                  if (ukRe.test(streetOnly)) variants.push(streetOnly.replace(ukRe, us));
                 }
                 for (const variant of variants) {
                   if (fixed) break;
