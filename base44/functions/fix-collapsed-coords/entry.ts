@@ -611,6 +611,27 @@ Return a JSON object with:
                 }
               }
             }
+            // Step 1b: Street-name fallback — if the full address (with
+            // house number) failed to geocode, try just the street name
+            // without the number. In abandoned/ghost towns like Centralia,
+            // Nominatim often can't resolve "1000 Church Rd" but CAN find
+            // "Church Rd" itself. Place the marker on the road (estimated)
+            // rather than leaving the LLM's random guessed coordinates.
+            if (!fixed && stop.address) {
+              const streetOnly = stop.address.replace(/^\d+\s+/, '').replace(/\s+\d{5}$/, '').trim();
+              if (streetOnly && streetOnly !== stop.address) {
+                const geo = await geocode(`${streetOnly}, ${tour.city || ''}, ${tour.state || ''}`);
+                await sleep(1100);
+                if (geo) {
+                  const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
+                  if (dist <= 5) {
+                    updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: false });
+                    matched.add(stop.id);
+                    fixed = true;
+                  }
+                }
+              }
+            }
             // Step 2: Fallback — OSM name search across the city area
             if (!fixed && tour.start_latitude && tour.start_longitude) {
               const cityBbox = `${(tour.start_latitude - 0.1).toFixed(6)},${(tour.start_longitude - 0.1).toFixed(6)},${(tour.start_latitude + 0.1).toFixed(6)},${(tour.start_longitude + 0.1).toFixed(6)}`;
