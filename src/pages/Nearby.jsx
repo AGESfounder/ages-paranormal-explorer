@@ -241,7 +241,7 @@ export default function Nearby() {
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-xs uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-50"
             >
               {generatingRange ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {generatingRange ? 'Creating…' : `Create New Tour${selectedRange ? ` · ${selectedRange.label}` : ''}`}
+              {generatingRange ? 'Be Patient: Complex Tour Build in Progress…' : `Create New Tour${selectedRange ? ` · ${selectedRange.label}` : ''}`}
             </button>
             {zipMode && (
               <div className="flex gap-2 pt-1">

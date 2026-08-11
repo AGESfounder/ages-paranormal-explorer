@@ -168,7 +168,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Generating Your Tour...
+                    Be Patient: Complex Tour Build in Progress…
                   </>
                 ) : (
                   <>
