@@ -72,7 +72,8 @@ const WALKING_LIMIT = 0.33;
 //
 // `startCoords` ({ lat, lon }) optionally moves the stop closest to the
 // tour's designated start to the front before ordering begins.
-export function enforceWalkingDistance(stops, tourType, startCoords) {
+export function enforceWalkingDistance(stops, tourType, startCoords, options = {}) {
+  const walkingLimit = options.walkingLimit || WALKING_LIMIT;
   if (!stops.length) return stops;
 
   // Sort by stop_number for a consistent base order, then move the stop
@@ -123,7 +124,7 @@ export function enforceWalkingDistance(stops, tourType, startCoords) {
       for (let j = 0; j < withCoords.length; j++) {
         if (!visited[j]) {
           const d = haversineDistance(withCoords[idx].latitude, withCoords[idx].longitude, withCoords[j].latitude, withCoords[j].longitude);
-          if (d <= WALKING_LIMIT) { visited[j] = true; queue.push(j); }
+          if (d <= walkingLimit) { visited[j] = true; queue.push(j); }
         }
       }
     }

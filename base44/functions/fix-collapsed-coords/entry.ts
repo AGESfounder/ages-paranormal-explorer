@@ -220,7 +220,12 @@ function looksLikeRoomOrArea(name) {
     // across the city by wrong web-search matches for generic room names
     'bar', 'taproom', 'tap room', 'apartment', 'landing', 'storage',
   ];
-  return roomWords.some((w) => n.includes(w));
+  // Word-boundary matching — substring matching causes false positives
+  // (e.g., "bar" matches inside "barracks", "den" inside "garden").
+  return roomWords.some((w) => {
+    const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('\\b' + escaped + '\\b').test(n);
+  });
 }
 
 function haversine(lat1, lon1, lat2, lon2) {
@@ -390,7 +395,21 @@ export default async function (req) {
             continue;
           }
 
-          // DISTINCT structure on the property — search for its real coords.
+          // DISTINCT structure — trust the LLM's web-searched coordinates from
+          // generation. Per-stop LLM re-search is too slow (200+ seconds for 8
+          // stops) and usually returns the same coordinates. Only do LLM web
+          // search if the stop has NO coordinates or is an outlier (>2mi from
+          // center), which indicates bad data that needs correction.
+          if (stop.latitude != null && stop.longitude != null) {
+            const dist = haversine(centerLat, centerLon, stop.latitude, stop.longitude);
+            if (dist <= 2) {
+              updates.push({ id: stop.id, geocoded: true, same_structure: false });
+              matched.add(stop.id);
+              continue;
+            }
+          }
+
+          // No coordinates or outlier — search for its real coords.
           const prompt = `Search the web for the EXACT GPS coordinates of this location:
 
 "${cleanName}"

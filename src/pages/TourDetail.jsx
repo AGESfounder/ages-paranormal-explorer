@@ -32,6 +32,15 @@ import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 // energy cost to the user (system maintenance bypasses energy gating).
 const STOPS_VALIDATION_VERSION = 15;
 
+// Walking threshold for stop clustering. Single-site tours (landmark/ship/
+// cold_spot) are large properties where you walk between structures that can
+// be 0.5+ miles apart — use 1.0-mile threshold so they form a walking cluster
+// ordered as a loop. Area tours use 0.33 miles (downtown walking tours).
+const getWalkingLimit = (tour) => {
+  const cat = tour?.tour_category;
+  return (cat === 'landmark' || cat === 'ship' || cat === 'cold_spot') ? 1.0 : 0.33;
+};
+
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
 //   (area/cold_spot/landmark/ship: 50 miles, road_trip: 200 miles)
@@ -190,7 +199,7 @@ export default function TourDetail() {
     if (tourData && !tourData.user_reordered) {
       const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking');
       const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
-      const reordered = enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude });
+      const reordered = enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
       for (const s of reordered) {
         const existing = tourStopsOnly.find(ts => ts.id === s.id);
         if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
@@ -332,7 +341,7 @@ export default function TourDetail() {
             setStops(allStops);
             geocodeExistingStops(allStops, tourData[0]).catch(console.error);
           } else {
-            const reordered = enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude });
+            const reordered = enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]) });
             // Update stop_numbers in the database if they changed
             for (const s of reordered) {
               const existing = tourStopsOnly.find(ts => ts.id === s.id);
@@ -542,7 +551,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         }
       }
 
-      const processed = enforceWalkingDistance(result.stops || [], tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude });
+      const processed = enforceWalkingDistance(result.stops || [], tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
       // Auto-correct tour type if stops are a mix of walking + driving
       const methods = new Set(processed.map(s => s.travel_method));
       const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
@@ -663,7 +672,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         // be optimal. This ensures walking cluster stays first, driving last.
         const vParking = verifiedStops.find(s => s.stop_type === 'parking');
         const vTourStops = verifiedStops.filter(s => s.stop_type !== 'parking');
-        const reordered = enforceWalkingDistance(vTourStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude });
+        const reordered = enforceWalkingDistance(vTourStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
         for (const s of reordered) {
           const existing = vTourStops.find(ts => ts.id === s.id);
           if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
