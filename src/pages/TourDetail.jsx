@@ -91,8 +91,14 @@ function validateStops(stops, tour) {
   // Collapse detection — same_structure aware. Multiple stops at the same
   // coordinates are only an error if NOT all of them are same_structure: true
   // (rooms/areas within one building legitimately share coordinates).
+  // Collapse detection — same_structure and needs_placement aware.
+  // - same_structure: true stops (rooms in one building) legitimately share coords.
+  // - needs_placement: true stops are intentionally stacked at the parking area
+  //   as placeholders — they're NOT collapsed, they're waiting for user verification.
+  //   Exclude them entirely from collapse detection so they don't trigger regeneration.
   const coordMap = {};
   for (const s of stops) {
+    if (s.needs_placement === true) continue;
     if (s.latitude != null && s.longitude != null) {
       const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
       if (!coordMap[key]) coordMap[key] = [];
