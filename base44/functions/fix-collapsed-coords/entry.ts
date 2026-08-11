@@ -482,8 +482,12 @@ Return a JSON object with:
           // For small properties: mark as unverified (geocoded: false).
           if (!definitive) {
             if (largeProp) {
-              const offsetLat = 0.0004 + Math.floor(needsPlacementIdx / 4) * 0.0004;
-              const offsetLon = ((needsPlacementIdx % 4) - 1.5) * 0.0005;
+              // Place needs_placement stops in a circle around the parking
+              // badge using the golden angle for even distribution at any count.
+              const radius = 0.0015; // ~150 meters
+              const angle = needsPlacementIdx * 2.39996; // golden angle (137.5°)
+              const offsetLat = radius * Math.cos(angle);
+              const offsetLon = radius * Math.sin(angle);
               updates.push({
                 id: stop.id,
                 latitude: placementLat + offsetLat,
