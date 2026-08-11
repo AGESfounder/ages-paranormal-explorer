@@ -197,7 +197,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         <FitBounds bounds={bounds} />
-        {bounds && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
+        {routeLine && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
         {hasParking && boundsStops.length > 0 && (
           <Polyline
             positions={[[parkingLat, parkingLon], [boundsStops[0].latitude, boundsStops[0].longitude]]}
