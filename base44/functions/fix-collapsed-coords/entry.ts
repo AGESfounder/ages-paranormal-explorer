@@ -431,11 +431,15 @@ Return a JSON object with:
               },
             });
             if (llmResult.found && llmResult.latitude != null && llmResult.longitude != null) {
-              // Sanity check: coordinate must be within 0.5 miles of property
-              // center (tightened from 1 mile — 1 mile let in wrong matches
-              // from different businesses with similar names across the city).
+              // Sanity check: coordinate must be within 2 miles of property
+              // center. Room-like stops are already handled before this search
+              // (they use the building center directly), so this search only
+              // runs for DISTINCT structures on the property. Large properties
+              // like Fort Miles spread structures over 1.5+ miles — 0.5 miles
+              // was too tight and rejected correct coordinates, marking real
+              // locations as unverified "Est." guesses.
               const dist = haversine(centerLat, centerLon, llmResult.latitude, llmResult.longitude);
-              if (dist <= 0.5) {
+              if (dist <= 2) {
                 updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true });
                 matched.add(stop.id);
               } else {
