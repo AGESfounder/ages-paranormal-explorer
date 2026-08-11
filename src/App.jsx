@@ -3,41 +3,43 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import PageNotFound from './lib/PageNotFound';
+import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
-import Login from '@/pages/Login';
-import Register from '@/pages/Register';
-import ForgotPassword from '@/pages/ForgotPassword';
-import ResetPassword from '@/pages/ResetPassword';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import TabNavigationProvider from '@/components/TabNavigationProvider';
-import { Navigate } from 'react-router-dom';
-// Add page imports here
-import Home from '@/pages/Home';
-import States from '@/pages/States';
-import StateTours from '@/pages/StateTours';
-import TourDetail from '@/pages/TourDetail';
-import StopDetail from '@/pages/StopDetail';
-import Evidence from '@/pages/Evidence';
-import Favorites from '@/pages/Favorites';
-import Profile from '@/pages/Profile';
-import Toolkit from '@/pages/Toolkit';
-import Nearby from '@/pages/Nearby';
-import AbroadTours from '@/pages/AbroadTours';
-import Settings from '@/pages/Settings';
-import Admin from '@/pages/Admin';
-import Leaderboard from '@/pages/Leaderboard';
-import CommunityMap from '@/pages/CommunityMap';
-import EvidenceDashboard from '@/pages/EvidenceDashboard';
-import PrivacyPolicy from '@/pages/PrivacyPolicy';
-import TermsOfService from '@/pages/TermsOfService';
 import HauntedMusic from '@/components/HauntedMusic';
-import Dashboard from '@/pages/Dashboard';
-import ThankYou from '@/pages/ThankYou';
-import PlanAnalysis from '@/pages/PlanAnalysis';
-import DeveloperDocs from '@/pages/DeveloperDocs';
+import PageLoader from '@/components/PageLoader';
+import { Navigate } from 'react-router-dom';
+// Lazy page imports — loaded on-demand for smaller initial bundle
+const PageNotFound = lazy(() => import('./lib/PageNotFound'));
+const Login = lazy(() => import('@/pages/Login'));
+const Register = lazy(() => import('@/pages/Register'));
+const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
+const Home = lazy(() => import('@/pages/Home'));
+const States = lazy(() => import('@/pages/States'));
+const StateTours = lazy(() => import('@/pages/StateTours'));
+const TourDetail = lazy(() => import('@/pages/TourDetail'));
+const StopDetail = lazy(() => import('@/pages/StopDetail'));
+const Evidence = lazy(() => import('@/pages/Evidence'));
+const Favorites = lazy(() => import('@/pages/Favorites'));
+const Profile = lazy(() => import('@/pages/Profile'));
+const Toolkit = lazy(() => import('@/pages/Toolkit'));
+const Nearby = lazy(() => import('@/pages/Nearby'));
+const AbroadTours = lazy(() => import('@/pages/AbroadTours'));
+const Settings = lazy(() => import('@/pages/Settings'));
+const Admin = lazy(() => import('@/pages/Admin'));
+const Leaderboard = lazy(() => import('@/pages/Leaderboard'));
+const CommunityMap = lazy(() => import('@/pages/CommunityMap'));
+const EvidenceDashboard = lazy(() => import('@/pages/EvidenceDashboard'));
+const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const ThankYou = lazy(() => import('@/pages/ThankYou'));
+const PlanAnalysis = lazy(() => import('@/pages/PlanAnalysis'));
+const DeveloperDocs = lazy(() => import('@/pages/DeveloperDocs'));
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
@@ -69,6 +71,7 @@ const AuthenticatedApp = () => {
     {isAuthenticated && <HauntedMusic />}
     <AnimatePresence mode="wait">
     <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+    <Suspense fallback={<PageLoader />}>
     <Routes location={location}>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -102,6 +105,7 @@ const AuthenticatedApp = () => {
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </Suspense>
     </motion.div>
     </AnimatePresence>
     </TabNavigationProvider>
