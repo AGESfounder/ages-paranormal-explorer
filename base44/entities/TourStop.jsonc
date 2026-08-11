@@ -106,11 +106,6 @@
       "default": false,
       "description": "Whether the GPS coordinates have been verified via real address geocoding (Nominatim). False = LLM-generated coordinates that may be inaccurate."
     },
-    "needs_placement": {
-      "type": "boolean",
-      "default": false,
-      "description": "true = this stop's exact location could not be definitively verified. It has been placed at the parking area as a placeholder. The marker is pink and says 'Needs Placement'. When a user verifies the stop's actual location (GPS mark or marker drag), this becomes false and the marker turns blue. Used for large property tours (parks, forts, farms, battlefields) where LLM-generated coordinates are unreliable."
-    },
     "user_verified": {
       "type": "boolean",
       "default": false,

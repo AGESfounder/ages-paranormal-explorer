@@ -31,7 +31,7 @@ import { isLargeProperty } from '@/lib/largeProperty';
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 17;
+const STOPS_VALIDATION_VERSION = 16;
 
 // Walking threshold for stop clustering. Single-site tours (landmark/ship/
 // cold_spot) are large properties where you walk between structures that can
@@ -91,14 +91,8 @@ function validateStops(stops, tour) {
   // Collapse detection — same_structure aware. Multiple stops at the same
   // coordinates are only an error if NOT all of them are same_structure: true
   // (rooms/areas within one building legitimately share coordinates).
-  // Collapse detection — same_structure and needs_placement aware.
-  // - same_structure: true stops (rooms in one building) legitimately share coords.
-  // - needs_placement: true stops are intentionally stacked at the parking area
-  //   as placeholders — they're NOT collapsed, they're waiting for user verification.
-  //   Exclude them entirely from collapse detection so they don't trigger regeneration.
   const coordMap = {};
   for (const s of stops) {
-    if (s.needs_placement === true) continue;
     if (s.latitude != null && s.longitude != null) {
       const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
       if (!coordMap[key]) coordMap[key] = [];
@@ -574,10 +568,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       // DEDUP: Remove duplicate stops by normalized name and address. The LLM
       // sometimes returns the same physical location twice (same address,
       // slightly different name) — both would get created without this check.
-      // For single-site tours (landmark/ship/cold_spot), ALL stops share the
-      // same property address — address-based dedup would delete all but the
-      // first stop. Only dedup by address for area/road_trip tours where each
-      // stop is a different property.
       const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
       const seenNames = new Set();
       const seenAddrs = new Set();
@@ -586,7 +576,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         const nameKey = normKey(stop.name);
         const addrKey = normKey(stop.address);
         if (nameKey && seenNames.has(nameKey)) continue;
-        if (!isSingleSite && addrKey && seenAddrs.has(addrKey)) continue;
+        if (addrKey && seenAddrs.has(addrKey)) continue;
         // Fuzzy name dedup — catch near-duplicates like "Frederick City Hall"
         // vs "Frederick City Hall Main Floor" (one normalized name contains
         // the other). Prevents the LLM from padding with variations of the
@@ -602,7 +592,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         }
         if (isFuzzyDup) continue;
         if (nameKey) seenNames.add(nameKey);
-        if (!isSingleSite && addrKey) seenAddrs.add(addrKey);
+        if (addrKey) seenAddrs.add(addrKey);
         deduped.push(stop);
       }
       // Cap at 10 stops — the prompt asks for 8-10, but the LLM sometimes
@@ -938,10 +928,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5">
                                   <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{stop.name}</p>
-                                  {stop.needs_placement && (
-                                    <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-pink-500/15 border border-pink-500/40 text-pink-400 text-[9px] font-heading uppercase tracking-wider">Needs Placement</span>
-                                  )}
-                                  {stop.geocoded === false && !stop.needs_placement && (
+                                  {stop.geocoded === false && (
                                     <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 text-[9px] font-heading uppercase tracking-wider">Est.</span>
                                   )}
                                 </div>

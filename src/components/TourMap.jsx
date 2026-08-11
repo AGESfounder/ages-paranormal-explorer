@@ -78,40 +78,6 @@ function makeStackedIcon(stopNumber, count) {
   });
 }
 
-// Pink marker for stops that need placement — their exact location could not
-// be definitively verified, so they're stacked at the parking area until a
-// user confirms the real spot.
-function makeNeedsPlacementIcon(stopNumber) {
-  return new L.DivIcon({
-    className: 'stop-marker needs-placement',
-    html: `<div style="
-      width: 28px; height: 28px;
-      background: hsl(330, 80%, 55%);
-      border-radius: 50%;
-      box-shadow: 0 0 12px hsl(330, 80%, 55%, 0.6), 0 0 24px hsl(330, 80%, 55%, 0.3);
-      border: 2px solid hsl(330, 80%, 55%);
-      display: flex; align-items: center; justify-content: center;
-      color: white; font-size: 12px; font-weight: bold; font-family: 'Cinzel', serif;
-    ">${stopNumber}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -16],
-  });
-}
-
-function makeNeedsPlacementStackedIcon(count) {
-  return new L.DivIcon({
-    className: 'stop-marker needs-placement stacked',
-    html: `<div style="position:relative;width:28px;height:28px;">
-      <div style="width:28px;height:28px;background:hsl(330,80%,55%);border-radius:50%;box-shadow:0 0 12px hsl(330,80%,55%,0.6),0 0 24px hsl(330,80%,55%,0.3);border:2px solid hsl(330,80%,55%);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:bold;font-family:'Inter',sans-serif;">?</div>
-      <div style="position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;background:hsl(330,80%,55%);border-radius:8px;border:1.5px solid hsl(222,47%,8%);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:bold;font-family:'Inter',sans-serif;line-height:1;">${count}</div>
-    </div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -16],
-  });
-}
-
 export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd }) {
   if (!stops || stops.length === 0) return null;
 
@@ -180,7 +146,6 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   const renderGroups = Object.values(coordGroups).map(group => ({
     stops: group,
     isStacked: group.length > 1 && group.every(s => s.same_structure === true),
-    needsPlacement: group.every(s => s.needs_placement === true),
   }));
 
   return (
@@ -197,7 +162,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         <FitBounds bounds={bounds} />
-        {routeLine && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
+        {bounds && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
         {hasParking && boundsStops.length > 0 && (
           <Polyline
             positions={[[parkingLat, parkingLon], [boundsStops[0].latitude, boundsStops[0].longitude]]}
@@ -223,45 +188,6 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           </Marker>
         )}
         {renderGroups.flatMap((group) => {
-          if (group.needsPlacement) {
-            const first = group.stops[0];
-            if (group.stops.length > 1) {
-              return (
-                <Marker
-                  key={first.id}
-                  position={[first.latitude, first.longitude]}
-                  icon={makeNeedsPlacementStackedIcon(group.stops.length)}
-                  draggable={draggable}
-                  eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
-                >
-                  <Popup>
-                    <div className="text-xs font-heading">
-                      <strong>Needs Placement ({group.stops.length} stops):</strong>
-                      <ul className="mt-1 space-y-0.5 list-none p-0">
-                        {group.stops.map(s => <li key={s.id}>• {s.name}</li>)}
-                      </ul>
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            }
-            return (
-              <Marker
-                key={first.id}
-                position={[first.latitude, first.longitude]}
-                icon={makeNeedsPlacementIcon(first.stop_number)}
-                draggable={draggable}
-                eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
-              >
-                <Popup>
-                  <div className="text-xs font-heading">
-                    <strong>Stop {first.stop_number}:</strong> {first.name}
-                    <div className="text-pink-400 text-[10px] mt-1">Needs Placement — location not verified</div>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          }
           if (group.isStacked) {
             const first = group.stops[0];
             return (
