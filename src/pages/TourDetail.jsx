@@ -574,6 +574,10 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       // DEDUP: Remove duplicate stops by normalized name and address. The LLM
       // sometimes returns the same physical location twice (same address,
       // slightly different name) — both would get created without this check.
+      // For single-site tours (landmark/ship/cold_spot), ALL stops share the
+      // same property address — address-based dedup would delete all but the
+      // first stop. Only dedup by address for area/road_trip tours where each
+      // stop is a different property.
       const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
       const seenNames = new Set();
       const seenAddrs = new Set();
@@ -582,7 +586,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         const nameKey = normKey(stop.name);
         const addrKey = normKey(stop.address);
         if (nameKey && seenNames.has(nameKey)) continue;
-        if (addrKey && seenAddrs.has(addrKey)) continue;
+        if (!isSingleSite && addrKey && seenAddrs.has(addrKey)) continue;
         // Fuzzy name dedup — catch near-duplicates like "Frederick City Hall"
         // vs "Frederick City Hall Main Floor" (one normalized name contains
         // the other). Prevents the LLM from padding with variations of the
@@ -598,7 +602,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         }
         if (isFuzzyDup) continue;
         if (nameKey) seenNames.add(nameKey);
-        if (addrKey) seenAddrs.add(addrKey);
+        if (!isSingleSite && addrKey) seenAddrs.add(addrKey);
         deduped.push(stop);
       }
       // Cap at 10 stops — the prompt asks for 8-10, but the LLM sometimes
