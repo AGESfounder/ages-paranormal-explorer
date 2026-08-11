@@ -541,28 +541,20 @@ Return a JSON object with:
           for (const stop of needsFix) {
             let fixed = false;
             // Step 1: Geocode the stop's physical address — the address is the
-            // source of truth, not the LLM's guessed coordinates. Always use
-            // the geocoded address if it's on land and within 5 miles of the
-            // tour start (sanity check to reject wrong-address matches).
-            // Previously, a "sameCoords" check skipped the update when the
-            // LLM's coords were within 0.001° of the geocoded address — but
-            // it didn't set fixed=true, so Steps 2/3 would OVERRIDE the
-            // coordinates by matching the stop NAME to a different OSM
-            // feature elsewhere in the city. That's how markers ended up
-            // at the wrong address.
+            // source of truth, not the LLM's guessed coordinates. Use the
+            // geocoded address directly if within 5 miles of tour start.
+            // Skip the reverse-geocode water check — a geocoded real address
+            // is on land by definition, and the extra Nominatim call adds
+            // 1.1s per stop (11s for a 10-stop tour).
             if (stop.address) {
               const geo = await geocode(`${stop.address}, ${tour.city || ''}, ${tour.state || ''}`);
               await sleep(1100);
               if (geo) {
                 const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
                 if (dist <= 5) {
-                  const rev = await reverseGeocode(geo.lat, geo.lon);
-                  await sleep(1100);
-                  if (isOnLand(rev)) {
-                    updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true });
-                    matched.add(stop.id);
-                    fixed = true;
-                  }
+                  updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true });
+                  matched.add(stop.id);
+                  fixed = true;
                 }
               }
             }

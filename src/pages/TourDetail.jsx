@@ -675,8 +675,10 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         console.error('Coordinate verification failed:', e);
         setStops(created.sort((a, b) => a.stop_number - b.stop_number));
       }
-      // New stops are unverified — drop the tour's verified status
-      await base44.entities.Tour.update(tourData.id, { verified: false });
+      // New stops are unverified — drop the tour's verified status.
+      // Mark stops_regenerated to the current version so the next view
+      // doesn't re-run the full verification (which would double load time).
+      await base44.entities.Tour.update(tourData.id, { verified: false, stops_regenerated: STOPS_VALIDATION_VERSION });
       setGeneratingStops(false);
     } catch (err) {
       setStopsError(err.message || 'Failed to generate stops. Please try again.');
