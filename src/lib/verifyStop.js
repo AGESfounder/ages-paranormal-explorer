@@ -11,6 +11,7 @@ export async function verifyStopLocation(stopId, tourId, latitude, longitude, us
     user_verified: true,
     verified_by_id: userId,
     verified_date: new Date().toISOString(),
+    needs_placement: false,
   });
 
   const siblings = await base44.entities.TourStop.filter({ tour_id: tourId });

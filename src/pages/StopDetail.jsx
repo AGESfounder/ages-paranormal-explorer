@@ -465,6 +465,15 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           </button>
         </div>
 
+        {stop.needs_placement && (
+          <div className="flex items-center gap-2 p-3 rounded-xl border border-pink-500/30 bg-pink-500/5">
+            <MapPin className="w-4 h-4 text-pink-400 shrink-0" />
+            <div>
+              <p className="text-xs font-heading uppercase tracking-wider text-pink-400">Needs Placement</p>
+              <p className="text-[10px] text-muted-foreground">This stop's exact location hasn't been verified. Mark the vantage point below to place it.</p>
+            </div>
+          </div>
+        )}
         {isPaid && !stop.user_verified && (
           <div className="p-3 rounded-xl border border-primary/30 bg-primary/5">
             <button

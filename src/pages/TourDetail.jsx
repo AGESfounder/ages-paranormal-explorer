@@ -31,7 +31,7 @@ import { isLargeProperty } from '@/lib/largeProperty';
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 16;
+const STOPS_VALIDATION_VERSION = 17;
 
 // Walking threshold for stop clustering. Single-site tours (landmark/ship/
 // cold_spot) are large properties where you walk between structures that can
@@ -928,7 +928,10 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5">
                                   <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{stop.name}</p>
-                                  {stop.geocoded === false && (
+                                  {stop.needs_placement && (
+                                    <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-pink-500/15 border border-pink-500/40 text-pink-400 text-[9px] font-heading uppercase tracking-wider">Needs Placement</span>
+                                  )}
+                                  {stop.geocoded === false && !stop.needs_placement && (
                                     <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 text-[9px] font-heading uppercase tracking-wider">Est.</span>
                                   )}
                                 </div>

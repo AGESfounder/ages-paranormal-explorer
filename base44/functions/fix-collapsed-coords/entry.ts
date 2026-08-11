@@ -359,13 +359,13 @@ export default async function (req) {
         // within the building), use the building center — don't try Overpass,
         // which would match it to an unrelated nearby feature.
         if (stop.same_structure === true) {
-          updates.push({ id: stop.id, latitude: centerLat, longitude: centerLon, geocoded: true, same_structure: true });
+          updates.push({ id: stop.id, latitude: centerLat, longitude: centerLon, geocoded: true, same_structure: true, needs_placement: false });
           matched.add(stop.id);
           continue;
         }
         const feature = matchStopToFeature(stop.name, features);
         if (feature) {
-          updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true });
+          updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true, needs_placement: false });
           matched.add(stop.id);
         }
       }
@@ -375,6 +375,11 @@ export default async function (req) {
       // coordinates that are still collapsed. This preserves the LLM's
       // web-searched coordinates from generation instead of overwriting
       // them with fake grid points.
+      // Find parking coordinates for needs_placement fallback (large properties).
+      const parkingStopForFallback = allStops.find(s => s.stop_type === 'parking');
+      const parkingLat = parkingStopForFallback?.latitude || centerLat;
+      const parkingLon = parkingStopForFallback?.longitude || centerLon;
+
       const unmatched = stops.filter((s) => !matched.has(s.id));
       if (unmatched.length > 0) {
         for (const stop of unmatched) {
@@ -393,27 +398,29 @@ export default async function (req) {
               longitude: centerLon,
               same_structure: true,
               geocoded: true,
+              needs_placement: false,
             });
             matched.add(stop.id);
             continue;
           }
 
-          // DISTINCT structure — trust the LLM's web-searched coordinates from
-          // generation IF they're within the verify radius of the property
-          // center. Large properties (parks, forts, farms, battlefields) use
-          // a 2-mile radius because structures can be spread far apart. Small
-          // properties use a 0.5-mile radius — stops outside that were likely
-          // scattered by bad LLM coordinates and need per-stop web search.
-          if (stop.latitude != null && stop.longitude != null) {
+          // Small properties: trust the LLM's web-searched coordinates from
+          // generation IF they're within the verify radius (0.5 miles). Large
+          // properties (parks, forts, farms, battlefields) do NOT trust
+          // generated coordinates — they're often guesses that look plausible
+          // but are wrong. Large properties require definitive verification
+          // via LLM web search, and fall back to parking + needs_placement.
+          if (!largeProp && stop.latitude != null && stop.longitude != null) {
             const dist = haversine(centerLat, centerLon, stop.latitude, stop.longitude);
             if (dist <= verifyRadius) {
-              updates.push({ id: stop.id, geocoded: true, same_structure: false });
+              updates.push({ id: stop.id, geocoded: true, same_structure: false, needs_placement: false });
               matched.add(stop.id);
               continue;
             }
           }
 
-          // No coordinates or outlier — search for its real coords.
+          let llmFound = false;
+          // Search for definitive coordinates via LLM web search.
           const prompt = `Search the web for the EXACT GPS coordinates of this location:
 
 "${cleanName}"
@@ -454,23 +461,28 @@ Return a JSON object with:
               },
             });
             if (llmResult.found && llmResult.latitude != null && llmResult.longitude != null) {
-              // Sanity check: coordinate must be within the verify radius of
-              // the property center. Room-like stops are already handled before
-              // this search (they use the building center directly), so this
-              // search only runs for DISTINCT structures on the property.
               const dist = haversine(centerLat, centerLon, llmResult.latitude, llmResult.longitude);
               if (dist <= verifyRadius) {
-                updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true });
+                updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true, needs_placement: false });
                 matched.add(stop.id);
-              } else {
-                updates.push({ id: stop.id, geocoded: false });
+                llmFound = true;
               }
-            } else {
-              updates.push({ id: stop.id, geocoded: false });
             }
           } catch (e) {
             console.error(`Per-stop LLM search failed for "${stop.name}":`, e.message);
-            updates.push({ id: stop.id, geocoded: false });
+          }
+
+          // Fallback if no definitive coordinates were found.
+          if (!llmFound) {
+            if (largeProp) {
+              // Large property: place at parking area, mark needs_placement.
+              // The marker will be pink with "Needs Placement" label until a
+              // user verifies the actual location.
+              updates.push({ id: stop.id, latitude: parkingLat, longitude: parkingLon, geocoded: false, needs_placement: true });
+            } else {
+              // Small property: mark as unverified (existing behavior).
+              updates.push({ id: stop.id, geocoded: false, needs_placement: false });
+            }
           }
         }
       }
