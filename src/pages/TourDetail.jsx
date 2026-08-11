@@ -772,10 +772,10 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         <SectionHeader title="Loading Tour" showBack />
         <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
           <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
-            {generatingStops ? <Ghost className="w-12 h-12 text-primary" /> : <Loader2 className="w-8 h-8 text-primary" />}
+            <Ghost className="w-12 h-12 text-primary" />
           </motion.div>
           <p className="text-sm text-muted-foreground font-heading tracking-wide">
-            {generatingStops ? 'Be Patient: Complex Tour Build in Progress…' : 'Loading...'}
+            Be Patient: Complex Tour Build in Progress…
           </p>
         </div>
         <NavBar />
