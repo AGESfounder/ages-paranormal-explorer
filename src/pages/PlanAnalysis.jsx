@@ -33,19 +33,16 @@ const BASE44_PLANS = [
   { name: 'Elite', monthlyCost: 200, credits: 50000, costPerCredit: 200 / 50000 }, // estimated
 ];
 
-// Wix Payments (Base44 Payments) processing fees — the ACTUAL payment processor
-// used by this app for all subscriptions and aura bundles (see create-subscription).
-// Standard card-not-present rate for US merchants. Each recurring charge is a
-// separate transaction, so monthly subscriptions incur this fee every cycle.
-const WIX_PROCESSING_PCT = 0.029;     // 2.9% per transaction
-const WIX_PROCESSING_FLAT = 0.30;      // $0.30 per transaction
+// App Store / Google Play IAP fees — the app publishes natively via iOS/Android.
+// Apple & Google take 15% for small developers (<$1M/yr). Apple jumps to 30%
+// above $1M/yr; Google stays at 15%. This is the active billing model.
+const STORE_FEE_PCT = 0.15;            // Apple & Google: 15% for small devs (<$1M/yr)
+const STORE_FEE_PCT_HIGH = 0.30;       // Apple: 30% if >$1M/yr; Google stays 15%
+const STORE_HIGH_THRESHOLD = 1000000;
 
-// FUTURE RISK: If the app publishes as a native iOS/Android app and uses IAP for
-// digital content, Apple/Google take 15% (small devs <$1M/yr) or 30% (Apple >$1M/yr).
-// This is NOT the current fee model — Wix Payments is used today. Kept for risk planning.
-const IAP_FEE_PCT_LOW = 0.15;          // Apple & Google: 15% for small devs (<$1M/yr)
-const IAP_FEE_PCT_HIGH = 0.30;         // Apple: 30% if >$1M/yr; Google stays 15%
-const IAP_HIGH_THRESHOLD = 1000000;
+// RevenueCat (subscription management layer for IAP across iOS/Android)
+const REVENUECAT_FEE_PCT = 0.01;       // 1% of monthly sales above $2,500
+const REVENUECAT_THRESHOLD = 2500;
 
 // Fixed annual costs
 const APPLE_DEV_ANNUAL = 99;
@@ -167,9 +164,15 @@ function calcCosts(manE, narE, months) {
   return { credits, platformCost };
 }
 
-// Wix Payments processing fee for a single transaction
-function processingFee(price) {
-  return price * WIX_PROCESSING_PCT + WIX_PROCESSING_FLAT;
+// App Store / Google Play IAP fee (15% for small devs)
+function storeFee(price) {
+  return price * STORE_FEE_PCT;
+}
+
+// RevenueCat fee (1% of monthly sales above $2,500)
+function revenuecatFee(monthlySales) {
+  if (monthlySales <= REVENUECAT_THRESHOLD) return 0;
+  return (monthlySales - REVENUECAT_THRESHOLD) * REVENUECAT_FEE_PCT;
 }
 
 // Determine which Base44 plan(s) are needed for a given monthly credit volume
@@ -187,30 +190,30 @@ const monthlyAnalysis = [
   { plan: 'Investigator', price: 11.99, manE: 15, narE: 1500 },
 ].map(p => {
   const { credits, platformCost } = calcCosts(p.manE, p.narE, 1);
-  const pf = processingFee(p.price);
-  const totalCost = platformCost + pf;
+  const sf = storeFee(p.price);
+  const totalCost = platformCost + sf;
   const profit = p.price - totalCost;
-  return { ...p, credits, platformCost, pf, totalCost, profit, margin: (profit / p.price * 100) };
+  return { ...p, credits, platformCost, sf, totalCost, profit, margin: (profit / p.price * 100) };
 });
 
 // Trailblazer (30 months, 100% utilization)
 const trailblazerAnalysis = (() => {
   const price = 239.99;
   const { credits, platformCost } = calcCosts(15, 1500, 30);
-  const pf = processingFee(price);
-  const totalCost = platformCost + pf;
+  const sf = storeFee(price);
+  const totalCost = platformCost + sf;
   const profit = price - totalCost;
-  return { price, credits, platformCost, pf, totalCost, profit, margin: (profit / price * 100) };
+  return { price, credits, platformCost, sf, totalCost, profit, margin: (profit / price * 100) };
 })();
 
 // Trailblazer at 50% utilization
 const trailblazer50 = (() => {
   const price = 239.99;
   const { credits, platformCost } = calcCosts(7.5, 750, 30);
-  const pf = processingFee(price);
-  const totalCost = platformCost + pf;
+  const sf = storeFee(price);
+  const totalCost = platformCost + sf;
   const profit = price - totalCost;
-  return { price, credits, platformCost, pf, totalCost, profit, margin: (profit / price * 100) };
+  return { price, credits, platformCost, sf, totalCost, profit, margin: (profit / price * 100) };
 })();
 
 // Aura bundle profit (100% utilization)
@@ -218,10 +221,10 @@ const bundleAnalysis = AURA_BUNDLES.map(b => {
   const price = parseFloat(b.price.replace('$', ''));
   const credits = b.energy;
   const platformCost = credits * COST_PER_CREDIT;
-  const pf = processingFee(price);
-  const totalCost = platformCost + pf;
+  const sf = storeFee(price);
+  const totalCost = platformCost + sf;
   const profit = price - totalCost;
-  return { ...b, priceNum: price, credits, platformCost, pf, totalCost, profit, margin: (profit / price * 100) };
+  return { ...b, priceNum: price, credits, platformCost, sf, totalCost, profit, margin: (profit / price * 100) };
 });
 
 // Fixed operating costs
@@ -280,9 +283,7 @@ const scenarios = [
   const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
   const adRev = interstitialAdRev + rewardedAdRev;
   const totalRev = subRev + adRev;
-  // Credits from ad-reward energy consumed by paid users
   const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
-  // Total credits consumed by paid users at 70% utilization + ad-reward credits
   const totalCredits = Math.round(
     s.mix.explorer * calcCosts(5 * 0.7, 500 * 0.7, 1).credits
     + s.mix.investigator * calcCosts(15 * 0.7, 1500 * 0.7, 1).credits
@@ -291,15 +292,17 @@ const scenarios = [
   );
   const base44Plan = requiredBase44Plan(totalCredits);
   const platformCosts = base44Plan.cost;
-  // Wix Payments processing fees: monthly subs (per-transaction) + Trailblazer amortized
-  const processingCosts = s.mix.explorer * processingFee(7.99) + s.mix.investigator * processingFee(11.99) + s.mix.trailblazer * processingFee(239.99) / 30;
+  // Store fees (15% on IAP subscription revenue; ad revenue not subject to store fees)
+  const storeCosts = subRev * STORE_FEE_PCT;
+  // RevenueCat (1% above $2,500/month in subscription sales)
+  const revcatCost = revenuecatFee(subRev);
   const fixedCost = fixedOngoingMonthly;
-  const preDevCost = platformCosts + processingCosts + fixedCost;
+  const preDevCost = platformCosts + storeCosts + revcatCost + fixedCost;
   const preDevProfit = totalRev - preDevCost;
   const developerFee = Math.max(0, preDevProfit) * DEV_PROFIT_SHARE_PCT;
   const totalCost = preDevCost + developerFee;
   const profit = totalRev - totalCost;
-  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, rewardedAdRev, adRev, totalRev, platformCosts, processingCosts, developerFee, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, base44Plan };
+  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, rewardedAdRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, developerFee, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, base44Plan };
 });
 
 const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -348,8 +351,8 @@ function downloadPDF() {
   para(`Manifestation Energy: 1 unit = 1 InvokeLLM call (Automatic) ~ ${CREDITS_PER_MANIFESTATION} integration credits`);
   para(`Narration Energy: 1 unit = 1 GenerateSpeech credit (1 credit / 50 chars)`);
   para(`Platform cost: $${COST_PER_CREDIT.toFixed(4)}/credit (Builder/Pro: $40-80/mo / 10k-20k credits)`);
-  para(`Payment processing: Wix Payments (Base44 Payments) — ${(WIX_PROCESSING_PCT * 100).toFixed(1)}% + $${WIX_PROCESSING_FLAT.toFixed(2)}/transaction. Each monthly subscription charge is a separate transaction. Ad revenue is not subject to processing fees.`);
-  para(`FUTURE RISK (not current): Native iOS/Android IAP would charge ${(IAP_FEE_PCT_LOW * 100).toFixed(0)}% (small devs) or ${(IAP_FEE_PCT_HIGH * 100).toFixed(0)}% (Apple >$1M/yr). Not used today — Wix Payments is the active processor.`);
+  para(`App Store / Google Play IAP fee: ${(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (Apple & Google, small devs < $1M/yr). Apple jumps to ${(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%. The app publishes natively via iOS/Android IAP.`);
+  para(`RevenueCat: ${(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above $${REVENUECAT_THRESHOLD.toLocaleString()}/mo (IAP subscription management layer)`);
   para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | Private Developer: $${DEV_UPFRONT_ONE_TIME} upfront + ${(DEV_PROFIT_SHARE_PCT * 100).toFixed(1)}% of annual profit`);
   para(`Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by total credits consumed. The per-credit rate ($${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4-6.`);
   para(`AdMob Interstitial: $${ADMOB_ECPM}/1k impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
@@ -390,19 +393,19 @@ function downloadPDF() {
   para(`Two "Auto" actions (Stop Enrichment + People Extraction) previously fired without user action — ${autoLeak.reduce((s, r) => s + r.totalCredits, 0)} of ${FREE_USER_BREAKDOWN_TOTAL} credits (${Math.round(autoLeak.reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user. These are now gated — free users silently skip enrichment.`);
 
   heading('4. Per-Plan Profit - Monthly, 100% Utilization');
-  table(['Plan', 'Price', 'Credits', 'Platform', 'Proc. Fee', 'Cost', 'Profit', 'Margin'],
-    monthlyAnalysis.map(r => [r.plan, '$' + r.price.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.pf.toFixed(2), '$' + r.totalCost.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
+  table(['Plan', 'Price', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
+    monthlyAnalysis.map(r => [r.plan, '$' + r.price.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.sf.toFixed(2), '$' + r.totalCost.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
     [65, 45, 45, 55, 50, 50, 50, 45]);
 
   heading('5. Trailblazer - 30-Month ($239.99)');
-  table(['Utilization', 'Credits', 'Platform', 'Proc. Fee', 'Cost', 'Profit', 'Margin'],
-    [['100%', trailblazerAnalysis.credits.toLocaleString(), '$' + trailblazerAnalysis.platformCost.toFixed(2), '$' + trailblazerAnalysis.pf.toFixed(2), '$' + trailblazerAnalysis.totalCost.toFixed(2), '$' + trailblazerAnalysis.profit.toFixed(2), trailblazerAnalysis.margin.toFixed(1) + '%'],
-     ['50%', trailblazer50.credits.toLocaleString(), '$' + trailblazer50.platformCost.toFixed(2), '$' + trailblazer50.pf.toFixed(2), '$' + trailblazer50.totalCost.toFixed(2), '$' + trailblazer50.profit.toFixed(2), trailblazer50.margin.toFixed(1) + '%']],
+  table(['Utilization', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
+    [['100%', trailblazerAnalysis.credits.toLocaleString(), '$' + trailblazerAnalysis.platformCost.toFixed(2), '$' + trailblazerAnalysis.sf.toFixed(2), '$' + trailblazerAnalysis.totalCost.toFixed(2), '$' + trailblazerAnalysis.profit.toFixed(2), trailblazerAnalysis.margin.toFixed(1) + '%'],
+     ['50%', trailblazer50.credits.toLocaleString(), '$' + trailblazer50.platformCost.toFixed(2), '$' + trailblazer50.sf.toFixed(2), '$' + trailblazer50.totalCost.toFixed(2), '$' + trailblazer50.profit.toFixed(2), trailblazer50.margin.toFixed(1) + '%']],
     [65, 65, 55, 50, 55, 55, 50]);
 
   heading('6. Aura Bundle Profit - 100% Utilization');
-  table(['Bundle', 'Price', 'Credits', 'Platform', 'Proc. Fee', 'Profit', 'Margin'],
-    bundleAnalysis.map(r => [r.name, '$' + r.priceNum.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.pf.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
+  table(['Bundle', 'Price', 'Credits', 'Platform', 'Store Fee', 'Profit', 'Margin'],
+    bundleAnalysis.map(r => [r.name, '$' + r.priceNum.toFixed(2), r.credits, '$' + r.platformCost.toFixed(2), '$' + r.sf.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
     [65, 45, 45, 55, 50, 55, 50]);
 
   heading('7. Fixed Operating Costs');
@@ -427,9 +430,9 @@ function downloadPDF() {
   para(`Model: ${ADS_PER_PAID_USER_MO} ads/paid user/mo x $${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)}/impression = $${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(3)} ad rev. Energy cost: ${ADS_PER_PAID_USER_MO} x ${AD_REWARD_CREDITS_PER_AD} credits x ${Math.round(AD_REWARD_UTILIZATION * 100)}% utilization x $${COST_PER_CREDIT.toFixed(4)}/credit = $${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Net is a retention investment — ad-reward credits are included in the Base44 plan-tier calculation in section 9a.`);
 
   heading('9. Revenue Scenarios (Monthly, 70% Utilization)');
-  table(['Scenario', 'Sub Rev', 'Interstitial', 'Rewarded', 'Total Rev', 'B44 Plan', 'Proc Fee', 'Dev 2.5%', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
-    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.interstitialAdRev.toFixed(0), '$' + s.rewardedAdRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.processingCosts.toFixed(0), '$' + s.developerFee.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
-    [70, 30, 30, 30, 35, 30, 25, 30, 25, 30, 30, 25]);
+  table(['Scenario', 'Sub Rev', 'Interstitial', 'Rewarded', 'Total Rev', 'B44 Plan', 'Store', 'RevCat', 'Dev 2.5%', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
+    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.interstitialAdRev.toFixed(0), '$' + s.rewardedAdRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.developerFee.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
+    [70, 30, 30, 30, 35, 30, 25, 25, 30, 25, 30, 30, 25]);
 
   heading('9a. Base44 Plan Required Per Scenario');
   para('Total monthly integration credits consumed by paid users (70% utilization) plus credits from consumed ad-reward energy, and the minimum Base44 plan needed to support them. Free (Observer) users are gated and consume 0 credits.');
@@ -440,15 +443,16 @@ function downloadPDF() {
 
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free (Observer) users are gated (0 credits). Must upgrade plans to scale.');
-  para(`Payment processing: Wix Payments charges ${(WIX_PROCESSING_PCT * 100).toFixed(1)}% + $${WIX_PROCESSING_FLAT.toFixed(2)}/transaction — far cheaper than the 15-30% App Store/Google Play IAP fees. This is the current processor; IAP would only apply if the app publishes natively and uses Apple/Google billing.`);
+  para(`Store fees (15% IAP) are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30). The app publishes natively via Apple/Google IAP.`);
   para(`Full narration cost: ~${FULL_TOUR_NARRATION_CREDITS} credits/tour = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour. Explorer ~${TOURS_PER_ENERGY(500)} tour/mo, Investigator ~${TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~${TOURS_PER_ENERGY(1500)} tours/mo.`);
   para(`Explorer yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.`);
   para(`Trailblazer is profitable at 100% utilization (~${trailblazerAnalysis.margin.toFixed(0)}% margin = $${trailblazerAnalysis.profit.toFixed(0)} profit over 30 months). At 50% realistic usage, margin improves to ~${trailblazer50.margin.toFixed(0)}%. The 300-slot cap protects against credit cost exposure.`);
-  para('AdMob interstitial revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and processing costs.');
+  para('AdMob interstitial revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
   para(`Rewarded ads (paid users) generate ~$${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but granted energy costs ~$${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~$${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a retention investment, not a profit center — it keeps paid users engaged at energy gates. Ad-reward credits are included in the Base44 plan-tier calculation (section 9a).`);
-  para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing + 2.5% of profit to private developer) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + ' (includes $250 developer upfront). Base44 plan costs are shown as actual tier costs in section 9, not per-credit estimates.');
-  para(`FUTURE RISK: If the app publishes as a native iOS/Android app and uses IAP, Apple's fee jumps to 30% above $${(IAP_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr. At that rate, Trailblazer margin shrinks but remains profitable at realistic (50%) utilization. Revisit pricing before pursuing native IAP billing.`);
-  para('Annual plans improve cash flow and reduce per-transaction processing fee burden (one charge vs. twelve).');
+  para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing + 2.5% of profit to private developer) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + ' (includes $250 developer upfront). Base44 plan costs are now shown as actual tier costs in section 9, not per-credit estimates.');
+  para(`RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.`);
+  para(`RISK: Apple fee jumps to 30% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M.`);
+  para('Annual plans improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).');
 
   doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
   if (y > 760) { doc.addPage(); y = 50; }
@@ -571,8 +575,8 @@ export default function PlanAnalysis() {
             <p className="print-text"><span className="font-semibold">Manifestation Energy:</span> 1 unit = 1 InvokeLLM call (Automatic model) ≈ {CREDITS_PER_MANIFESTATION} integration credits</p>
             <p className="print-text"><span className="font-semibold">Narration Energy:</span> 1 unit = 1 GenerateSpeech credit (1 credit / 50 chars of audio)</p>
             <p className="print-text"><span className="font-semibold">Platform cost:</span> ${COST_PER_CREDIT.toFixed(4)}/credit (Builder plan: $40/mo, 10,000 included credits). Pro: $80/mo, 20,000 credits. Elite: custom. Credits are hard-capped — actions FAIL when exhausted, not pay-per-use.</p>
-            <p className="print-text"><span className="font-semibold">Payment processing (Wix Payments / Base44 Payments):</span> {(WIX_PROCESSING_PCT * 100).toFixed(1)}% + ${WIX_PROCESSING_FLAT.toFixed(2)}/transaction. Each monthly subscription charge is a separate transaction. Ad revenue is not subject to processing fees.</p>
-            <p className="print-text text-xs italic"><span className="font-semibold">Future risk (not current):</span> If the app publishes as a native iOS/Android app and uses IAP for digital content, Apple/Google take {(IAP_FEE_PCT_LOW * 100).toFixed(0)}% (small devs &lt; ${(IAP_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr) or {(IAP_FEE_PCT_HIGH * 100).toFixed(0)}% (Apple above that). This is <span className="font-semibold">not</span> the current fee model — Wix Payments is the active processor today.</p>
+            <p className="print-text"><span className="font-semibold">App Store / Google Play IAP fee:</span> {(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (both stores, small devs &lt; ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr). Apple jumps to {(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above that; Google stays 15%. The app publishes natively via iOS/Android IAP.</p>
+            <p className="print-text"><span className="font-semibold">RevenueCat:</span> {(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above ${REVENUECAT_THRESHOLD.toLocaleString()}/mo (IAP subscription management layer for iOS/Android)</p>
             <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · Private Developer ${DEV_UPFRONT_ONE_TIME} upfront + {(DEV_PROFIT_SHARE_PCT * 100).toFixed(1)}% of annual profit</p>
             <p className="print-text text-xs italic"><span className="font-semibold">Note:</span> Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (e.g. Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by the total credits consumed. The per-credit rate (${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4–6.</p>
             <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
@@ -794,7 +798,7 @@ export default function PlanAnalysis() {
                   <th className={`${th} ${num}`}>Price</th>
                   <th className={`${th} ${num}`}>Credits/mo</th>
                   <th className={`${th} ${num}`}>Platform Cost</th>
-                  <th className={`${th} ${num}`}>Proc. Fee (2.9%+$0.30)</th>
+                  <th className={`${th} ${num}`}>Store Fee (15%)</th>
                   <th className={`${th} ${num}`}>Total Cost</th>
                   <th className={`${th} ${num}`}>Profit</th>
                   <th className={`${th} ${num}`}>Margin</th>
@@ -807,7 +811,7 @@ export default function PlanAnalysis() {
                     <td className={`${td} ${num} print-text`}>${r.price.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>{r.credits}</td>
                     <td className={`${td} ${num} print-text`}>${r.platformCost.toFixed(2)}</td>
-                    <td className={`${td} ${num} print-text`}>${r.pf.toFixed(2)}</td>
+                    <td className={`${td} ${num} print-text`}>${r.sf.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>${r.totalCost.toFixed(2)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${r.profit.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>{r.margin.toFixed(1)}%</td>
@@ -828,7 +832,7 @@ export default function PlanAnalysis() {
                   <th className={th}>Utilization</th>
                   <th className={`${th} ${num}`}>Credits (30 mo)</th>
                   <th className={`${th} ${num}`}>Platform Cost</th>
-                  <th className={`${th} ${num}`}>Proc. Fee</th>
+                  <th className={`${th} ${num}`}>Store Fee (15%)</th>
                   <th className={`${th} ${num}`}>Total Cost</th>
                   <th className={`${th} ${num}`}>Profit</th>
                   <th className={`${th} ${num}`}>Margin</th>
@@ -839,7 +843,7 @@ export default function PlanAnalysis() {
                   <td className={`${td} font-semibold print-text`}>100% (max use)</td>
                   <td className={`${td} ${num} print-text`}>{trailblazerAnalysis.credits.toLocaleString()}</td>
                   <td className={`${td} ${num} print-text`}>${trailblazerAnalysis.platformCost.toFixed(2)}</td>
-                  <td className={`${td} ${num} print-text`}>${trailblazerAnalysis.pf.toFixed(2)}</td>
+                  <td className={`${td} ${num} print-text`}>${trailblazerAnalysis.sf.toFixed(2)}</td>
                   <td className={`${td} ${num} print-text`}>${trailblazerAnalysis.totalCost.toFixed(2)}</td>
                   <td className={`${td} ${num} font-semibold print-text`}>${trailblazerAnalysis.profit.toFixed(2)}</td>
                   <td className={`${td} ${num} print-text`}>{trailblazerAnalysis.margin.toFixed(1)}%</td>
@@ -848,7 +852,7 @@ export default function PlanAnalysis() {
                   <td className={`${td} font-semibold print-text`}>50% (realistic)</td>
                   <td className={`${td} ${num} print-text`}>{trailblazer50.credits.toLocaleString()}</td>
                   <td className={`${td} ${num} print-text`}>${trailblazer50.platformCost.toFixed(2)}</td>
-                  <td className={`${td} ${num} print-text`}>${trailblazer50.pf.toFixed(2)}</td>
+                  <td className={`${td} ${num} print-text`}>${trailblazer50.sf.toFixed(2)}</td>
                   <td className={`${td} ${num} print-text`}>${trailblazer50.totalCost.toFixed(2)}</td>
                   <td className={`${td} ${num} font-semibold print-text`}>${trailblazer50.profit.toFixed(2)}</td>
                   <td className={`${td} ${num} print-text`}>{trailblazer50.margin.toFixed(1)}%</td>
@@ -856,7 +860,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">With 1500 narration energy/month over 30 months, Trailblazer is profitable at 100% utilization (~{trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} profit). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap protects against credit cost exposure. Processing fee is a one-time charge on the $239.99 purchase.</p>
+          <p className="text-xs print-muted mt-2 italic">With 1500 narration energy/month over 30 months, Trailblazer is profitable at 100% utilization (~{trailblazerAnalysis.margin.toFixed(0)}% margin = ${trailblazerAnalysis.profit.toFixed(0)} profit). At 50% realistic usage, margin improves to ~{trailblazer50.margin.toFixed(0)}%. The 300-slot cap protects against credit cost exposure. At Apple's 30% rate (above $1M/yr), Trailblazer becomes a small loss at 100% utilization but remains profitable at 50% (~31% margin).</p>
         </section>
 
         {/* 6. Aura Bundle Profit */}
@@ -870,7 +874,7 @@ export default function PlanAnalysis() {
                   <th className={`${th} ${num}`}>Price</th>
                   <th className={`${th} ${num}`}>Credits</th>
                   <th className={`${th} ${num}`}>Platform Cost</th>
-                  <th className={`${th} ${num}`}>Proc. Fee</th>
+                  <th className={`${th} ${num}`}>Store Fee (15%)</th>
                   <th className={`${th} ${num}`}>Profit</th>
                   <th className={`${th} ${num}`}>Margin</th>
                 </tr>
@@ -882,7 +886,7 @@ export default function PlanAnalysis() {
                     <td className={`${td} ${num} print-text`}>${r.priceNum.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>{r.credits}</td>
                     <td className={`${td} ${num} print-text`}>${r.platformCost.toFixed(2)}</td>
-                    <td className={`${td} ${num} print-text`}>${r.pf.toFixed(2)}</td>
+                    <td className={`${td} ${num} print-text`}>${r.sf.toFixed(2)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${r.profit.toFixed(2)}</td>
                     <td className={`${td} ${num} print-text`}>{r.margin.toFixed(1)}%</td>
                   </tr>
@@ -890,7 +894,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Wix Payments processing fee (2.9% + $0.30) applies to each one-time bundle purchase. The $0.30 flat fee is a larger share of small bundles (Flicker) than large ones (Spectral).</p>
+          <p className="text-xs print-muted mt-2 italic">Store fee (15%) applies to all IAP purchases. This is cheaper for small transactions (Flicker) than a flat $0.30 + 2.9% processing fee, but more expensive for larger ones.</p>
         </section>
 
         {/* 7. Fixed Operating Costs */}
@@ -962,7 +966,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Model: {ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo × ${ADMOB_PER_IMPRESSION.toFixed(3)}/impression = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo. Stop 1 paranormal history is free; stops 2+ show interstitial ads. Ad revenue is not subject to processing fees.</p>
+          <p className="text-xs print-muted mt-2 italic">Model: {ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo × ${ADMOB_PER_IMPRESSION.toFixed(3)}/impression = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo. Stop 1 paranormal history is free; stops 2+ show interstitial ads. Ad revenue is not subject to store fees.</p>
 
           <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">8b. Rewarded Ads (Paid Users — Energy Top-Ups)</h3>
           <p className="text-xs print-muted mb-3">Paid users who hit an energy gate can watch a rewarded ad for +{AD_REWARD_ENERGY} energy (up to {5}/day). Each ad generates ${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)} in ad revenue, but the granted energy costs {AD_REWARD_CREDITS_PER_AD} credits ({Math.round(AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION)} at {Math.round(AD_REWARD_UTILIZATION * 100)}% utilization) = ${((AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION * COST_PER_CREDIT)).toFixed(3)} in platform costs when consumed. <span className="font-semibold">Net: ${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(3)}/paid user/mo</span> — a small retention cost that prevents churn at energy gates.</p>
@@ -1006,7 +1010,8 @@ export default function PlanAnalysis() {
                   <th className={`${th} ${num}`}>Rewarded</th>
                   <th className={`${th} ${num}`}>Total Rev</th>
                   <th className={`${th} ${num}`}>Base44 Plan</th>
-                  <th className={`${th} ${num}`}>Proc Fee</th>
+                  <th className={`${th} ${num}`}>Store 15%</th>
+                  <th className={`${th} ${num}`}>RevCat</th>
                   <th className={`${th} ${num}`}>Dev 2.5%</th>
                   <th className={`${th} ${num}`}>Fixed</th>
                   <th className={`${th} ${num}`}>Total Cost</th>
@@ -1023,7 +1028,8 @@ export default function PlanAnalysis() {
                     <td className={`${td} ${num} print-muted`}>${s.rewardedAdRev.toFixed(0)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${s.totalRev.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.platformCosts}</td>
-                    <td className={`${td} ${num} print-text`}>${s.processingCosts.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.storeCosts.toFixed(0)}</td>
+                    <td className={`${td} ${num} print-text`}>${s.revcatCost.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.developerFee.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.fixedCost.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.totalCost.toFixed(0)}</td>
@@ -1034,7 +1040,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). "Proc Fee" = Wix Payments processing fees (2.9% + $0.30 per monthly subscription transaction; Trailblazer one-time fee amortized over 30 months). Ad revenue = interstitial (free users) + rewarded (paid users) — not subject to processing fees. Rewarded ad credits from consumed ad-reward energy are included in the Base44 plan-tier calculation. Free (Observer) users are gated and consume 0 credits. Private developer fee is 2.5% of monthly profit (shown as "Dev 2.5%").</p>
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). Ad revenue = interstitial (free users) + rewarded (paid users). Rewarded ad credits from consumed ad-reward energy are included in the Base44 plan-tier calculation. Free (Observer) users are gated and consume 0 credits. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales. Private developer fee is 2.5% of monthly profit (shown as "Dev 2.5%").</p>
 
           {/* 9a. Base44 Plan Required Per Scenario */}
           <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
@@ -1098,15 +1104,16 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold text-red-500">✓ CREDIT CAPACITY: Base44 Builder plan includes only 10,000 credits/mo.</span> At 100% utilization that supports just ~19 Explorer, ~6 Investigator, or ~6 Trailblazer users. Pro (20k credits) doubles capacity. Free (Observer) users are gated (0 credits) — upgrade plans as you scale paid users.</p>
             <p>• <span className="font-semibold text-green-500">✓ Energy gating is deployed.</span> All 27 credit-consuming actions are gated. Free (Observer) users are blocked from creating tours, narrating, enriching stops, and using sweepers. Paid users are limited by their monthly energy allotment.</p>
             <p>• <span className="font-semibold">27 credit-consuming actions identified</span> across 14 manifestation (InvokeLLM) and 13 narration (GenerateSpeech) actions. Full audit in section 3c. Key hidden costs: stop enrichment (auto-fires on 1st stop view, 3–6 credits each) and Haunted Locations discovery (auto-fires on every search, 3 credits each).</p>
-            <p>• <span className="font-semibold">Payment processing (Wix Payments):</span> 2.9% + $0.30/transaction — far cheaper than the 15–30% App Store/Google Play IAP fees. This is the current processor. IAP would only apply if the app publishes natively and uses Apple/Google billing.</p>
+            <p>• <span className="font-semibold">Store fees (15% IAP)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30). The app publishes natively via Apple/Google IAP.</p>
             <p>• <span className="font-semibold">Full narration cost:</span> Each fully narrated tour (all 4 tabs per stop + intro + conclusion) costs ~{FULL_TOUR_NARRATION_CREDITS} credits = ${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Energy budgets support: Explorer ~{TOURS_PER_ENERGY(500)} tour/mo, Investigator ~{TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~{TOURS_PER_ENERGY(1500)} tours/mo.</p>
             <p>• <span className="font-semibold">Explorer</span> yields ~{monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; <span className="font-semibold">Investigator</span> ~{monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.</p>
             <p>• <span className="font-semibold text-green-500">✓ Trailblazer is profitable at all utilization levels</span> (~{trailblazerAnalysis.margin.toFixed(0)}% margin at 100% = ${trailblazerAnalysis.profit.toFixed(0)} profit over 30 months; ~{trailblazer50.margin.toFixed(0)}% at 50% realistic usage). The 300-slot cap protects against credit cost exposure. Trailblazer matches Investigator energy at a locked-in discount.</p>
-            <p>• <span className="font-semibold">AdMob revenue</span> from free users (interstitial) meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and processing costs.</p>
+            <p>• <span className="font-semibold">AdMob revenue</span> from free users (interstitial) meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
             <p>• <span className="font-semibold">Rewarded ads</span> (paid users) generate ~${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but the granted energy costs ~${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a <span className="font-semibold">retention investment</span>, not a profit center — it keeps paid users engaged at energy gates instead of churning. Ad-reward credits are included in the Base44 plan-tier calculation (section 9a), so high ad-reward usage can push the required plan tier higher.</p>
             <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing + 2.5% of profit to private developer) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal} (includes ${DEV_UPFRONT_ONE_TIME} developer upfront). Base44 plan costs are shown as actual tier costs in section 9, not per-credit estimates.</p>
-            <p>• <span className="font-semibold">FUTURE RISK (IAP):</span> If the app publishes as a native iOS/Android app and uses IAP, Apple's fee jumps to 30% above ${(IAP_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr. At that rate, margins shrink significantly but Trailblazer remains profitable at realistic (50%) utilization. Revisit pricing before pursuing native IAP billing — Wix Payments is the current processor.</p>
-            <p>• <span className="font-semibold">Annual plans</span> improve cash flow and reduce per-transaction processing fee burden (one charge vs. twelve).</p>
+            <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
+            <p>• <span className="font-semibold">RISK:</span> Apple's fee jumps to 30% above ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M.</p>
+            <p>• <span className="font-semibold">Annual plans</span> improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).</p>
           </div>
         </section>
 
