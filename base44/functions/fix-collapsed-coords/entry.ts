@@ -100,6 +100,11 @@ async function queryOverpassByName(stopName, bbox) {
   })).filter((e) => e.lat && e.lon);
 }
 
+// Normalize an address for comparison (lowercase, strip non-alphanumeric)
+function normalizeAddr(a) {
+  return String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+}
+
 // Normalize a name for fuzzy matching
 function normalizeName(s) {
   return String(s || '')
@@ -405,6 +410,32 @@ export default async function (req) {
             });
             matched.add(stop.id);
             continue;
+          }
+
+          // SAME ADDRESS = SAME PROPERTY: For a single house/building (not a
+          // large property like a fort or park), if this stop's address matches
+          // the property's address, it's on the same property — place it at the
+          // building center. The LLM routinely invents fake distinct coordinates
+          // for areas of a single house ("The Garden", "The Fountain", "The Old
+          // Oak"), scattering markers across town. Don't web-search these generic
+          // names — that matches a different feature elsewhere and makes it
+          // worse. Large properties are excluded: distinct buildings on a
+          // fort/park can share one mailing address but need their own coords.
+          if (!largeProp) {
+            const propertyAddr = normalizeAddr(stops[0]?.address);
+            const stopAddr = normalizeAddr(stop.address);
+            if (propertyAddr && (stopAddr === propertyAddr || !stopAddr)) {
+              updates.push({
+                id: stop.id,
+                latitude: centerLat,
+                longitude: centerLon,
+                same_structure: true,
+                geocoded: true,
+                needs_placement: false,
+              });
+              matched.add(stop.id);
+              continue;
+            }
           }
 
           // DISTINCT structure — for small properties, trust the LLM's

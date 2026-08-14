@@ -31,7 +31,7 @@ import { isLargeProperty } from '@/lib/largeProperty';
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 17;
+const STOPS_VALIDATION_VERSION = 18;
 
 // Walking threshold for stop clustering. Single-site tours (landmark/ship/
 // cold_spot) are large properties where you walk between structures that can
@@ -544,9 +544,19 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       // large properties (e.g. Pennhurst Asylum) can have distinct buildings
       // that share the same mailing address — those need their own coordinates.
       const isSingleSite = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
+      const isLargeProp = isLargeProperty(tourData);
       if (isSingleSite && result.stops) {
+        // For a single house/building (not a large property), all stops that
+        // share the property's street address are at the same location. The
+        // LLM routinely invents fake distinct coordinates for areas of a
+        // single house ("The Garden", "The Fountain"), scattering markers
+        // across town. Collapse them to the building center. Large properties
+        // (forts, parks) are excluded — distinct buildings there can share one
+        // mailing address but need their own coordinates.
+        const normAddr = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+        const propertyAddr = isLargeProp ? null : normAddr(result.stops[0]?.address);
         for (const stop of result.stops) {
-          if (looksLikeRoomOrArea(stop.name)) {
+          if (looksLikeRoomOrArea(stop.name) || (propertyAddr && normAddr(stop.address) === propertyAddr)) {
             stop.same_structure = true;
             stop.latitude = tourData.start_latitude;
             stop.longitude = tourData.start_longitude;
