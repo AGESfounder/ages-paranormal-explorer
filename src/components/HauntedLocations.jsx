@@ -170,7 +170,7 @@ export default function HauntedLocations() {
     const tourMap = {};
     tours.forEach(t => { tourMap[t.id] = t; });
     const byTour = {};
-    stops.filter(s => s.latitude && s.longitude).forEach(s => { (byTour[s.tour_id] ||= []).push(s); });
+    stops.filter(s => s.latitude && s.longitude && s.stop_type !== 'parking').forEach(s => { (byTour[s.tour_id] ||= []).push(s); });
 
     // Precompute which tours are single-destination (dedicated tours for one landmark).
     const singleDest = {};
