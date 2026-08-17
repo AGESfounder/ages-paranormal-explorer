@@ -14,7 +14,7 @@ const CONCLUSION_OPENERS = [
   /^wrapping up/i,
   /^(as )?our (tour|journey|investigation) (comes to|ends|draws to|winds down|finishes|concludes)/i,
   /^(as )?we (bring|close|finish|end) (our|this) (tour|journey|investigation)/i,
-  /^our (final|last) stop/i,
+  /^(our|this|the) (final|last) stop/i,
   /^(and so|thus|finally),? (we|our|as)/i,
   /^(as )?we (near|approach) (the end|our final)/i,
   /^having (concluded|finished|completed|explored)/i,
@@ -28,7 +28,7 @@ const CONCLUSION_OPENERS = [
 // conclude" mid-narration.
 const CONCLUSION_ANYWHERE = [
   /\b(where|as|before|when|after|until|while)\s+(our|the|this)\s+(tour|journey|investigation)\s+(ends|concludes|finishes|wraps up|comes to (an end|a close)|draws to (a close|an end))\b/i,
-  /\bour\s+(final|last)\s+stop\b/i,
+  /\b(our|this|the)\s+(final|last)\s+stop\b/i,
   /\b(wrapping up|to conclude|in conclusion)\b/i,
   /\b(as|when)\s+we\s+(conclude|wrap up|finish|end|leave|depart)\s+(our|the|this)\s+(tour|journey|investigation)\b/i,
   /\b(bringing|bring)\s+(our|the)\s+(tour|journey|investigation)\s+(to an end|to a close)\b/i,
