@@ -24,6 +24,7 @@ import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedD
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
+import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 import { isLargeProperty } from '@/lib/largeProperty';
@@ -745,6 +746,25 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       await base44.entities.Tour.update(tourId, { user_reordered: true });
       setTour(prev => prev ? { ...prev, user_reordered: true } : prev);
     } catch (e) {}
+    // Rebalance conclusion phrases: strip from the old final stop (now
+    // non-final) and regenerate the new final stop's narration with a
+    // conclusion ending so the tour still wraps up properly.
+    try {
+      const rebalanceResult = await rebalanceConclusionPhrases(currentTourStops, withNumbers);
+      if (rebalanceResult) {
+        setStops(prev => prev.map(s => {
+          if (rebalanceResult.oldFinal && s.id === rebalanceResult.oldFinal.id) {
+            return { ...s, ...rebalanceResult.oldFinal };
+          }
+          if (rebalanceResult.newFinal && s.id === rebalanceResult.newFinal.id) {
+            return { ...s, ...rebalanceResult.newFinal };
+          }
+          return s;
+        }));
+      }
+    } catch (e) {
+      console.error('Conclusion rebalance failed:', e);
+    }
   };
 
   const markComplete = async () => {

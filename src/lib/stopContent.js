@@ -68,6 +68,21 @@ export function stripConclusionOpeners(text, isFinalStop) {
   return filtered.length > 0 ? filtered.join('').trim() : text;
 }
 
+// Strip conclusion phrases from all three text fields on a stop. Returns an
+// object with only the fields that actually changed (for bulkUpdate / update).
+// If isFinalStop is true, returns an empty object (final stop keeps everything).
+export function stripStopConclusion(stop, isFinalStop) {
+  if (!stop || isFinalStop) return {};
+  const updates = {};
+  const cleanNarration = stripConclusionOpeners(stop.narration_text, false);
+  const cleanParanormal = stripConclusionOpeners(stop.paranormal_info, false);
+  const cleanHistorical = stripConclusionOpeners(stop.historical_info, false);
+  if (cleanNarration !== stop.narration_text) updates.narration_text = cleanNarration;
+  if (cleanParanormal !== stop.paranormal_info) updates.paranormal_info = cleanParanormal;
+  if (cleanHistorical !== stop.historical_info) updates.historical_info = cleanHistorical;
+  return updates;
+}
+
 // Shared prompt instruction block — append to any stop-generation prompt
 // so the LLM reserves conclusion phrasing for the final stop only.
-export const CONCLUSION_PHRASE_RULE = `\nCONCLUSION PHRASE RULE — FOLLOW EXACTLY: For any stop that is NOT the last stop on the tour, do NOT include ANY references to the tour ending, wrapping up, concluding, finishing, or coming to a close — not just at the beginning, but ANYWHERE in the narration_text or paranormal_info. This means: no "as we end our tour", no "where the tour concludes", no "our final stop", no "as we wrap up", no "before we finish", no "the cellar where our tour ends", no "bringing our investigation to a close", and no similar phrasing anywhere in the text — beginning, middle, or end. Each non-final stop must focus ENTIRELY on its own haunted history and paranormal activity as if it is a standalone story. Only the LAST stop on the tour may reference the tour ending or use wrap-up / conclusion language.`;
+export const CONCLUSION_PHRASE_RULE = `\nCONCLUSION PHRASE RULE — FOLLOW EXACTLY: For any stop that is NOT the last stop on the tour, do NOT include ANY references to the tour ending, wrapping up, concluding, finishing, or coming to a close — not just at the beginning, but ANYWHERE in the narration_text, paranormal_info, or historical_info. This means: no "as we end our tour", no "where the tour concludes", no "our final stop", no "this final stop", no "as we wrap up", no "before we finish", no "the cellar where our tour ends", no "bringing our investigation to a close", and no similar phrasing anywhere in the text — beginning, middle, or end. Each non-final stop must focus ENTIRELY on its own haunted history and paranormal activity as if it is a standalone story. Only the LAST stop on the tour may reference the tour ending or use wrap-up / conclusion language.`;

@@ -160,7 +160,7 @@ Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RUL
       longitude: typeof ns.longitude === 'number' ? ns.longitude : parseFloat(ns.longitude) || null,
       address: ns.address || '',
       geocoded: newGeocodedAddrs.has(ns.address),
-      historical_info: ns.historical_info || '',
+      historical_info: stripConclusionOpeners(ns.historical_info || '', false),
       paranormal_info: stripConclusionOpeners(ns.paranormal_info || '', false),
       investigation_suggestions: Array.isArray(ns.investigation_suggestions) ? ns.investigation_suggestions.filter((x) => typeof x === 'string' && x.trim()) : [],
       estimated_investigation_time: ns.estimated_investigation_time || '',

@@ -347,7 +347,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       latitude: toNum(s.latitude) || (useCoords ? coords.lat : null),
       longitude: toNum(s.longitude) || (useCoords ? coords.lng : null),
       address: toStr(s.address),
-      historical_info: toStr(s.historical_info),
+      historical_info: stripConclusionOpeners(toStr(s.historical_info), i === validStops.length - 1),
       paranormal_info: stripConclusionOpeners(toStr(s.paranormal_info), i === validStops.length - 1),
       investigation_suggestions: toStrArr(s.investigation_suggestions),
       estimated_investigation_time: toStr(s.estimated_investigation_time),
