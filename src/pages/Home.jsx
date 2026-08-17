@@ -12,6 +12,7 @@ import HauntedLocations from '../components/HauntedLocations';
 import DashboardEnergyPreview from '../components/DashboardEnergyPreview';
 import EnergyCostBadge from '../components/EnergyCostBadge';
 import { base44 } from '@/api/base44Client';
+// Home page — main dashboard for the AGES paranormal explorer app
 
 const menuItems = [
   { label: 'Favorites', icon: Heart, path: '/favorites', desc: 'Saved Tours' },
