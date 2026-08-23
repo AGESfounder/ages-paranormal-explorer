@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
@@ -172,6 +172,9 @@ export default function TourDetail() {
   const [conclusionRead, setConclusionRead] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [completingTour, setCompletingTour] = useState(false);
+  // Track if the user has manually dragged a marker — prevents background
+  // validation from overwriting their placement with server-side coordinates.
+  const userDraggedRef = useRef(false);
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
@@ -199,6 +202,8 @@ export default function TourDetail() {
     }
     // Reload stops with corrected coordinates
     const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourData.id });
+    // Don't overwrite stops the user has manually placed via marker drag
+    if (userDraggedRef.current) return;
     // Re-order stops by proximity using the NOW-correct coordinates.
     // Skip for tours the user manually reordered — respect their custom order.
     if (tourData && !tourData.user_reordered) {
@@ -243,6 +248,8 @@ export default function TourDetail() {
       console.warn(`Tour ${tourId} validation: ${validation.reason}. Stops preserved.`);
     }
     await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
+    // Don't overwrite stops the user has manually placed via marker drag
+    if (userDraggedRef.current) return;
     // Re-order and update display with corrected coordinates
     if (!tourData.user_reordered) {
       const reordered = enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
@@ -821,6 +828,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   // Handle pink "Needs Placement" marker drag — update coordinates, clear
   // needs_placement, and mark as user-verified so the marker turns blue.
   const handleMarkerDragEnd = async (stopId, latLng) => {
+    userDraggedRef.current = true;
     setStops(prev => prev.map(s =>
       s.id === stopId
         ? { ...s, latitude: latLng.lat, longitude: latLng.lng, needs_placement: false, geocoded: true, user_verified: true }

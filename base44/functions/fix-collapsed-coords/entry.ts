@@ -398,6 +398,12 @@ export default async function (req) {
       }
 
       for (const stop of stops) {
+        // Skip stops the user has manually verified via marker drag —
+        // their coordinates are correct and should not be overwritten.
+        if (stop.user_verified) {
+          matched.add(stop.id);
+          continue;
+        }
         // If generation already marked this stop same_structure: true (a room
         // within the building), use the building center — don't try Overpass,
         // which would match it to an unrelated nearby feature.
@@ -631,10 +637,10 @@ Return a JSON object with:
       // Only fix collapsed stops or stops missing coordinates — unless
       // verifyAll is true, in which case verify ALL stops (including those
       // without coordinates) via the verification pipeline.
-      const needsFix = verifyAll ? stops : stops.filter(s =>
+      const needsFix = (verifyAll ? stops : stops.filter(s =>
         collapsedStopIds.has(s.id) ||
         s.latitude == null || s.longitude == null
-      );
+      )).filter(s => !s.user_verified);
 
       if (needsFix.length > 0) {
         if (tour.tour_category === 'road_trip') {
