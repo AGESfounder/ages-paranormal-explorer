@@ -407,7 +407,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
   // creation time, not just on view (TourDetail re-runs this on load, but
   // only when stops need geocoding; already-geocoded tours would otherwise
   // keep the LLM's original order with driving stops possibly in the middle).
-  const orderedStops = enforceWalkingDistance(
+  const orderedStops = await enforceWalkingDistance(
     processed.stopRecords,
     processed.tourData.tour_type,
     { lat: processed.tourData.start_latitude, lon: processed.tourData.start_longitude }

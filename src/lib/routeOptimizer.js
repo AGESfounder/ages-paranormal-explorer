@@ -11,13 +11,45 @@ export function haversineDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Rounding helper for coordinate-based map keys (5 decimals ≈ 1 meter).
+const coordKey = (s) => `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
+
+// Fetch routed distances from OSRM (Open Source Routing Machine). Unlike
+// haversine (straight-line), OSRM routes along the road network — over
+// bridges, around water — so two stops separated by a creek get a longer
+// distance that reflects the actual walk via the nearest bridge crossing.
+// Returns a Map keyed by `"latA,lonA->latB,lonB"` → miles, or null on
+// failure (caller falls back to haversine).
+async function fetchRouteDistanceMatrix(stops) {
+  const valid = stops.filter(s => s.latitude != null && s.longitude != null);
+  if (valid.length < 2) return null;
+  try {
+    const coords = valid.map(s => `${s.longitude},${s.latitude}`).join(';');
+    const url = `https://router.project-osrm.org/table/v1/driving/${coords}?annotations=distance`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.code !== 'Ok' || !data.distances) return null;
+    const lookup = new Map();
+    for (let i = 0; i < valid.length; i++) {
+      for (let j = 0; j < valid.length; j++) {
+        lookup.set(`${coordKey(valid[i])}->${coordKey(valid[j])}`, data.distances[i][j] / 1609.344);
+      }
+    }
+    return lookup;
+  } catch (e) {
+    console.error('OSRM distance matrix failed:', e);
+    return null;
+  }
+}
+
 // 2-opt optimization: reverses route segments that reduce total distance.
 // Fixes backtracking patterns that nearest-neighbor alone produces.
 // When includeReturn is true, the return-to-start edge is included in the
 // cost so walking tours form a loop that brings the user back near start.
-function optimizeRoute2Opt(route, includeReturn) {
+function optimizeRoute2Opt(route, includeReturn, distFn) {
   if (route.length <= 3) return route;
-  const dist = (a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude);
+  const dist = distFn || ((a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude));
   let improved = true;
   let iterations = 0;
   while (improved && iterations < 50) {
@@ -42,8 +74,9 @@ function optimizeRoute2Opt(route, includeReturn) {
   return route;
 }
 
-export function orderStopsByProximity(stops, includeReturn = false) {
+export function orderStopsByProximity(stops, includeReturn = false, distFn) {
   if (stops.length <= 1) return stops;
+  const dist = distFn || ((a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude));
   const ordered = [stops[0]];
   const remaining = stops.slice(1);
   while (remaining.length > 0) {
@@ -51,12 +84,12 @@ export function orderStopsByProximity(stops, includeReturn = false) {
     let nearestIdx = 0;
     let nearestDist = Infinity;
     for (let i = 0; i < remaining.length; i++) {
-      const d = haversineDistance(last.latitude, last.longitude, remaining[i].latitude, remaining[i].longitude);
+      const d = dist(last, remaining[i]);
       if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
     }
     ordered.push(remaining.splice(nearestIdx, 1)[0]);
   }
-  return optimizeRoute2Opt(ordered, includeReturn);
+  return optimizeRoute2Opt(ordered, includeReturn, dist);
 }
 
 const WALKING_LIMIT = 0.33;
@@ -66,15 +99,25 @@ const WALKING_LIMIT = 0.33;
 // - WALKING & MIXED tours: build connected components (stops within
 //   WALKING_LIMIT of each other). The largest component (2+ stops) is the
 //   walking cluster, ordered as a loop. All other stops are DRIVING stops,
-//   appended AFTER the walking cluster — never in the middle. This ensures
-//   driving segments only appear at the end of the route, never splitting
-//   the walking loop.
+//   appended AFTER the walking cluster — never in the middle.
+//
+// Distances use OSRM routed distances (over bridges, around water) when
+// available, falling back to haversine (straight-line) if OSRM is down.
+// This prevents two stops separated by a creek from being ordered adjacent
+// when the actual walking distance via the nearest bridge is much longer.
 //
 // `startCoords` ({ lat, lon }) optionally moves the stop closest to the
 // tour's designated start to the front before ordering begins.
-export function enforceWalkingDistance(stops, tourType, startCoords, options = {}) {
+export async function enforceWalkingDistance(stops, tourType, startCoords, options = {}) {
   const walkingLimit = options.walkingLimit || WALKING_LIMIT;
   if (!stops.length) return stops;
+
+  // Fetch routed distances — accounts for water barriers and bridge
+  // crossings. Falls back to haversine if OSRM is unavailable.
+  const routedLookup = await fetchRouteDistanceMatrix(stops);
+  const dist = routedLookup
+    ? (a, b) => routedLookup.get(`${coordKey(a)}->${coordKey(b)}`) ?? haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude)
+    : (a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude);
 
   // Sort by stop_number for a consistent base order, then move the stop
   // closest to the tour's start coordinates to the front.
@@ -95,7 +138,7 @@ export function enforceWalkingDistance(stops, tourType, startCoords, options = {
   }
 
   if (tourType === 'driving') {
-    return orderStopsByProximity(stops).map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
+    return orderStopsByProximity(stops, false, dist).map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
   }
 
   // WALKING & MIXED tours: separate into a walking cluster (the largest group
@@ -109,6 +152,9 @@ export function enforceWalkingDistance(stops, tourType, startCoords, options = {
   const noCoords = stops.filter(s => s.latitude == null || s.longitude == null);
 
   // Build connected components: stops linked when within WALKING_LIMIT.
+  // Uses routed distances (over bridges, around water) so stops on opposite
+  // sides of a creek are NOT grouped as walking even if straight-line distance
+  // is short — the actual walk to the bridge makes them too far apart.
   // Uses a head-index queue (not shift) to avoid O(n²) on larger stop sets.
   const visited = new Array(withCoords.length).fill(false);
   const components = [];
@@ -123,7 +169,7 @@ export function enforceWalkingDistance(stops, tourType, startCoords, options = {
       comp.push(withCoords[idx]);
       for (let j = 0; j < withCoords.length; j++) {
         if (!visited[j]) {
-          const d = haversineDistance(withCoords[idx].latitude, withCoords[idx].longitude, withCoords[j].latitude, withCoords[j].longitude);
+          const d = dist(withCoords[idx], withCoords[j]);
           if (d <= walkingLimit) { visited[j] = true; queue.push(j); }
         }
       }
@@ -138,7 +184,7 @@ export function enforceWalkingDistance(stops, tourType, startCoords, options = {
 
   // Order the walking cluster as a loop (2-opt with return-to-start)
   const orderedCluster = walkingCluster.length > 1
-    ? orderStopsByProximity(walkingCluster, true)
+    ? orderStopsByProximity(walkingCluster, true, dist)
     : walkingCluster.slice();
 
   // Rotate the loop so the stop closest to the nearest driving stop is
@@ -148,7 +194,7 @@ export function enforceWalkingDistance(stops, tourType, startCoords, options = {
     let bestDist = Infinity;
     for (let i = 0; i < orderedCluster.length; i++) {
       for (const ds of drivingStops) {
-        const d = haversineDistance(orderedCluster[i].latitude, orderedCluster[i].longitude, ds.latitude, ds.longitude);
+        const d = dist(orderedCluster[i], ds);
         if (d < bestDist) { bestDist = d; bestIdx = i; }
       }
     }
@@ -169,12 +215,12 @@ export function enforceWalkingDistance(stops, tourType, startCoords, options = {
     let startDist = Infinity;
     for (let i = 0; i < drivingStops.length; i++) {
       if (ref) {
-        const d = haversineDistance(ref.latitude, ref.longitude, drivingStops[i].latitude, drivingStops[i].longitude);
+        const d = dist(ref, drivingStops[i]);
         if (d < startDist) { startDist = d; startIdx = i; }
       }
     }
     const sorted = [drivingStops[startIdx], ...drivingStops.filter((_, i) => i !== startIdx)];
-    orderedDriving.push(...orderStopsByProximity(sorted, false));
+    orderedDriving.push(...orderStopsByProximity(sorted, false, dist));
   }
 
   // Final order: walking cluster loop + driving stops + no-coords stops
