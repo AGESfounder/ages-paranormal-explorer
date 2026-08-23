@@ -18,25 +18,35 @@ async function geocode(query) {
 // shared-address stops where address geocoding would collapse all stops
 // to the same point — name search finds the specific landmark instead.
 async function geocodeByName(name, city, state, refLat, refLon, maxDist = 5) {
-  const query = `${name}, ${city}, ${state}`;
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=us&q=${encodeURIComponent(query)}`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'AGES-Paranormal-Explorer/1.0' } });
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data || data.length === 0) return null;
-  // Return the closest result within maxDist miles of the reference point
+  // Try with city first, then without city (just name + state). The 5-mile
+  // radius check from the reference point filters out wrong matches, so
+  // searching without the city safely catches landmarks in neighboring
+  // townships (e.g. "John Eisenhower Bridge" is in Cumberland Township, not
+  // Gettysburg — searching with "Gettysburg" misses it, but "Pennsylvania"
+  // alone finds it).
+  const queries = city
+    ? [`${name}, ${city}, ${state}`, `${name}, ${state}`]
+    : [`${name}, ${state}`];
   let best = null;
   let bestDist = Infinity;
-  for (const d of data) {
-    const lat = parseFloat(d.lat);
-    const lon = parseFloat(d.lon);
-    if (refLat && refLon) {
-      const dist = haversine(refLat, refLon, lat, lon);
-      if (dist < bestDist && dist <= maxDist) { bestDist = dist; best = { lat, lon }; }
-    } else {
-      best = { lat, lon };
-      break;
+  for (const query of queries) {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=us&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'AGES-Paranormal-Explorer/1.0' } });
+    if (!res.ok) continue;
+    const data = await res.json();
+    if (!data || data.length === 0) continue;
+    for (const d of data) {
+      const lat = parseFloat(d.lat);
+      const lon = parseFloat(d.lon);
+      if (refLat && refLon) {
+        const dist = haversine(refLat, refLon, lat, lon);
+        if (dist < bestDist && dist <= maxDist) { bestDist = dist; best = { lat, lon }; }
+      } else {
+        best = { lat, lon };
+        break;
+      }
     }
+    if (best) break;
   }
   return best;
 }
@@ -543,7 +553,7 @@ Return a JSON object with:
             if (largeProp) {
               // Place needs_placement stops in a circle around the parking
               // badge using the golden angle for even distribution at any count.
-              const radius = 0.0015; // ~150 meters
+              const radius = 0.00015; // ~15 meters — right next to parking
               const angle = needsPlacementIdx * 2.39996; // golden angle (137.5°)
               const offsetLat = radius * Math.cos(angle);
               const offsetLon = radius * Math.sin(angle);
@@ -854,7 +864,7 @@ Return a JSON object with:
             // it to the correct spot. This is NOT guessing — the marker is
             // explicitly flagged as unplaced and requires manual verification.
             if (!fixed) {
-              const radius = 0.0015; // ~150 meters
+              const radius = 0.00015; // ~15 meters — right next to parking
               const angle = areaNeedsPlacementIdx * 2.39996; // golden angle
               const offsetLat = radius * Math.cos(angle);
               const offsetLon = radius * Math.sin(angle);
