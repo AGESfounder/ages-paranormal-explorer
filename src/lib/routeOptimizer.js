@@ -1,3 +1,5 @@
+import { base44 } from '@/api/base44Client';
+
 // Shared route optimization logic — used by both tour creation (generateTour.js)
 // and tour viewing (TourDetail.jsx). Extracted here so creation can enforce
 // correct stop ordering (driving stops at the end, walking stops as a loop)
@@ -40,6 +42,36 @@ async function fetchRouteDistanceMatrix(stops) {
   } catch (e) {
     console.error('OSRM distance matrix failed:', e);
     return null;
+  }
+}
+
+// Fetch water barriers from the backend. Returns a Set of coordinate-key
+// pairs that cross a waterway without a nearby walkable bridge. The ordering
+// applies a large penalty to these pairs so it groups same-side stops together
+// and only crosses water when a walkable bridge exists.
+async function fetchWaterBarriers(stops) {
+  const valid = stops.filter(s => s.latitude != null && s.longitude != null);
+  if (valid.length < 2) return new Set();
+  try {
+    // Timeout after 8 seconds — Overpass is often slow or down. If it
+    // times out, fall back to OSRM/haversine without water barriers.
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 8000)
+    );
+    const fetchPromise = base44.functions.invoke('detect-water-barriers', {
+      stops: valid.map(s => ({ lat: s.latitude, lon: s.longitude })),
+    });
+    const res = await Promise.race([fetchPromise, timeoutPromise]);
+    const barriers = res?.data?.barriers || [];
+    const set = new Set();
+    for (const b of barriers) {
+      set.add(`${b.a}->${b.b}`);
+      set.add(`${b.b}->${b.a}`); // bidirectional
+    }
+    return set;
+  } catch (e) {
+    console.error('Water barrier detection failed:', e);
+    return new Set();
   }
 }
 
@@ -115,9 +147,24 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   // Fetch routed distances — accounts for water barriers and bridge
   // crossings. Falls back to haversine if OSRM is unavailable.
   const routedLookup = await fetchRouteDistanceMatrix(stops);
-  const dist = routedLookup
+  // Fetch water barriers — pairs of stops separated by a waterway with no
+  // nearby walkable bridge. These get a large distance penalty so the
+  // ordering groups same-side stops together and only crosses water at a
+  // bridge. OSRM's driving profile finds road crossings that walkers can't
+  // use, so this Overpass-based check is necessary for walking tours.
+  const waterBarriers = await fetchWaterBarriers(stops);
+  // Moderate penalty — enough to make the ordering prefer same-side stops
+  // (grouping them together, crossing water only once at a bridge), but
+  // small enough that cross-water stops can still be grouped as walking
+  // (within the 0.33-mile walking limit).
+  const WATER_PENALTY = 0.15; // miles
+  const baseDist = routedLookup
     ? (a, b) => routedLookup.get(`${coordKey(a)}->${coordKey(b)}`) ?? haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude)
     : (a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude);
+  const dist = (a, b) => {
+    if (waterBarriers.has(`${coordKey(a)}->${coordKey(b)}`)) return WATER_PENALTY;
+    return baseDist(a, b);
+  };
 
   // Sort by stop_number for a consistent base order, then move the stop
   // closest to the tour's start coordinates to the front.
