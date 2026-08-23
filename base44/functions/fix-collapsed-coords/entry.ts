@@ -630,15 +630,40 @@ Return a JSON object with:
           const areaPlacementLat = parkingStopData?.latitude || tour.start_latitude;
           const areaPlacementLon = parkingStopData?.longitude || tour.start_longitude;
           let areaNeedsPlacementIdx = 0;
+          // Detect stops that share the same address — address geocoding would
+          // collapse them all to the same point (coordinate collision). For
+          // these stops, skip address geocoding (Steps 1 & 1b) and go directly
+          // to OSM name search / LLM web search, which searches by STOP NAME
+          // and finds the correct distinct location for each stop.
+          const addressCounts = {};
+          for (const s of needsFix) {
+            if (s.address) {
+              const key = normalizeAddr(s.address);
+              addressCounts[key] = (addressCounts[key] || 0) + 1;
+            }
+          }
           for (const stop of needsFix) {
             let fixed = false;
+            const sharedAddress = !!(stop.address && addressCounts[normalizeAddr(stop.address)] > 1);
+            // For stops with shared addresses that are ALREADY geocoded with
+            // valid, non-collapsed coordinates, trust the existing coordinates.
+            // Re-verifying via address geocoding would collapse them (all stops
+            // at the same address merge to one point), and OSM/LLM name search
+            // often fails for descriptive names like "Marsh Creek West Bank",
+            // returning worse results than the original LLM-generated coords.
+            if (sharedAddress && stop.geocoded === true && stop.latitude != null && stop.longitude != null && !collapsedStopIds.has(stop.id)) {
+              updates.push({ id: stop.id, geocoded: true, needs_placement: false });
+              matched.add(stop.id);
+              fixed = true;
+            }
             // Step 1: Geocode the stop's physical address — the address is the
             // source of truth, not the LLM's guessed coordinates. Use the
             // geocoded address directly if within 5 miles of tour start.
-            // Skip the reverse-geocode water check — a geocoded real address
-            // is on land by definition, and the extra Nominatim call adds
-            // 1.1s per stop (11s for a 10-stop tour).
-            if (stop.address) {
+            // SKIP for shared addresses — multiple stops at the same address
+            // would all collapse to the same geocoded point, destroying their
+            // distinct locations (e.g. stops on both sides of a creek sharing
+            // "Waterworks Road" would all merge to one point).
+            if (stop.address && !sharedAddress) {
               const geo = await geocode(`${stop.address}, ${tour.city || ''}, ${tour.state || ''}`);
               await sleep(1100);
               if (geo) {
@@ -658,7 +683,8 @@ Return a JSON object with:
             // rather than leaving the LLM's random guessed coordinates.
             // Also tries common spelling variants — the LLM often Americanizes
             // British spellings (e.g. "Center St" → "Centre St" in Centralia).
-            if (!fixed && stop.address) {
+            // SKIP for shared addresses — same collision risk as Step 1.
+            if (!fixed && stop.address && !sharedAddress) {
               const streetOnly = stop.address.replace(/^\d+\s+/, '').replace(/\s+\d{5}$/, '').trim();
               if (streetOnly && streetOnly !== stop.address) {
                 const variants = [streetOnly];
