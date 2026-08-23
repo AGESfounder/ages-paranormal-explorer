@@ -219,6 +219,46 @@ export default function TourDetail() {
     }
   };
 
+  // Background validation — runs fix-collapsed-coords (verifyAll) WITHOUT
+  // blocking the page load. The tour displays immediately with existing
+  // coordinates; when verification completes, stops are reloaded and
+  // re-ordered with corrected coordinates. This prevents the page from
+  // appearing stuck when opening a tour whose validation version is
+  // outdated (fix-collapsed-coords can take 30-60+ seconds for 10 stops).
+  const runBackgroundValidation = async (tourId, tourData) => {
+    try {
+      await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData.user_reordered, verifyAll: true });
+    } catch (e) {
+      console.error('Coordinate verification failed:', e);
+      return;
+    }
+    // Reload stops with corrected coordinates
+    const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+    const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
+    let tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking');
+    // Validate — log issues but never delete stops (needs_placement handles
+    // unverified stops instead of destructive regeneration)
+    const validation = validateStops(tourStopsOnly, tourData);
+    if (!validation.compliant) {
+      console.warn(`Tour ${tourId} validation: ${validation.reason}. Stops preserved.`);
+    }
+    await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
+    // Re-order and update display with corrected coordinates
+    if (!tourData.user_reordered) {
+      const reordered = enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
+      for (const s of reordered) {
+        const existing = tourStopsOnly.find(ts => ts.id === s.id);
+        if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
+          try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
+        }
+      }
+      setStops([...(parkingStop ? [parkingStop] : []), ...reordered]);
+    } else {
+      const sorted = tourStopsOnly.sort((a, b) => a.stop_number - b.stop_number);
+      setStops([...(parkingStop ? [parkingStop] : []), ...sorted]);
+    }
+  };
+
   const [narrationLength, setNarrationLengthState] = useState(getNarrationLength());
   const handleNarrationLengthChange = (value) => {
     setNarrationLengthState(value);
@@ -313,37 +353,18 @@ export default function TourDetail() {
         // compliance. Stops are NEVER deleted — needs_placement handles
         // unverified stops instead of destructive regeneration.
         let regenerated = false;
-        if ((tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION) {
-          // First, verify ALL coordinates via per-stop LLM web search
-          // (verifyAll: true) — confirms/corrects each stop's coordinates
-          // against real-world data. Catches inaccurate LLM coordinates from
-          // generation and collapsed Nominatim address geocoding.
-          try {
-            await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData[0].user_reordered, verifyAll: true });
-          } catch (e) {
-            console.error('Coordinate verification failed:', e);
-          }
-          // Reload stops with corrected coordinates
-          tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
-          parkingStop = tourStops.find(s => s.stop_type === 'parking');
-          tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking');
-          // Now validate with corrected coordinates. If still not compliant,
-          // DO NOT delete and regenerate — that destroys stops the user may
-          // have verified. The needs_placement system handles unverified
-          // stops. Just log the issue and mark the version as current.
-          const validation = validateStops(tourStopsOnly, tourData[0]);
-          if (!validation.compliant) {
-            console.warn(`Tour ${tourId} validation: ${validation.reason}. Stops preserved — fix-collapsed-coords already ran.`);
-          }
-          await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
-        }
+        const needsValidation = (tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION;
         if (!regenerated) {
           if (tourData[0].user_reordered) {
             // Respect the user's manual stop order — do not re-sort by proximity
             const sortedTourStops = tourStopsOnly.sort((a, b) => a.stop_number - b.stop_number);
             const allStops = [...(parkingStop ? [parkingStop] : []), ...sortedTourStops];
             setStops(allStops);
-            geocodeExistingStops(allStops, tourData[0]).catch(console.error);
+            if (needsValidation) {
+              runBackgroundValidation(tourId, tourData[0]).catch(console.error);
+            } else {
+              geocodeExistingStops(allStops, tourData[0]).catch(console.error);
+            }
           } else {
             const reordered = enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]) });
             // Update stop_numbers in the database if they changed
@@ -363,7 +384,11 @@ export default function TourDetail() {
             }
             const allStops = [...(parkingStop ? [parkingStop] : []), ...reordered];
             setStops(allStops);
-            geocodeExistingStops(allStops, tourData[0]).catch(console.error);
+            if (needsValidation) {
+              runBackgroundValidation(tourId, tourData[0]).catch(console.error);
+            } else {
+              geocodeExistingStops(allStops, tourData[0]).catch(console.error);
+            }
           }
         }
         // Lazily generate parking for tours that don't have it yet
