@@ -162,8 +162,14 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
     ? (a, b) => routedLookup.get(`${coordKey(a)}->${coordKey(b)}`) ?? haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude)
     : (a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude);
   const dist = (a, b) => {
-    if (waterBarriers.has(`${coordKey(a)}->${coordKey(b)}`)) return WATER_PENALTY;
-    return baseDist(a, b);
+    const base = baseDist(a, b);
+    // Water penalty only RAISES the distance for close stops (so the
+    // ordering prefers same-side stops). It must never LOWER the distance
+    // for far-apart stops — that would wrongly group driving stops as
+    // walking. Math.max ensures a 5-mile road distance stays 5 miles
+    // even if the straight line crosses a creek.
+    if (waterBarriers.has(`${coordKey(a)}->${coordKey(b)}`)) return Math.max(base, WATER_PENALTY);
+    return base;
   };
 
   // Sort by stop_number for a consistent base order, then move the stop
