@@ -13,6 +13,34 @@ async function geocode(query) {
   return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
 }
 
+// Search Nominatim for a landmark by name (not address). Returns the best
+// match within maxDist miles of the reference point, or null. Used for
+// shared-address stops where address geocoding would collapse all stops
+// to the same point — name search finds the specific landmark instead.
+async function geocodeByName(name, city, state, refLat, refLon, maxDist = 5) {
+  const query = `${name}, ${city}, ${state}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=us&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'AGES-Paranormal-Explorer/1.0' } });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!data || data.length === 0) return null;
+  // Return the closest result within maxDist miles of the reference point
+  let best = null;
+  let bestDist = Infinity;
+  for (const d of data) {
+    const lat = parseFloat(d.lat);
+    const lon = parseFloat(d.lon);
+    if (refLat && refLon) {
+      const dist = haversine(refLat, refLon, lat, lon);
+      if (dist < bestDist && dist <= maxDist) { bestDist = dist; best = { lat, lon }; }
+    } else {
+      best = { lat, lon };
+      break;
+    }
+  }
+  return best;
+}
+
 // Reverse geocode to check if a point is on land (returns specific feature, not just county)
 async function reverseGeocode(lat, lon) {
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=17`;
@@ -726,23 +754,40 @@ Return a JSON object with:
                 }
               }
             }
-            // Step 2: Fallback — OSM name search across the city area
+            // Step 2: Fallback — Nominatim name search for the landmark.
+            // Build search variants from specific to general: strip parenthetical
+            // aliases, then strip " - Suffix" qualifiers (e.g. "Sachs Covered
+            // Bridge - North Portal" → "Sachs Covered Bridge"), then strip
+            // trailing generic words (e.g. "Eisenhower Farm Perimeter" →
+            // "Eisenhower Farm"). Try each variant until Nominatim finds a
+            // match within 5 miles of the tour start. This recognizes clearly-
+            // mapped landmarks (covered bridges, named farms) instead of
+            // giving them pink "Needs Placement" markers.
             if (!fixed && tour.start_latitude && tour.start_longitude) {
-              const cityBbox = `${(tour.start_latitude - 0.1).toFixed(6)},${(tour.start_longitude - 0.1).toFixed(6)},${(tour.start_latitude + 0.1).toFixed(6)},${(tour.start_longitude + 0.1).toFixed(6)}`;
-              const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
-              if (cleanName && cleanName.length >= 4) {
+              const baseName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
+              const dashStripped = baseName.replace(/\s*-\s*[^-]+$/,'').trim();
+              const genericTrailing = ['perimeter', 'exterior', 'interior', 'grounds', 'area', 'site', 'view', 'entrance', 'approach', 'vicinity', 'surroundings'];
+              const wArr = baseName.split(/\s+/);
+              let trailingStripped = baseName;
+              while (wArr.length > 2 && genericTrailing.includes(wArr[wArr.length - 1].toLowerCase())) {
+                wArr.pop();
+                trailingStripped = wArr.join(' ');
+              }
+              const variants = [baseName, dashStripped, trailingStripped]
+                .filter((v, i, a) => v && v.length >= 4 && a.indexOf(v) === i);
+              for (const variant of variants) {
+                if (fixed) break;
                 try {
-                  const nameMatches = await queryOverpassByName(cleanName, cityBbox);
-                  const feature = matchStopToFeature(stop.name, nameMatches);
-                  if (feature) {
-                    updates.push({ id: stop.id, latitude: feature.lat, longitude: feature.lon, geocoded: true, needs_placement: false });
+                  const geo = await geocodeByName(variant, tour.city || '', tour.state || '', tour.start_latitude, tour.start_longitude, 5);
+                  if (geo) {
+                    updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true, needs_placement: false });
                     matched.add(stop.id);
                     fixed = true;
                   }
                 } catch (e) {
-                  console.error(`Name search failed for "${stop.name}":`, e.message);
+                  console.error(`Name search failed for "${stop.name}" (variant "${variant}"):`, e.message);
                 }
-                await sleep(1000);
+                await sleep(1100);
               }
             }
             // Step 3: Final fallback — LLM web search for the exact location.
