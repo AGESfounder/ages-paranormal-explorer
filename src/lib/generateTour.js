@@ -66,6 +66,11 @@ export async function findExistingTour(destination, state, category, accessType,
     // (e.g., a landmark-specific tour vs. a city walking tour that
     // includes that landmark as one stop). Only flag a true duplicate
     // when the destination matches the tour's actual name/title.
+    // When the user provided specific locations, skip title matching
+    // too — they explicitly want different stops (e.g., a bridge tour
+    // when a downtown walking tour already exists), and cross-tour
+    // stop dedup in generateLocationTour prevents duplicate stops.
+    if (hasSpecificLocations) return false;
     const normTitle = norm(t.title || '');
     const titleMatch = normTitle.includes(destLower);
     const destInTitle = destLower.includes(normTitle.trim()) && normTitle.trim().length > 3;
