@@ -553,7 +553,7 @@ Return a JSON object with:
             if (largeProp) {
               // Place needs_placement stops in a circle around the parking
               // badge using the golden angle for even distribution at any count.
-              const radius = 0.0004; // ~40 meters — near parking but spread enough to see individually
+              const radius = 0.0002; // ~20 meters — surrounding parking, individually visible
               const angle = needsPlacementIdx * 2.39996; // golden angle (137.5°)
               const offsetLat = radius * Math.cos(angle);
               const offsetLon = radius * Math.sin(angle);
@@ -864,7 +864,7 @@ Return a JSON object with:
             // it to the correct spot. This is NOT guessing — the marker is
             // explicitly flagged as unplaced and requires manual verification.
             if (!fixed) {
-              const radius = 0.0004; // ~40 meters — near parking but spread enough to see individually
+              const radius = 0.0002; // ~20 meters — surrounding parking, individually visible
               const angle = areaNeedsPlacementIdx * 2.39996; // golden angle
               const offsetLat = radius * Math.cos(angle);
               const offsetLon = radius * Math.sin(angle);
@@ -894,7 +894,9 @@ Return a JSON object with:
       const parkingStop = allStops.find(s => s.stop_type === 'parking');
       if (parkingStop && parkingStop.latitude && parkingStop.longitude) {
         const refreshedStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
-        const tourStops = refreshedStops.filter(s => s.stop_type !== 'parking' && s.latitude && s.longitude);
+        // Only offset from real verified stops — NOT needs_placement markers,
+        // which are intentionally placed near parking and should stay there.
+        const tourStops = refreshedStops.filter(s => s.stop_type !== 'parking' && s.latitude && s.longitude && !s.needs_placement);
         let overlap = false;
         for (const s of tourStops) {
           const d = haversine(parkingStop.latitude, parkingStop.longitude, s.latitude, s.longitude);
