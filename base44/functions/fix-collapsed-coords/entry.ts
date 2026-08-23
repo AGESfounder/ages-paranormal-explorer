@@ -645,24 +645,14 @@ Return a JSON object with:
           for (const stop of needsFix) {
             let fixed = false;
             const sharedAddress = !!(stop.address && addressCounts[normalizeAddr(stop.address)] > 1);
-            // For shared-address stops that already have verified (geocoded),
-            // NON-COLLAPSED coordinates, trust the existing coordinates.
-            // This is NOT guessing:
-            //  - geocoded === true means coordinates were set by a geocoding
-            //    function during tour generation (LLM web search or name search),
-            //    not random LLM guesses.
-            //  - !collapsedStopIds ensures the coordinates are DISTINCT — if all
-            //    shared-address stops had the same coordinates (e.g. a city
-            //    centroid guess), they would be collapsed and rejected here,
-            //    forcing them through OSM/LLM verification.
-            // Re-geocoding via address would collapse them (all stops at the
-            // same address merge to one point), and re-verifying via OSM/LLM
-            // for every stop times out (>5 min for 9 stops).
-            if (sharedAddress && stop.geocoded === true && stop.latitude != null && stop.longitude != null && !collapsedStopIds.has(stop.id)) {
-              updates.push({ id: stop.id, geocoded: true, needs_placement: false });
-              matched.add(stop.id);
-              fixed = true;
-            }
+            // NO GUESSING for shared-address stops: do NOT trust existing
+            // geocoded coordinates — they were LLM-generated during tour
+            // creation and may be inaccurate (e.g. stop 4 of the Sachs Bridge
+            // tour was ~100m off). Instead, verify via OSM name search. If OSM
+            // can't find the feature, mark as needs_placement near the parking
+            // area (pink marker) so a visitor can drag it to the correct spot.
+            // LLM web search is skipped for shared-address stops because
+            // calling it for 9+ stops causes execution timeouts.
             // Step 1: Geocode the stop's physical address — the address is the
             // source of truth, not the LLM's guessed coordinates. Use the
             // geocoded address directly if within 5 miles of tour start.
@@ -755,8 +745,12 @@ Return a JSON object with:
                 await sleep(1000);
               }
             }
-            // Step 3: Final fallback — LLM web search for the exact location
-            if (!fixed) {
+            // Step 3: Final fallback — LLM web search for the exact location.
+            // SKIP for shared-address stops: calling LLM for 9+ stops causes
+            // execution timeouts. For shared-address stops, OSM name search
+            // (Step 2) is the only verification; if it fails, go straight to
+            // needs_placement (no guessing).
+            if (!fixed && !sharedAddress) {
               const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
               const prompt = `Search the web for the EXACT GPS coordinates of this specific location:
 
@@ -791,7 +785,7 @@ Return a JSON object with:
                     properties: {
                       found: { type: 'boolean' },
                       latitude: { type: 'number' },
-                      longitude: { type: 'number' },
+                      longitude: { type: "number" },
                       source: { type: 'string' },
                     },
                   },
