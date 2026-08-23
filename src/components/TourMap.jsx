@@ -245,8 +245,8 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
             key={stop.id}
             position={[stop.latitude, stop.longitude]}
             icon={makeNeedsPlacementIcon(stop.stop_number)}
-            draggable={draggable}
-            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
+            draggable
+            eventHandlers={{ dragend: (e) => onMarkerDragEnd?.(stop.id, e.target.getLatLng()) }}
           >
             <Popup>
               <div className="text-xs font-heading">

@@ -818,6 +818,27 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     setCompletingTour(false);
   };
 
+  // Handle pink "Needs Placement" marker drag — update coordinates, clear
+  // needs_placement, and mark as user-verified so the marker turns blue.
+  const handleMarkerDragEnd = async (stopId, latLng) => {
+    setStops(prev => prev.map(s =>
+      s.id === stopId
+        ? { ...s, latitude: latLng.lat, longitude: latLng.lng, needs_placement: false, geocoded: true, user_verified: true }
+        : s
+    ));
+    try {
+      await base44.entities.TourStop.update(stopId, {
+        latitude: latLng.lat,
+        longitude: latLng.lng,
+        needs_placement: false,
+        geocoded: true,
+        user_verified: true,
+      });
+    } catch (e) {
+      console.error('Failed to update stop coordinates:', e);
+    }
+  };
+
   const parkingStop = stops.find(s => s.stop_type === 'parking');
   const tourStops = stops.filter(s => s.stop_type !== 'parking');
 
@@ -916,7 +937,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           </div>
         </div>
 
-        {stops.length > 0 && <TourMap stops={stops} tour={tour} height="h-72" />}
+        {stops.length > 0 && <TourMap stops={stops} tour={tour} height="h-72" onMarkerDragEnd={handleMarkerDragEnd} />}
 
         <div>
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
