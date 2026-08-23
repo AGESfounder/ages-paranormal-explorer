@@ -553,7 +553,7 @@ Return a JSON object with:
             if (largeProp) {
               // Place needs_placement stops in a circle around the parking
               // badge using the golden angle for even distribution at any count.
-              const radius = 0.00015; // ~15 meters — right next to parking
+              const radius = 0.0004; // ~40 meters — near parking but spread enough to see individually
               const angle = needsPlacementIdx * 2.39996; // golden angle (137.5°)
               const offsetLat = radius * Math.cos(angle);
               const offsetLon = radius * Math.sin(angle);
@@ -864,7 +864,7 @@ Return a JSON object with:
             // it to the correct spot. This is NOT guessing — the marker is
             // explicitly flagged as unplaced and requires manual verification.
             if (!fixed) {
-              const radius = 0.00015; // ~15 meters — right next to parking
+              const radius = 0.0004; // ~40 meters — near parking but spread enough to see individually
               const angle = areaNeedsPlacementIdx * 2.39996; // golden angle
               const offsetLat = radius * Math.cos(angle);
               const offsetLon = radius * Math.sin(angle);
@@ -883,6 +883,43 @@ Return a JSON object with:
         // Apply coordinate updates
         if (updates.length > 0) {
           await base44.asServiceRole.entities.TourStop.bulkUpdate(updates);
+        }
+      }
+
+      // Offset parking from any tour stop it overlaps. For area tours, the
+      // parking address often geocodes to the same point as a landmark stop
+      // (e.g. "Waterworks Road" is both the parking address and the Sachs
+      // Covered Bridge address), placing the parking marker ON the bridge
+      // instead of at the parking area. Offset it ~40m from the nearest stop.
+      const parkingStop = allStops.find(s => s.stop_type === 'parking');
+      if (parkingStop && parkingStop.latitude && parkingStop.longitude) {
+        const refreshedStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
+        const tourStops = refreshedStops.filter(s => s.stop_type !== 'parking' && s.latitude && s.longitude);
+        let overlap = false;
+        for (const s of tourStops) {
+          const d = haversine(parkingStop.latitude, parkingStop.longitude, s.latitude, s.longitude);
+          if (d < 0.03) { overlap = true; break; }
+        }
+        if (overlap) {
+          // Find the centroid of the walking cluster (stops within 0.2 mi of
+          // parking) and offset parking away from it, toward open space.
+          const nearby = tourStops.filter(s => haversine(parkingStop.latitude, parkingStop.longitude, s.latitude, s.longitude) < 0.2);
+          if (nearby.length > 0) {
+            const avgLat = nearby.reduce((sum, s) => sum + s.latitude, 0) / nearby.length;
+            const avgLon = nearby.reduce((sum, s) => sum + s.longitude, 0) / nearby.length;
+            // Offset away from the cluster centroid
+            const dLat = parkingStop.latitude - avgLat;
+            const dLon = parkingStop.longitude - avgLon;
+            const mag = Math.sqrt(dLat * dLat + dLon * dLon) || 1;
+            const offsetMag = 0.0006; // ~60m offset
+            const newLat = parkingStop.latitude + (dLat / mag) * offsetMag;
+            const newLon = parkingStop.longitude + (dLon / mag) * offsetMag;
+            await base44.asServiceRole.entities.TourStop.update(parkingStop.id, {
+              latitude: newLat,
+              longitude: newLon,
+              geocoded: true,
+            });
+          }
         }
       }
     }
