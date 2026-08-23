@@ -407,7 +407,12 @@ export default async function (req) {
         // If generation already marked this stop same_structure: true (a room
         // within the building), use the building center — don't try Overpass,
         // which would match it to an unrelated nearby feature.
-        if (stop.same_structure === true) {
+        // EXCEPT for large properties (lakes, dams, parks, forts): outdoor
+        // areas like "The Dam Overlook Deck" or "Shoreline Trail" get wrongly
+        // tagged same_structure during generation, collapsing distinct
+        // outdoor sites to one point. For large properties, verify each stop
+        // individually via Overpass/LLM instead.
+        if (stop.same_structure === true && !largeProp) {
           updates.push({ id: stop.id, latitude: centerLat, longitude: centerLon, geocoded: true, same_structure: true, needs_placement: false });
           matched.add(stop.id);
           continue;

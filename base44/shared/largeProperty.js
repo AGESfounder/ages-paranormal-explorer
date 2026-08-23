@@ -5,6 +5,10 @@
 const LARGE_PROPERTY_KEYWORDS = [
   'park', 'fort', 'farm', 'battlefield', 'battle field',
   'plantation', 'farmstead',
+  'lake', 'dam', 'reservoir', 'recreation area',
+  'wildlife refuge', 'preserve', 'forest', 'woods',
+  'greenway', 'trail system', 'cemetery', 'graveyard',
+  'campus', 'grounds', 'estate', 'manor',
 ];
 
 export function isLargeProperty(tour) {
