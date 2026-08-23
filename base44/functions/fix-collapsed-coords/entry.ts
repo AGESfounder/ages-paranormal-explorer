@@ -645,12 +645,19 @@ Return a JSON object with:
           for (const stop of needsFix) {
             let fixed = false;
             const sharedAddress = !!(stop.address && addressCounts[normalizeAddr(stop.address)] > 1);
-            // For stops with shared addresses that are ALREADY geocoded with
-            // valid, non-collapsed coordinates, trust the existing coordinates.
-            // Re-verifying via address geocoding would collapse them (all stops
-            // at the same address merge to one point), and OSM/LLM name search
-            // often fails for descriptive names like "Marsh Creek West Bank",
-            // returning worse results than the original LLM-generated coords.
+            // For shared-address stops that already have verified (geocoded),
+            // NON-COLLAPSED coordinates, trust the existing coordinates.
+            // This is NOT guessing:
+            //  - geocoded === true means coordinates were set by a geocoding
+            //    function during tour generation (LLM web search or name search),
+            //    not random LLM guesses.
+            //  - !collapsedStopIds ensures the coordinates are DISTINCT — if all
+            //    shared-address stops had the same coordinates (e.g. a city
+            //    centroid guess), they would be collapsed and rejected here,
+            //    forcing them through OSM/LLM verification.
+            // Re-geocoding via address would collapse them (all stops at the
+            // same address merge to one point), and re-verifying via OSM/LLM
+            // for every stop times out (>5 min for 9 stops).
             if (sharedAddress && stop.geocoded === true && stop.latitude != null && stop.longitude != null && !collapsedStopIds.has(stop.id)) {
               updates.push({ id: stop.id, geocoded: true, needs_placement: false });
               matched.add(stop.id);
@@ -802,11 +809,11 @@ Return a JSON object with:
                 console.error(`LLM search failed for "${stop.name}":`, e.message);
               }
             }
-            // ABSOLUTE LAST RESORT: all geocoding methods failed (e.g. ghost
-            // towns like Centralia where streets no longer exist in any map
-            // database). Place the stop near the parking area with a pink
-            // "Needs Placement" marker in a circular arrangement so a visitor
-            // can drag it to the correct spot.
+            // ABSOLUTE LAST RESORT: all geocoding methods failed AND there are
+            // no existing verified coordinates. Place the stop near the parking
+            // area with a pink "Needs Placement" marker so a visitor can drag
+            // it to the correct spot. This is NOT guessing — the marker is
+            // explicitly flagged as unplaced and requires manual verification.
             if (!fixed) {
               const radius = 0.0015; // ~150 meters
               const angle = areaNeedsPlacementIdx * 2.39996; // golden angle
