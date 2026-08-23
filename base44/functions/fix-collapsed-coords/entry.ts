@@ -448,7 +448,10 @@ export default async function (req) {
           // Bar" or "The Dining Room" matches a DIFFERENT business elsewhere
           // in the city, scattering markers. The room IS inside the building
           // at the building's coordinates — that's accurate, not a guess.
-          if (looksLikeRoom) {
+          // EXCEPT for large properties: outdoor structures like "The Dam
+          // Overlook Deck" or "The Shoreline Trail" contain room words but
+          // are distinct outdoor sites, not rooms in a building.
+          if (looksLikeRoom && !largeProp) {
             updates.push({
               id: stop.id,
               latitude: centerLat,
