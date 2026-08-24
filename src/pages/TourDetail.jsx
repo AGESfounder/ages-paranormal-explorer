@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign, CheckCircle2, PartyPopper, Route } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign, CheckCircle2, PartyPopper, Route, Plus } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -28,6 +28,8 @@ import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 import { isLargeProperty } from '@/lib/largeProperty';
+import { Input } from '@/components/ui/input';
+import { addStopByName } from '@/lib/addTourStops';
 
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
@@ -175,8 +177,10 @@ export default function TourDetail() {
   // Track if the user has manually dragged a marker — prevents background
   // validation from overwriting their placement with server-side coordinates.
   const userDraggedRef = useRef(false);
+  const [addingStop, setAddingStop] = useState(false);
+  const [stopSearchName, setStopSearchName] = useState('');
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
-  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user } = useEnergyGate();
 
   // Gated narration wrapper — checks energy before speaking, toggles off for free.
   const narrate = (text, opts = {}) => {
@@ -851,6 +855,47 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     }
   };
 
+  const handleAddStopByName = async () => {
+    if (!stopSearchName.trim() || addingStop) return;
+    const gate = await checkManifestationGate();
+    if (!gate.allowed) {
+      setStopsError(gate.reason === 'energy'
+        ? "You're out of manifestation energy. Buy an Aura Bundle or upgrade your plan."
+        : 'Upgrade to a paid plan to add stops.');
+      return;
+    }
+    setAddingStop(true);
+    setStopsError('');
+    try {
+      const result = await addStopByName(tour, stopSearchName.trim());
+      if (!result.added) {
+        setStopsError(result.reason === 'max'
+          ? 'This tour is at the maximum number of stops.'
+          : `Could not find "${stopSearchName}". Try a more specific name or check the spelling.`);
+        setAddingStop(false);
+        return;
+      }
+      spendManifestationEnergy();
+      setStopSearchName('');
+      // Reload and re-order all stops with the new stop included
+      const allStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+      const pStop = allStops.find(s => s.stop_type === 'parking');
+      const tStops = allStops.filter(s => s.stop_type !== 'parking');
+      const pCoords = pStop?.latitude != null ? { lat: pStop.latitude, lon: pStop.longitude } : null;
+      const reordered = await enforceWalkingDistance(tStops, tour.tour_type, { lat: tour.start_latitude, lon: tour.start_longitude }, { walkingLimit: getWalkingLimit(tour), parkingCoords: pCoords });
+      for (const s of reordered) {
+        const existing = tStops.find(ts => ts.id === s.id);
+        if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
+          try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
+        }
+      }
+      setStops([...(pStop ? [pStop] : []), ...reordered]);
+    } catch (e) {
+      setStopsError(e.message || 'Failed to add stop. Please try again.');
+    }
+    setAddingStop(false);
+  };
+
   const parkingStop = stops.find(s => s.stop_type === 'parking');
   const tourStops = stops.filter(s => s.stop_type !== 'parking');
 
@@ -1048,6 +1093,29 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 )}
               </Droppable>
             </DragDropContext>
+            {user?.role === 'admin' && (
+              <div className="mt-3 p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
+                <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Add Specific Stop by Name</p>
+                <div className="flex gap-2">
+                  <Input
+                    value={stopSearchName}
+                    onChange={(e) => setStopSearchName(e.target.value)}
+                    placeholder="e.g., Mumma Farm"
+                    className="flex-1"
+                    onKeyDown={(e) => { if (e.key === 'Enter' && stopSearchName.trim()) handleAddStopByName(); }}
+                  />
+                  <button
+                    onClick={handleAddStopByName}
+                    disabled={addingStop || !stopSearchName.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-heading text-xs uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-50"
+                  >
+                    {addingStop ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    {addingStop ? 'Adding…' : 'Add Stop'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Searches the web for the location and generates a full stop with coordinates, history, and paranormal info.</p>
+              </div>
+            )}
             </>
           )}
         </div>

@@ -243,3 +243,146 @@ Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RUL
   }
   return { added: actualAdded, capped: existingStops.length + newStops.length > maxStops };
 }
+
+// Adds a specific stop by name. The admin types a location name (e.g.,
+// "Mumma Farm") and this function finds it via LLM web search, generates
+// full stop content, and creates the TourStop. The caller re-orders all
+// stops via enforceWalkingDistance after this returns.
+export async function addStopByName(tour, searchName) {
+  const existingStops = await base44.entities.TourStop.filter({ tour_id: tour.id });
+  const maxStops = tour.tour_category === 'cold_spot' ? 4 : 12;
+  const existingTourStops = existingStops.filter(s => s.stop_type !== 'parking');
+  if (existingTourStops.length >= maxStops) {
+    return { added: false, reason: 'max' };
+  }
+
+  const existingSummary = existingTourStops
+    .map((s) => `Stop ${s.stop_number}: ${s.name} | coords: ${s.latitude}, ${s.longitude}`)
+    .join('\n');
+
+  const category = tour.tour_category || 'area';
+
+  const locationConstraint = category === 'landmark' || category === 'ship'
+    ? `This stop MUST be on the SAME ${category === 'landmark' ? 'property/site' : 'vessel'} as the existing stops.`
+    : category === 'cold_spot'
+    ? `This stop MUST be at the SAME specific haunted location as the existing stops.`
+    : category === 'road_trip'
+    ? `This stop must be along the road trip route in ${tour.state}.`
+    : `This stop must be a distinct real location in or near ${tour.city}, ${tour.state}.`;
+
+  const prompt = `You are adding a specific stop to an existing paranormal ghost hunting tour in ${tour.city}, ${tour.state}.
+
+TOUR TITLE: ${tour.title}
+TOUR TYPE: ${tour.tour_type}
+TOUR CATEGORY: ${category}
+
+EXISTING STOPS:
+${existingSummary || '(none yet)'}
+
+The user wants to add this specific location: "${searchName}"
+
+${locationConstraint}
+
+Find this exact location using web search. It must be a real place. Generate full stop content for it.
+
+Provide:
+- name: the location's real name
+- latitude: real GPS coordinates (look up via web search)
+- longitude: real GPS coordinates
+- address: COMPLETE STREET ADDRESS with street number (e.g., "123 Main St, City, ST 12345"). Must be GPS-searchable.
+- same_structure: true if a room/area within a single building, false if its own structure
+- historical_info: 2-3 sentences
+- paranormal_info: 2-3 sentences
+- investigation_suggestions: array of 3-5 strings
+- estimated_investigation_time: string
+- construction_date: string
+- famous_people: string
+- narration_text: 4-6 sentences of dramatic narration
+- travel_method: "walking" or "driving"
+- hours_of_operation: always provide (use "Exterior accessible 24/7" if freely accessible)
+- entry_fee: always provide (use "Free" if no charge)
+
+Output ONLY a valid JSON object with a "stop" property. No markdown fences.`;
+
+  const result = await base44.integrations.Core.InvokeLLM({
+    prompt,
+    response_json_schema: {
+      type: 'object',
+      properties: {
+        stop: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            latitude: { type: 'number' },
+            longitude: { type: 'number' },
+            address: { type: 'string' },
+            historical_info: { type: 'string' },
+            paranormal_info: { type: 'string' },
+            investigation_suggestions: { type: 'array', items: { type: 'string' } },
+            estimated_investigation_time: { type: 'string' },
+            construction_date: { type: 'string' },
+            famous_people: { type: 'string' },
+            narration_text: { type: 'string' },
+            travel_method: { type: 'string' },
+            hours_of_operation: { type: 'string' },
+            entry_fee: { type: 'string' },
+            same_structure: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    model: 'gemini_3_flash',
+    add_context_from_internet: true,
+  });
+
+  const stopData = result?.stop;
+  if (!stopData || !stopData.name) {
+    return { added: false, reason: 'not_found' };
+  }
+
+  // Geocode for non-landmark tours (landmark/ship stops share an address)
+  const isLandmarkOrShip = category === 'landmark' || category === 'ship';
+  let geocoded = isLandmarkOrShip;
+  if (!isLandmarkOrShip && stopData.address) {
+    const geoMap = await geocodeStopsWithNames([{
+      id: 'new', name: stopData.name, address: stopData.address, city: tour.city, state: tour.state
+    }], { lat: tour.start_latitude, lon: tour.start_longitude, maxDistMiles: category === 'road_trip' ? 200 : 5 });
+    if (geoMap.new) {
+      stopData.latitude = geoMap.new.lat;
+      stopData.longitude = geoMap.new.lon;
+      geocoded = true;
+    }
+  }
+
+  // Create the stop with a temporary high stop number — the caller re-orders.
+  const created = await base44.entities.TourStop.create({
+    tour_id: tour.id,
+    stop_number: 999,
+    name: stopData.name,
+    latitude: typeof stopData.latitude === 'number' ? stopData.latitude : parseFloat(stopData.latitude) || null,
+    longitude: typeof stopData.longitude === 'number' ? stopData.longitude : parseFloat(stopData.longitude) || null,
+    address: stopData.address || '',
+    geocoded,
+    historical_info: stripConclusionOpeners(stopData.historical_info || '', false),
+    paranormal_info: stripConclusionOpeners(stopData.paranormal_info || '', false),
+    investigation_suggestions: Array.isArray(stopData.investigation_suggestions) ? stopData.investigation_suggestions.filter(x => typeof x === 'string' && x.trim()) : [],
+    estimated_investigation_time: stopData.estimated_investigation_time || '',
+    construction_date: stopData.construction_date || '',
+    famous_people: stopData.famous_people || '',
+    narration_text: stripConclusionOpeners(stopData.narration_text || '', false),
+    travel_method: String(stopData.travel_method || '').toLowerCase() === 'driving' ? 'driving' : 'walking',
+    hours_of_operation: stopData.hours_of_operation || '',
+    entry_fee: stopData.entry_fee || '',
+    same_structure: stopData.same_structure === true,
+  });
+
+  // Verify coordinates via the backend
+  try {
+    await base44.functions.invoke('fix-collapsed-coords', { tourId: tour.id, skipReorder: tour.user_reordered });
+  } catch (e) {
+    console.error('Coordinate verification failed (stop still added):', e);
+  }
+
+  await base44.entities.Tour.update(tour.id, { verified: false });
+  return { added: true, stop: created };
+}
