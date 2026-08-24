@@ -1,5 +1,27 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
-import { isLargeProperty } from '../../shared/largeProperty.js';
+
+// Inline large-property detection — inlined (not imported from shared module)
+// to ensure the deployed function always uses the latest keyword list.
+const LARGE_PROPERTY_KEYWORDS = [
+  'park', 'fort', 'farm', 'battlefield', 'battle field',
+  'plantation', 'farmstead',
+  'lake', 'dam', 'reservoir', 'recreation area',
+  'wildlife refuge', 'preserve', 'forest', 'woods',
+  'greenway', 'trail system', 'cemetery', 'graveyard',
+  'campus', 'grounds', 'estate', 'manor',
+];
+function isLargeProperty(tour) {
+  if (!tour) return false;
+  const text = [
+    tour.title || '',
+    tour.start_location_name || '',
+    tour.description || '',
+  ].join(' ').toLowerCase();
+  return LARGE_PROPERTY_KEYWORDS.some((kw) => {
+    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('\\b' + escaped + '\\b').test(text);
+  });
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -327,6 +349,7 @@ export default async function (req) {
 
     const isSingleSite = tour.tour_category === 'landmark' || tour.tour_category === 'ship' || tour.tour_category === 'cold_spot';
     const largeProp = isLargeProperty(tour);
+    console.log(`fix-collapsed-coords: tour="${tour.title}", category=${tour.tour_category}, largeProp=${largeProp}, isSingleSite=${isSingleSite}`);
     const verifyRadius = largeProp ? 2 : 0.5;
     const updates = [];
     const matched = new Set();
