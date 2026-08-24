@@ -27,6 +27,7 @@ import { Input } from '@/components/ui/input';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
 import DeleteStopDialog from '@/components/DeleteStopDialog';
 import { Trash2 } from 'lucide-react';
+import { reverseGeocodeParking } from '@/lib/reverseGeocode';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -233,6 +234,19 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`, '_blank');
   };
 
+  // Auto-name parking when its location changes. Reverse-geocodes the new
+  // coordinates to get a descriptive name (e.g., "Rodman Avenue Parking").
+  const autoNameParking = async (lat, lon) => {
+    if (stop?.stop_type !== 'parking') return;
+    const newName = await reverseGeocodeParking(lat, lon);
+    if (newName && newName !== stop.name) {
+      try {
+        await base44.entities.TourStop.update(stop.id, { name: newName });
+        setStop(prev => ({ ...prev, name: newName }));
+      } catch (e) {}
+    }
+  };
+
   // Paid users mark their current GPS position as the best vantage point.
   // Admins can also drag the map marker to set the exact location.
   const handleMarkVantagePoint = async () => {
@@ -247,6 +261,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           const { latitude, longitude } = pos.coords;
           const result = await verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id);
           setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false }));
+          autoNameParking(latitude, longitude);
           toast({
             title: 'Vantage Point Marked!',
             description: result.allVerified
@@ -270,6 +285,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
     try {
       const result = await verifyStopLocation(stop.id, stop.tour_id, latlng.lat, latlng.lng, user?.id);
       setStop(prev => ({ ...prev, latitude: latlng.lat, longitude: latlng.lng, user_verified: true, needs_placement: false }));
+      autoNameParking(latlng.lat, latlng.lng);
       toast({
         title: 'Position Saved',
         description: result.allVerified
@@ -330,6 +346,15 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           </div>
 
           <div className="p-4 rounded-xl border border-border/40 bg-card/40 space-y-3">
+            <div>
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">Parking Name</p>
+              <Input
+                value={stop.name || ''}
+                onChange={(e) => handleParkingDetailChange('name', e.target.value)}
+                placeholder="e.g., Burnside Bridge Parking"
+                className="w-full"
+              />
+            </div>
             <div>
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">Parking Type</p>
               <Select
