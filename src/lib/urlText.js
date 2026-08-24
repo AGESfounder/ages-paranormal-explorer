@@ -6,9 +6,9 @@ const URL_PATTERN = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-z0-9-]+\.(?:com|org|net|e
 export const URL_REGEX = new RegExp(URL_PATTERN.source, 'gi');
 export const URL_TEST = URL_PATTERN;
 
-// Strips URLs from text for narration. Replaces each URL with "link" so the
-// narrator says "link" instead of reading out the full web address.
+// Strips URLs from text for narration. Removes URLs entirely so the narrator
+// skips them — the blue link in the display is enough, no need to say anything.
 export function stripUrlsForNarration(text) {
   if (!text) return text;
-  return text.replace(URL_REGEX, 'link');
+  return text.replace(URL_REGEX, '');
 }

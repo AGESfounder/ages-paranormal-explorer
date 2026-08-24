@@ -104,8 +104,51 @@ export default function useGhostVoice() {
     }
   };
 
+  const numberToWords = (n) => {
+    if (n === 0) return 'zero';
+    const ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    const twoDigits = (num) => num < 20 ? ones[num] : tens[Math.floor(num / 10)] + (num % 10 > 0 ? '-' + ones[num % 10] : '');
+    if (n < 100) return twoDigits(n);
+    if (n < 1000) return ones[Math.floor(n / 100)] + ' hundred' + (n % 100 > 0 ? ' ' + twoDigits(n % 100) : '');
+    if (n === 1000) return 'one thousand';
+    // Years 1001-1999: read as "eighteen sixty-two" style
+    if (n < 2000) {
+      const firstTwo = Math.floor(n / 100);
+      const lastTwo = n % 100;
+      return lastTwo === 0 ? twoDigits(firstTwo) + ' hundred' : twoDigits(firstTwo) + ' ' + twoDigits(lastTwo);
+    }
+    if (n < 2100) {
+      const r = n - 2000;
+      return 'two thousand' + (r > 0 ? ' ' + twoDigits(r) : '');
+    }
+    if (n < 10000) {
+      const thousands = Math.floor(n / 1000);
+      const r = n % 1000;
+      return twoDigits(thousands) + ' thousand' + (r > 0 ? ' ' + numberToWords(r) : '');
+    }
+    if (n < 1000000) {
+      const thousands = Math.floor(n / 1000);
+      const r = n % 1000;
+      return numberToWords(thousands) + ' thousand' + (r > 0 ? ' ' + numberToWords(r) : '');
+    }
+    return String(n);
+  };
+
   const sanitizeText = (text) => {
-    return text.replace(/A\.G\.E\.S\.?/gi, 'Ages');
+    let result = text.replace(/A\.G\.E\.S\.?/gi, 'Ages');
+    // Remove commas from comma-separated numbers (e.g., "1,500" → "1500")
+    result = result.replace(/(\d{1,3}(?:,\d{3})+)/g, (m) => m.replace(/,/g, ''));
+    // Convert standalone numbers to words so TTS pronounces them correctly
+    // (e.g., "150" → "one hundred fifty", "1862" → "eighteen sixty-two").
+    // Decimal parts (3.5) and numbers adjacent to letters (10pm, 5th) are
+    // left as-is since TTS handles those fine.
+    result = result.replace(/(?<!\d\.)\b\d+\b(?!\.\d)/g, (match) => {
+      const n = parseInt(match, 10);
+      if (isNaN(n)) return match;
+      return numberToWords(n);
+    });
+    return result;
   };
 
   // Call within a user gesture (e.g. a button tap) to unlock Web Audio + HTML
