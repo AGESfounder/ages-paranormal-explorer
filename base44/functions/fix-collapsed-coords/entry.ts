@@ -749,7 +749,7 @@ Return a JSON object with:
                     // "Mumma Farm" on Main St instead of Smokehouse Rd). OSM
                     // name search by landmark name is more specific and
                     // should be preferred when available.
-                    addrGeocodeCandidate = { lat: geo.lat, lon: geo.lon };
+                    addrGeocodeCandidate = { lat: geo.lat, lon: geo.lon, fromFullAddress: true };
                   } else {
                     updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true, needs_placement: false });
                     matched.add(stop.id);
@@ -808,7 +808,7 @@ Return a JSON object with:
                         // Save as candidate — don't short-circuit. Step 1
                         // (full address) candidate is preferred over this
                         // street-only fallback.
-                        if (!addrGeocodeCandidate) addrGeocodeCandidate = { lat: geo.lat, lon: geo.lon };
+                        if (!addrGeocodeCandidate) addrGeocodeCandidate = { lat: geo.lat, lon: geo.lon, fromFullAddress: false };
                       } else {
                         updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: false, needs_placement: false });
                         matched.add(stop.id);
@@ -856,13 +856,13 @@ Return a JSON object with:
               }
             }
             // If OSM name search didn't find a match but address geocoding did,
-            // use the address geocode result — but mark as estimated
-            // (geocoded: false) since it hasn't been confirmed by name search.
-            // This shows an amber "EST" badge instead of a blue marker,
-            // honestly reflecting that the coordinates are address-geocoded
-            // but not landmark-verified.
+            // use the address geocode result. A full street address with a house
+            // number (Step 1) geocodes precisely to the building in Nominatim,
+            // so it gets geocoded: true (blue marker). A street-name-only
+            // fallback (Step 1b) places the marker somewhere on the road without
+            // a house number, so it gets geocoded: false (amber "EST" badge).
             if (!fixed && addrGeocodeCandidate) {
-              updates.push({ id: stop.id, latitude: addrGeocodeCandidate.lat, longitude: addrGeocodeCandidate.lon, geocoded: false, needs_placement: false });
+              updates.push({ id: stop.id, latitude: addrGeocodeCandidate.lat, longitude: addrGeocodeCandidate.lon, geocoded: !!addrGeocodeCandidate.fromFullAddress, needs_placement: false });
               matched.add(stop.id);
               fixed = true;
             }
