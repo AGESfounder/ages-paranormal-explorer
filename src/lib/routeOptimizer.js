@@ -198,9 +198,9 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   // of stops within WALKING_LIMIT of each other) and driving stops. Order the
   // walking cluster as a loop (2-opt with return-to-start) so the first and
   // last stops are near each other — the user walks a circle and returns to
-  // their car. The loop's start/end point is chosen as the stop closest to the
-  // nearest driving stop. Driving stops are appended in linear order AFTER the
-  // walking cluster — never in the middle.
+  // their car. The loop's start/end point is the stop closest to the tour
+  // start / parking area. Driving stops are appended in linear order AFTER
+  // the walking cluster — never in the middle.
   const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
   const noCoords = stops.filter(s => s.latitude == null || s.longitude == null);
 
@@ -240,14 +240,21 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
     ? orderStopsByProximity(walkingCluster, true, dist)
     : walkingCluster.slice();
 
-  // Rotate the loop so the stop closest to the nearest driving stop is
-  // first/last — positions the user near their car for the drive out.
-  if (orderedCluster.length > 1 && drivingStops.length > 0) {
+  // Rotate the loop so the stop closest to the tour start / parking area
+  // is first. The walking cluster is a closed loop — the user starts at
+  // their car (parking), walks the loop, and returns to the first stop
+  // (near the car). Starting at the parking-adjacent stop keeps both the
+  // walk out and the walk back to the car short, and avoids zigzagging
+  // across bridges. Do NOT rotate to the driving-adjacent stop — the user
+  // returns to their car (at parking), not to the driving stop, before
+  // driving out.
+  if (orderedCluster.length > 1 && startCoords && startCoords.lat != null && startCoords.lon != null) {
     let bestIdx = 0;
     let bestDist = Infinity;
     for (let i = 0; i < orderedCluster.length; i++) {
-      for (const ds of drivingStops) {
-        const d = dist(orderedCluster[i], ds);
+      const s = orderedCluster[i];
+      if (s.latitude != null && s.longitude != null) {
+        const d = haversineDistance(startCoords.lat, startCoords.lon, s.latitude, s.longitude);
         if (d < bestDist) { bestDist = d; bestIdx = i; }
       }
     }
@@ -259,11 +266,13 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   }
 
   // Order driving stops linearly, starting from the one closest to the
-  // end of the walking cluster so the drive-out is as short as possible.
+  // tour start / parking area. After the walking loop the user returns to
+  // their car at parking, then drives — so the first driving stop should
+  // be the one closest to parking, not to the last walking stop.
   const clusterEnd = orderedCluster[orderedCluster.length - 1];
   const orderedDriving = [];
   if (drivingStops.length > 0) {
-    const ref = clusterEnd || withCoords[0];
+    const ref = (startCoords && startCoords.lat != null) ? { latitude: startCoords.lat, longitude: startCoords.lon } : (clusterEnd || withCoords[0]);
     let startIdx = 0;
     let startDist = Infinity;
     for (let i = 0; i < drivingStops.length; i++) {
