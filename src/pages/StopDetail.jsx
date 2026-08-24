@@ -25,6 +25,8 @@ import { verifyStopLocation } from '@/lib/verifyStop';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
+import { stripUrlsForNarration } from '@/lib/urlText';
+import LinkifiedText from '@/components/LinkifiedText';
 import DeleteStopDialog from '@/components/DeleteStopDialog';
 import { Trash2 } from 'lucide-react';
 import { reverseGeocodeParking } from '@/lib/reverseGeocode';
@@ -59,10 +61,11 @@ export default function StopDetail() {
 
   // Gated narration wrapper — checks energy before speaking, toggles off for free.
   const narrate = (text, opts = {}) => {
-    if (isSpeaking || isGenerating) { rawNarrate(text, opts); return; }
-    if (!gateNarration(text)) return;
-    rawNarrate(text, opts);
-    spendNarration(estimateNarrationCost(text));
+    const cleanText = stripUrlsForNarration(text);
+    if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
+    if (!gateNarration(cleanText)) return;
+    rawNarrate(cleanText, opts);
+    spendNarration(estimateNarrationCost(cleanText));
   };
 
   const [narrationLength] = useState(getNarrationLength());
@@ -552,7 +555,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={displayNarrationText} /></>}
               </button>
             </div>
-            <p className="text-log text-xs text-foreground/70 leading-relaxed italic">"{displayNarrationText}"</p>
+            <p className="text-log text-xs text-foreground/70 leading-relaxed italic">"<LinkifiedText text={displayNarrationText} />"</p>
           </div>
         )}
 
@@ -595,7 +598,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                   {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={displayHistoricalInfo} /></>}
                 </button>
               </div>
-              <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line">{displayHistoricalInfo}</p>
+              <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line"><LinkifiedText text={displayHistoricalInfo} /></p>
               {peopleLoading && isThinContent(stop.historical_info) && (
                 <p className="text-[10px] text-muted-foreground mt-2 italic animate-glow-pulse">Be Patient: Loading detailed history…</p>
               )}

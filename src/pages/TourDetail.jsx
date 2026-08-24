@@ -28,6 +28,7 @@ import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 import { isLargeProperty } from '@/lib/largeProperty';
+import { stripUrlsForNarration } from '@/lib/urlText';
 import { Input } from '@/components/ui/input';
 import { addStopByName } from '@/lib/addTourStops';
 
@@ -184,10 +185,11 @@ export default function TourDetail() {
 
   // Gated narration wrapper — checks energy before speaking, toggles off for free.
   const narrate = (text, opts = {}) => {
-    if (isSpeaking || isGenerating) { rawNarrate(text, opts); return; }
-    if (!gateNarration(text)) return;
-    rawNarrate(text, opts);
-    spendNarration(estimateNarrationCost(text));
+    const cleanText = stripUrlsForNarration(text);
+    if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
+    if (!gateNarration(cleanText)) return;
+    rawNarrate(cleanText, opts);
+    spendNarration(estimateNarrationCost(cleanText));
   };
 
   // Lazily verify existing stops whose GPS coordinates haven't been verified.

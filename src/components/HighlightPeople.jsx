@@ -1,16 +1,18 @@
 import React from 'react';
+import LinkifiedText from '@/components/LinkifiedText';
 
 // Renders `text` with each notable person's name (from `people`) wrapped in a
-// tappable, blue-highlighted button. Clicking calls onPerson(match).
+// tappable, blue-highlighted button. Clicking calls onPerson(match). URLs in
+// the text are rendered as clickable blue links via LinkifiedText.
 export default function HighlightPeople({ text, people, onPerson }) {
   if (!text) return null;
-  if (!people || people.length === 0) return <>{text}</>;
+  if (!people || people.length === 0) return <LinkifiedText text={text} />;
 
   const names = people
     .map(p => p.name)
     .filter(Boolean)
     .sort((a, b) => b.length - a.length);
-  if (names.length === 0) return <>{text}</>;
+  if (names.length === 0) return <LinkifiedText text={text} />;
 
   const escaped = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const re = new RegExp(`(${escaped.join('|')})`, 'gi');
@@ -34,7 +36,7 @@ export default function HighlightPeople({ text, people, onPerson }) {
               </button>
             );
           }
-          return <span key={i}>{part}</span>;
+          return <LinkifiedText key={i} text={part} />;
         });
       })()}
     </>
