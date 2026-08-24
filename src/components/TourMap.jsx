@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -92,6 +92,34 @@ function makeNeedsPlacementIcon(stopNumber) {
 }
 
 export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd }) {
+  // Fetch the actual road/bridge path from OSRM so the route line follows
+  // roads and bridges instead of drawing straight lines across creeks.
+  const [routedPath, setRoutedPath] = useState(null);
+  const routeStops = (stops || []).filter(s => s.latitude && s.longitude && s.stop_type !== 'parking' && !s.needs_placement);
+  const routeKey = routeStops.map(s => `${s.latitude},${s.longitude}`).join('|');
+  useEffect(() => {
+    if (routeStops.length < 2) { setRoutedPath(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const coords = routeStops.map(s => `${s.longitude},${s.latitude}`).join(';');
+        const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (!res.ok) { if (!cancelled) setRoutedPath(null); return; }
+        const data = await res.json();
+        if (data.code !== 'Ok' || !data.routes?.[0]?.geometry?.coordinates) {
+          if (!cancelled) setRoutedPath(null);
+          return;
+        }
+        const path = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        if (!cancelled) setRoutedPath(path);
+      } catch (e) {
+        if (!cancelled) setRoutedPath(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [routeKey]);
+
   if (!stops || stops.length === 0) return null;
 
   // Find parking stop (from stops list, fallback to tour entity for legacy tours)
@@ -176,7 +204,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         <FitBounds bounds={bounds} />
-        {bounds && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
+        {bounds && <Polyline positions={routedPath || routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
         {hasParking && boundsStops.length > 0 && (
           <Polyline
             positions={[[parkingLat, parkingLon], [boundsStops[0].latitude, boundsStops[0].longitude]]}
