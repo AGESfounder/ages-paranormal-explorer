@@ -180,7 +180,7 @@ export default function TourDetail() {
   const [addingStop, setAddingStop] = useState(false);
   const [stopSearchName, setStopSearchName] = useState('');
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
-  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user } = useEnergyGate();
+  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
 
   // Gated narration wrapper — checks energy before speaking, toggles off for free.
   const narrate = (text, opts = {}) => {
@@ -1093,7 +1093,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 )}
               </Droppable>
             </DragDropContext>
-            {user?.role === 'admin' && (
+            {(user?.role === 'admin' || isPaid) && (
               <div className="mt-3 p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
                 <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Add Specific Stop by Name</p>
                 <div className="flex gap-2">
