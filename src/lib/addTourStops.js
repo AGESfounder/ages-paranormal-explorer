@@ -340,19 +340,15 @@ Output ONLY a valid JSON object with a "stop" property. No markdown fences.`;
     return { added: false, reason: 'not_found' };
   }
 
-  // Geocode for non-landmark tours (landmark/ship stops share an address)
+  // For non-landmark tours, don't geocode here — fix-collapsed-coords with
+  // verifyAll will run the full verification pipeline (address geocode → OSM
+  // name search → LLM web search → needs_placement). Geocoding here would
+  // overwrite the LLM's web-searched coordinates with potentially wrong
+  // Nominatim results (e.g. placing "Mumma Farm" on Main Street instead of
+  // Smokehouse Rd). Trust the LLM's coordinates initially and let the
+  // verification pipeline confirm or correct them.
   const isLandmarkOrShip = category === 'landmark' || category === 'ship';
-  let geocoded = isLandmarkOrShip;
-  if (!isLandmarkOrShip && stopData.address) {
-    const geoMap = await geocodeStopsWithNames([{
-      id: 'new', name: stopData.name, address: stopData.address, city: tour.city, state: tour.state
-    }], { lat: tour.start_latitude, lon: tour.start_longitude, maxDistMiles: category === 'road_trip' ? 200 : 5 });
-    if (geoMap.new) {
-      stopData.latitude = geoMap.new.lat;
-      stopData.longitude = geoMap.new.lon;
-      geocoded = true;
-    }
-  }
+  const geocoded = isLandmarkOrShip;
 
   // Create the stop with a temporary high stop number — the caller re-orders.
   const created = await base44.entities.TourStop.create({
@@ -376,9 +372,11 @@ Output ONLY a valid JSON object with a "stop" property. No markdown fences.`;
     same_structure: stopData.same_structure === true,
   });
 
-  // Verify coordinates via the backend
+  // Verify coordinates via the backend — verifyAll ensures the new stop goes
+  // through the full pipeline (address geocode → OSM name search → LLM web
+  // search → needs_placement), not just collapse detection.
   try {
-    await base44.functions.invoke('fix-collapsed-coords', { tourId: tour.id, skipReorder: tour.user_reordered });
+    await base44.functions.invoke('fix-collapsed-coords', { tourId: tour.id, skipReorder: tour.user_reordered, verifyAll: true });
   } catch (e) {
     console.error('Coordinate verification failed (stop still added):', e);
   }

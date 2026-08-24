@@ -735,15 +735,26 @@ Return a JSON object with:
             // would all collapse to the same geocoded point, destroying their
             // distinct locations (e.g. stops on both sides of a creek sharing
             // "Waterworks Road" would all merge to one point).
+            let addrGeocodeCandidate = null;
             if (stop.address && !sharedAddress) {
               const geo = await geocode(`${stop.address}, ${tour.city || ''}, ${tour.state || ''}`);
               await sleep(1100);
               if (geo) {
                 const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
                 if (dist <= 5) {
-                  updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true, needs_placement: false });
-                  matched.add(stop.id);
-                  fixed = true;
+                  if (verifyAll) {
+                    // Don't short-circuit — save as candidate and continue to
+                    // OSM name search (Step 2). Address geocoding alone isn't
+                    // definitive — it can resolve to the wrong street (e.g.
+                    // "Mumma Farm" on Main St instead of Smokehouse Rd). OSM
+                    // name search by landmark name is more specific and
+                    // should be preferred when available.
+                    addrGeocodeCandidate = { lat: geo.lat, lon: geo.lon };
+                  } else {
+                    updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true, needs_placement: false });
+                    matched.add(stop.id);
+                    fixed = true;
+                  }
                 }
               }
             }
@@ -793,9 +804,16 @@ Return a JSON object with:
                   if (geo) {
                     const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
                     if (dist <= 5) {
-                      updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: false, needs_placement: false });
-                      matched.add(stop.id);
-                      fixed = true;
+                      if (verifyAll) {
+                        // Save as candidate — don't short-circuit. Step 1
+                        // (full address) candidate is preferred over this
+                        // street-only fallback.
+                        if (!addrGeocodeCandidate) addrGeocodeCandidate = { lat: geo.lat, lon: geo.lon };
+                      } else {
+                        updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: false, needs_placement: false });
+                        matched.add(stop.id);
+                        fixed = true;
+                      }
                     }
                   }
                 }
@@ -836,6 +854,17 @@ Return a JSON object with:
                 }
                 await sleep(1100);
               }
+            }
+            // If OSM name search didn't find a match but address geocoding did,
+            // use the address geocode result — but mark as estimated
+            // (geocoded: false) since it hasn't been confirmed by name search.
+            // This shows an amber "EST" badge instead of a blue marker,
+            // honestly reflecting that the coordinates are address-geocoded
+            // but not landmark-verified.
+            if (!fixed && addrGeocodeCandidate) {
+              updates.push({ id: stop.id, latitude: addrGeocodeCandidate.lat, longitude: addrGeocodeCandidate.lon, geocoded: false, needs_placement: false });
+              matched.add(stop.id);
+              fixed = true;
             }
             // Step 3: Final fallback — LLM web search for the exact location.
             // SKIP for shared-address stops: calling LLM for 9+ stops causes
