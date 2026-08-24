@@ -174,14 +174,16 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   };
 
   // Sort by stop_number for a consistent base order, then move the stop
-  // closest to the tour's start coordinates to the front.
+  // closest to parking (or the tour's start coordinates if no parking) to
+  // the front — the user starts investigating from where they park.
   stops = [...stops].sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-  if (startCoords && startCoords.lat != null && startCoords.lon != null) {
+  const refCoords = (parkingCoords && parkingCoords.lat != null && parkingCoords.lon != null) ? parkingCoords : startCoords;
+  if (refCoords && refCoords.lat != null && refCoords.lon != null) {
     let bestIdx = 0;
     let bestDist = Infinity;
     for (let i = 0; i < stops.length; i++) {
       if (stops[i].latitude != null && stops[i].longitude != null) {
-        const d = haversineDistance(startCoords.lat, startCoords.lon, stops[i].latitude, stops[i].longitude);
+        const d = haversineDistance(refCoords.lat, refCoords.lon, stops[i].latitude, stops[i].longitude);
         if (d < bestDist) { bestDist = d; bestIdx = i; }
       }
     }
