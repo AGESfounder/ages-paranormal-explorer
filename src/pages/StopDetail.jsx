@@ -258,11 +258,26 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       return;
     }
     setVerifying(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const { latitude, longitude } = pos.coords;
-          const result = await verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id);
+    const MAX_ACCURACY_M = 30; // Reject stale/low-accuracy GPS fixes
+    let retried = false;
+    const attempt = (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      if (accuracy != null && accuracy > MAX_ACCURACY_M && !retried) {
+        // Stale or poor fix — wait for a better one instead of saving bad coords
+        retried = true;
+        return;
+      }
+      if (accuracy != null && accuracy > MAX_ACCURACY_M) {
+        toast({
+          title: 'GPS Too Imprecise',
+          description: `Accuracy was ${Math.round(accuracy)}m. Move to an open area and try again.`,
+          variant: 'destructive',
+        });
+        setVerifying(false);
+        return;
+      }
+      verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id)
+        .then((result) => {
           setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false }));
           autoNameParking(latitude, longitude);
           toast({
@@ -271,17 +286,25 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
               ? 'All stops validated — tour is now fully validated!'
               : 'Stop location validated. Keep going!',
           });
-        } catch (e) {
+        })
+        .catch((e) => {
           toast({ title: 'Verification Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
-        }
-        setVerifying(false);
-      },
+        })
+        .finally(() => setVerifying(false));
+    };
+    // Use watchPosition so a poor first fix is replaced by a better one
+    // before we save — prevents stale cached positions from being stored.
+    const watchId = navigator.geolocation.watchPosition(
+      attempt,
       () => {
         toast({ title: 'Location Access Denied', description: 'Enable location permissions to mark this vantage point.', variant: 'destructive' });
         setVerifying(false);
+        navigator.geolocation.clearWatch(watchId);
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
+    // Stop watching after a reasonable window so it doesn't run forever
+    setTimeout(() => navigator.geolocation.clearWatch(watchId), 20000);
   };
 
   const handleMarkerDragEnd = async (latlng) => {
