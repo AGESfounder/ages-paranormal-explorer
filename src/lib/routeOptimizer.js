@@ -142,6 +142,7 @@ const WALKING_LIMIT = 0.33;
 // tour's designated start to the front before ordering begins.
 export async function enforceWalkingDistance(stops, tourType, startCoords, options = {}) {
   const walkingLimit = options.walkingLimit || WALKING_LIMIT;
+  const parkingCoords = options.parkingCoords;
   if (!stops.length) return stops;
 
   // Fetch routed distances — accounts for water barriers and bridge
@@ -240,15 +241,23 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
     ? orderStopsByProximity(walkingCluster, true, dist)
     : walkingCluster.slice();
 
-  // Rotate the loop so the stop closest to the nearest driving stop is
-  // first/last — positions the user near their car for the drive out.
-  if (orderedCluster.length > 1 && drivingStops.length > 0) {
+  // Rotate the loop so the stop closest to parking (or the nearest driving
+  // stop if no parking) is first/last — the user starts at their car, walks
+  // to the nearest stop, does the loop, and returns near where they parked.
+  if (orderedCluster.length > 1) {
     let bestIdx = 0;
     let bestDist = Infinity;
-    for (let i = 0; i < orderedCluster.length; i++) {
-      for (const ds of drivingStops) {
-        const d = dist(orderedCluster[i], ds);
+    if (parkingCoords && parkingCoords.lat != null && parkingCoords.lon != null) {
+      for (let i = 0; i < orderedCluster.length; i++) {
+        const d = haversineDistance(parkingCoords.lat, parkingCoords.lon, orderedCluster[i].latitude, orderedCluster[i].longitude);
         if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+    } else if (drivingStops.length > 0) {
+      for (let i = 0; i < orderedCluster.length; i++) {
+        for (const ds of drivingStops) {
+          const d = dist(orderedCluster[i], ds);
+          if (d < bestDist) { bestDist = d; bestIdx = i; }
+        }
       }
     }
     if (bestIdx > 0) {

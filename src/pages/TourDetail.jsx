@@ -209,7 +209,8 @@ export default function TourDetail() {
     if (tourData && !tourData.user_reordered) {
       const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking');
       const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
-      const reordered = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
+      const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
+      const reordered = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
       for (const s of reordered) {
         const existing = tourStopsOnly.find(ts => ts.id === s.id);
         if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
@@ -252,7 +253,8 @@ export default function TourDetail() {
     if (userDraggedRef.current) return;
     // Re-order and update display with corrected coordinates
     if (!tourData.user_reordered) {
-      const reordered = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
+      const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
+      const reordered = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
       for (const s of reordered) {
         const existing = tourStopsOnly.find(ts => ts.id === s.id);
         if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
@@ -373,7 +375,8 @@ export default function TourDetail() {
               geocodeExistingStops(allStops, tourData[0]).catch(console.error);
             }
           } else {
-            const reordered = await enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]) });
+            const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
+            const reordered = await enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords });
             // Update stop_numbers in the database if they changed
             for (const s of reordered) {
               const existing = tourStopsOnly.find(ts => ts.id === s.id);
@@ -718,7 +721,8 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         // be optimal. This ensures walking cluster stays first, driving last.
         const vParking = verifiedStops.find(s => s.stop_type === 'parking');
         const vTourStops = verifiedStops.filter(s => s.stop_type !== 'parking');
-        const reordered = await enforceWalkingDistance(vTourStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
+        const parkingCoords = vParking?.latitude != null ? { lat: vParking.latitude, lon: vParking.longitude } : null;
+        const reordered = await enforceWalkingDistance(vTourStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
         for (const s of reordered) {
           const existing = vTourStops.find(ts => ts.id === s.id);
           if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
