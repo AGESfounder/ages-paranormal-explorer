@@ -185,15 +185,19 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
     }));
   }
 
-  // Fetch routed distances — accounts for water barriers and bridge
-  // crossings. Falls back to haversine if OSRM is unavailable.
-  const routedLookup = await fetchRouteDistanceMatrix(stops);
   // Fetch water barriers — pairs of stops separated by a waterway with no
   // nearby walkable bridge. These get a large distance penalty so the
   // ordering groups same-side stops together and only crosses water at a
-  // bridge. OSRM's driving profile finds road crossings that walkers can't
-  // use, so this Overpass-based check is necessary for walking tours.
+  // bridge.
   const waterBarriers = await fetchWaterBarriers(stops);
+  // For WALKING & MIXED tours: use haversine (straight-line) distances, NOT
+  // OSRM driving distances. Downtown areas have one-way streets that make
+  // driving distances wildly different from walking distances — two stops
+  // 0.1 mi apart by foot can be 0.5 mi apart by car, causing the nearest-
+  // neighbor to pick wrong stops and produce crisscrossing routes. The
+  // water barrier penalties above handle creek/bridge crossings.
+  // For DRIVING tours: use OSRM driving distances for accurate road routing.
+  const routedLookup = tourType === 'driving' ? await fetchRouteDistanceMatrix(stops) : null;
   // Moderate penalty — enough to make the ordering prefer same-side stops
   // (grouping them together, crossing water only once at a bridge), but
   // small enough that cross-water stops can still be grouped as walking
