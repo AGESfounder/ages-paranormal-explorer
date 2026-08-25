@@ -757,19 +757,16 @@ Return a JSON object with:
               if (geo) {
                 const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
                 if (dist <= 5) {
-                  if (verifyAll) {
-                    // Don't short-circuit — save as candidate and continue to
-                    // OSM name search (Step 2). Address geocoding alone isn't
-                    // definitive — it can resolve to the wrong street (e.g.
-                    // "Mumma Farm" on Main St instead of Smokehouse Rd). OSM
-                    // name search by landmark name is more specific and
-                    // should be preferred when available.
-                    addrGeocodeCandidate = { lat: geo.lat, lon: geo.lon, fromFullAddress: true };
-                  } else {
-                    updates.push({ id: stop.id, latitude: geo.lat, longitude: geo.lon, geocoded: true, needs_placement: false });
-                    matched.add(stop.id);
-                    fixed = true;
-                  }
+                  // ALWAYS save as candidate and verify via name check —
+                  // even when verifyAll is false. If the LLM generated the
+                  // WRONG address for a landmark (e.g. "106 W Patrick St" for
+                  // the Gaslight House which is actually at "118 E Church St"),
+                  // the address geocodes successfully but to the WRONG building.
+                  // Without the name check, the wrong point gets a blue
+                  // "geocoded" badge, falsely signalling accuracy. The name
+                  // check reverse-geocodes the candidate and confirms the
+                  // stop's name tokens appear in the result before trusting it.
+                  addrGeocodeCandidate = { lat: geo.lat, lon: geo.lon, fromFullAddress: true };
                 }
               }
             }
@@ -966,7 +963,37 @@ Return a JSON object with:
                     // Mark as geocoded: false (amber "EST" badge) so users know
                     // to verify at the actual location. LLM can return wrong
                     // coordinates — never mark them as verified (blue).
-                    updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: false, needs_placement: false });
+                    const updateData = { id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: false, needs_placement: false };
+                    // If the LLM found coordinates that differ significantly from
+                    // the original address geocode candidate, the LLM's original
+                    // address was likely WRONG (e.g. "106 W Patrick St" for the
+                    // Gaslight House which is actually at "118 E Church St").
+                    // Reverse-geocode the LLM-found coordinates and update the
+                    // address so the displayed address matches the real location.
+                    if (addrGeocodeCandidate) {
+                      const addrDist = haversine(addrGeocodeCandidate.lat, addrGeocodeCandidate.lon, llmResult.latitude, llmResult.longitude);
+                      if (addrDist > 0.1) {
+                        try {
+                          const rev = await reverseGeocode(llmResult.latitude, llmResult.longitude);
+                          await sleep(1100);
+                          if (rev && rev.display_name) {
+                            // Build a clean street address from the reverse geocode
+                            const a = rev.address || {};
+                            const streetAddr = [a.house_number, a.road].filter(Boolean).join(' ');
+                            const cityPart = a.city || a.town || a.village || tour.city || '';
+                            const statePart = a.state || tour.state || '';
+                            const zip = a.postcode || '';
+                            const fullAddr = [streetAddr, cityPart, statePart, zip].filter(Boolean).join(', ');
+                            if (fullAddr) {
+                              updateData.address = fullAddr;
+                            }
+                          }
+                        } catch (e) {
+                          console.error(`Address correction failed for "${stop.name}":`, e.message);
+                        }
+                      }
+                    }
+                    updates.push(updateData);
                     matched.add(stop.id);
                     fixed = true;
                   }
