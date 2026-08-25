@@ -372,11 +372,12 @@ Output ONLY a valid JSON object with a "stop" property. No markdown fences.`;
     same_structure: stopData.same_structure === true,
   });
 
-  // Verify coordinates via the backend — verifyAll ensures the new stop goes
-  // through the full pipeline (address geocode → OSM name search → LLM web
-  // search → needs_placement), not just collapse detection.
+  // SAFETY: Do NOT use verifyAll — it re-verifies ALL stops on the tour and
+  // can overwrite correct coordinates with wrong OSM/LLM guesses. Only fix
+  // collapsed/missing stops. The new stop stays as geocoded: false (amber
+  // "EST") until a user verifies it at the actual location.
   try {
-    await base44.functions.invoke('fix-collapsed-coords', { tourId: tour.id, skipReorder: tour.user_reordered, verifyAll: true });
+    await base44.functions.invoke('fix-collapsed-coords', { tourId: tour.id, skipReorder: tour.user_reordered, verifyAll: false });
   } catch (e) {
     console.error('Coordinate verification failed (stop still added):', e);
   }

@@ -198,10 +198,15 @@ export default function TourDetail() {
   // Nominatim address geocoding, which collapses stops in tiny towns and
   // overrides accurate LLM coordinates with generic address points.
   const geocodeExistingStops = async (stopsList, tourData) => {
+    // SAFETY: Do NOT re-verify stops that already have coordinates. The
+    // background OSM/LLM search can return WRONG coordinates (e.g. Morgan's
+    // Grove Park was moved 0.5 miles off), sending users to the wrong
+    // location at night. Only fix collapsed/missing stops — never overwrite
+    // existing coordinates with a new guess.
     const needsVerification = stopsList.filter(s => s.stop_type !== 'parking' && s.geocoded === false);
     if (needsVerification.length === 0) return;
     try {
-      await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered, verifyAll: true });
+      await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered, verifyAll: false });
     } catch (e) {
       console.error('Coordinate verification failed:', e);
       return;
@@ -238,8 +243,11 @@ export default function TourDetail() {
   // appearing stuck when opening a tour whose validation version is
   // outdated (fix-collapsed-coords can take 30-60+ seconds for 10 stops).
   const runBackgroundValidation = async (tourId, tourData) => {
+    // SAFETY: Do NOT re-verify all stops. Background OSM/LLM search can return
+    // WRONG coordinates, overwriting correct ones and sending users to the
+    // wrong location at night. Only fix collapsed/missing/water stops.
     try {
-      await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData.user_reordered, verifyAll: true });
+      await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData.user_reordered, verifyAll: false });
     } catch (e) {
       console.error('Coordinate verification failed:', e);
       return;
@@ -662,14 +670,13 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         deduped[i].narration_text = stripConclusionOpeners(deduped[i].narration_text, i === lastIdx);
         deduped[i].paranormal_info = stripConclusionOpeners(deduped[i].paranormal_info, i === lastIdx);
       }
-      // ALL tour types: trust the LLM's web-searched coordinates from
-      // generation. Address geocoding (Nominatim) is NOT used as a primary
-      // method — it collapses stops in tiny towns (Centralia) and overrides
-      // accurate LLM coordinates with generic address points. Coordinates
-      // are verified/corrected via fix-collapsed-coords with verifyAll below,
-      // which runs per-stop LLM web search to confirm each stop's real location.
+      // LLM-generated coordinates are ESTIMATES, not verified. Mark as
+      // geocoded: false (amber "EST" badge) so users know to verify at the
+      // actual location. fix-collapsed-coords upgrades to geocoded: true
+      // (blue) ONLY when OSM name search or address geocode confirms the
+      // coordinates. LLM web search results stay amber — LLM can be wrong.
       for (const stop of deduped) {
-        stop._geocoded = true;
+        stop._geocoded = false;
       }
 
       const created = [];

@@ -571,7 +571,11 @@ Return a JSON object with:
             if (llmResult.found && llmResult.latitude != null && llmResult.longitude != null) {
               const dist = haversine(centerLat, centerLon, llmResult.latitude, llmResult.longitude);
               if (dist <= verifyRadius) {
-                updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true, needs_placement: false });
+                // LLM web-search coordinates are ESTIMATES, not verified.
+                // Mark as geocoded: false (amber "EST" badge) so users know
+                // to verify at the actual location. LLM can return wrong
+                // coordinates — never mark them as verified (blue).
+                updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: false, needs_placement: false });
                 matched.add(stop.id);
                 definitive = true;
               }
@@ -947,7 +951,11 @@ Return a JSON object with:
                   // Sanity check: coordinate must be within 5 miles of tour start
                   const dist = haversine(tour.start_latitude, tour.start_longitude, llmResult.latitude, llmResult.longitude);
                   if (dist <= 5) {
-                    updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: true, needs_placement: false });
+                    // LLM web-search coordinates are ESTIMATES, not verified.
+                    // Mark as geocoded: false (amber "EST" badge) so users know
+                    // to verify at the actual location. LLM can return wrong
+                    // coordinates — never mark them as verified (blue).
+                    updates.push({ id: stop.id, latitude: llmResult.latitude, longitude: llmResult.longitude, geocoded: false, needs_placement: false });
                     matched.add(stop.id);
                     fixed = true;
                   }
