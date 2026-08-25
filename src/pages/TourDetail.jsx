@@ -787,6 +787,8 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   const onDragEnd = async (result) => {
     document.body.style.overflow = '';
     if (!result.destination || result.source.index === result.destination.index) return;
+    // Prevent background validation/geocoding from overwriting this reorder
+    userDraggedRef.current = true;
     const currentParking = stops.find(s => s.stop_type === 'parking');
     const currentTourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
     const reordered = Array.from(currentTourStops);
