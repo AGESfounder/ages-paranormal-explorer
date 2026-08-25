@@ -3,6 +3,7 @@ import { callJson } from '@/lib/llmJson';
 import { US_STATES } from '@/lib/statesData';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
 import { enforceWalkingDistance } from '@/lib/routeOptimizer';
+import { getVerifiedCoordsForStops, applyVerifiedCoords } from '@/lib/reuseVerifiedCoords';
 
 function normalizeStateName(state) {
   if (!state) return '';
@@ -400,6 +401,25 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       `This location generated only ${processed.validStops.length} stop${processed.validStops.length === 1 ? '' : 's'} ` +
       `(minimum ${minStops} required). Please try again or try a different location.`
     );
+  }
+
+  // REUSE VERIFIED COORDINATES: If any generated stop name matches a
+  // user-verified stop in an existing tour in the same state, override its
+  // coordinates with the verified ones. A user who pinned a location at 9pm
+  // in one tour should never see a new tour place that same location
+  // somewhere else — their verified pin is ground truth.
+  const stopNames = processed.stopRecords.map((s) => s.name).filter(Boolean);
+  if (stopNames.length > 0) {
+    try {
+      const verifiedMap = await getVerifiedCoordsForStops(stopNames, processed.tourData.state);
+      const result = applyVerifiedCoords(processed.stopRecords, verifiedMap);
+      processed.stopRecords = result.stopRecords;
+      if (result.reused > 0) {
+        console.log(`Reused ${result.reused} verified coordinate(s) from existing tours`);
+      }
+    } catch (e) {
+      console.error('Verified coord reuse failed (continuing with LLM coords):', e);
+    }
   }
 
   // Enforce proper route ordering BEFORE storing stops — driving stops go to

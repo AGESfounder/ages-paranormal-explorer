@@ -1,6 +1,7 @@
 import { base44 } from '@/api/base44Client';
 import { geocodeStopsWithNames } from '@/lib/geocodeStops';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
+import { getVerifiedCoordsForStops, applyVerifiedCoords } from '@/lib/reuseVerifiedCoords';
 
 const MAX_STOPS = 12;
 const COLD_SPOT_MAX_STOPS = 4; // cold_spot = 1-4 stops at a single location
@@ -120,6 +121,22 @@ Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RUL
 
   if (newStops.length === 0) {
     return { added: 0, capped: false, reason: 'none' };
+  }
+
+  // REUSE VERIFIED COORDINATES: If any new stop name matches a user-verified
+  // stop in an existing tour in the same state, override its coordinates with
+  // the verified ones. The user's pinned locations are ground truth.
+  try {
+    const stopNames = newStops.map((s) => s.name).filter(Boolean);
+    if (stopNames.length > 0) {
+      const verifiedMap = await getVerifiedCoordsForStops(stopNames, tour.state);
+      const result = applyVerifiedCoords(newStops, verifiedMap);
+      if (result.reused > 0) {
+        console.log(`Reused ${result.reused} verified coordinate(s) from existing tours`);
+      }
+    }
+  } catch (e) {
+    console.error('Verified coord reuse failed (continuing with LLM coords):', e);
   }
 
   const isLandmarkOrShip = tour.tour_category === 'landmark' || tour.tour_category === 'ship';
@@ -338,6 +355,28 @@ Output ONLY a valid JSON object with a "stop" property. No markdown fences.`;
   const stopData = result?.stop;
   if (!stopData || !stopData.name) {
     return { added: false, reason: 'not_found' };
+  }
+
+  // REUSE VERIFIED COORDINATES: If this stop name matches a user-verified
+  // stop in an existing tour in the same state, override its coordinates with
+  // the verified ones. The user's pinned locations are ground truth.
+  try {
+    const verifiedMap = await getVerifiedCoordsForStops([stopData.name], tour.state);
+    const verified = verifiedMap.get(
+      String(stopData.name || '')
+        .toLowerCase()
+        .trim()
+        .replace(/[''`]/g, '')
+        .replace(/\./g, '')
+        .replace(/[^a-z0-9]/g, '')
+    );
+    if (verified) {
+      stopData.latitude = verified.latitude;
+      stopData.longitude = verified.longitude;
+      console.log(`Reused verified coordinates for "${stopData.name}" from "${verified.sourceTour}"`);
+    }
+  } catch (e) {
+    console.error('Verified coord reuse failed (continuing with LLM coords):', e);
   }
 
   // For non-landmark tours, don't geocode here — fix-collapsed-coords with
