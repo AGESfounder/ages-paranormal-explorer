@@ -614,9 +614,20 @@ Return a JSON object with:
         }
       }
 
-      // Apply coordinate updates
+      // Apply coordinate updates — but first re-check for user_verified
+      // stops that may have been verified WHILE this function was running
+      // (race condition: user drags marker while background verification
+      // is in progress). Never overwrite a stop the user has verified.
       if (updates.length > 0) {
-        await base44.asServiceRole.entities.TourStop.bulkUpdate(updates);
+        const refreshedStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
+        const verifiedIds = new Set(refreshedStops.filter(s => s.user_verified).map(s => s.id));
+        const safeUpdates = updates.filter(u => !verifiedIds.has(u.id));
+        if (safeUpdates.length < updates.length) {
+          console.log(`Race-condition guard: skipping ${updates.length - safeUpdates.length} stop(s) verified during execution`);
+        }
+        if (safeUpdates.length > 0) {
+          await base44.asServiceRole.entities.TourStop.bulkUpdate(safeUpdates);
+        }
       }
 
       // Verify parking stop — move to center if too far or in water
@@ -986,9 +997,20 @@ Return a JSON object with:
           }
         }
 
-        // Apply coordinate updates
+        // Apply coordinate updates — but first re-check for user_verified
+        // stops that may have been verified WHILE this function was running
+        // (race condition: user drags marker while background verification
+        // is in progress). Never overwrite a stop the user has verified.
         if (updates.length > 0) {
-          await base44.asServiceRole.entities.TourStop.bulkUpdate(updates);
+          const refreshedStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
+          const verifiedIds = new Set(refreshedStops.filter(s => s.user_verified).map(s => s.id));
+          const safeUpdates = updates.filter(u => !verifiedIds.has(u.id));
+          if (safeUpdates.length < updates.length) {
+            console.log(`Race-condition guard: skipping ${updates.length - safeUpdates.length} stop(s) verified during execution`);
+          }
+          if (safeUpdates.length > 0) {
+            await base44.asServiceRole.entities.TourStop.bulkUpdate(safeUpdates);
+          }
         }
       }
 
