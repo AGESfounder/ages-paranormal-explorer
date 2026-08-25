@@ -9,6 +9,7 @@ export async function verifyStopLocation(stopId, tourId, latitude, longitude, us
     latitude,
     longitude,
     user_verified: true,
+    geocoded: true,
     needs_placement: false,
     verified_by_id: userId,
     verified_date: new Date().toISOString(),
