@@ -32,6 +32,24 @@ function makeParkingIcon() {
   });
 }
 
+function makeShuttleIcon() {
+  return new L.DivIcon({
+    className: 'shuttle-marker',
+    html: `<div style="
+      width: 28px; height: 28px;
+      background: hsl(142, 70%, 45%);
+      border-radius: 6px;
+      box-shadow: 0 0 12px hsl(142, 70%, 45%, 0.6), 0 0 24px hsl(142, 70%, 45%, 0.3);
+      border: 2px solid hsl(142, 70%, 45%);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 14px; font-weight: bold; font-family: 'Cinzel', serif;
+    ">S</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  });
+}
+
 function makeStopIcon(stopNumber, estimated = false) {
   if (estimated) {
     return new L.DivIcon({
@@ -102,16 +120,19 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   const parkingCost = parkingStop?.parking_cost || tour?.parking_cost;
   const hasParking = parkingLat != null && parkingLon != null;
 
-  // Tour stops only (exclude parking) for route line and stop markers
-  const validStops = stops.filter(s => s.latitude && s.longitude && s.stop_type !== 'parking' && !s.needs_placement);
-  const needsPlacementStops = stops.filter(s => s.latitude && s.longitude && s.stop_type !== 'parking' && s.needs_placement);
-  if (validStops.length === 0 && !hasParking && needsPlacementStops.length === 0) return null;
+  const shuttleStop = stops.find(s => s.stop_type === 'shuttle' && s.latitude && s.longitude);
+  const hasShuttle = shuttleStop != null;
+
+  // Tour stops only (exclude parking and shuttle) for route line and stop markers
+  const validStops = stops.filter(s => s.latitude && s.longitude && s.stop_type !== 'parking' && s.stop_type !== 'shuttle' && !s.needs_placement);
+  const needsPlacementStops = stops.filter(s => s.latitude && s.longitude && s.stop_type !== 'parking' && s.stop_type !== 'shuttle' && s.needs_placement);
+  if (validStops.length === 0 && !hasParking && !hasShuttle && needsPlacementStops.length === 0) return null;
 
   // Filter out geographic outliers so one bad coordinate can't zoom the
   // map to a continental scale. Compute the median center, then keep only
   // stops within a reasonable distance (50 mi normal, 200 mi road trips).
   // Outliers are still shown as markers but excluded from bounds/route.
-  const allCoords = [...validStops, ...needsPlacementStops, ...(hasParking ? [{ latitude: parkingLat, longitude: parkingLon }] : [])];
+  const allCoords = [...validStops, ...needsPlacementStops, ...(hasParking ? [{ latitude: parkingLat, longitude: parkingLon }] : []), ...(hasShuttle ? [{ latitude: shuttleStop.latitude, longitude: shuttleStop.longitude }] : [])];
   const sortedLats = allCoords.map(s => s.latitude).sort((a, b) => a - b);
   const sortedLngs = allCoords.map(s => s.longitude).sort((a, b) => a - b);
   const medianLat = sortedLats[Math.floor(sortedLats.length / 2)];
@@ -132,8 +153,8 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
 
   const lats = boundsStops.map(s => s.latitude);
   const lngs = boundsStops.map(s => s.longitude);
-  const allLats = [...lats, ...needsPlacementStops.map(s => s.latitude), ...(hasParking ? [parkingLat] : [])];
-  const allLngs = [...lngs, ...needsPlacementStops.map(s => s.longitude), ...(hasParking ? [parkingLon] : [])];
+  const allLats = [...lats, ...needsPlacementStops.map(s => s.latitude), ...(hasParking ? [parkingLat] : []), ...(hasShuttle ? [shuttleStop.latitude] : [])];
+  const allLngs = [...lngs, ...needsPlacementStops.map(s => s.longitude), ...(hasParking ? [parkingLon] : []), ...(hasShuttle ? [shuttleStop.longitude] : [])];
   const center = [
     (Math.min(...allLats) + Math.max(...allLats)) / 2,
     (Math.min(...allLngs) + Math.max(...allLngs)) / 2,
@@ -177,7 +198,25 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
         />
         <FitBounds bounds={bounds} />
         {bounds && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
-        {hasParking && boundsStops.length > 0 && (
+        {hasParking && hasShuttle && (
+          <Polyline
+            positions={[[parkingLat, parkingLon], [shuttleStop.latitude, shuttleStop.longitude]]}
+            color="hsl(142, 70%, 45%)"
+            weight={1.5}
+            opacity={0.4}
+            dashArray="4 4"
+          />
+        )}
+        {hasShuttle && boundsStops.length > 0 && (
+          <Polyline
+            positions={[[shuttleStop.latitude, shuttleStop.longitude], [boundsStops[0].latitude, boundsStops[0].longitude]]}
+            color="hsl(142, 70%, 45%)"
+            weight={1.5}
+            opacity={0.4}
+            dashArray="4 4"
+          />
+        )}
+        {hasParking && !hasShuttle && boundsStops.length > 0 && (
           <Polyline
             positions={[[parkingLat, parkingLon], [boundsStops[0].latitude, boundsStops[0].longitude]]}
             color="hsl(45, 90%, 50%)"
@@ -197,6 +236,21 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
               <div className="text-xs font-heading">
                 <strong>Parking: {parkingName || 'Parking Area'}</strong>
                 {parkingCost && <><br /><span className="text-muted-foreground">{parkingCost}</span></>}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+        {hasShuttle && (
+          <Marker
+            position={[shuttleStop.latitude, shuttleStop.longitude]}
+            icon={makeShuttleIcon()}
+            draggable={draggable}
+            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(shuttleStop.id, e.target.getLatLng()) } : undefined}
+          >
+            <Popup>
+              <div className="text-xs font-heading">
+                <strong>Shuttle Drop-Off: {shuttleStop.name}</strong>
+                {shuttleStop.parking_cost && <><br /><span className="text-muted-foreground">{shuttleStop.parking_cost}</span></>}
               </div>
             </Popup>
           </Marker>

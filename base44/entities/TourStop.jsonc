@@ -12,10 +12,11 @@
       "type": "string",
       "enum": [
         "tour",
-        "parking"
+        "parking",
+        "shuttle"
       ],
       "default": "tour",
-      "description": "tour = a regular investigation stop, parking = the parking area stop (stop_number 0, shown before stop 1)"
+      "description": "tour = a regular investigation stop, parking = the parking area stop (stop_number 0, shown before stop 1), shuttle = the shuttle drop-off stop (stop_number 0, shown after parking and before stop 1 \u2014 for tours where you park at a visitor center and take a shuttle to the tour start)"
     },
     "name": {
       "type": "string"
@@ -79,13 +80,15 @@
       "enum": [
         "street",
         "parking_lot",
-        "parking_garage"
+        "parking_garage",
+        "shuttle_free",
+        "shuttle_paid"
       ],
-      "description": "For parking stops only: street = on-street parking, parking_lot = surface parking lot, parking_garage = multi-level parking structure."
+      "description": "For parking stops: street = on-street parking, parking_lot = surface parking lot, parking_garage = multi-level parking structure. For shuttle stops: shuttle_free = free shuttle service, shuttle_paid = paid shuttle service."
     },
     "parking_cost": {
       "type": "string",
-      "description": "For parking stops only: parking cost description (e.g., 'Free', 'Metered ($1.50/hr, free after 6pm)', 'Paid lot ($5 flat rate)')."
+      "description": "For parking and shuttle stops: cost description (e.g., 'Free', 'Metered ($1.50/hr, free after 6pm)', 'Paid lot ($5 flat rate)', 'Free shuttle', '$5 round-trip shuttle')."
     },
     "people": {
       "type": "array",

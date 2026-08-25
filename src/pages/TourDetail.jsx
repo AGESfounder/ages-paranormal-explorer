@@ -31,6 +31,7 @@ import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
 import { Input } from '@/components/ui/input';
 import { addStopByName } from '@/lib/addTourStops';
+import { addShuttleStop } from '@/lib/addShuttleStop';
 
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
@@ -179,6 +180,7 @@ export default function TourDetail() {
   // validation from overwriting their placement with server-side coordinates.
   const userDraggedRef = useRef(false);
   const [addingStop, setAddingStop] = useState(false);
+  const [addingShuttle, setAddingShuttle] = useState(false);
   const [stopSearchName, setStopSearchName] = useState('');
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
@@ -203,7 +205,7 @@ export default function TourDetail() {
     // Grove Park was moved 0.5 miles off), sending users to the wrong
     // location at night. Only fix collapsed/missing stops — never overwrite
     // existing coordinates with a new guess.
-    const needsVerification = stopsList.filter(s => s.stop_type !== 'parking' && s.geocoded === false);
+    const needsVerification = stopsList.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' && s.geocoded === false);
     if (needsVerification.length === 0) return;
     try {
       await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered, verifyAll: false });
@@ -218,8 +220,9 @@ export default function TourDetail() {
     // Re-order stops by proximity using the NOW-correct coordinates.
     // Skip for tours the user manually reordered — respect their custom order.
     if (tourData && !tourData.user_reordered) {
-      const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking');
+      const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
       const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
+      const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
       const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
       const reordered = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
       for (const s of reordered) {
@@ -230,7 +233,7 @@ export default function TourDetail() {
           } catch (e) {}
         }
       }
-      setStops([...(parkingStop ? [parkingStop] : []), ...reordered]);
+      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered]);
     } else {
       setStops(updatedStops);
     }
@@ -255,7 +258,8 @@ export default function TourDetail() {
     // Reload stops with corrected coordinates
     const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
     const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
-    let tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking');
+    const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
+    let tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
     // Validate — log issues but never delete stops (needs_placement handles
     // unverified stops instead of destructive regeneration)
     const validation = validateStops(tourStopsOnly, tourData);
@@ -275,10 +279,10 @@ export default function TourDetail() {
           try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
         }
       }
-      setStops([...(parkingStop ? [parkingStop] : []), ...reordered]);
+      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered]);
     } else {
       const sorted = tourStopsOnly.sort((a, b) => a.stop_number - b.stop_number);
-      setStops([...(parkingStop ? [parkingStop] : []), ...sorted]);
+      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
     }
   };
 
@@ -297,7 +301,7 @@ export default function TourDetail() {
   const displayConclusion = condensed.conclusion || truncateText(tour?.conclusion, narrationLength);
 
   const totalDistance = useMemo(() => {
-    const tourStopsOnly = stops.filter(s => s.stop_type !== 'parking');
+    const tourStopsOnly = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
     if (tourStopsOnly.length < 2) return 0;
     let total = 0;
     const parkingStop = stops.find(s => s.stop_type === 'parking');
@@ -370,7 +374,7 @@ export default function TourDetail() {
             });
           } catch (e) { console.error('Parking migration failed:', e); }
         }
-        let tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking');
+        let tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
         // Re-validate stops when validation rules change. fix-collapsed-coords
         // runs first to verify/correct coordinates, then validateStops checks
         // compliance. Stops are NEVER deleted — needs_placement handles
@@ -381,7 +385,8 @@ export default function TourDetail() {
           if (tourData[0].user_reordered) {
             // Respect the user's manual stop order — do not re-sort by proximity
             const sortedTourStops = tourStopsOnly.sort((a, b) => a.stop_number - b.stop_number);
-            const allStops = [...(parkingStop ? [parkingStop] : []), ...sortedTourStops];
+            const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
+            const allStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sortedTourStops];
             setStops(allStops);
             if (needsValidation) {
               runBackgroundValidation(tourId, tourData[0]).catch(console.error);
@@ -406,7 +411,8 @@ export default function TourDetail() {
               await base44.entities.Tour.update(tourData[0].id, { tour_type: correctedType });
               tourData[0].tour_type = correctedType;
             }
-            const allStops = [...(parkingStop ? [parkingStop] : []), ...reordered];
+            const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
+            const allStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered];
             setStops(allStops);
             if (needsValidation) {
               runBackgroundValidation(tourId, tourData[0]).catch(console.error);
@@ -494,7 +500,7 @@ Output ONLY valid JSON. No markdown fences.`;
         parking_type: parkingType, parking_cost: parkingCost,
         travel_method: 'walking', geocoded: true,
       });
-      setStops(prev => [parkingStopRecord, ...prev.filter(s => s.stop_type !== 'parking')]);
+      setStops(prev => [parkingStopRecord, ...prev.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle')]);
     } catch (e) {
       console.error('Parking generation failed:', e);
     }
@@ -733,7 +739,8 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         // positions, so the original order (from LLM coords) may no longer
         // be optimal. This ensures walking cluster stays first, driving last.
         const vParking = verifiedStops.find(s => s.stop_type === 'parking');
-        const vTourStops = verifiedStops.filter(s => s.stop_type !== 'parking');
+        const vShuttle = verifiedStops.find(s => s.stop_type === 'shuttle');
+        const vTourStops = verifiedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
         const parkingCoords = vParking?.latitude != null ? { lat: vParking.latitude, lon: vParking.longitude } : null;
         const reordered = await enforceWalkingDistance(vTourStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
         for (const s of reordered) {
@@ -742,7 +749,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
             await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
           }
         }
-        setStops([...(vParking ? [vParking] : []), ...reordered]);
+        setStops([...(vParking ? [vParking] : []), ...(vShuttle ? [vShuttle] : []), ...reordered]);
       } catch (e) {
         console.error('Coordinate verification failed:', e);
         setStops(created.sort((a, b) => a.stop_number - b.stop_number));
@@ -781,7 +788,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     document.body.style.overflow = '';
     if (!result.destination || result.source.index === result.destination.index) return;
     const currentParking = stops.find(s => s.stop_type === 'parking');
-    const currentTourStops = stops.filter(s => s.stop_type !== 'parking');
+    const currentTourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
     const reordered = Array.from(currentTourStops);
     const [removed] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, removed);
@@ -889,7 +896,8 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       // Reload and re-order all stops with the new stop included
       const allStops = await base44.entities.TourStop.filter({ tour_id: tourId });
       const pStop = allStops.find(s => s.stop_type === 'parking');
-      const tStops = allStops.filter(s => s.stop_type !== 'parking');
+      const sStop = allStops.find(s => s.stop_type === 'shuttle');
+      const tStops = allStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
       const pCoords = pStop?.latitude != null ? { lat: pStop.latitude, lon: pStop.longitude } : null;
       const reordered = await enforceWalkingDistance(tStops, tour.tour_type, { lat: tour.start_latitude, lon: tour.start_longitude }, { walkingLimit: getWalkingLimit(tour), parkingCoords: pCoords });
       for (const s of reordered) {
@@ -898,15 +906,38 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
         }
       }
-      setStops([...(pStop ? [pStop] : []), ...reordered]);
+      setStops([...(pStop ? [pStop] : []), ...(sStop ? [sStop] : []), ...reordered]);
     } catch (e) {
       setStopsError(e.message || 'Failed to add stop. Please try again.');
     }
     setAddingStop(false);
   };
 
+  const handleAddShuttle = async () => {
+    if (addingShuttle) return;
+    setAddingShuttle(true);
+    setStopsError('');
+    try {
+      const result = await addShuttleStop(tour);
+      if (!result.added) {
+        setStopsError(result.reason === 'exists'
+          ? 'A shuttle drop-off stop already exists for this tour.'
+          : 'Could not find a shuttle drop-off location. Try adding it manually.');
+        setAddingShuttle(false);
+        return;
+      }
+      // Reload stops to include the new shuttle stop
+      const allStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+      setStops(allStops.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0)));
+    } catch (e) {
+      setStopsError(e.message || 'Failed to add shuttle stop. Please try again.');
+    }
+    setAddingShuttle(false);
+  };
+
   const parkingStop = stops.find(s => s.stop_type === 'parking');
-  const tourStops = stops.filter(s => s.stop_type !== 'parking');
+  const shuttleStop = stops.find(s => s.stop_type === 'shuttle');
+  const tourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
 
   if (loading) {
     return (
@@ -1044,6 +1075,22 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-amber-400 transition-colors shrink-0" />
               </div>
             )}
+            {shuttleStop && (
+              <div
+                onClick={() => navigate(`/stop/${shuttleStop.id}`)}
+                className="flex items-center gap-3 p-3 rounded-lg border border-green-500/30 bg-green-500/5 hover:border-green-500/50 hover:bg-green-500/10 transition-all group cursor-pointer mb-2"
+              >
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-500/20 border border-green-500/40 font-heading text-sm font-bold shrink-0 text-green-400">S</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate group-hover:text-green-400 transition-colors">{shuttleStop.name || 'Shuttle Drop-Off'}</p>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                    <MapPin className="w-2.5 h-2.5" /> <span className="truncate">{shuttleStop.address || 'Shuttle drop-off point'}</span>
+                  </p>
+                </div>
+                {shuttleStop.user_verified && <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />}
+                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-green-400 transition-colors shrink-0" />
+              </div>
+            )}
             <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
               <Droppable droppableId="stops">
                 {(provided) => (
@@ -1102,6 +1149,15 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 )}
               </Droppable>
             </DragDropContext>
+            {(user?.role === 'admin' || isPaid) && !shuttleStop && (
+              <button
+                onClick={handleAddShuttle}
+                disabled={addingShuttle}
+                className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-green-500/30 bg-green-500/5 text-green-400 text-xs font-heading uppercase tracking-wider hover:bg-green-500/10 transition-colors disabled:opacity-50 mb-3"
+              >
+                {addingShuttle ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Searching for shuttle drop-off…</> : <><Plus className="w-3.5 h-3.5" /> Add Shuttle Drop-Off</>}
+              </button>
+            )}
             {(user?.role === 'admin' || isPaid) && (
               <div className="mt-3 p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
                 <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Add Specific Stop by Name</p>

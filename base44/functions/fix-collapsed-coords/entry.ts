@@ -343,7 +343,7 @@ export default async function (req) {
     if (!tour) return Response.json({ error: 'Tour not found' }, { status: 404 });
 
     const allStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
-    const stops = allStops.filter(s => s.stop_type !== 'parking');
+    const stops = allStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
     stops.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
     if (stops.length < 1) return Response.json({ tourId, updated: 0, reason: 'no stops' });
 

@@ -157,7 +157,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         setAllStops(sortedSiblings);
         // Determine if this is the final tour stop (highest stop_number,
         // excluding parking) so conclusion phrases are allowed only here.
-        const tourSiblings = sortedSiblings.filter(s => s.stop_type !== 'parking');
+        const tourSiblings = sortedSiblings.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
         const maxStopNum = tourSiblings.length > 0 ? Math.max(...tourSiblings.map(s => s.stop_number || 0)) : 0;
         const isFinalStop = currentStop.stop_type !== 'parking' && (currentStop.stop_number || 0) === maxStopNum && tourSiblings.length > 1;
         if (currentStop.stop_type !== 'parking' && (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0)) ensureRichContent(currentStop, isFinalStop);
@@ -193,12 +193,12 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
   // stops sequentially, strips premature conclusion phrases from the new
   // final stop, and marks the tour unverified so it re-enters validation.
   const handleDeleteStop = async () => {
-    if (!stop || stop.stop_type === 'parking') return;
+    if (!stop || stop.stop_type === 'parking' || stop.stop_type === 'shuttle') return;
     setDeletingStop(true);
     try {
       const siblings = await base44.entities.TourStop.filter({ tour_id: stop.tour_id });
       const tourStops = siblings
-        .filter(s => s.stop_type !== 'parking' && s.id !== stop.id)
+        .filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' && s.id !== stop.id)
         .sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
       // Minimum-stop guard: cold_spot needs at least 1, others at least 2.
       const minStops = 1;
@@ -240,7 +240,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
   // Auto-name parking when its location changes. Reverse-geocodes the new
   // coordinates to get a descriptive name (e.g., "Rodman Avenue Parking").
   const autoNameParking = async (lat, lon) => {
-    if (stop?.stop_type !== 'parking') return;
+    if (stop?.stop_type !== 'parking' && stop?.stop_type !== 'shuttle') return;
     const newName = await reverseGeocodeParking(lat, lon);
     if (newName && newName !== stop.name) {
       try {
@@ -334,7 +334,8 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
     );
   }
 
-  if (stop.stop_type === 'parking') {
+  if (stop.stop_type === 'parking' || stop.stop_type === 'shuttle') {
+    const isShuttle = stop.stop_type === 'shuttle';
     const handleParkingDetailChange = async (field, value) => {
       try {
         await base44.entities.TourStop.update(stop.id, { [field]: value });
@@ -353,13 +354,13 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           onBack={() => navigate(`/tour/${stop.tour_id}`)}
         />
         <div className="px-4 pb-28 space-y-4 pt-3">
-          <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 space-y-3">
+          <div className={`p-4 rounded-xl border space-y-3 ${isShuttle ? 'border-green-500/20 bg-green-500/5' : 'border-amber-500/20 bg-amber-500/5'}`}>
             <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 shrink-0">
-                <span className="font-heading text-base font-bold text-amber-400">P</span>
+              <div className={`flex items-center justify-center w-8 h-8 rounded-lg border shrink-0 ${isShuttle ? 'bg-green-500/20 border-green-500/40' : 'bg-amber-500/20 border-amber-500/40'}`}>
+                <span className={`font-heading text-base font-bold ${isShuttle ? 'text-green-400' : 'text-amber-400'}`}>{isShuttle ? 'S' : 'P'}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-heading uppercase tracking-wider text-amber-400">Parking Area</p>
+                <p className={`text-[10px] font-heading uppercase tracking-wider ${isShuttle ? 'text-green-400' : 'text-amber-400'}`}>{isShuttle ? 'Shuttle Drop-Off' : 'Parking Area'}</p>
                 <p className="text-sm text-foreground truncate">{stop.name}</p>
               </div>
               {stop.user_verified && <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />}
@@ -373,7 +374,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
 
           <div className="p-4 rounded-xl border border-border/40 bg-card/40 space-y-3">
             <div>
-              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">Parking Name</p>
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">{isShuttle ? 'Shuttle Name' : 'Parking Name'}</p>
               <Input
                 value={stop.name || ''}
                 onChange={(e) => handleParkingDetailChange('name', e.target.value)}
@@ -382,23 +383,32 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
               />
             </div>
             <div>
-              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">Parking Type</p>
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">{isShuttle ? 'Shuttle Type' : 'Parking Type'}</p>
               <Select
                 value={stop.parking_type || ''}
                 onValueChange={(val) => handleParkingDetailChange('parking_type', val)}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select parking type" />
+                  <SelectValue placeholder={isShuttle ? "Select shuttle type" : "Select parking type"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="street">Street Parking</SelectItem>
-                  <SelectItem value="parking_lot">Parking Lot</SelectItem>
-                  <SelectItem value="parking_garage">Parking Garage</SelectItem>
+                  {isShuttle ? (
+                    <>
+                      <SelectItem value="shuttle_free">Free Shuttle</SelectItem>
+                      <SelectItem value="shuttle_paid">Paid Shuttle</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="street">Street Parking</SelectItem>
+                      <SelectItem value="parking_lot">Parking Lot</SelectItem>
+                      <SelectItem value="parking_garage">Parking Garage</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">Parking Cost</p>
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">{isShuttle ? 'Shuttle Cost' : 'Parking Cost'}</p>
               <Input
                 value={stop.parking_cost || ''}
                 onChange={(e) => handleParkingDetailChange('parking_cost', e.target.value)}
@@ -418,7 +428,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 {verifying ? (
                   <><Loader2 className="w-5 h-5 animate-spin" /> <span>Getting GPS Location...</span></>
                 ) : (
-                  <><Crosshair className="w-5 h-5" /> <span>Mark Best Parking Spot</span></>
+                  <><Crosshair className="w-5 h-5" /> <span>{isShuttle ? 'Mark Shuttle Drop-Off' : 'Mark Best Parking Spot'}</span></>
                 )}
               </button>
               <p className="text-[10px] text-muted-foreground text-center mt-1.5">
@@ -430,8 +440,8 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             <div className="flex items-center gap-2 p-3 rounded-xl border border-green-500/30 bg-green-500/5">
               <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
               <div>
-                <p className="text-xs font-heading uppercase tracking-wider text-green-400">Parking Spot Validated</p>
-                <p className="text-[10px] text-muted-foreground">A visitor confirmed this parking location</p>
+                <p className="text-xs font-heading uppercase tracking-wider text-green-400">{isShuttle ? 'Shuttle Spot Validated' : 'Parking Spot Validated'}</p>
+                <p className="text-[10px] text-muted-foreground">A visitor confirmed this {isShuttle ? 'shuttle drop-off' : 'parking'} location</p>
               </div>
             </div>
           )}
@@ -443,8 +453,8 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             <p className="text-[10px] text-amber-400/70 text-center">Admin: drag the map marker to adjust the exact location</p>
           )}
 
-          <button onClick={openInMaps} className="flex items-center justify-center gap-2 w-full py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm font-heading uppercase tracking-wider hover:bg-amber-500/20 transition-colors">
-            <Navigation className="w-4 h-4" /> Navigate to Parking
+          <button onClick={openInMaps} className={`flex items-center justify-center gap-2 w-full py-3 rounded-lg border text-sm font-heading uppercase tracking-wider transition-colors ${isShuttle ? 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20' : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'}`}>
+            <Navigation className="w-4 h-4" /> {isShuttle ? 'Navigate to Shuttle Drop-Off' : 'Navigate to Parking'}
           </button>
 
           <div className="flex items-center gap-2">
@@ -686,7 +696,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         open={showDeleteStop}
         onOpenChange={setShowDeleteStop}
         stop={stop}
-        remainingCount={allStops.filter(s => s.stop_type !== 'parking' && s.id !== stop.id).length}
+        remainingCount={allStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' && s.id !== stop.id).length}
         onConfirm={handleDeleteStop}
         deleting={deletingStop}
       />
