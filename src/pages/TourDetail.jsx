@@ -35,7 +35,7 @@ import { addStopByName } from '@/lib/addTourStops';
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-const STOPS_VALIDATION_VERSION = 19;
+const STOPS_VALIDATION_VERSION = 20;
 
 // Walking threshold for stop clustering. Single-site tours (landmark/ship/
 // cold_spot) are large properties where you walk between structures that can

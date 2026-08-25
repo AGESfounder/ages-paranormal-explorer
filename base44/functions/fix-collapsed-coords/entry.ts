@@ -876,7 +876,14 @@ Return a JSON object with:
                 const rev = await reverseGeocode(addrGeocodeCandidate.lat, addrGeocodeCandidate.lon);
                 await sleep(1100);
                 if (rev) {
-                  const revText = `${rev.display_name || ''} ${(rev.address || {}).road || ''} ${(rev.address || {}).neighbourhood || ''} ${(rev.address || {}).suburb || ''}`.toLowerCase();
+                  const addr = rev.address || {};
+                  // Exclude road from the name check — a road name like
+                  // "Rumsey Monument Rd" contains the stop's name tokens but
+                  // only proves the point is on the right ROAD, not at the
+                  // actual landmark. Only accept the address geocode if the
+                  // reverse geocode has a specific landmark field (amenity,
+                  // tourism, historic, building, leisure) that matches.
+                  const revText = `${addr.neighbourhood || ''} ${addr.suburb || ''} ${addr.amenity || ''} ${addr.tourism || ''} ${addr.historic || ''} ${addr.building || ''} ${addr.leisure || ''}`.toLowerCase();
                   const stopTokens = normalizeName(stop.name).split(' ').filter(w => w.length > 3);
                   nameMatches = stopTokens.some(t => revText.includes(t));
                 }
