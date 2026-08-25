@@ -856,15 +856,40 @@ Return a JSON object with:
               }
             }
             // If OSM name search didn't find a match but address geocoding did,
-            // use the address geocode result. A full street address with a house
-            // number (Step 1) geocodes precisely to the building in Nominatim,
-            // so it gets geocoded: true (blue marker). A street-name-only
-            // fallback (Step 1b) places the marker somewhere on the road without
-            // a house number, so it gets geocoded: false (amber "EST" badge).
+            // verify the geocoded point actually corresponds to the named
+            // landmark before trusting it. Nominatim routinely resolves rural
+            // addresses like "4000 Kearneysville Pike" to a WRONG point (e.g.
+            // downtown instead of the actual park 0.8 miles south). Without
+            // this check, the wrong point gets a blue "geocoded" marker,
+            // falsely signalling accuracy. Reverse-geocode the candidate and
+            // check whether any significant token of the stop NAME appears in
+            // the result — if "Morgan's Grove Park" geocodes to a point whose
+            // reverse geocode mentions neither "Morgan" nor "Grove" nor "Park",
+            // the geocode is suspect. Don't trust it: continue to LLM web
+            // search (Step 3) to find the real location. If LLM search also
+            // fails, fall back to the address candidate but mark it
+            // geocoded: false (amber "EST" badge) so it's not falsely showing
+            // as a precise blue marker.
             if (!fixed && addrGeocodeCandidate) {
-              updates.push({ id: stop.id, latitude: addrGeocodeCandidate.lat, longitude: addrGeocodeCandidate.lon, geocoded: !!addrGeocodeCandidate.fromFullAddress, needs_placement: false });
-              matched.add(stop.id);
-              fixed = true;
+              let nameMatches = false;
+              try {
+                const rev = await reverseGeocode(addrGeocodeCandidate.lat, addrGeocodeCandidate.lon);
+                await sleep(1100);
+                if (rev) {
+                  const revText = `${rev.display_name || ''} ${(rev.address || {}).road || ''} ${(rev.address || {}).neighbourhood || ''} ${(rev.address || {}).suburb || ''}`.toLowerCase();
+                  const stopTokens = normalizeName(stop.name).split(' ').filter(w => w.length > 3);
+                  nameMatches = stopTokens.some(t => revText.includes(t));
+                }
+              } catch (e) {
+                console.error(`Reverse geocode name-check failed for "${stop.name}":`, e.message);
+              }
+              if (nameMatches) {
+                updates.push({ id: stop.id, latitude: addrGeocodeCandidate.lat, longitude: addrGeocodeCandidate.lon, geocoded: !!addrGeocodeCandidate.fromFullAddress, needs_placement: false });
+                matched.add(stop.id);
+                fixed = true;
+              }
+              // If name doesn't match, leave fixed=false so Step 3 (LLM web
+              // search) runs to find the real coordinates.
             }
             // Step 3: Final fallback — LLM web search for the exact location.
             // SKIP for shared-address stops: calling LLM for 9+ stops causes
