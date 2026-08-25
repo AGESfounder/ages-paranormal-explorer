@@ -143,7 +143,47 @@ const WALKING_LIMIT = 0.33;
 export async function enforceWalkingDistance(stops, tourType, startCoords, options = {}) {
   const walkingLimit = options.walkingLimit || WALKING_LIMIT;
   const parkingCoords = options.parkingCoords;
+  const preserveOrder = options.preserveOrder || false;
   if (!stops.length) return stops;
+
+  // preserveOrder: update travel_method based on current coordinates
+  // without reordering stops or changing stop_numbers. Uses haversine
+  // only (no OSRM/water barrier fetch) for speed. Used when the user
+  // has manually reordered stops — we respect their order but still
+  // mark stops as walking/driving based on actual distances.
+  if (preserveOrder) {
+    if (tourType === 'driving') {
+      return stops.map(s => ({ ...s, travel_method: 'driving' }));
+    }
+    const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
+    const visited = new Array(withCoords.length).fill(false);
+    const components = [];
+    for (let i = 0; i < withCoords.length; i++) {
+      if (visited[i]) continue;
+      const comp = [];
+      const queue = [i];
+      let head = 0;
+      visited[i] = true;
+      while (head < queue.length) {
+        const idx = queue[head++];
+        comp.push(withCoords[idx]);
+        for (let j = 0; j < withCoords.length; j++) {
+          if (!visited[j]) {
+            const d = haversineDistance(withCoords[idx].latitude, withCoords[idx].longitude, withCoords[j].latitude, withCoords[j].longitude);
+            if (d <= walkingLimit) { visited[j] = true; queue.push(j); }
+          }
+        }
+      }
+      components.push(comp);
+    }
+    components.sort((a, b) => b.length - a.length);
+    const walkingCluster = components[0] && components[0].length > 1 ? components[0] : [];
+    const walkingSet = new Set(walkingCluster);
+    return stops.map(s => ({
+      ...s,
+      travel_method: walkingSet.has(s) ? 'walking' : 'driving',
+    }));
+  }
 
   // Fetch routed distances — accounts for water barriers and bridge
   // crossings. Falls back to haversine if OSRM is unavailable.

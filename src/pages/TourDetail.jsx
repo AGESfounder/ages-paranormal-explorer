@@ -235,7 +235,21 @@ export default function TourDetail() {
       }
       setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered]);
     } else {
-      setStops(updatedStops);
+      // user_reordered is true — respect the user's order, but update
+      // travel_method based on the corrected coordinates.
+      const pStop = updatedStops.find(s => s.stop_type === 'parking');
+      const sStop = updatedStops.find(s => s.stop_type === 'shuttle');
+      const tStops = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
+      const parkingCoords = pStop?.latitude != null ? { lat: pStop.latitude, lon: pStop.longitude } : null;
+      const updatedMethods = await enforceWalkingDistance(tStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords, preserveOrder: true });
+      for (const s of updatedMethods) {
+        const existing = tStops.find(ts => ts.id === s.id);
+        if (existing && existing.travel_method !== s.travel_method) {
+          try { await base44.entities.TourStop.update(s.id, { travel_method: s.travel_method }); } catch (e) {}
+        }
+      }
+      const sorted = updatedMethods.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+      setStops([...(pStop ? [pStop] : []), ...(sStop ? [sStop] : []), ...sorted]);
     }
   };
 
@@ -281,7 +295,17 @@ export default function TourDetail() {
       }
       setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered]);
     } else {
-      const sorted = tourStopsOnly.sort((a, b) => a.stop_number - b.stop_number);
+      // user_reordered is true — respect the user's order, but update
+      // travel_method based on the corrected coordinates.
+      const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
+      const updatedMethods = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords, preserveOrder: true });
+      for (const s of updatedMethods) {
+        const existing = tourStopsOnly.find(ts => ts.id === s.id);
+        if (existing && existing.travel_method !== s.travel_method) {
+          try { await base44.entities.TourStop.update(s.id, { travel_method: s.travel_method }); } catch (e) {}
+        }
+      }
+      const sorted = updatedMethods.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
       setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
     }
   };
@@ -383,8 +407,18 @@ export default function TourDetail() {
         const needsValidation = (tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION;
         if (!regenerated) {
           if (tourData[0].user_reordered) {
-            // Respect the user's manual stop order — do not re-sort by proximity
-            const sortedTourStops = tourStopsOnly.sort((a, b) => a.stop_number - b.stop_number);
+            // Respect the user's manual stop order — do not re-sort by proximity.
+            // But still update travel_method based on current (possibly validated)
+            // coordinates so stops show as walking/driving correctly.
+            const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
+            const updatedMethods = await enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords, preserveOrder: true });
+            for (const s of updatedMethods) {
+              const existing = tourStopsOnly.find(ts => ts.id === s.id);
+              if (existing && existing.travel_method !== s.travel_method) {
+                try { await base44.entities.TourStop.update(s.id, { travel_method: s.travel_method }); } catch (e) {}
+              }
+            }
+            const sortedTourStops = updatedMethods.sort((a, b) => a.stop_number - b.stop_number);
             const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
             const allStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sortedTourStops];
             setStops(allStops);
