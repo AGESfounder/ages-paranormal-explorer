@@ -31,6 +31,7 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
+import { verifyStopLocation } from '@/lib/verifyStop';
 import { Input } from '@/components/ui/input';
 import { addStopByName } from '@/lib/addTourStops';
 
@@ -924,13 +925,10 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         : s
     ));
     try {
-      await base44.entities.TourStop.update(stopId, {
-        latitude: latLng.lat,
-        longitude: latLng.lng,
-        needs_placement: false,
-        geocoded: true,
-        user_verified: true,
-      });
+      const result = await verifyStopLocation(stopId, tourId, latLng.lat, latLng.lng, user?.id);
+      if (result.allVerified) {
+        setTour(prev => prev ? { ...prev, verified: true } : prev);
+      }
     } catch (e) {
       console.error('Failed to update stop coordinates:', e);
     }
