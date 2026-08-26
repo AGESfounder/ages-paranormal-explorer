@@ -19,6 +19,8 @@ import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from 
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
+import TravelModeSelector from '@/components/TravelModeSelector';
+import TourStopRow from '@/components/TourStopRow';
 
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
@@ -180,6 +182,7 @@ export default function TourDetail() {
   const userDraggedRef = useRef(false);
   const [addingStop, setAddingStop] = useState(false);
   const [stopSearchName, setStopSearchName] = useState('');
+  const [travelMode, setTravelMode] = useState('mixed');
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
 
@@ -323,23 +326,38 @@ export default function TourDetail() {
   const displayConclusion = condensed.conclusion || truncateText(tour?.conclusion, narrationLength);
 
   const totalDistance = useMemo(() => {
-    const tourStopsOnly = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
+    const allTourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
+    const tourStopsOnly = travelMode === 'walking'
+      ? allTourStops.filter(s => s.travel_method !== 'driving')
+      : allTourStops;
     if (tourStopsOnly.length < 2) return 0;
     let total = 0;
-    const parkingStop = stops.find(s => s.stop_type === 'parking');
+    const pStop = stops.find(s => s.stop_type === 'parking');
     // Parking to first walking stop + last walking stop back to parking
     const walkingStops = tourStopsOnly.filter(s => s.travel_method === 'walking' && s.latitude != null && s.longitude != null);
-    if (parkingStop?.latitude && walkingStops.length > 0) {
+    if (pStop?.latitude && walkingStops.length > 0) {
       const firstWalk = walkingStops[0];
       const lastWalk = walkingStops[walkingStops.length - 1];
-      total += haversineDistance(parkingStop.latitude, parkingStop.longitude, firstWalk.latitude, firstWalk.longitude);
-      total += haversineDistance(lastWalk.latitude, lastWalk.longitude, parkingStop.latitude, parkingStop.longitude);
+      total += haversineDistance(pStop.latitude, pStop.longitude, firstWalk.latitude, firstWalk.longitude);
+      total += haversineDistance(lastWalk.latitude, lastWalk.longitude, pStop.latitude, pStop.longitude);
     }
     for (let i = 1; i < tourStopsOnly.length; i++) {
       total += haversineDistance(tourStopsOnly[i - 1].latitude, tourStopsOnly[i - 1].longitude, tourStopsOnly[i].latitude, tourStopsOnly[i].longitude);
     }
     return total;
-  }, [stops]);
+  }, [stops, travelMode]);
+
+  // Scale the estimated duration proportionally when walking-only filters out
+  // driving stops. Minimum 30% so a short walking portion doesn't show an
+  // unrealistically tiny duration.
+  const walkingScale = useMemo(() => {
+    if (travelMode !== 'walking') return 1;
+    const allTourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
+    const hasDriving = allTourStops.some(s => s.travel_method === 'driving');
+    if (!hasDriving || allTourStops.length === 0) return 1;
+    const walkingOnly = allTourStops.filter(s => s.travel_method !== 'driving');
+    return Math.max(0.3, walkingOnly.length / allTourStops.length);
+  }, [stops, travelMode]);
 
   const formatDistance = (mi) => mi < 1 ? `${Math.round(mi * 5280)} ft` : `${mi.toFixed(1)} mi`;
 
@@ -950,6 +968,13 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   const parkingStop = stops.find(s => s.stop_type === 'parking');
   const shuttleStop = stops.find(s => s.stop_type === 'shuttle');
   const tourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
+  const hasDrivingStops = tourStops.some(s => s.travel_method === 'driving');
+  const visibleTourStops = travelMode === 'walking' && hasDrivingStops
+    ? tourStops.filter(s => s.travel_method !== 'driving')
+    : tourStops;
+  const mapStops = travelMode === 'walking' && hasDrivingStops
+    ? stops.filter(s => s.stop_type === 'parking' || s.stop_type === 'shuttle' || s.travel_method !== 'driving')
+    : stops;
 
   if (loading) {
     return (
@@ -1002,7 +1027,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
               {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3.5 h-3.5" /><Car className="w-3 h-3" /></> : <Car className="w-3.5 h-3.5" />}
               {tour.tour_type === 'mixed' ? 'Walking + Driving' : tour.tour_type}
             </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {computeAdjustedDuration(tour.estimated_duration, narrationLength, parkingStop ? 5 : 0)}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {computeAdjustedDuration(tour.estimated_duration, narrationLength, parkingStop ? 5 : 0, walkingScale)}</span>
             {totalDistance > 0 && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground"><Route className="w-3.5 h-3.5" /> {formatDistance(totalDistance)}</span>
             )}
@@ -1015,6 +1040,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           </div>
           {tour.best_time && <p className="text-xs text-primary flex items-center gap-1"><Zap className="w-3 h-3" /> Best time: {tour.best_time}</p>}
           <NarrationLengthSelector value={narrationLength} onChange={handleNarrationLengthChange} estimatedDuration={tour.estimated_duration} />
+          {hasDrivingStops && <TravelModeSelector value={travelMode} onChange={setTravelMode} />}
         </div>
 
         <TourAccessInfo tour={tour} stops={stops} />
@@ -1046,11 +1072,11 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           </div>
         </div>
 
-        {stops.length > 0 && <TourMap stops={stops} tour={tour} height="h-72" onMarkerDragEnd={handleMarkerDragEnd} />}
+        {stops.length > 0 && <TourMap stops={mapStops} tour={tour} height="h-72" onMarkerDragEnd={handleMarkerDragEnd} />}
 
         <div>
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
-            <Map className="w-4 h-4 text-primary" /> {tourStops.length} Investigation Stops
+            <Map className="w-4 h-4 text-primary" /> {visibleTourStops.length} Investigation Stops
           </h3>
           {stopsError ? (
             <div className="flex flex-col items-center py-8 gap-3">
@@ -1103,56 +1129,39 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-green-400 transition-colors shrink-0" />
               </div>
             )}
+            {travelMode === 'walking' && hasDrivingStops ? (
+              <div className="space-y-2">
+                {visibleTourStops.map((stop) => (
+                  <TourStopRow
+                    key={stop.id}
+                    stop={stop}
+                    onNavigate={() => navigate(`/stop/${stop.id}`)}
+                    onNarrate={narrate}
+                    isSpeaking={isSpeaking}
+                    isGenerating={isGenerating}
+                    narrationLength={narrationLength}
+                  />
+                ))}
+              </div>
+            ) : (
             <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
               <Droppable droppableId="stops">
                 {(provided) => (
                   <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
-                    {tourStops.map((stop, i) => (
+                    {visibleTourStops.map((stop, i) => (
                       <Draggable key={stop.id} draggableId={stop.id} index={i}>
                         {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            className={snapshot.isDragging ? 'opacity-80' : ''}
-                          >
-                            <div
-                              onClick={() => navigate(`/stop/${stop.id}`)}
-                              className="flex items-center gap-3 p-3 rounded-lg border border-border/30 bg-card/30 hover:border-primary/30 hover:bg-card/50 transition-all group cursor-pointer"
-                            >
-                              <div
-                                {...provided.dragHandleProps}
-                                className={`flex items-center justify-center w-8 h-8 rounded-full font-heading text-sm font-bold shrink-0 cursor-grab active:cursor-grabbing select-none ${snapshot.isDragging ? 'ring-2 ring-primary shadow-[0_0_16px_hsl(199,89%,48%,0.5)]' : ''} ${stop.travel_method === 'driving' ? 'bg-amber-500/10 text-amber-400' : 'bg-primary/10 text-primary'}`}
-                              >
-                                {stop.stop_number}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">{stop.name}</p>
-                                  {stop.needs_placement && (
-                                    <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-pink-500/15 border border-pink-500/40 text-pink-400 text-[9px] font-heading uppercase tracking-wider">Needs Placement</span>
-                                  )}
-                                  {!stop.needs_placement && stop.geocoded === false && (
-                                    <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 text-[9px] font-heading uppercase tracking-wider">Est.</span>
-                                  )}
-                                </div>
-                                <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
-                                  <Clock className="w-2.5 h-2.5" /> {stop.estimated_investigation_time}
-                                  {stop.travel_method === 'driving' && <span className="flex items-center gap-0.5 text-amber-400"><Car className="w-2.5 h-2.5" /> Drive</span>}
-                                  {stop.address && <><MapPin className="w-2.5 h-2.5" /> <span className="truncate">{stop.address}</span></>}
-                                </p>
-                              </div>
-                              {(stop.hours_of_operation || stop.entry_fee) && (
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {stop.entry_fee && <DollarSign className="w-3 h-3 text-green-400" />}
-                                  {stop.hours_of_operation && <Info className="w-3 h-3 text-amber-400" />}
-                                </div>
-                              )}
-                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); narrate(truncateText(stop.narration_text || stop.paranormal_info, narrationLength)); }} className={`p-1.5 rounded-md shrink-0 transition-colors ${isSpeaking || isGenerating ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}>
-                                {isSpeaking || isGenerating ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                              </button>
-                              <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                            </div>
-                          </div>
+                          <TourStopRow
+                            key={stop.id}
+                            stop={stop}
+                            provided={provided}
+                            isDragging={snapshot.isDragging}
+                            onNavigate={() => navigate(`/stop/${stop.id}`)}
+                            onNarrate={narrate}
+                            isSpeaking={isSpeaking}
+                            isGenerating={isGenerating}
+                            narrationLength={narrationLength}
+                          />
                         )}
                       </Draggable>
                     ))}
@@ -1161,6 +1170,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 )}
               </Droppable>
             </DragDropContext>
+            )}
             {(user?.role === 'admin' || isPaid) && (
               <div className="mt-3 p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
                 <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Add Specific Stop by Name</p>

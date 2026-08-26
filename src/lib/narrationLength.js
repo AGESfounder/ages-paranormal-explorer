@@ -155,11 +155,11 @@ export function computeDurationRange(durationStr, extraMinutes = 0) {
   return `${formatMinutes(glimpseLow)}\u2013${formatMinutes(reliveHigh)}`;
 }
 
-export function computeAdjustedDuration(durationStr, mode, extraMinutes = 0) {
+export function computeAdjustedDuration(durationStr, mode, extraMinutes = 0, scaleFactor = 1) {
   const parsed = parseDurationToMinutes(durationStr);
   if (!parsed) return durationStr || '';
   const [low, high] = parsed;
-  const factor = DURATION_FACTORS[mode] || 1.0;
+  const factor = (DURATION_FACTORS[mode] || 1.0) * scaleFactor;
   const adjLow = Math.max(5, Math.round(low * factor));
   const adjHigh = Math.max(5, Math.round(high * factor) + extraMinutes);
   if (adjLow === adjHigh) return formatMinutes(adjLow);
