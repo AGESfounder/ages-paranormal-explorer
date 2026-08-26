@@ -455,9 +455,10 @@ export default function TourDetail() {
             }
           } else {
             const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
-            // SACRED PINS: If any stop is user-verified, preserve the existing
-            // stop order — only update travel_method, never reorder stops.
-            const reordered = await enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords, preserveOrder: hasVerifiedStops });
+            // Reorder stops for the best walking loop. Verified pins are sacred —
+            // their coordinates never change — but the ORDER can be optimized
+            // unless the user manually reordered (user_reordered handled above).
+            const reordered = await enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords });
             // Update stop_numbers in the database if they changed
             for (const s of reordered) {
               const existing = tourStopsOnly.find(ts => ts.id === s.id);
