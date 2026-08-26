@@ -950,23 +950,23 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     } catch (e) {
       console.error('Failed to update stop coordinates:', e);
     }
-    // Re-order stops and re-classify walking/driving based on the corrected
-    // coordinates. A marker drag corrects the GPS position — the optimal
-    // stop order may change. Clear user_reordered so the proximity-based
-    // order replaces the old manual order.
+    // SACRED PINS: The user placed this pin deliberately — only they or a
+    // paid user can move it again. Do NOT reorder stops or change stop
+    // numbers. Just update travel_method (walking/driving) based on the
+    // new coordinates, preserving the current stop order.
     const pStop = updatedStops.find(s => s.stop_type === 'parking');
     const sStop = updatedStops.find(s => s.stop_type === 'shuttle');
     const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
     const parkingCoords = pStop?.latitude != null ? { lat: pStop.latitude, lon: pStop.longitude } : null;
-    const reordered = await enforceWalkingDistance(tourStopsOnly, tour.tour_type, { lat: tour.start_latitude, lon: tour.start_longitude }, { walkingLimit: getWalkingLimit(tour), parkingCoords });
-    for (const s of reordered) {
+    const updated = await enforceWalkingDistance(tourStopsOnly, tour.tour_type, { lat: tour.start_latitude, lon: tour.start_longitude }, { walkingLimit: getWalkingLimit(tour), parkingCoords, preserveOrder: true });
+    for (const s of updated) {
       const existing = tourStopsOnly.find(ts => ts.id === s.id);
-      if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
-        try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
+      if (existing && existing.travel_method !== s.travel_method) {
+        try { await base44.entities.TourStop.update(s.id, { travel_method: s.travel_method }); } catch (e) {}
       }
     }
     // Auto-correct tour type if stops are now a mix of walking + driving
-    const methods = new Set(reordered.map(s => s.travel_method));
+    const methods = new Set(updated.map(s => s.travel_method));
     const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed'
       : methods.has('driving') ? 'driving' : 'walking';
     if (correctedType !== tour.tour_type) {
@@ -975,11 +975,13 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         setTour(prev => prev ? { ...prev, tour_type: correctedType } : prev);
       } catch (e) {}
     }
-    setStops([...(pStop ? [pStop] : []), ...(sStop ? [sStop] : []), ...reordered]);
-    // Clear user_reordered — the marker drag invalidates the old manual order
+    // Keep stops in their current order — do NOT reorder after a pin drag
+    const sortedByNumber = updated.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+    setStops([...(pStop ? [pStop] : []), ...(sStop ? [sStop] : []), ...sortedByNumber]);
+    // Preserve the user's stop order on next page load — do NOT clear it
     try {
-      await base44.entities.Tour.update(tourId, { user_reordered: false });
-      setTour(prev => prev ? { ...prev, user_reordered: false } : prev);
+      await base44.entities.Tour.update(tourId, { user_reordered: true });
+      setTour(prev => prev ? { ...prev, user_reordered: true } : prev);
     } catch (e) {}
   };
 
