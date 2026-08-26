@@ -1099,7 +1099,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           </div>
         </div>
 
-        {stops.length > 0 && <TourMap stops={mapStops} tour={tour} height="h-72" onMarkerDragEnd={handleMarkerDragEnd} />}
+        {stops.length > 0 && <TourMap stops={mapStops} tour={tour} height="h-72" draggable={user?.role === 'admin' || isPaid} onMarkerDragEnd={handleMarkerDragEnd} />}
 
         <div>
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">

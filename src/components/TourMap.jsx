@@ -230,7 +230,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
             position={[parkingLat, parkingLon]}
             icon={makeParkingIcon()}
             draggable={draggable}
-            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
+            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(parkingStop?.id, e.target.getLatLng()) } : undefined}
           >
             <Popup>
               <div className="text-xs font-heading">
@@ -264,7 +264,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
                 position={[first.latitude, first.longitude]}
                 icon={makeStackedIcon(first.stop_number, group.stops.length)}
                 draggable={draggable}
-                eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
+                eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(first.id, e.target.getLatLng()) } : undefined}
               >
                 <Popup>
                   <div className="text-xs font-heading">
@@ -283,7 +283,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
               position={[stop.latitude, stop.longitude]}
               icon={makeStopIcon(stop.stop_number, stop.geocoded === false)}
               draggable={draggable}
-              eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(e.target.getLatLng()) } : undefined}
+              eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(stop.id, e.target.getLatLng()) } : undefined}
             >
               <Popup>
                 <div className="text-xs font-heading">
