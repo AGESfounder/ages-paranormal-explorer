@@ -1,6 +1,6 @@
 import { base44 } from '@/api/base44Client';
 import { geocodeStopsWithNames } from '@/lib/geocodeStops';
-import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
+import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP } from '@/lib/stopContent';
 import { getVerifiedCoordsForStops, applyVerifiedCoords } from '@/lib/reuseVerifiedCoords';
 
 const MAX_STOPS = 12;
@@ -79,6 +79,7 @@ Each new stop needs:
 
 ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations from existing ghost tour companies, walking tours, or tourism websites, you MUST find the ACTUAL STREET ADDRESS of each location independently. Do NOT copy a tour company's meeting point, starting location, or vague area description — tour companies often list only where their tour GROUPS MEET (e.g., "2nd & Market St") rather than the actual haunted building's address. For every stop, look up the real street address where the actual haunted building, landmark, or site is located (e.g., "43 Cape Henlopen Dr, Lewes, DE 19958" for the ferry terminal, NOT "Near the intersection of 2nd & Market"). The address must be the physical location of the haunted site itself, not a tour company's gathering point.
 
+${BRAND_RULE_STOP}
 Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RULE}`;
 
   const result = await base44.integrations.Core.InvokeLLM({
@@ -319,6 +320,7 @@ Provide:
 - hours_of_operation: always provide (use "Exterior accessible 24/7" if freely accessible)
 - entry_fee: always provide (use "Free" if no charge)
 
+${BRAND_RULE_STOP}
 Output ONLY a valid JSON object with a "stop" property. No markdown fences.`;
 
   const result = await base44.integrations.Core.InvokeLLM({

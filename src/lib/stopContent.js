@@ -83,6 +83,18 @@ export function stripStopConclusion(stop, isFinalStop) {
   return updates;
 }
 
+// Brand rule for STOP-level content (narration_text, paranormal_info,
+// historical_info). The full expansion "AGES (Accessible Ghost Exploration
+// Solutions)" is reserved for the tour's introduction and conclusion only.
+// In stops, only the abbreviation "AGES" is used — saying the full expansion
+// at every stop is repetitive and the user flagged it as excessive.
+export const BRAND_RULE_STOP = `\nBRAND RULE — FOLLOW EXACTLY: The app is branded AGES (Accessible Ghost Exploration Solutions). In stop content (narration_text, paranormal_info, historical_info), use ONLY the abbreviation "AGES" — NEVER write out the full expansion "Accessible Ghost Exploration Solutions" in stop content. The full "AGES (Accessible Ghost Exploration Solutions)" expansion is reserved for the tour's introduction and conclusion only. Using "AGES" alone in stops is correct and preferred.`;
+
+// Brand rule for TOUR-level generation prompts (generate the tour shell plus
+// stops). The full expansion is allowed in the introduction and conclusion,
+// but stops must use only "AGES".
+export const BRAND_RULE_TOUR = `\nBRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). You may use the full expansion "AGES (Accessible Ghost Exploration Solutions)" in the tour's introduction and conclusion. However, in STOP content (narration_text, paranormal_info, historical_info), use ONLY the abbreviation "AGES" — never write out the full expansion in stops. The full expansion in every stop is repetitive; "AGES" alone is correct for stops.`;
+
 // Shared prompt instruction block — append to any stop-generation prompt
 // so the LLM reserves conclusion phrasing for the final stop only.
 export const CONCLUSION_PHRASE_RULE = `\nCONCLUSION PHRASE RULE — FOLLOW EXACTLY: For any stop that is NOT the last stop on the tour, do NOT include ANY references to the tour ending, wrapping up, concluding, finishing, or coming to a close — not just at the beginning, but ANYWHERE in the narration_text, paranormal_info, or historical_info. This means: no "as we end our tour", no "where the tour concludes", no "our final stop", no "this final stop", no "as we wrap up", no "before we finish", no "the cellar where our tour ends", no "bringing our investigation to a close", and no similar phrasing anywhere in the text — beginning, middle, or end. Each non-final stop must focus ENTIRELY on its own haunted history and paranormal activity as if it is a standalone story. Only the LAST stop on the tour may reference the tour ending or use wrap-up / conclusion language.`;
