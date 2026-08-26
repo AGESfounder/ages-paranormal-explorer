@@ -21,6 +21,7 @@ import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
 import TravelModeSelector from '@/components/TravelModeSelector';
 import TourStopRow from '@/components/TourStopRow';
+import ValidateTourCard from '@/components/ValidateTourCard';
 
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
@@ -1240,6 +1241,18 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
             </>
           )}
         </div>
+
+        {(user?.role === 'admin' || isPaid) && (
+          <ValidateTourCard
+            tour={tour}
+            stops={stops}
+            userId={user?.id}
+            onValidated={() => {
+              setTour(prev => prev ? { ...prev, verified: true } : prev);
+              setStops(prev => prev.map(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' ? { ...s, user_verified: true } : s));
+            }}
+          />
+        )}
 
         {tour.conclusion && (
           <div id="conclusion" className="p-4 rounded-xl border border-dim-purple/20 bg-dim-purple/5 space-y-3">
