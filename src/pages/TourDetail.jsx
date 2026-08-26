@@ -942,32 +942,40 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         ? { ...s, latitude: latLng.lat, longitude: latLng.lng, needs_placement: false, geocoded: true, user_verified: true }
         : s
     );
+    let allVerified = false;
     try {
       const result = await verifyStopLocation(stopId, tourId, latLng.lat, latLng.lng, user?.id);
-      if (result.allVerified) {
+      allVerified = result.allVerified;
+      if (allVerified) {
         setTour(prev => prev ? { ...prev, verified: true } : prev);
       }
     } catch (e) {
       console.error('Failed to update stop coordinates:', e);
     }
-    // Reorder stops by proximity and re-classify walking/driving based on the
-    // new coordinates. enforceWalkingDistance preserves each stop's latitude/
-    // longitude (it only changes stop_number and travel_method) — so the pin
-    // stays exactly where the user placed it, but the stop order updates to
-    // reflect the new optimal route.
+    // SACRED PINS: The user placed this pin deliberately — never move it.
+    // While the user is actively on the tour validating pins, do NOT reorder
+    // stops — it would be confusing mid-tour (they need to finish hitting all
+    // stops in the current order). Just update travel_method (walking/driving)
+    // based on the new coordinates, preserving the current stop order and
+    // stop numbers. Coordinates are never changed.
+    //
+    // AFTER VALIDATION: When the last stop is validated (allVerified), clear
+    // user_reordered so the NEXT tour load reorders stops by proximity for the
+    // optimal loop. Until then, keep user_reordered: true to preserve the
+    // current order for the rest of this tour session.
     const pStop = updatedStops.find(s => s.stop_type === 'parking');
     const sStop = updatedStops.find(s => s.stop_type === 'shuttle');
     const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
     const parkingCoords = pStop?.latitude != null ? { lat: pStop.latitude, lon: pStop.longitude } : null;
-    const reordered = await enforceWalkingDistance(tourStopsOnly, tour.tour_type, { lat: tour.start_latitude, lon: tour.start_longitude }, { walkingLimit: getWalkingLimit(tour), parkingCoords });
-    for (const s of reordered) {
+    const updated = await enforceWalkingDistance(tourStopsOnly, tour.tour_type, { lat: tour.start_latitude, lon: tour.start_longitude }, { walkingLimit: getWalkingLimit(tour), parkingCoords, preserveOrder: true });
+    for (const s of updated) {
       const existing = tourStopsOnly.find(ts => ts.id === s.id);
-      if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
-        try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
+      if (existing && existing.travel_method !== s.travel_method) {
+        try { await base44.entities.TourStop.update(s.id, { travel_method: s.travel_method }); } catch (e) {}
       }
     }
     // Auto-correct tour type if stops are now a mix of walking + driving
-    const methods = new Set(reordered.map(s => s.travel_method));
+    const methods = new Set(updated.map(s => s.travel_method));
     const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed'
       : methods.has('driving') ? 'driving' : 'walking';
     if (correctedType !== tour.tour_type) {
@@ -976,11 +984,16 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         setTour(prev => prev ? { ...prev, tour_type: correctedType } : prev);
       } catch (e) {}
     }
-    setStops([...(pStop ? [pStop] : []), ...(sStop ? [sStop] : []), ...reordered]);
-    // Clear user_reordered so the proximity-based order replaces the old manual order
+    // Keep stops in their current order — do NOT reorder during validation
+    const sortedByNumber = updated.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+    setStops([...(pStop ? [pStop] : []), ...(sStop ? [sStop] : []), ...sortedByNumber]);
+    // After all stops are validated, clear user_reordered so the next tour
+    // load reorders by proximity (optimal loop for future investigators).
+    // Until then, preserve the current order for the active tour session.
     try {
-      await base44.entities.Tour.update(tourId, { user_reordered: false });
-      setTour(prev => prev ? { ...prev, user_reordered: false } : prev);
+      const newReordered = !allVerified;
+      await base44.entities.Tour.update(tourId, { user_reordered: newReordered });
+      setTour(prev => prev ? { ...prev, user_reordered: newReordered } : prev);
     } catch (e) {}
   };
 
