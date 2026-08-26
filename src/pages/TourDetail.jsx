@@ -1242,18 +1242,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           )}
         </div>
 
-        {(user?.role === 'admin' || isPaid) && (
-          <ValidateTourCard
-            tour={tour}
-            stops={stops}
-            userId={user?.id}
-            onValidated={() => {
-              setTour(prev => prev ? { ...prev, verified: true } : prev);
-              setStops(prev => prev.map(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' ? { ...s, user_verified: true } : s));
-            }}
-          />
-        )}
-
         {tour.conclusion && (
           <div id="conclusion" className="p-4 rounded-xl border border-dim-purple/20 bg-dim-purple/5 space-y-3">
             <div className="flex items-center justify-between">
@@ -1267,6 +1255,18 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
               I've read the conclusion
             </button>
           </div>
+        )}
+
+        {(user?.role === 'admin' || isPaid) && (
+          <ValidateTourCard
+            tour={tour}
+            stops={stops}
+            userId={user?.id}
+            onValidated={() => {
+              setTour(prev => prev ? { ...prev, verified: true } : prev);
+              setStops(prev => prev.map(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' ? { ...s, user_verified: true } : s));
+            }}
+          />
         )}
 
         {conclusionRead && (
