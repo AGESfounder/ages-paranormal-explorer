@@ -841,9 +841,22 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     userDraggedRef.current = true;
     const currentParking = stops.find(s => s.stop_type === 'parking');
     const currentTourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-    const reordered = Array.from(currentTourStops);
-    const [removed] = reordered.splice(result.source.index, 1);
-    reordered.splice(result.destination.index, 0, removed);
+    // When walking-only is active, drag indices refer to the walking-only
+    // sublist. Reorder just the walking stops, then append driving stops at
+    // the end in their original relative order (driving stops are always last).
+    let reordered;
+    if (travelMode === 'walking') {
+      const walkingStops = currentTourStops.filter(s => s.travel_method !== 'driving');
+      const drivingStops = currentTourStops.filter(s => s.travel_method === 'driving');
+      reordered = Array.from(walkingStops);
+      const [removed] = reordered.splice(result.source.index, 1);
+      reordered.splice(result.destination.index, 0, removed);
+      reordered = [...reordered, ...drivingStops];
+    } else {
+      reordered = Array.from(currentTourStops);
+      const [removed] = reordered.splice(result.source.index, 1);
+      reordered.splice(result.destination.index, 0, removed);
+    }
     const withNumbers = reordered.map((s, i) => ({ ...s, stop_number: i + 1 }));
     setStops([...(currentParking ? [currentParking] : []), ...withNumbers]);
     for (const s of withNumbers) {
@@ -1129,21 +1142,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-green-400 transition-colors shrink-0" />
               </div>
             )}
-            {travelMode === 'walking' && hasDrivingStops ? (
-              <div className="space-y-2">
-                {visibleTourStops.map((stop) => (
-                  <TourStopRow
-                    key={stop.id}
-                    stop={stop}
-                    onNavigate={() => navigate(`/stop/${stop.id}`)}
-                    onNarrate={narrate}
-                    isSpeaking={isSpeaking}
-                    isGenerating={isGenerating}
-                    narrationLength={narrationLength}
-                  />
-                ))}
-              </div>
-            ) : (
             <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
               <Droppable droppableId="stops">
                 {(provided) => (
@@ -1170,7 +1168,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 )}
               </Droppable>
             </DragDropContext>
-            )}
             {(user?.role === 'admin' || isPaid) && (
               <div className="mt-3 p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
                 <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Add Specific Stop by Name</p>
