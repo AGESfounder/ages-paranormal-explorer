@@ -2,31 +2,31 @@ import { Marker } from 'react-leaflet';
 import { useRef, useEffect } from 'react';
 
 // Wraps react-leaflet's Marker with long-press-to-drag behavior.
-// The user must press and hold for LONG_PRESS_DELAY before the marker
-// becomes draggable. This prevents accidental marker movement when
-// panning/zooming the map.
 //
-// KEY ARCHITECTURE: Native event listeners are attached directly to the
-// marker's icon DOM element (not via react-leaflet's eventHandlers).
-// This lets us call stopPropagation() on touchstart/mousedown BEFORE the
-// event bubbles to the map container — preventing the map's pan handler
-// from stealing the touch gesture. react-leaflet's eventHandlers fire
-// only AFTER the event reaches the map container (Leaflet uses event
-// delegation), which is too late to stop the pan.
+// FLOW:
+// 1. User touches marker → map pans normally (no propagation stopped).
+// 2. If user moves > 10px → cancel long-press (they're panning the map).
+// 3. If user holds still for LONG_PRESS_DELAY → marker glows, drag begins.
+// 4. During drag, capture-phase document listeners intercept touchmove
+//    BEFORE the map's pan handler, so only the marker moves.
+// 5. On release, marker pins at that spot and onMarkerDragEnd is called.
 //
-// Click events are NOT stopped, so popups still open normally.
+// The map can be panned/zoomed freely — the long-press only activates
+// when the user presses and holds a marker without moving.
 const LONG_PRESS_DELAY = 500;
+const MOVE_THRESHOLD = 10; // px — cancel long-press if finger moves more than this
 
 export default function LongPressMarker({ draggable = false, onMarkerDragEnd, stopId, children, eventHandlers, ...props }) {
   const markerRef = useRef(null);
   const pressTimer = useRef(null);
   const isDragging = useRef(false);
   const lastInputType = useRef(null);
-  const moveHandler = useRef(null);
-  const endHandler = useRef(null);
+  const startPos = useRef(null);
+  const moveDetector = useRef(null);
+  const dragMove = useRef(null);
+  const dragEnd = useRef(null);
 
-  // Refs to avoid stale closures — the native listeners are set up once
-  // (when the icon becomes available) and must always use the latest props.
+  // Refs to avoid stale closures
   const draggableRef = useRef(draggable);
   draggableRef.current = draggable;
   const onDragEndRef = useRef(onMarkerDragEnd);
@@ -34,23 +34,36 @@ export default function LongPressMarker({ draggable = false, onMarkerDragEnd, st
   const stopIdRef = useRef(stopId);
   stopIdRef.current = stopId;
 
-  // Unmount cleanup
   useEffect(() => {
     return () => {
       clearTimeout(pressTimer.current);
-      if (moveHandler.current) {
-        document.removeEventListener('touchmove', moveHandler.current);
-        document.removeEventListener('mousemove', moveHandler.current);
-      }
-      if (endHandler.current) {
-        document.removeEventListener('touchend', endHandler.current);
-        document.removeEventListener('mouseup', endHandler.current);
-      }
+      removeMoveDetector();
+      removeDragListeners();
     };
   }, []);
 
-  // Attach native listeners to the marker icon element. Uses requestAnimationFrame
-  // to retry until the icon is available (Leaflet creates it asynchronously).
+  const removeMoveDetector = () => {
+    if (moveDetector.current) {
+      document.removeEventListener('touchmove', moveDetector.current, true);
+      document.removeEventListener('mousemove', moveDetector.current);
+      moveDetector.current = null;
+    }
+  };
+
+  const removeDragListeners = () => {
+    if (dragMove.current) {
+      document.removeEventListener('touchmove', dragMove.current, true);
+      document.removeEventListener('mousemove', dragMove.current);
+    }
+    if (dragEnd.current) {
+      document.removeEventListener('touchend', dragEnd.current, true);
+      document.removeEventListener('mouseup', dragEnd.current);
+    }
+    dragMove.current = null;
+    dragEnd.current = null;
+  };
+
+  // Attach native listeners to the marker icon element.
   useEffect(() => {
     if (!draggable) return;
     let rafId;
@@ -65,68 +78,87 @@ export default function LongPressMarker({ draggable = false, onMarkerDragEnd, st
       const onStart = (e) => {
         if (!draggableRef.current) return;
         const isTouch = e.type === 'touchstart';
-        // Ignore synthetic mousedown that browsers fire after touchstart.
         if (lastInputType.current === 'touch' && !isTouch) return;
         lastInputType.current = isTouch ? 'touch' : 'mouse';
         clearTimeout(pressTimer.current);
+        const point = e.touches ? e.touches[0] : e;
+        startPos.current = { x: point.clientX, y: point.clientY };
+
+        // Movement detector — cancels long-press if user pans the map.
+        // Capture phase, but does NOT stop propagation (map pans normally).
+        moveDetector.current = (ev) => {
+          if (isDragging.current) return;
+          const p = ev.touches ? ev.touches[0] : ev;
+          const dx = p.clientX - startPos.current.x;
+          const dy = p.clientY - startPos.current.y;
+          if (Math.sqrt(dx * dx + dy * dy) > MOVE_THRESHOLD) {
+            clearTimeout(pressTimer.current);
+            removeMoveDetector();
+          }
+        };
+        document.addEventListener('touchmove', moveDetector.current, { capture: true, passive: true });
+        document.addEventListener('mousemove', moveDetector.current);
+
+        // Long-press timer
         pressTimer.current = setTimeout(() => {
           const m = markerRef.current;
           if (!m) return;
           isDragging.current = true;
           m._icon?.classList.add('marker-ready-to-drag');
+          removeMoveDetector();
 
-          // Custom move handler — updates marker position in real time.
-          moveHandler.current = (ev) => {
+          // Disable map dragging so a second finger can't pan during drag
+          const map = m._map;
+          if (map && map.dragging) map.dragging.disable();
+
+          // Capture-phase drag handler — fires BEFORE the map's bubble-phase
+          // pan handler, so stopImmediatePropagation prevents the map from moving.
+          dragMove.current = (ev) => {
             if (!isDragging.current || !markerRef.current) return;
-            if (ev.cancelable) ev.preventDefault();
-            const point = ev.touches ? ev.touches[0] : ev;
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            const p = ev.touches ? ev.touches[0] : ev;
             const map = markerRef.current._map;
             const rect = map._container.getBoundingClientRect();
-            const latLng = map.containerPointToLatLng([point.clientX - rect.left, point.clientY - rect.top]);
+            const latLng = map.containerPointToLatLng([p.clientX - rect.left, p.clientY - rect.top]);
             markerRef.current.setLatLng(latLng);
           };
 
-          // Custom end handler — finalizes position and calls callback.
-          endHandler.current = () => {
+          dragEnd.current = (ev) => {
             if (!isDragging.current) return;
+            ev.stopImmediatePropagation();
             isDragging.current = false;
-            const m = markerRef.current;
-            if (m) {
-              m._icon?.classList.remove('marker-ready-to-drag');
-              const latLng = m.getLatLng();
+            const m2 = markerRef.current;
+            if (m2) {
+              m2._icon?.classList.remove('marker-ready-to-drag');
+              const latLng = m2.getLatLng();
               onDragEndRef.current?.(stopIdRef.current, latLng);
             }
-            document.removeEventListener('touchmove', moveHandler.current);
-            document.removeEventListener('mousemove', moveHandler.current);
-            document.removeEventListener('touchend', endHandler.current);
-            document.removeEventListener('mouseup', endHandler.current);
-            moveHandler.current = null;
-            endHandler.current = null;
+            const map = m2?._map;
+            if (map && map.dragging) map.dragging.enable();
+            removeDragListeners();
           };
 
-          document.addEventListener('touchmove', moveHandler.current, { passive: false });
-          document.addEventListener('mousemove', moveHandler.current);
-          document.addEventListener('touchend', endHandler.current);
-          document.addEventListener('mouseup', endHandler.current);
+          document.addEventListener('touchmove', dragMove.current, { capture: true, passive: false });
+          document.addEventListener('mousemove', dragMove.current);
+          document.addEventListener('touchend', dragEnd.current, { capture: true });
+          document.addEventListener('mouseup', dragEnd.current);
         }, LONG_PRESS_DELAY);
-        // CRITICAL: Stop propagation before the event reaches the map
-        // container — prevents the map's pan handler from stealing the touch.
-        e.stopPropagation();
       };
 
       const onEnd = (e) => {
-        // Ignore synthetic mouseup/mouseout during touch interaction.
         if (lastInputType.current === 'touch' && e.type !== 'touchend') return;
         if (!isDragging.current) {
           clearTimeout(pressTimer.current);
+          removeMoveDetector();
         }
-        e.stopPropagation();
       };
 
       const onOut = (e) => {
         if (lastInputType.current === 'touch') return;
         if (!isDragging.current) {
           clearTimeout(pressTimer.current);
+          removeMoveDetector();
         }
       };
 
