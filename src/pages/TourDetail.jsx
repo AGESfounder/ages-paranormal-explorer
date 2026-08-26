@@ -31,7 +31,6 @@ import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
 import { Input } from '@/components/ui/input';
 import { addStopByName } from '@/lib/addTourStops';
-import { addShuttleStop } from '@/lib/addShuttleStop';
 
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
@@ -180,7 +179,6 @@ export default function TourDetail() {
   // validation from overwriting their placement with server-side coordinates.
   const userDraggedRef = useRef(false);
   const [addingStop, setAddingStop] = useState(false);
-  const [addingShuttle, setAddingShuttle] = useState(false);
   const [stopSearchName, setStopSearchName] = useState('');
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
@@ -949,28 +947,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     setAddingStop(false);
   };
 
-  const handleAddShuttle = async () => {
-    if (addingShuttle) return;
-    setAddingShuttle(true);
-    setStopsError('');
-    try {
-      const result = await addShuttleStop(tour);
-      if (!result.added) {
-        setStopsError(result.reason === 'exists'
-          ? 'A shuttle drop-off stop already exists for this tour.'
-          : 'Could not find a shuttle drop-off location. Try adding it manually.');
-        setAddingShuttle(false);
-        return;
-      }
-      // Reload stops to include the new shuttle stop
-      const allStops = await base44.entities.TourStop.filter({ tour_id: tourId });
-      setStops(allStops.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0)));
-    } catch (e) {
-      setStopsError(e.message || 'Failed to add shuttle stop. Please try again.');
-    }
-    setAddingShuttle(false);
-  };
-
   const parkingStop = stops.find(s => s.stop_type === 'parking');
   const shuttleStop = stops.find(s => s.stop_type === 'shuttle');
   const tourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
@@ -1185,15 +1161,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 )}
               </Droppable>
             </DragDropContext>
-            {(user?.role === 'admin' || isPaid) && !shuttleStop && (
-              <button
-                onClick={handleAddShuttle}
-                disabled={addingShuttle}
-                className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-green-500/30 bg-green-500/5 text-green-400 text-xs font-heading uppercase tracking-wider hover:bg-green-500/10 transition-colors disabled:opacity-50 mb-3"
-              >
-                {addingShuttle ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Searching for shuttle drop-off…</> : <><Plus className="w-3.5 h-3.5" /> Add Shuttle Drop-Off</>}
-              </button>
-            )}
             {(user?.role === 'admin' || isPaid) && (
               <div className="mt-3 p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
                 <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Add Specific Stop by Name</p>

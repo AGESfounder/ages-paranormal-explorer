@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car, Info, DollarSign, ChevronDown, Crosshair, CheckCircle2 } from 'lucide-react';
+import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car, Info, DollarSign, ChevronDown, Crosshair, CheckCircle2, Plus } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageContainer from '../components/PageContainer';
 import SectionHeader from '../components/SectionHeader';
@@ -30,6 +30,7 @@ import LinkifiedText from '@/components/LinkifiedText';
 import DeleteStopDialog from '@/components/DeleteStopDialog';
 import { Trash2 } from 'lucide-react';
 import { reverseGeocodeParking } from '@/lib/reverseGeocode';
+import { addShuttleStop } from '@/lib/addShuttleStop';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -58,6 +59,7 @@ export default function StopDetail() {
   const [verifying, setVerifying] = useState(false);
   const [showDeleteStop, setShowDeleteStop] = useState(false);
   const [deletingStop, setDeletingStop] = useState(false);
+  const [addingShuttle, setAddingShuttle] = useState(false);
 
   // Gated narration wrapper — checks energy before speaking, toggles off for free.
   const narrate = (text, opts = {}) => {
@@ -323,6 +325,30 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
     }
   };
 
+  // Add a shuttle drop-off stop to this tour. Only available from the parking
+  // screen (rare use case — most tours don't need a shuttle). Searches the web
+  // for a shuttle drop-off point near the tour's parking area.
+  const handleAddShuttle = async () => {
+    if (addingShuttle) return;
+    setAddingShuttle(true);
+    try {
+      const tours = await base44.entities.Tour.filter({ id: stop.tour_id });
+      if (!tours.length) { toast({ title: 'Tour not found', variant: 'destructive' }); return; }
+      const result = await addShuttleStop(tours[0]);
+      if (!result.added) {
+        toast({ title: 'Could not add shuttle', description: result.reason === 'exists' ? 'A shuttle drop-off already exists.' : 'Could not find a shuttle drop-off location.', variant: 'destructive' });
+        return;
+      }
+      // Reload siblings to include the new shuttle stop
+      const siblings = await base44.entities.TourStop.filter({ tour_id: stop.tour_id });
+      setAllStops(siblings.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0)));
+      toast({ title: 'Shuttle Drop-Off Added', description: 'A shuttle stop has been added to this tour.' });
+    } catch (e) {
+      toast({ title: 'Failed to add shuttle', description: e?.message || 'Please try again.', variant: 'destructive' });
+    }
+    setAddingShuttle(false);
+  };
+
   if (loading || !stop) {
     return (
       <PageContainer>
@@ -456,6 +482,16 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           <button onClick={openInMaps} className={`flex items-center justify-center gap-2 w-full py-3 rounded-lg border text-sm font-heading uppercase tracking-wider transition-colors ${isShuttle ? 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20' : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'}`}>
             <Navigation className="w-4 h-4" /> {isShuttle ? 'Navigate to Shuttle Drop-Off' : 'Navigate to Parking'}
           </button>
+
+          {!isShuttle && !allStops.some(s => s.stop_type === 'shuttle') && (isAdmin || isPaid) && (
+            <button
+              onClick={handleAddShuttle}
+              disabled={addingShuttle}
+              className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-green-500/30 bg-green-500/5 text-green-400 text-xs font-heading uppercase tracking-wider hover:bg-green-500/10 transition-colors disabled:opacity-50"
+            >
+              {addingShuttle ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Searching for shuttle drop-off…</> : <><Plus className="w-3.5 h-3.5" /> Add Shuttle Drop-Off</>}
+            </button>
+          )}
 
           <div className="flex items-center gap-2">
             <button onClick={() => prevStop && navigate(`/stop/${prevStop.id}`)} disabled={!prevStop} className="flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border border-border/40 bg-card/30 text-sm font-heading uppercase tracking-wider disabled:opacity-30 hover:border-primary/30 transition-colors">
