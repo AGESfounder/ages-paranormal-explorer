@@ -143,6 +143,13 @@
   background: hsl(222 47% 5%) !important;
 }
 
+/* Long-press visual feedback — marker glows when ready to drag */
+.marker-ready-to-drag {
+  filter: drop-shadow(0 0 14px hsl(199,89%,48%,0.95)) brightness(1.35);
+  transition: filter 0.2s ease;
+  z-index: 1000;
+}
+
 .toolkit-scroll {
   scrollbar-width: thin;
   scrollbar-color: hsl(199 89% 48% / 0.5) hsl(222 47% 8%);

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import LongPressMarker from './LongPressMarker';
 
 // Auto-fit the map to show all stops. Without this the map uses a fixed zoom
 // centered on the midpoint, so stops at the edges fall off-screen.
@@ -226,11 +227,12 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           />
         )}
         {hasParking && (
-          <Marker
+          <LongPressMarker
             position={[parkingLat, parkingLon]}
             icon={makeParkingIcon()}
             draggable={draggable}
-            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(parkingStop?.id, e.target.getLatLng()) } : undefined}
+            stopId={parkingStop?.id}
+            onMarkerDragEnd={onMarkerDragEnd}
           >
             <Popup>
               <div className="text-xs font-heading">
@@ -238,14 +240,15 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
                 {parkingCost && <><br /><span className="text-muted-foreground">{parkingCost}</span></>}
               </div>
             </Popup>
-          </Marker>
+          </LongPressMarker>
         )}
         {hasShuttle && (
-          <Marker
+          <LongPressMarker
             position={[shuttleStop.latitude, shuttleStop.longitude]}
             icon={makeShuttleIcon()}
             draggable={draggable}
-            eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(shuttleStop.id, e.target.getLatLng()) } : undefined}
+            stopId={shuttleStop.id}
+            onMarkerDragEnd={onMarkerDragEnd}
           >
             <Popup>
               <div className="text-xs font-heading">
@@ -253,18 +256,19 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
                 {shuttleStop.parking_cost && <><br /><span className="text-muted-foreground">{shuttleStop.parking_cost}</span></>}
               </div>
             </Popup>
-          </Marker>
+          </LongPressMarker>
         )}
         {renderGroups.flatMap((group) => {
           if (group.isStacked) {
             const first = group.stops[0];
             return (
-              <Marker
+              <LongPressMarker
                 key={first.id}
                 position={[first.latitude, first.longitude]}
                 icon={makeStackedIcon(first.stop_number, group.stops.length)}
                 draggable={draggable}
-                eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(first.id, e.target.getLatLng()) } : undefined}
+                stopId={first.id}
+                onMarkerDragEnd={onMarkerDragEnd}
               >
                 <Popup>
                   <div className="text-xs font-heading">
@@ -274,16 +278,17 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
                     </ul>
                   </div>
                 </Popup>
-              </Marker>
+              </LongPressMarker>
             );
           }
           return group.stops.map(stop => (
-            <Marker
+            <LongPressMarker
               key={stop.id}
               position={[stop.latitude, stop.longitude]}
               icon={makeStopIcon(stop.stop_number, stop.geocoded === false)}
               draggable={draggable}
-              eventHandlers={draggable ? { dragend: (e) => onMarkerDragEnd?.(stop.id, e.target.getLatLng()) } : undefined}
+              stopId={stop.id}
+              onMarkerDragEnd={onMarkerDragEnd}
             >
               <Popup>
                 <div className="text-xs font-heading">
@@ -291,24 +296,25 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
                   {stop.geocoded === false && <div className="text-amber-400 text-[10px] mt-1">Estimated — needs verification</div>}
                 </div>
               </Popup>
-            </Marker>
+            </LongPressMarker>
           ));
         })}
         {needsPlacementStops.map(stop => (
-          <Marker
+          <LongPressMarker
             key={stop.id}
             position={[stop.latitude, stop.longitude]}
             icon={makeNeedsPlacementIcon(stop.stop_number)}
             draggable
-            eventHandlers={{ dragend: (e) => onMarkerDragEnd?.(stop.id, e.target.getLatLng()) }}
+            stopId={stop.id}
+            onMarkerDragEnd={onMarkerDragEnd}
           >
             <Popup>
               <div className="text-xs font-heading">
                 <strong>Stop {stop.stop_number}:</strong> {stop.name}
-                <div className="text-pink-400 text-[10px] mt-1">Needs Placement — drag to correct location</div>
+                <div className="text-pink-400 text-[10px] mt-1">Needs Placement — long press to drag</div>
               </div>
             </Popup>
-          </Marker>
+          </LongPressMarker>
         ))}
       </MapContainer>
     </div>

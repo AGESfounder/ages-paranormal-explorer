@@ -935,11 +935,12 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   // needs_placement, and mark as user-verified so the marker turns blue.
   const handleMarkerDragEnd = async (stopId, latLng) => {
     userDraggedRef.current = true;
-    setStops(prev => prev.map(s =>
+    // Compute updated stops with the new coordinates
+    const updatedStops = stops.map(s =>
       s.id === stopId
         ? { ...s, latitude: latLng.lat, longitude: latLng.lng, needs_placement: false, geocoded: true, user_verified: true }
         : s
-    ));
+    );
     try {
       const result = await verifyStopLocation(stopId, tourId, latLng.lat, latLng.lng, user?.id);
       if (result.allVerified) {
@@ -948,6 +949,37 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     } catch (e) {
       console.error('Failed to update stop coordinates:', e);
     }
+    // Re-order stops and re-classify walking/driving based on the corrected
+    // coordinates. A marker drag corrects the GPS position — the optimal
+    // stop order may change. Clear user_reordered so the proximity-based
+    // order replaces the old manual order.
+    const pStop = updatedStops.find(s => s.stop_type === 'parking');
+    const sStop = updatedStops.find(s => s.stop_type === 'shuttle');
+    const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
+    const parkingCoords = pStop?.latitude != null ? { lat: pStop.latitude, lon: pStop.longitude } : null;
+    const reordered = await enforceWalkingDistance(tourStopsOnly, tour.tour_type, { lat: tour.start_latitude, lon: tour.start_longitude }, { walkingLimit: getWalkingLimit(tour), parkingCoords });
+    for (const s of reordered) {
+      const existing = tourStopsOnly.find(ts => ts.id === s.id);
+      if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
+        try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
+      }
+    }
+    // Auto-correct tour type if stops are now a mix of walking + driving
+    const methods = new Set(reordered.map(s => s.travel_method));
+    const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed'
+      : methods.has('driving') ? 'driving' : 'walking';
+    if (correctedType !== tour.tour_type) {
+      try {
+        await base44.entities.Tour.update(tourId, { tour_type: correctedType });
+        setTour(prev => prev ? { ...prev, tour_type: correctedType } : prev);
+      } catch (e) {}
+    }
+    setStops([...(pStop ? [pStop] : []), ...(sStop ? [sStop] : []), ...reordered]);
+    // Clear user_reordered — the marker drag invalidates the old manual order
+    try {
+      await base44.entities.Tour.update(tourId, { user_reordered: false });
+      setTour(prev => prev ? { ...prev, user_reordered: false } : prev);
+    } catch (e) {}
   };
 
   const handleAddStopByName = async () => {
