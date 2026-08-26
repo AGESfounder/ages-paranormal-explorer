@@ -319,6 +319,53 @@ function orderStopsByProximity(stops) {
   return ordered;
 }
 
+// Project a point onto a line segment — returns the nearest point on the segment.
+function projectPointToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return { lat: ax + t * dx, lon: ay + t * dy };
+}
+
+// Snap a point to the nearest street/road within maxDistMeters. Places markers
+// on the street in front of the building (where visitors stand to view it)
+// rather than on the building centroid returned by address geocoding. Excludes
+// footways/paths/tracks so the marker lands on a real street. Returns null if
+// no road found within range (keeps original coordinates).
+async function snapToNearestStreet(lat, lon, maxDistMeters = 40) {
+  const query = `[out:json][timeout:25];
+  way(around:${maxDistMeters},${lat},${lon})["highway"]["highway"!~"footway|path|cycleway|steps|pedestrian|track"];
+  out geom 200;`;
+  try {
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', 'User-Agent': 'AGES-Paranormal-Explorer/1.0' },
+      body: query,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const ways = (data.elements || []).filter(e => e.geometry && e.geometry.length > 1);
+    if (ways.length === 0) return null;
+    let bestPoint = null;
+    let bestDist = Infinity;
+    for (const way of ways) {
+      for (let i = 1; i < way.geometry.length; i++) {
+        const proj = projectPointToSegment(lat, lon,
+          way.geometry[i - 1].lat, way.geometry[i - 1].lon,
+          way.geometry[i].lat, way.geometry[i].lon);
+        const dist = haversine(lat, lon, proj.lat, proj.lon) * 1609.34;
+        if (dist < bestDist) { bestDist = dist; bestPoint = proj; }
+      }
+    }
+    return bestPoint;
+  } catch (e) {
+    console.error('snapToNearestStreet failed:', e.message);
+    return null;
+  }
+}
+
 // Verifies and corrects stop coordinates for ALL tour types using
 // OpenStreetMap's Overpass API (real mapped features) instead of Nominatim
 // guesses. For landmark/ship/cold_spot tours, all stops are on the same
@@ -1034,6 +1081,20 @@ Return a JSON object with:
           const safeUpdates = updates.filter(u => !verifiedIds.has(u.id));
           if (safeUpdates.length < updates.length) {
             console.log(`Race-condition guard: skipping ${updates.length - safeUpdates.length} stop(s) verified during execution`);
+          }
+          // Snap geocoded stops to the nearest street — place markers on the
+          // street in front of the building (where visitors stand) rather than
+          // on the building centroid returned by address geocoding. Skip
+          // needs_placement stops (manually placed by the user).
+          for (const u of safeUpdates) {
+            if (u.latitude != null && u.longitude != null && !u.needs_placement) {
+              const snapped = await snapToNearestStreet(u.latitude, u.longitude);
+              if (snapped) {
+                u.latitude = snapped.lat;
+                u.longitude = snapped.lon;
+              }
+              await sleep(500);
+            }
           }
           if (safeUpdates.length > 0) {
             await base44.asServiceRole.entities.TourStop.bulkUpdate(safeUpdates);
