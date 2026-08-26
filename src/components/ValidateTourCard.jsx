@@ -4,7 +4,7 @@ import { ShieldCheck, CheckCircle2, Loader2, Lock, AlertTriangle } from 'lucide-
 import { base44 } from '@/api/base44Client';
 
 const VALIDATION_CHECKS = [
-  { id: 'stops_exist', label: 'All stops exist and are publicly accessible after 7 PM' },
+  { id: 'stops_exist', label: 'Access to stops is accurate to stop descriptions' },
   { id: 'stops_marked', label: 'All stops are correctly marked on the map at their real locations' },
   { id: 'info_accurate', label: 'All stop information (history, paranormal details, hours, fees) is accurate' },
   { id: 'route_logical', label: 'The tour route is logical, safe, and walkable/drivable as marked' },
