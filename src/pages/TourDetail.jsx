@@ -422,6 +422,11 @@ export default function TourDetail() {
         // unverified stops instead of destructive regeneration.
         let regenerated = false;
         const needsValidation = (tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION;
+        // SACRED PINS: If any stop on this tour has been user-verified (manually
+        // placed by a real person at the actual location), do NOT run any
+        // background validation or coordinate correction. User-verified pins
+        // are ground truth — no automated process should ever touch them.
+        const hasVerifiedStops = tourStopsOnly.some(s => s.user_verified);
         if (!regenerated) {
           if (tourData[0].user_reordered) {
             // Respect the user's manual stop order — do not re-sort by proximity.
@@ -439,14 +444,20 @@ export default function TourDetail() {
             const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
             const allStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sortedTourStops];
             setStops(allStops);
-            if (needsValidation) {
-              runBackgroundValidation(tourId, tourData[0]).catch(console.error);
-            } else {
-              geocodeExistingStops(allStops, tourData[0]).catch(console.error);
+            // SACRED PINS: Skip all background validation on tours with
+            // user-verified stops — no automated process touches them.
+            if (!hasVerifiedStops) {
+              if (needsValidation) {
+                runBackgroundValidation(tourId, tourData[0]).catch(console.error);
+              } else {
+                geocodeExistingStops(allStops, tourData[0]).catch(console.error);
+              }
             }
           } else {
             const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
-            const reordered = await enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords });
+            // SACRED PINS: If any stop is user-verified, preserve the existing
+            // stop order — only update travel_method, never reorder stops.
+            const reordered = await enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords, preserveOrder: hasVerifiedStops });
             // Update stop_numbers in the database if they changed
             for (const s of reordered) {
               const existing = tourStopsOnly.find(ts => ts.id === s.id);
@@ -465,10 +476,14 @@ export default function TourDetail() {
             const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
             const allStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered];
             setStops(allStops);
-            if (needsValidation) {
-              runBackgroundValidation(tourId, tourData[0]).catch(console.error);
-            } else {
-              geocodeExistingStops(allStops, tourData[0]).catch(console.error);
+            // SACRED PINS: Skip all background validation on tours with
+            // user-verified stops — no automated process touches them.
+            if (!hasVerifiedStops) {
+              if (needsValidation) {
+                runBackgroundValidation(tourId, tourData[0]).catch(console.error);
+              } else {
+                geocodeExistingStops(allStops, tourData[0]).catch(console.error);
+              }
             }
           }
         }
