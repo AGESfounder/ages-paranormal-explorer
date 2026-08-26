@@ -12,12 +12,16 @@ import { useRef, useEffect } from 'react';
 // 2. Custom drag tracking is used instead of Leaflet's built-in dragger,
 //    because Leaflet's dragger only listens for NEW touchstart/mousedown
 //    events — it can't pick up the current touch after we enable it.
+// 3. Input type (touch vs mouse) is tracked to ignore synthetic mouse events
+//    that browsers fire ~300ms after touchstart — those would otherwise clear
+//    the timer before the long-press threshold is reached.
 const LONG_PRESS_DELAY = 500;
 
 export default function LongPressMarker({ draggable = false, onMarkerDragEnd, stopId, children, eventHandlers, ...props }) {
   const markerRef = useRef(null);
   const pressTimer = useRef(null);
   const isDragging = useRef(false);
+  const lastInputType = useRef(null); // 'touch' or 'mouse'
   const moveHandler = useRef(null);
   const endHandler = useRef(null);
 
@@ -39,8 +43,13 @@ export default function LongPressMarker({ draggable = false, onMarkerDragEnd, st
     };
   }, []);
 
-  const startPress = () => {
+  const startPress = (e) => {
     if (!draggable) return;
+    const isTouch = e?.type === 'touchstart';
+    // Ignore synthetic mousedown that browsers fire after touchstart —
+    // it would reset the timer and change the input type.
+    if (lastInputType.current === 'touch' && !isTouch) return;
+    lastInputType.current = isTouch ? 'touch' : 'mouse';
     clearTimeout(pressTimer.current);
     // Disable map dragging so the map doesn't pan during the long-press.
     const map = markerRef.current?._map;
@@ -95,7 +104,12 @@ export default function LongPressMarker({ draggable = false, onMarkerDragEnd, st
     }, LONG_PRESS_DELAY);
   };
 
-  const cancelPress = () => {
+  const cancelPress = (e) => {
+    // Ignore synthetic mouse events during a touch interaction —
+    // browsers fire mouseup/mouseout ~300ms after touchstart, which
+    // would clear the timer before the long-press threshold.
+    const eventType = e?.type || '';
+    if (lastInputType.current === 'touch' && eventType !== 'touchend') return;
     // Only cancel if the long-press hasn't triggered yet.
     // If we're already dragging, the end handler manages cleanup.
     if (!isDragging.current) {
