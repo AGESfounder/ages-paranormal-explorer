@@ -211,7 +211,7 @@ export default function TourDetail() {
     const needsVerification = stopsList.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' && s.geocoded === false);
     if (needsVerification.length === 0) return;
     try {
-      await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered, verifyAll: false });
+      await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered || tourData.manual_reorder, verifyAll: false });
     } catch (e) {
       console.error('Coordinate verification failed:', e);
       return;
@@ -222,7 +222,7 @@ export default function TourDetail() {
     if (userDraggedRef.current) return;
     // Re-order stops by proximity using the NOW-correct coordinates.
     // Skip for tours the user manually reordered — respect their custom order.
-    if (tourData && !tourData.user_reordered) {
+    if (tourData && !tourData.user_reordered && !tourData.manual_reorder) {
       const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
       const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
       const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
@@ -267,7 +267,7 @@ export default function TourDetail() {
     // WRONG coordinates, overwriting correct ones and sending users to the
     // wrong location at night. Only fix collapsed/missing/water stops.
     try {
-      await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData.user_reordered, verifyAll: false });
+      await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData.user_reordered || tourData.manual_reorder, verifyAll: false });
     } catch (e) {
       console.error('Coordinate verification failed:', e);
       return;
@@ -287,7 +287,7 @@ export default function TourDetail() {
     // Don't overwrite stops the user has manually placed via marker drag
     if (userDraggedRef.current) return;
     // Re-order and update display with corrected coordinates
-    if (!tourData.user_reordered) {
+    if (!tourData.user_reordered && !tourData.manual_reorder) {
       const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
       const reordered = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
       for (const s of reordered) {
@@ -429,7 +429,7 @@ export default function TourDetail() {
         // are ground truth — no automated process should ever touch them.
         const hasVerifiedStops = tourStopsOnly.some(s => s.user_verified);
         if (!regenerated) {
-          if (tourData[0].user_reordered) {
+          if (tourData[0].user_reordered || tourData[0].manual_reorder) {
             // Respect the user's manual stop order — do not re-sort by proximity.
             // But still update travel_method based on current (possibly validated)
             // coordinates so stops show as walking/driving correctly.
@@ -880,10 +880,13 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     for (const s of withNumbers) {
       await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number });
     }
-    // Remember that the user customized the stop order so we don't re-sort by proximity on next load
+    // Remember that the user customized the stop order so we don't re-sort by
+    // proximity on next load. manual_reorder is permanent — it takes
+    // precedence over pin-validation auto-reordering so the custom order is
+    // always respected, even after all stops are validated.
     try {
-      await base44.entities.Tour.update(tourId, { user_reordered: true });
-      setTour(prev => prev ? { ...prev, user_reordered: true } : prev);
+      await base44.entities.Tour.update(tourId, { user_reordered: true, manual_reorder: true });
+      setTour(prev => prev ? { ...prev, user_reordered: true, manual_reorder: true } : prev);
     } catch (e) {}
     // Rebalance conclusion phrases: strip from the old final stop (now
     // non-final) and regenerate the new final stop's narration with a
@@ -990,10 +993,19 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     // After all stops are validated, clear user_reordered so the next tour
     // load reorders by proximity (optimal loop for future investigators).
     // Until then, preserve the current order for the active tour session.
+    // EXCEPTION: If the user/admin manually reordered via the drag-and-drop
+    // list (manual_reorder: true), NEVER clear user_reordered — their custom
+    // order is permanent and takes precedence over proximity auto-reordering.
     try {
-      const newReordered = !allVerified;
-      await base44.entities.Tour.update(tourId, { user_reordered: newReordered });
-      setTour(prev => prev ? { ...prev, user_reordered: newReordered } : prev);
+      const newReordered = allVerified ? false : true;
+      const updateData = { user_reordered: newReordered };
+      if (tour.manual_reorder) {
+        // Manual reorder is permanent — keep user_reordered true so the
+        // custom order is always respected on next load.
+        updateData.user_reordered = true;
+      }
+      await base44.entities.Tour.update(tourId, updateData);
+      setTour(prev => prev ? { ...prev, user_reordered: updateData.user_reordered } : prev);
     } catch (e) {}
   };
 

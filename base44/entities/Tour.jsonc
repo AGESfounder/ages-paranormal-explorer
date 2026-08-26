@@ -96,6 +96,11 @@
       "type": "boolean",
       "default": false
     },
+    "manual_reorder": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when a user or admin has manually reordered stops via the drag-and-drop list (not via pin validation). This is permanent \u2014 it takes precedence over proximity-based auto-reordering so the custom order is always respected, even after all stops are validated."
+    },
     "rank": {
       "type": "number",
       "description": "State ranking: 1 = #1 Most Active, 2 = #2, 3 = #3. Null/undefined for unranked tours."
