@@ -165,8 +165,30 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
     ? [[Math.min(...allLats), Math.min(...allLngs)], [Math.max(...allLats), Math.max(...allLngs)]]
     : undefined;
 
-  const routeLine = boundsStops.length > 1
-    ? boundsStops.map(s => [s.latitude, s.longitude])
+  // Split stops into walking and driving segments for separate route lines.
+  // Walking stops form a loop (back to parking/shuttle); driving stops are a
+  // linear segment starting from parking.
+  const walkingStops = boundsStops.filter(s => s.travel_method !== 'driving');
+  const drivingStops = boundsStops.filter(s => s.travel_method === 'driving');
+  // Walking loop start/end — shuttle if present, else parking
+  const loopEndpoint = hasShuttle
+    ? [shuttleStop.latitude, shuttleStop.longitude]
+    : hasParking
+    ? [parkingLat, parkingLon]
+    : null;
+  const walkingLine = walkingStops.length > 0
+    ? [
+        ...(loopEndpoint ? [loopEndpoint] : []),
+        ...walkingStops.map(s => [s.latitude, s.longitude]),
+        ...(loopEndpoint ? [loopEndpoint] : []),
+      ]
+    : undefined;
+  // Driving line — starts from parking (user returns to car, then drives)
+  const drivingLine = drivingStops.length > 0
+    ? [
+        ...(hasParking ? [[parkingLat, parkingLon]] : []),
+        ...drivingStops.map(s => [s.latitude, s.longitude]),
+      ]
     : undefined;
 
   // Group stops by coordinates for stacked marker display. When multiple
@@ -198,29 +220,16 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         <FitBounds bounds={bounds} />
-        {bounds && <Polyline positions={routeLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />}
+        {walkingLine && (
+          <Polyline positions={walkingLine} color="hsl(199,89%,48%)" weight={2} opacity={0.5} dashArray="8 6" />
+        )}
+        {drivingLine && (
+          <Polyline positions={drivingLine} color="hsl(270,40%,50%)" weight={2} opacity={0.5} dashArray="8 6" />
+        )}
         {hasParking && hasShuttle && (
           <Polyline
             positions={[[parkingLat, parkingLon], [shuttleStop.latitude, shuttleStop.longitude]]}
             color="hsl(142, 70%, 45%)"
-            weight={1.5}
-            opacity={0.4}
-            dashArray="4 4"
-          />
-        )}
-        {hasShuttle && boundsStops.length > 0 && (
-          <Polyline
-            positions={[[shuttleStop.latitude, shuttleStop.longitude], [boundsStops[0].latitude, boundsStops[0].longitude]]}
-            color="hsl(142, 70%, 45%)"
-            weight={1.5}
-            opacity={0.4}
-            dashArray="4 4"
-          />
-        )}
-        {hasParking && !hasShuttle && boundsStops.length > 0 && (
-          <Polyline
-            positions={[[parkingLat, parkingLon], [boundsStops[0].latitude, boundsStops[0].longitude]]}
-            color="hsl(45, 90%, 50%)"
             weight={1.5}
             opacity={0.4}
             dashArray="4 4"
