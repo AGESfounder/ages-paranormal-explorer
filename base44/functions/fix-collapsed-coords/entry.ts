@@ -727,12 +727,17 @@ Return a JSON object with:
         }
       }
 
-      // Only fix collapsed stops or stops missing coordinates — unless
-      // verifyAll is true, in which case verify ALL stops (including those
-      // without coordinates) via the verification pipeline.
+      // Only fix collapsed stops, stops missing coordinates, or stops still
+      // marked as estimated (geocoded: false) — unless verifyAll is true, in
+      // which case verify ALL stops (including those without coordinates) via
+      // the verification pipeline. Including geocoded: false stops here is
+      // critical: geocodeExistingStops calls this function precisely because
+      // estimated stops exist, but without this filter the function would
+      // skip them (they have coordinates, just unverified ones).
       const needsFix = (verifyAll ? stops : stops.filter(s =>
         collapsedStopIds.has(s.id) ||
-        s.latitude == null || s.longitude == null
+        s.latitude == null || s.longitude == null ||
+        s.geocoded === false
       )).filter(s => !s.user_verified);
 
       if (needsFix.length > 0) {
@@ -929,6 +934,26 @@ Return a JSON object with:
             // fails, fall back to the address candidate but mark it
             // geocoded: false (amber "EST" badge) so it's not falsely showing
             // as a precise blue marker.
+            if (!fixed && addrGeocodeCandidate) {
+              // Fast path for urban walking tours: if the address has a house
+              // number (specific building) and geocoded within a tight radius
+              // of the tour start (within the walking cluster), trust the
+              // address geocode directly. In dense urban areas, street
+              // addresses geocode accurately to the correct building. The
+              // name check below (designed for rural areas where Nominatim
+              // resolves addresses to wrong points 0.8+ miles away) rejects
+              // valid urban geocodes because Nominatim reverse geocoding
+              // rarely includes building names — only road and house_number.
+              // The 0.4-mile radius is tight enough that rural wrong-point
+              // geocodes (typically 0.8+ miles off) still get the name check.
+              const hasHouseNumber = /^\d+\s+\w/.test(stop.address || '');
+              const addrDist = haversine(tour.start_latitude, tour.start_longitude, addrGeocodeCandidate.lat, addrGeocodeCandidate.lon);
+              if (addrGeocodeCandidate.fromFullAddress && hasHouseNumber && addrDist <= 0.4) {
+                updates.push({ id: stop.id, latitude: addrGeocodeCandidate.lat, longitude: addrGeocodeCandidate.lon, geocoded: true, needs_placement: false });
+                matched.add(stop.id);
+                fixed = true;
+              }
+            }
             if (!fixed && addrGeocodeCandidate) {
               let nameMatches = false;
               try {
