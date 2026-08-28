@@ -787,6 +787,28 @@ Return a JSON object with:
           for (const stop of needsFix) {
             let fixed = false;
             const sharedAddress = !!(stop.address && addressCounts[normalizeAddr(stop.address)] > 1);
+            // Trust-the-address path: if the stop has a clear street address with
+            // a house number (a specific building, not an intersection or vague
+            // area) and existing coordinates within a reasonable distance of
+            // the tour start, trust the existing coordinates and mark as
+            // geocoded. The address is specific enough that the LLM's generation
+            // coordinates are almost certainly correct. Running Nominatim/OSM/
+            // LLM geocoding risks OVERWRITING correct coordinates with wrong
+            // ones — Nominatim can fail or rate-limit, and LLM web search can
+            // return wrong locations and overwrites existing coords. This is
+            // the safest path: just upgrade the flag without touching coords.
+            // Skip shared-address stops (multiple stops at the same address
+            // need individual verification via name search to avoid collapse).
+            const hasHouseNumber = /^\d+\s+\w/.test(stop.address || '');
+            if (hasHouseNumber && !sharedAddress && stop.latitude != null && stop.longitude != null) {
+              const dist = haversine(tour.start_latitude, tour.start_longitude, stop.latitude, stop.longitude);
+              const maxTrustDist = stop.travel_method === 'driving' ? 5 : 0.5;
+              if (dist <= maxTrustDist) {
+                updates.push({ id: stop.id, geocoded: true, needs_placement: false });
+                matched.add(stop.id);
+                fixed = true;
+              }
+            }
             // NO GUESSING for shared-address stops: do NOT trust existing
             // geocoded coordinates — they were LLM-generated during tour
             // creation and may be inaccurate (e.g. stop 4 of the Sachs Bridge
