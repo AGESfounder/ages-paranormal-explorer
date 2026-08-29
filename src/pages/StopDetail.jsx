@@ -261,8 +261,10 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
     }
     setVerifying(true);
     const MAX_ACCURACY_M = 30; // Reject stale/low-accuracy GPS fixes
+    let saved = false; // Prevent multiple saves — watchPosition fires repeatedly
     let retried = false;
     const attempt = (pos) => {
+      if (saved) return; // Already saved — ignore further GPS fixes
       const { latitude, longitude, accuracy } = pos.coords;
       if (accuracy != null && accuracy > MAX_ACCURACY_M && !retried) {
         // Stale or poor fix — wait for a better one instead of saving bad coords
@@ -276,8 +278,13 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           variant: 'destructive',
         });
         setVerifying(false);
+        navigator.geolocation.clearWatch(watchId);
         return;
       }
+      // Got a good fix — save immediately and stop watching so we don't
+      // fire multiple toasts from repeated GPS updates.
+      saved = true;
+      navigator.geolocation.clearWatch(watchId);
       verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id)
         .then((result) => {
           setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false }));

@@ -121,8 +121,11 @@ export default function CommunityMap() {
                 style={{ height: '65vh' }}
               >
                 <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                  attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                  attribution='&copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                />
+                <TileLayer
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
                 />
                 {filtered.map(pin => (
                   <Marker key={pin.id} position={[pin.latitude, pin.longitude]} icon={createPin(pin.type)}>
