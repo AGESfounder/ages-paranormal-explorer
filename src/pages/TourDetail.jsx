@@ -21,6 +21,7 @@ import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
 import TravelModeSelector from '@/components/TravelModeSelector';
 import TourTypeSelector from '@/components/TourTypeSelector';
+import { classifyStopAccess } from '@/lib/stopAccess';
 import TourStopRow from '@/components/TourStopRow';
 import ValidateTourCard from '@/components/ValidateTourCard';
 
@@ -338,9 +339,14 @@ export default function TourDetail() {
 
   const totalDistance = useMemo(() => {
     const allTourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-    const tourStopsOnly = travelMode === 'walking'
-      ? allTourStops.filter(s => s.travel_method !== 'driving')
+    const accessFiltered = tour?.access_type === 'interior_only'
+      ? allTourStops.filter(s => s.access_area === 'interior')
+      : tour?.access_type === 'exterior_only'
+      ? allTourStops.filter(s => s.access_area === 'exterior')
       : allTourStops;
+    const tourStopsOnly = travelMode === 'walking'
+      ? accessFiltered.filter(s => s.travel_method !== 'driving')
+      : accessFiltered;
     if (tourStopsOnly.length < 2) return 0;
     let total = 0;
     const pStop = stops.find(s => s.stop_type === 'parking');
@@ -356,7 +362,7 @@ export default function TourDetail() {
       total += haversineDistance(tourStopsOnly[i - 1].latitude, tourStopsOnly[i - 1].longitude, tourStopsOnly[i].latitude, tourStopsOnly[i].longitude);
     }
     return total;
-  }, [stops, travelMode]);
+  }, [stops, travelMode, tour?.access_type]);
 
   // Scale the estimated duration proportionally when walking-only filters out
   // driving stops. Minimum 30% so a short walking portion doesn't show an
@@ -364,11 +370,16 @@ export default function TourDetail() {
   const walkingScale = useMemo(() => {
     if (travelMode !== 'walking') return 1;
     const allTourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-    const hasDriving = allTourStops.some(s => s.travel_method === 'driving');
-    if (!hasDriving || allTourStops.length === 0) return 1;
-    const walkingOnly = allTourStops.filter(s => s.travel_method !== 'driving');
-    return Math.max(0.3, walkingOnly.length / allTourStops.length);
-  }, [stops, travelMode]);
+    const accessFiltered = tour?.access_type === 'interior_only'
+      ? allTourStops.filter(s => s.access_area === 'interior')
+      : tour?.access_type === 'exterior_only'
+      ? allTourStops.filter(s => s.access_area === 'exterior')
+      : allTourStops;
+    const hasDriving = accessFiltered.some(s => s.travel_method === 'driving');
+    if (!hasDriving || accessFiltered.length === 0) return 1;
+    const walkingOnly = accessFiltered.filter(s => s.travel_method !== 'driving');
+    return Math.max(0.3, walkingOnly.length / accessFiltered.length);
+  }, [stops, travelMode, tour?.access_type]);
 
   const formatDistance = (mi) => mi < 1 ? `${Math.round(mi * 5280)} ft` : `${mi.toFixed(1)} mi`;
 
@@ -399,6 +410,17 @@ export default function TourDetail() {
       setIsFavorite(favs.length > 0);
       if (completions.length > 0) { setIsCompleted(true); setConclusionRead(true); }
       let tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+      // Classify stops that don't have access_area — instant heuristic,
+      // persisted to DB in the background (non-blocking).
+      const toClassify = tourStops.filter(s => s.stop_type === 'tour' && !s.access_area);
+      if (toClassify.length > 0) {
+        for (const s of toClassify) {
+          s.access_area = classifyStopAccess(s.name);
+        }
+        base44.entities.TourStop.bulkUpdate(
+          toClassify.map(s => ({ id: s.id, access_area: s.access_area }))
+        ).catch(e => console.error('Failed to persist access classification:', e));
+      }
       // Clean up duplicate parking stops (keep the first, delete the rest)
       const allParking = tourStops.filter(s => s.stop_type === 'parking');
       if (allParking.length > 1) {
@@ -608,6 +630,7 @@ Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand 
 - name, latitude, longitude (real GPS), address
 - address: ALWAYS provide a COMPLETE STREET ADDRESS with a street number (e.g. "123 Main St, Lewes, DE 19958"). NEVER use just a city name, an intersection ("X & Y"), or words like "near", "vicinity", "various". If the location has no street address (e.g. a park), use the park entrance address or nearest street address. This address must be GPS-searchable — a user should be able to type it into Google Maps and arrive at the exact location.
 - same_structure: true if this stop is a room, area, or section WITHIN a single building or vessel (rooms in the Farnsworth House, decks on a ship, different areas of one cemetery); false if it is its own distinct building or structure on the property (separate buildings at Pennhurst Asylum, separate batteries at a fort). For AREA and ROAD TRIP tours, always false since each stop is a different property.
+- access_area: "interior" if this stop is inside a building or enclosed structure (room, basement, hall, lobby, bar, etc.), "exterior" if it's outside (garden, cemetery, courtyard, battlefield, grounds, etc.)
 - historical_info: 2-3 sentences summarizing the key history (dates, notable figures, major events). Brief summary only.
 - paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
 - investigation_suggestions: 3-5 items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
@@ -764,6 +787,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
 
       const created = [];
       for (const stop of deduped) {
+        if (!stop.access_area) stop.access_area = classifyStopAccess(stop.name);
         const { _geocoded, ...rest } = stop;
         const saved = await base44.entities.TourStop.create({ ...rest, tour_id: tourId, geocoded: !!_geocoded });
         created.push(saved);
@@ -1063,13 +1087,19 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   const parkingStop = stops.find(s => s.stop_type === 'parking');
   const shuttleStop = stops.find(s => s.stop_type === 'shuttle');
   const tourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-  const hasDrivingStops = tourStops.some(s => s.travel_method === 'driving');
-  const visibleTourStops = travelMode === 'walking' && hasDrivingStops
-    ? tourStops.filter(s => s.travel_method !== 'driving')
+  const accessFilteredStops = tour?.access_type === 'interior_only'
+    ? tourStops.filter(s => s.access_area === 'interior')
+    : tour?.access_type === 'exterior_only'
+    ? tourStops.filter(s => s.access_area === 'exterior')
     : tourStops;
+  const hasDrivingStops = accessFilteredStops.some(s => s.travel_method === 'driving');
+  const visibleTourStops = travelMode === 'walking' && hasDrivingStops
+    ? accessFilteredStops.filter(s => s.travel_method !== 'driving')
+    : accessFilteredStops;
+  const displayStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStop ? [shuttleStop] : []), ...accessFilteredStops];
   const mapStops = travelMode === 'walking' && hasDrivingStops
-    ? stops.filter(s => s.stop_type === 'parking' || s.stop_type === 'shuttle' || s.travel_method !== 'driving')
-    : stops;
+    ? displayStops.filter(s => s.stop_type === 'parking' || s.stop_type === 'shuttle' || s.travel_method !== 'driving')
+    : displayStops;
 
   if (loading) {
     return (
@@ -1253,6 +1283,17 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 )}
               </Droppable>
             </DragDropContext>
+            {visibleTourStops.length === 0 && (
+              <div className="flex flex-col items-center py-8 gap-3">
+                <AlertTriangle className="w-10 h-10 text-yellow-500" />
+                <p className="text-xs text-yellow-400 font-heading uppercase tracking-wider">
+                  {tour.access_type === 'interior_only' ? 'No Interior Stops' : 'No Exterior Stops'}
+                </p>
+                <p className="text-xs text-muted-foreground text-center">
+                  Switch to "Interior/Exterior" to see all stops on this tour.
+                </p>
+              </div>
+            )}
             {(user?.role === 'admin' || isPaid) && (
               <div className="mt-3 p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
                 <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Add Specific Stop by Name</p>
