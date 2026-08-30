@@ -20,9 +20,10 @@
       "type": "string",
       "enum": [
         "exterior_only",
-        "exterior_interior"
+        "exterior_interior",
+        "interior_only"
       ],
-      "description": "Access classification for cold_spot and landmark (property) tours: exterior_only = tour covers only exterior/grounds/perimeter (free 24/7 access), exterior_interior = tour covers both interior and exterior areas (may require paid admission). Null/undefined for area/road_trip/ship tours. An exterior-only tour and an exterior/interior tour of the same location are different tours (not duplicates)."
+      "description": "Access classification for cold_spot and landmark (property) tours: exterior_only = tour covers only exterior/grounds/perimeter (free 24/7 access), exterior_interior = tour covers both interior and exterior areas (may require paid admission), interior_only = tour covers only the interior of the building. Null/undefined for area/road_trip/ship tours. An exterior-only tour and an exterior/interior tour of the same location are different tours (not duplicates)."
     },
     "state": {
       "type": "string"

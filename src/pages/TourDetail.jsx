@@ -20,6 +20,7 @@ import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
 import TravelModeSelector from '@/components/TravelModeSelector';
+import TourTypeSelector from '@/components/TourTypeSelector';
 import TourStopRow from '@/components/TourStopRow';
 import ValidateTourCard from '@/components/ValidateTourCard';
 
@@ -317,6 +318,14 @@ export default function TourDetail() {
   const handleNarrationLengthChange = (value) => {
     setNarrationLengthState(value);
     saveNarrationLength(value);
+  };
+  const handleAccessTypeChange = async (value) => {
+    try {
+      await base44.entities.Tour.update(tourId, { access_type: value });
+      setTour(prev => prev ? { ...prev, access_type: value } : prev);
+    } catch (e) {
+      console.error('Failed to update tour access type:', e);
+    }
   };
   const condensed = useCondensedTexts({
     description: tour?.description,
@@ -1126,6 +1135,9 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           </div>
           {tour.best_time && <p className="text-xs text-primary flex items-center gap-1"><Zap className="w-3 h-3" /> Best time: {tour.best_time}</p>}
           <NarrationLengthSelector value={narrationLength} onChange={handleNarrationLengthChange} estimatedDuration={tour.estimated_duration} />
+          {(tour.tour_category === 'landmark' || tour.tour_category === 'cold_spot') && (
+            <TourTypeSelector value={tour.access_type} onChange={handleAccessTypeChange} />
+          )}
           {hasDrivingStops && <TravelModeSelector value={travelMode} onChange={setTravelMode} />}
         </div>
 

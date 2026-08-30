@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, Footprints, Eye, DoorOpen } from 'lucide-react';
+import { DollarSign, Footprints, Eye, DoorOpen, DoorClosed } from 'lucide-react';
 
 function normalizeFee(fee) {
   return (fee || '').trim().toLowerCase();
@@ -41,10 +41,18 @@ export default function TourAccessInfo({ tour, stops }) {
     <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
       {tour.access_type && (
         <div className="flex items-center gap-2">
-          {tour.access_type === 'exterior_only' ? <Eye className="w-3.5 h-3.5 text-cyan-glow shrink-0" /> : <DoorOpen className="w-3.5 h-3.5 text-primary shrink-0" />}
+          {tour.access_type === 'exterior_only' ? <Eye className="w-3.5 h-3.5 text-cyan-glow shrink-0" />
+            : tour.access_type === 'interior_only' ? <DoorClosed className="w-3.5 h-3.5 text-accent shrink-0" />
+            : <DoorOpen className="w-3.5 h-3.5 text-primary shrink-0" />}
           <p className="text-xs">
             <span className="font-heading uppercase tracking-wider text-primary text-[11px]">Access: </span>
-            <span className="text-foreground/80">{tour.access_type === 'exterior_only' ? 'Exterior Only — grounds and perimeter' : 'Exterior & Interior — full property access'}</span>
+            <span className="text-foreground/80">
+              {tour.access_type === 'exterior_only'
+                ? 'Exterior Only — grounds and perimeter'
+                : tour.access_type === 'interior_only'
+                ? 'Interior Only — inside the building'
+                : 'Exterior & Interior — full property access'}
+            </span>
           </p>
         </div>
       )}
