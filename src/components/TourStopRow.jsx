@@ -5,8 +5,9 @@ import { truncateText } from '@/lib/narrationLength';
 // Renders a single tour stop row. When `provided` is passed (from
 // @hello-pangea/dnd Draggable), the row is draggable with a drag handle on
 // the number badge. When omitted, it renders as a plain tappable row.
-export default function TourStopRow({ stop, onNavigate, onNarrate, isSpeaking, isGenerating, narrationLength, provided, isDragging }) {
+export default function TourStopRow({ stop, onNavigate, onNarrate, isSpeaking, isGenerating, narrationLength, provided, isDragging, displayNumber }) {
   const drag = provided || {};
+  const stopNumber = displayNumber != null ? displayNumber : stop.stop_number;
   return (
     <div
       ref={drag.innerRef}
@@ -21,7 +22,7 @@ export default function TourStopRow({ stop, onNavigate, onNarrate, isSpeaking, i
           {...(drag.dragHandleProps || {})}
           className={`flex items-center justify-center w-8 h-8 rounded-full font-heading text-sm font-bold shrink-0 ${drag.dragHandleProps ? 'cursor-grab active:cursor-grabbing select-none' : ''} ${isDragging ? 'ring-2 ring-primary shadow-[0_0_16px_hsl(199,89%,48%,0.5)]' : ''} ${stop.travel_method === 'driving' ? 'bg-amber-500/10 text-amber-400' : 'bg-primary/10 text-primary'}`}
         >
-          {stop.stop_number}
+          {stopNumber}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">

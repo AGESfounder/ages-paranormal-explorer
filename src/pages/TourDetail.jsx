@@ -1097,6 +1097,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   const visibleTourStops = travelMode === 'walking' && hasDrivingStops
     ? accessFilteredStops.filter(s => s.travel_method !== 'driving')
     : accessFilteredStops;
+  const isFiltered = (tour?.access_type === 'interior_only' || tour?.access_type === 'exterior_only') || (travelMode === 'walking' && hasDrivingStops);
   const displayStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStop ? [shuttleStop] : []), ...accessFilteredStops];
   const mapStops = travelMode === 'walking' && hasDrivingStops
     ? displayStops.filter(s => s.stop_type === 'parking' || s.stop_type === 'shuttle' || s.travel_method !== 'driving')
@@ -1275,6 +1276,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                             isSpeaking={isSpeaking}
                             isGenerating={isGenerating}
                             narrationLength={narrationLength}
+                            displayNumber={isFiltered ? i + 1 : stop.stop_number}
                           />
                         )}
                       </Draggable>
