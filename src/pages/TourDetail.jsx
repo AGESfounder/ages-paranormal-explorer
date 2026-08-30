@@ -364,21 +364,22 @@ export default function TourDetail() {
     return total;
   }, [stops, travelMode, tour?.access_type]);
 
-  // Scale the estimated duration proportionally when walking-only filters out
-  // driving stops. Minimum 30% so a short walking portion doesn't show an
-  // unrealistically tiny duration.
-  const walkingScale = useMemo(() => {
-    if (travelMode !== 'walking') return 1;
+  // Scale the estimated duration proportionally based on how many stops are
+  // visible after access-type and travel-mode filtering. Minimum 30% so a
+  // short filtered tour doesn't show an unrealistically tiny duration.
+  const durationScale = useMemo(() => {
     const allTourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-    const accessFiltered = tour?.access_type === 'interior_only'
+    if (allTourStops.length === 0) return 1;
+    let filtered = tour?.access_type === 'interior_only'
       ? allTourStops.filter(s => s.access_area === 'interior')
       : tour?.access_type === 'exterior_only'
       ? allTourStops.filter(s => s.access_area === 'exterior')
       : allTourStops;
-    const hasDriving = accessFiltered.some(s => s.travel_method === 'driving');
-    if (!hasDriving || accessFiltered.length === 0) return 1;
-    const walkingOnly = accessFiltered.filter(s => s.travel_method !== 'driving');
-    return Math.max(0.3, walkingOnly.length / accessFiltered.length);
+    if (travelMode === 'walking') {
+      filtered = filtered.filter(s => s.travel_method !== 'driving');
+    }
+    if (filtered.length === 0) return 0.3;
+    return Math.max(0.3, filtered.length / allTourStops.length);
   }, [stops, travelMode, tour?.access_type]);
 
   const formatDistance = (mi) => mi < 1 ? `${Math.round(mi * 5280)} ft` : `${mi.toFixed(1)} mi`;
@@ -1152,7 +1153,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
               {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3.5 h-3.5" /><Car className="w-3 h-3" /></> : <Car className="w-3.5 h-3.5" />}
               {tour.tour_type === 'mixed' ? 'Walking + Driving' : tour.tour_type}
             </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {computeAdjustedDuration(tour.estimated_duration, narrationLength, parkingStop ? 5 : 0, walkingScale)}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3.5 h-3.5" /> {computeAdjustedDuration(tour.estimated_duration, narrationLength, parkingStop ? 5 : 0, durationScale)}</span>
             {totalDistance > 0 && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground"><Route className="w-3.5 h-3.5" /> {formatDistance(totalDistance)}</span>
             )}
