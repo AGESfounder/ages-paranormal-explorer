@@ -7,7 +7,6 @@ import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import DrawerSelect from '@/components/DrawerSelect';
 import TourCategoryPicker from '@/components/TourCategoryPicker';
-import AccessTypePicker from '@/components/AccessTypePicker';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
@@ -144,15 +143,6 @@ export default function CustomTourModal({ isOpen, onClose }) {
                     className="w-full px-3 py-2 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors resize-none"
                   />
                   <p className="text-[10px] text-muted-foreground/60 mt-1">List specific haunted locations you want included, separated by commas.</p>
-                </div>
-              )}
-
-              {(category === 'cold_spot' || category === 'landmark') && (
-                <div>
-                  <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
-                    Access Type
-                  </label>
-                  <AccessTypePicker value={accessType} onChange={setAccessType} />
                 </div>
               )}
 
