@@ -105,7 +105,7 @@ export default function Home() {
               transition={{ delay: 0.2, duration: 0.6 }}
               className="flex items-center justify-center"
             >
-              <a href="https://www.ebay.com/usr/ages4u" target="_blank" rel="noopener noreferrer" className="relative flex flex-col items-center group focus:outline-none focus-visible:outline-none">
+              <a href="https://www.ebay.com/usr/ages4you" target="_blank" rel="noopener noreferrer" className="relative flex flex-col items-center group focus:outline-none focus-visible:outline-none">
                 <div
                   className="w-24 h-24 rounded-full relative overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-300"
                   style={{
