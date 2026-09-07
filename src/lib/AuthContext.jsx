@@ -18,27 +18,37 @@ export const AuthProvider = ({ children }) => {
     checkAppState();
   }, []);
 
+  const fetchPublicSettings = async (useToken) => {
+    const appClient = createAxiosClient({
+      baseURL: `/api/apps/public`,
+      headers: {
+        'X-App-Id': appParams.appId
+      },
+      token: useToken ? appParams.token : undefined,
+      interceptResponses: true
+    });
+    return appClient.get(`/prod/public-settings/by-id/${appParams.appId}`);
+  };
+
+  const clearStoredTokens = () => {
+    try {
+      localStorage.removeItem('base44_access_token');
+      localStorage.removeItem('token');
+      localStorage.removeItem('base44_token');
+      sessionStorage.removeItem('base44_access_token');
+      sessionStorage.removeItem('token');
+    } catch (e) { /* ignore */ }
+  };
+
   const checkAppState = async () => {
     try {
       setIsLoadingPublicSettings(true);
       setAuthError(null);
-      
-      // First, check app public settings (with token if available)
-      // This will tell us if auth is required, user not registered, etc.
-      const appClient = createAxiosClient({
-        baseURL: `/api/apps/public`,
-        headers: {
-          'X-App-Id': appParams.appId
-        },
-        token: appParams.token, // Include token if available
-        interceptResponses: true
-      });
-      
+
       try {
-        const publicSettings = await appClient.get(`/prod/public-settings/by-id/${appParams.appId}`);
+        const publicSettings = await fetchPublicSettings(!!appParams.token);
         setAppPublicSettings(publicSettings);
-        
-        // If we got the app public settings successfully, check if user is authenticated
+
         if (appParams.token) {
           await checkUserAuth();
         } else {
@@ -49,31 +59,43 @@ export const AuthProvider = ({ children }) => {
         setIsLoadingPublicSettings(false);
       } catch (appError) {
         console.error('App state check failed:', appError);
-        
-        // Handle app-level errors
-        if (appError.status === 403 && appError.data?.extra_data?.reason) {
-          const reason = appError.data.extra_data.reason;
-          if (reason === 'auth_required') {
-            setAuthError({
-              type: 'auth_required',
-              message: 'Authentication required'
-            });
-          } else if (reason === 'user_not_registered') {
+
+        const reason = appError.status === 403 ? appError.data?.extra_data?.reason : null;
+
+        // If the platform rejected a saved token as "user_not_registered", the
+        // token is stale/invalid (e.g. an Apple relay-email mismatch). On a
+        // PUBLIC app, retrying anonymously should succeed and let the user in.
+        // Only retry once; if anonymous also fails, surface the real error.
+        if (reason === 'user_not_registered' && appParams.token) {
+          console.warn('Stale token rejected — retrying anonymously.');
+          clearStoredTokens();
+          appParams.token = null;
+          try {
+            const publicSettings = await fetchPublicSettings(false);
+            setAppPublicSettings(publicSettings);
+            setIsLoadingAuth(false);
+            setIsAuthenticated(false);
+            setAuthChecked(true);
+            setIsLoadingPublicSettings(false);
+            return;
+          } catch (retryError) {
+            console.error('Anonymous retry also failed:', retryError);
             setAuthError({
               type: 'user_not_registered',
               message: 'User not registered for this app'
             });
-          } else {
-            setAuthError({
-              type: reason,
-              message: appError.message
-            });
+            setIsLoadingPublicSettings(false);
+            setIsLoadingAuth(false);
+            return;
           }
+        }
+
+        if (reason === 'auth_required') {
+          setAuthError({ type: 'auth_required', message: 'Authentication required' });
+        } else if (reason === 'user_not_registered') {
+          setAuthError({ type: 'user_not_registered', message: 'User not registered for this app' });
         } else {
-          setAuthError({
-            type: 'unknown',
-            message: appError.message || 'Failed to load app'
-          });
+          setAuthError({ type: reason || 'unknown', message: appError.message || 'Failed to load app' });
         }
         setIsLoadingPublicSettings(false);
         setIsLoadingAuth(false);
