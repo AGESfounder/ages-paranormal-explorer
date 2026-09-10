@@ -37,7 +37,9 @@ export default function EvidenceDashboard() {
 
   const loadEvidence = async () => {
     try {
-      const items = await base44.entities.Evidence.list('-created_date', 2000);
+      const me = await base44.auth.me().catch(() => null);
+      if (!me?.id) { setLoading(false); return; }
+      const items = await base44.entities.Evidence.filter({ created_by_id: me.id }, '-created_date', 2000);
       setEvidence(items);
     } catch (e) {
       console.error('Failed to load evidence', e);

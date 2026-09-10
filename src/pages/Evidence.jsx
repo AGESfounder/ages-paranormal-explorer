@@ -88,10 +88,12 @@ export default function Evidence() {
   useEffect(() => { loadEvidence(); }, []);
 
   const loadEvidence = async () => {
-    const data = await base44.entities.Evidence.list('-created_date');
+    const me = await base44.auth.me().catch(() => null);
+    if (!me?.id) { setLoading(false); return; }
+    const data = await base44.entities.Evidence.filter({ created_by_id: me.id }, '-created_date');
     setEvidences(data);
     if (stopId) {
-      const stopData = await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
+      const stopData = await base44.entities.Evidence.filter({ stop_id: stopId, created_by_id: me.id }, '-created_date');
       setStopEvidences(stopData);
     }
     setLoading(false);
@@ -168,7 +170,10 @@ export default function Evidence() {
 
     if (cameFromStop) {
       resetStopForm();
-      const stopData = await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
+      const me = await base44.auth.me().catch(() => null);
+      const stopData = me?.id
+        ? await base44.entities.Evidence.filter({ stop_id: stopId, created_by_id: me.id }, '-created_date')
+        : await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
       setStopEvidences(stopData);
     } else {
       setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0 });
@@ -182,7 +187,10 @@ export default function Evidence() {
   const handleDelete = async (id) => {
     await base44.entities.Evidence.delete(id);
     if (cameFromStop) {
-      const stopData = await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
+      const me = await base44.auth.me().catch(() => null);
+      const stopData = me?.id
+        ? await base44.entities.Evidence.filter({ stop_id: stopId, created_by_id: me.id }, '-created_date')
+        : await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
       setStopEvidences(stopData);
     } else {
       loadEvidence();

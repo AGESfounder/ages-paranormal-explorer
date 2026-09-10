@@ -33,8 +33,13 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    base44.auth.me().then(u => { setUser(u); setTourInProgress(!!u?.last_stop_id); }).catch(() => {});
-    base44.entities.Evidence.list('-created_date', 5).then(setEvidences).catch(() => {});
+    base44.auth.me().then(u => {
+      setUser(u);
+      setTourInProgress(!!u?.last_stop_id);
+      if (u?.id) {
+        base44.entities.Evidence.filter({ created_by_id: u.id }, '-created_date', 5).then(setEvidences).catch(() => {});
+      }
+    }).catch(() => {});
   }, []);
 
   const handleStopTour = async () => {
