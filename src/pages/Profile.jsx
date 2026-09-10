@@ -54,8 +54,10 @@ export default function Profile() {
     if (!editName.trim()) return;
     setSaving(true);
     try {
-      const updated = await base44.auth.updateMe({ display_name: editName.trim() });
-      setUser(updated);
+      await base44.auth.updateMe({ display_name: editName.trim() });
+      // updateMe doesn't return the updated fields, so refresh from the server
+      const refreshed = await base44.auth.me();
+      setUser(refreshed);
       setEditing(false);
     } catch (e) {}
     setSaving(false);
