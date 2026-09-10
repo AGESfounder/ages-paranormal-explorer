@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     const leaderboard = users
       .map(u => ({
         id: u.id,
-        name: u.full_name || 'Anonymous',
+        name: u.display_name || u.full_name || 'Anonymous',
         profile_image_url: u.profile_image_url || null,
         count: counts[u.id] || 0,
       }))
