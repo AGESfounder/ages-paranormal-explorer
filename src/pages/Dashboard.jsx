@@ -77,6 +77,7 @@ export default function Dashboard() {
         subtitle="Subscription & Energy"
         showBack
         rightAction={
+          user?.role === 'admin' ? (
           <div className="flex items-center gap-2">
             <Link to="/dev-docs" className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card/60 text-foreground font-heading text-[11px] uppercase tracking-wider hover:bg-card hover:border-primary/40 transition-colors min-h-[44px]">
               <Code2 className="w-3.5 h-3.5 text-primary" /> Dev Docs
@@ -85,6 +86,7 @@ export default function Dashboard() {
               <FileText className="w-3.5 h-3.5 text-primary" /> Plan PDF
             </Link>
           </div>
+          ) : undefined
         }
       />
       <div className="px-4 pb-28 space-y-5 pt-3">
