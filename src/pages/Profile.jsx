@@ -37,7 +37,7 @@ export default function Profile() {
     try {
       const userData = await base44.auth.me();
       setUser(userData);
-      setEditName(userData.full_name || '');
+      setEditName(userData.display_name || userData.full_name || '');
       const [inv, favs, abroadTours] = await Promise.all([
         base44.entities.Investigation.list('-created_date'),
         base44.entities.Favorite.list('-created_date'),
@@ -54,7 +54,7 @@ export default function Profile() {
     if (!editName.trim()) return;
     setSaving(true);
     try {
-      const updated = await base44.auth.updateMe({ full_name: editName.trim() });
+      const updated = await base44.auth.updateMe({ display_name: editName.trim() });
       setUser(updated);
       setEditing(false);
     } catch (e) {}
@@ -164,7 +164,7 @@ export default function Profile() {
             </div>
           ) : (
             <button onClick={() => setEditing(true)} className="group">
-              <h2 className="font-heading text-lg font-bold text-foreground group-hover:text-primary transition-colors">{user?.full_name || 'Paranormal Explorer'}</h2>
+              <h2 className="font-heading text-lg font-bold text-foreground group-hover:text-primary transition-colors">{user?.display_name || user?.full_name || 'Paranormal Explorer'}</h2>
               <p className="text-[10px] text-muted-foreground font-heading uppercase tracking-wider">tap to edit name</p>
             </button>
           )}

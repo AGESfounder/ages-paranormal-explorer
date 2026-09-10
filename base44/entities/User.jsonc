@@ -8,6 +8,10 @@
         "user"
       ]
     },
+    "display_name": {
+      "type": "string",
+      "description": "User-editable display name shown on the profile. Takes precedence over the platform-managed full_name. Set by the user via the Profile page."
+    },
     "settings": {
       "type": "string",
       "description": "JSON-encoded user settings"

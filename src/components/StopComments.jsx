@@ -41,7 +41,7 @@ export default function StopComments({ stopId, tourId }) {
       stop_id: stopId,
       tour_id: tourId,
       text: trimmed,
-      author_name: user?.full_name || 'Anonymous Investigator',
+      author_name: user?.display_name || user?.full_name || 'Anonymous Investigator',
       created_date: new Date().toISOString(),
     };
     setComments((prev) => [optimisticComment, ...prev]);
@@ -50,7 +50,7 @@ export default function StopComments({ stopId, tourId }) {
         stop_id: stopId,
         tour_id: tourId,
         text: trimmed,
-        author_name: user?.full_name || 'Anonymous Investigator',
+        author_name: user?.display_name || user?.full_name || 'Anonymous Investigator',
       });
       setComments((prev) => prev.map((c) => (c.id === tempId ? saved : c)));
     } catch (err) {
