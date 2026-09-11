@@ -1127,7 +1127,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   // (proximity auto-sort or manual drag), not the static field set at tour
   // creation time — which goes stale when stops are reordered.
   const firstOrderedStop = [...tourStops].sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0))[0];
-  const effectiveStartLocation = firstOrderedStop?.name || tour.start_location_name;
+  const effectiveStartLocation = firstOrderedStop?.name || tour?.start_location_name;
 
   if (loading) {
     return (
