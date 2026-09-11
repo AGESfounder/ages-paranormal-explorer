@@ -503,9 +503,17 @@ export default function TourDetail() {
             const methods = new Set(reordered.map(s => s.travel_method));
             const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
               : methods.has('driving') ? 'driving' : 'walking';
-            if (correctedType !== tourData[0].tour_type) {
-              await base44.entities.Tour.update(tourData[0].id, { tour_type: correctedType });
-              tourData[0].tour_type = correctedType;
+            // Sync start_location_name to the new first stop so the Start
+            // Location note and future stop-generation prompts stay accurate
+            // after proximity auto-reordering.
+            const newFirstName = reordered[0]?.name;
+            const tourUpdates = {};
+            if (correctedType !== tourData[0].tour_type) tourUpdates.tour_type = correctedType;
+            if (newFirstName && newFirstName !== tourData[0].start_location_name) tourUpdates.start_location_name = newFirstName;
+            if (Object.keys(tourUpdates).length > 0) {
+              await base44.entities.Tour.update(tourData[0].id, tourUpdates);
+              if (tourUpdates.tour_type) tourData[0].tour_type = tourUpdates.tour_type;
+              if (tourUpdates.start_location_name) tourData[0].start_location_name = tourUpdates.start_location_name;
             }
             const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
             const allStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered];
@@ -918,9 +926,13 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     // proximity on next load. manual_reorder is permanent — it takes
     // precedence over pin-validation auto-reordering so the custom order is
     // always respected, even after all stops are validated.
+    // Also sync start_location_name to the new first stop.
     try {
-      await base44.entities.Tour.update(tourId, { user_reordered: true, manual_reorder: true });
-      setTour(prev => prev ? { ...prev, user_reordered: true, manual_reorder: true } : prev);
+      const newFirstName = withNumbers[0]?.name;
+      const updateData = { user_reordered: true, manual_reorder: true };
+      if (newFirstName && newFirstName !== tour.start_location_name) updateData.start_location_name = newFirstName;
+      await base44.entities.Tour.update(tourId, updateData);
+      setTour(prev => prev ? { ...prev, ...updateData } : prev);
     } catch (e) {}
     // Rebalance conclusion phrases: strip from the old final stop (now
     // non-final) and regenerate the new final stop's narration with a
@@ -1078,6 +1090,14 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
         }
       }
+      // Sync start_location_name if the first stop changed after adding
+      const newFirstName = reordered[0]?.name;
+      if (newFirstName && newFirstName !== tour.start_location_name) {
+        try {
+          await base44.entities.Tour.update(tourId, { start_location_name: newFirstName });
+          setTour(prev => prev ? { ...prev, start_location_name: newFirstName } : prev);
+        } catch (e) {}
+      }
       setStops([...(pStop ? [pStop] : []), ...(sStop ? [sStop] : []), ...reordered]);
     } catch (e) {
       setStopsError(e.message || 'Failed to add stop. Please try again.');
@@ -1102,6 +1122,12 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   const mapStops = travelMode === 'walking' && hasDrivingStops
     ? displayStops.filter(s => s.stop_type === 'parking' || s.stop_type === 'shuttle' || s.travel_method !== 'driving')
     : displayStops;
+
+  // Start Location reflects the CURRENT first stop after any reordering
+  // (proximity auto-sort or manual drag), not the static field set at tour
+  // creation time — which goes stale when stops are reordered.
+  const firstOrderedStop = [...tourStops].sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0))[0];
+  const effectiveStartLocation = firstOrderedStop?.name || tour.start_location_name;
 
   if (loading) {
     return (
@@ -1198,7 +1224,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           <Navigation className="w-4 h-4 text-primary" />
           <div>
             <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Start Location</p>
-            <p className="text-sm text-foreground">{tour.start_location_name}</p>
+            <p className="text-sm text-foreground">{effectiveStartLocation}</p>
           </div>
         </div>
 
