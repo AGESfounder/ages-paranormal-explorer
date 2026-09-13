@@ -80,7 +80,7 @@ function buildAvoidText(locations) {
 
 function buildPrompt(locationContext, category, avoidLocations) {
   const categoryText = category === 'cold_spot'
-    ? 'This is a COLD SPOT tour — a very short tour with only 1-4 stops at a single haunted location or a tiny cluster of nearby locations. Set tour_category to "cold_spot". Set tour_type to "walking".'
+    ? 'This is a COLD SPOT tour — a very short tour with only 1-4 stops at ONE specific haunted building, property, or landmark (e.g., a single hotel, asylum, cemetery, bridge, or historic house). Do NOT create a tour of multiple locations scattered around a town or city. All 1-4 stops must be specific areas, rooms, or sections WITHIN that one single location. Set tour_category to "cold_spot". Set tour_type to "walking".'
     : 'This is an AREA tour — walking or close driving, different locations 1-3 miles apart. Set tour_category to "area". Set tour_type to "walking", "driving", or "mixed".';
 
   return `Generate exactly 1 paranormal tour with a start location ${locationContext}.
@@ -157,16 +157,6 @@ export async function generateNewNearbyTour(locationContext) {
     if (!tourData) continue;
     const existing = await findExistingTour(tourData.title, tourData.state, 'cold_spot', undefined, tourData.city);
     if (!existing) {
-      // REDUNDANCY GUARD: The LLM may ignore the avoid list and generate a
-      // cold spot for a city that already has a tour. Check the avoid list
-      // directly — if this city is already covered, skip it. This only
-      // applies to the Nearby auto-generation flow; manual cold spot creation
-      // for specific buildings (via generateLocationTour) is unaffected —
-      // it uses findExistingTour's title matching, not the avoid list.
-      const cityNorm = (tourData.city || '').toLowerCase().trim();
-      if (cityNorm && avoidLocations.some(loc => loc.toLowerCase().startsWith(cityNorm + ','))) {
-        continue;
-      }
       const saved = await base44.entities.Tour.create({ ...tourData, tour_category: 'cold_spot' });
       return { status: 'created', tour: saved };
     }
