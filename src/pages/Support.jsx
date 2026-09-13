@@ -10,8 +10,8 @@ const SUPPORT_EMAIL = 'engageAGES@gmail.com';
 const SECTIONS = [
   {
     icon: Ghost,
-    h: 'About AGES',
-    p: 'AGES (Accessible Ghost Exploration Solutions) is a self-guided paranormal exploration app for ghost hunters and enthusiasts. It features AI-narrated haunted tours across all 50 U.S. states and international locations, a community evidence map, an investigation journal, and a toolkit of paranormal investigation utilities — all designed to help you explore the unexplained safely and at your own pace.',
+    h: 'About AGES Paranormal Explorer',
+    p: 'AGES Paranormal Explorer (Accessible Ghost Exploration Solutions) is a self-guided paranormal exploration app for ghost hunters and enthusiasts. It features AI-narrated haunted tours across all 50 U.S. states and international locations, a community evidence map, an investigation journal, and a toolkit of paranormal investigation utilities — all designed to help you explore the unexplained safely and at your own pace.',
   },
   {
     icon: Mail,
