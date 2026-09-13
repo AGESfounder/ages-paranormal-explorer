@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Moon, Sun, Volume2, Music, Download, Shield, Info, Navigation, Trash2, FileText, ScrollText, Ban } from 'lucide-react';
+import { Moon, Sun, Volume2, Music, Download, Shield, Info, Navigation, Trash2, FileText, ScrollText, Ban, LifeBuoy } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -216,13 +216,20 @@ export default function Settings() {
             </div>
             <span className="text-[10px] text-muted-foreground">View ›</span>
           </Link>
-          <button onClick={() => setDisclaimerOpen(true)} className="w-full flex items-center justify-between p-3 hover:bg-primary/5 transition-colors">
+          <button onClick={() => setDisclaimerOpen(true)} className="w-full flex items-center justify-between p-3 border-b border-border/20 hover:bg-primary/5 transition-colors">
             <div className="flex items-center gap-2">
               <Info className="w-4 h-4 text-primary/70" />
               <span className="text-sm text-foreground">Explorer App Disclaimer</span>
             </div>
             <span className="text-[10px] text-muted-foreground">View ›</span>
           </button>
+          <Link to="/support" className="flex items-center justify-between p-3 hover:bg-primary/5 transition-colors">
+            <div className="flex items-center gap-2">
+              <LifeBuoy className="w-4 h-4 text-primary/70" />
+              <span className="text-sm text-foreground">Support</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">View ›</span>
+          </Link>
         </div>
 
         {/* Blocked Users */}
