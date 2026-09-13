@@ -132,7 +132,7 @@ export default function CommunityMap() {
                 center={center}
                 zoom={filtered.length === 1 ? 13 : 5}
                 className="w-full rounded-xl overflow-hidden border border-border/40"
-                style={{ height: '65vh' }}
+                style={{ height: '55vh' }}
               >
                 <TileLayer
                   attribution='&copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'
