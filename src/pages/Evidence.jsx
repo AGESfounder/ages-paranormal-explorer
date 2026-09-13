@@ -617,9 +617,13 @@ export default function Evidence() {
                     <div>
                       <p className="text-sm font-medium text-foreground">{e.title}</p>
                       <p className="text-[10px] text-muted-foreground">{typeLabel[e.type]} {e.date ? `• ${e.date}` : ''}</p>
-                      {e.location_name ? (
+                      {e.tour_id && e.location_name ? (
                         <p className="text-[10px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
                           <MapPin className="w-2.5 h-2.5 shrink-0" /> {e.location_name}
+                        </p>
+                      ) : !e.tour_id && e.latitude && e.longitude && e.location_name ? (
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+                          <MapPin className="w-2.5 h-2.5 shrink-0" /> {Number(e.latitude).toFixed(4)}, {Number(e.longitude).toFixed(4)} <span className="text-muted-foreground/50">({e.location_name})</span>
                         </p>
                       ) : e.latitude && e.longitude ? (
                         <p className="text-[10px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">

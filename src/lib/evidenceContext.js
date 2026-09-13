@@ -43,6 +43,25 @@ export async function getActiveContext() {
  * into the Evidence.create payload. Existing fields on the payload (e.g.
  * a tool-specific location_name) take precedence — this only fills gaps.
  */
+async function reverseGeocodePlace(lat, lon) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=14`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const addr = data.address || {};
+    const road = addr.road || addr.pedestrian || addr.path;
+    const area = addr.neighbourhood || addr.suburb || addr.hamlet || addr.village || addr.town || addr.city;
+    if (road && area) return `${road}, ${area}`;
+    if (road) return road;
+    if (area) return area;
+    if (data.display_name) return data.display_name.split(',').slice(0, 2).join(',').trim();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function buildEvidenceContext(overrides = {}) {
   const [gps, activeCtx] = await Promise.all([captureGPS(), getActiveContext()]);
   const ctx = {};
@@ -52,6 +71,12 @@ export async function buildEvidenceContext(overrides = {}) {
   if (gps) {
     if (overrides.latitude == null) ctx.latitude = gps.latitude;
     if (overrides.longitude == null) ctx.longitude = gps.longitude;
+    // If no tour/stop context and no explicit location_name, reverse geocode
+    // the GPS to a readable place name so the journal shows more than raw coords.
+    if (!ctx.location_name && !overrides.location_name) {
+      const place = await reverseGeocodePlace(gps.latitude, gps.longitude);
+      if (place) ctx.location_name = place;
+    }
   }
   return ctx;
 }
