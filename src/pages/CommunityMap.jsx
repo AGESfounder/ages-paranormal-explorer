@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { motion } from 'framer-motion';
-import { Ghost, Loader2, FileText, Image, Video, ClipboardList, Users, Flag } from 'lucide-react';
+import { Ghost, Loader2, FileText, Image, Video, ClipboardList, Users, Flag, Eye } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import ReportContentDialog from '@/components/ReportContentDialog';
 import { getBlockedIds } from '@/lib/userBlocks';
+import EvidenceViewerDialog from '@/components/EvidenceViewerDialog';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'EVP', photo: 'Photograph', video: 'Video', note: 'Note' };
@@ -37,6 +38,8 @@ export default function CommunityMap() {
   const [filter, setFilter] = useState('all');
   const [blockedIds, setBlockedIds] = useState([]);
   const [reportingPin, setReportingPin] = useState(null);
+  const [authorNames, setAuthorNames] = useState({});
+  const [viewingEvidence, setViewingEvidence] = useState(null);
 
   useEffect(() => {
     loadPins();
@@ -49,6 +52,20 @@ export default function CommunityMap() {
     const all = await base44.entities.Evidence.filter({ is_private: false });
     const withCoords = all.filter(e => e.latitude && e.longitude);
     setPins(withCoords);
+    // Fetch author names for each pin
+    const uniqueIds = [...new Set(withCoords.map(e => e.created_by_id).filter(Boolean))];
+    const names = {};
+    await Promise.allSettled(
+      uniqueIds.map(async (id) => {
+        try {
+          const user = await base44.entities.User.get(id);
+          names[id] = user.full_name || user.email || 'Explorer';
+        } catch {
+          names[id] = 'Explorer';
+        }
+      })
+    );
+    setAuthorNames(names);
     setLoading(false);
   };
 
@@ -144,21 +161,34 @@ export default function CommunityMap() {
                 {filtered.map(pin => (
                   <Marker key={pin.id} position={[pin.latitude, pin.longitude]} icon={createPin(pin.type)}>
                     <Popup>
-                      <div className="min-w-[180px]">
+                      <div className="min-w-[200px]">
                         <p className="font-semibold text-sm mb-1">{pin.title}</p>
                         <p className="text-xs text-muted-foreground mb-1">{typeLabel[pin.type]}</p>
+                        {authorNames[pin.created_by_id] && (
+                          <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                            <Users className="w-3 h-3" /> {authorNames[pin.created_by_id]}
+                          </p>
+                        )}
                         {pin.location_name && <p className="text-xs">📍 {pin.location_name}</p>}
                         {pin.date && <p className="text-xs text-muted-foreground">{pin.date}{pin.time ? ` • ${pin.time}` : ''}</p>}
                         {pin.description && <p className="text-xs mt-1 leading-relaxed">{pin.description.slice(0, 120)}{pin.description.length > 120 ? '…' : ''}</p>}
                         {pin.activity_level > 0 && (
                           <p className="text-xs mt-1">{'★'.repeat(pin.activity_level)}{'☆'.repeat(5 - pin.activity_level)}</p>
                         )}
-                        <button
-                          onClick={() => setReportingPin(pin)}
-                          className="mt-2 flex items-center gap-1 text-[11px] text-destructive hover:underline"
-                        >
-                          <Flag className="w-3 h-3" /> Report
-                        </button>
+                        <div className="flex items-center gap-3 mt-2">
+                          <button
+                            onClick={() => setViewingEvidence(pin)}
+                            className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+                          >
+                            <Eye className="w-3 h-3" /> View Evidence
+                          </button>
+                          <button
+                            onClick={() => setReportingPin(pin)}
+                            className="flex items-center gap-1 text-[11px] text-destructive hover:underline"
+                          >
+                            <Flag className="w-3 h-3" /> Report
+                          </button>
+                        </div>
                       </div>
                     </Popup>
                   </Marker>
@@ -170,6 +200,12 @@ export default function CommunityMap() {
         </>
       )}
 
+      <EvidenceViewerDialog
+        evidence={viewingEvidence}
+        authorName={viewingEvidence ? authorNames[viewingEvidence.created_by_id] : null}
+        open={!!viewingEvidence}
+        onOpenChange={(v) => !v && setViewingEvidence(null)}
+      />
       <ReportContentDialog
         open={!!reportingPin}
         onOpenChange={(v) => !v && setReportingPin(null)}
