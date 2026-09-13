@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Camera, CameraOff, Video, Save, X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
+import EvidenceSaveButtons from './EvidenceSaveButtons';
 import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
@@ -178,7 +179,7 @@ export default function SLSCamera() {
     animFrameRef.current = requestAnimationFrame(processFrame);
   };
 
-  const saveRecording = async () => {
+  const saveRecording = async (isPrivate = true) => {
     if (!recordedBlob) return;
     setSaving(true);
     try {
@@ -194,6 +195,7 @@ export default function SLSCamera() {
         file_url,
         date: now.toISOString().split('T')[0],
         time: now.toTimeString().slice(0, 5),
+        is_private: isPrivate,
         ...ctx,
       });
       setRecordedBlob(null);
@@ -258,9 +260,7 @@ export default function SLSCamera() {
       {!active && recordedBlob && (
         <div className="space-y-2">
           <video src={URL.createObjectURL(recordedBlob)} controls className="w-full rounded border border-border/30" style={{ maxHeight: 160 }} />
-          <button onClick={saveRecording} disabled={saving} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
-            <Save className="w-3.5 h-3.5" /> {saving ? 'Saving…' : 'Save to Evidence Journal'}
-          </button>
+          <EvidenceSaveButtons onSave={saveRecording} saving={saving} />
           <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
             <X className="w-3.5 h-3.5" /> Discard
           </button>

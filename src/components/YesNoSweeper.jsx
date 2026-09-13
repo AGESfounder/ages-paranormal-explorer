@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Play, Square, Save, Info, X, Activity, Zap, Video, AlertTriangle, MessageCircle, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
+import EvidenceSaveButtons from './EvidenceSaveButtons';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
@@ -527,7 +528,7 @@ export default function YesNoSweeper() {
     setPhase('stopped');
   };
 
-  const saveSession = async () => {
+  const saveSession = async (isPrivate = true) => {
     if (!videoBlob) return;
     setSaving(true);
     try {
@@ -545,6 +546,7 @@ export default function YesNoSweeper() {
         file_url,
         date,
         time,
+        is_private: isPrivate,
         ...ctx,
       });
       setVideoBlob(null);
@@ -687,9 +689,7 @@ export default function YesNoSweeper() {
               </p>
               <video src={URL.createObjectURL(videoBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
             </div>
-            <button onClick={saveSession} disabled={saving} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
-              <Save className="w-3.5 h-3.5" /> {saving ? 'Saving to Evidence…' : 'Save Video to Evidence Journal'}
-            </button>
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

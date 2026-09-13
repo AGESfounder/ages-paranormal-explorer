@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, Save, X, Video, AlertTriangle, Zap, Activity } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
+import EvidenceSaveButtons from './EvidenceSaveButtons';
 
 const SENSITIVITY_THRESHOLDS = {
   accel: 0.12,  // m/s² delta from baseline
@@ -413,7 +414,7 @@ export default function PhoneREMDevice() {
     setPhase('stopped');
   };
 
-  const saveSession = async () => {
+  const saveSession = async (isPrivate = true) => {
     const blob = videoBlobRef.current || videoBlob;
     if (!blob) return;
     setSaving(true);
@@ -432,6 +433,7 @@ export default function PhoneREMDevice() {
         file_url,
         date,
         time,
+        is_private: isPrivate,
         ...ctx,
       });
       setVideoBlob(null);
@@ -648,13 +650,7 @@ export default function PhoneREMDevice() {
                 style={{ maxHeight: 180 }}
               />
             </div>
-            <button
-              onClick={saveSession}
-              disabled={saving}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50"
-            >
-              <Save className="w-3.5 h-3.5" /> {saving ? 'Saving to Evidence…' : 'Save Video to Evidence Journal'}
-            </button>
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

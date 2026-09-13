@@ -17,6 +17,7 @@ import useGhostVoice from '../hooks/useGhostVoice';
 import useWakeLock from '../hooks/useWakeLock';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import EvidenceSaveButtons from '@/components/EvidenceSaveButtons';
 
 const DEFAULT_TOOLS = [
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
@@ -411,7 +412,7 @@ export default function Toolkit() {
     if (timerRef.current) clearInterval(timerRef.current);
   };
 
-  const saveRecording = async () => {
+  const saveRecording = async (isPrivate = true) => {
     if (!recordedBlob) return;
     setSavingRec(true);
     try {
@@ -432,6 +433,7 @@ export default function Toolkit() {
         file_url: uploadRes.file_url,
         date,
         time,
+        is_private: isPrivate,
         ...ctx,
       });
       setRecordedBlob(null);
@@ -544,9 +546,7 @@ export default function Toolkit() {
                     className="w-full px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 resize-none"
                   />
                 </div>
-                <button onClick={saveRecording} disabled={savingRec} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
-                  <Save className="w-3.5 h-3.5" /> {savingRec ? 'Saving...' : 'Save to Evidence Journal'}
-                </button>
+                <EvidenceSaveButtons onSave={saveRecording} saving={savingRec} />
                 <p className="text-[10px] text-muted-foreground/60 text-center">Saves automatically with date & time</p>
                 <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); setRecorderNotes(''); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
                   <X className="w-3.5 h-3.5" /> Discard
@@ -671,9 +671,7 @@ export default function Toolkit() {
                   )}
                 </div>
 
-                <button onClick={saveRecording} disabled={savingRec} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-xs uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50">
-                  <Save className="w-3.5 h-3.5" /> {savingRec ? 'Saving...' : 'Save Session to Evidence Journal'}
-                </button>
+                <EvidenceSaveButtons onSave={saveRecording} saving={savingRec} />
                 <p className="text-[10px] text-muted-foreground/60 text-center">{formatDuration(recordDuration)} captured</p>
                 <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); setSavedWords([]); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
                   <X className="w-3.5 h-3.5" /> Discard Recording
