@@ -79,9 +79,15 @@ export async function findExistingTour(destination, state, category, accessType,
   }) || null;
 }
 
-export async function generateLocationTour(destination, state, coords, category = 'landmark', accessType, specificLocations) {
+export async function generateLocationTour(destination, state, coords, category = 'landmark', accessType, specificLocations, options = {}) {
   const dest = destination.trim();
   const useCoords = coords && typeof coords.lat === 'number' && typeof coords.lng === 'number';
+  const { isAbroad = false, locationType, stopCount } = options;
+  // Parse stopCount override (e.g. '3-4', '5-7', '8-10') into min/max numbers
+  const stopCountRange = stopCount ? String(stopCount).split('-').map(Number) : null;
+  const stopCountValid = stopCountRange && stopCountRange.length === 2 && stopCountRange.every((n) => !isNaN(n));
+  const stopCountMin = stopCountValid ? stopCountRange[0] : null;
+  const stopCountMax = stopCountValid ? stopCountRange[1] : null;
 
   // DUPLICATE GUARD: If a tour already exists for this destination, return it
   // instead of creating a duplicate. Callers should use findExistingTour()
@@ -133,11 +139,11 @@ export async function generateLocationTour(destination, state, coords, category 
   const categoryText = category === 'cold_spot'
     ? `This is a COLD SPOT tour — a very short tour with only 1-4 stops at a single haunted location or a tiny cluster of nearby locations. This is for locations that don't have enough distinct areas for a full tour but are still worth investigating. ALL stops must be specific areas, rooms, or sections within or near the location. Set tour_type to "walking". Generate 1-4 stops.`
     : category === 'landmark'
-    ? `This is a LOCATION/PROPERTY tour — one specific haunted property (e.g. an asylum, hotel, bridge, cemetery, museum, prison, battlefield, furnace, mansion). ALL stops must be specific areas, rooms, buildings, wings, or sections within or on the grounds of that one location, and all stops share the same street address. Set tour_type to "walking". Generate 8-10 stops.`
+    ? `This is a LOCATION/PROPERTY tour — one specific haunted property (e.g. an asylum, hotel, bridge, cemetery, museum, prison, battlefield, furnace, mansion). ALL stops must be specific areas, rooms, buildings, wings, or sections within or on the grounds of that one location, and all stops share the same street address. Set tour_type to "walking". Generate ${stopCount || '8-10'} stops.`
     : category === 'area'
     ? `This is an AREA tour — a city, town, or local area where walking or close driving is required. Different locations/properties are the stops. The TOTAL route distance MUST be ≤2.5 miles — plan for a tight walkable cluster, not a sprawling city-wide tour. Set tour_type to "walking" or "mixed". Each stop is a different haunted location with its own real street address and its own real GPS coordinates, spread across the area. Generate 8-10 stops.`
     : category === 'ship'
-    ? `This is a SHIP tour — a haunted ship or vessel. ALL stops must be specific decks, cabins, rooms, or areas within or on the vessel. All stops share the same vessel. Set tour_type to "walking". Generate 8-10 stops.`
+    ? `This is a SHIP tour — a haunted ship or vessel. ALL stops must be specific decks, cabins, rooms, or areas within or on the vessel. All stops share the same vessel. Set tour_type to "walking". Generate ${stopCount || '8-10'} stops.`
     : `This is a ROAD TRIP tour — driving between most locations with a higher total mileage. There MUST be considerable driving between stops — at least 5 miles between consecutive stops. Combine different locations and areas into one driving tour. Set tour_type to "driving" or "mixed". Each stop is a different haunted location or area spread across a wider geographic region, each with its own real street address and GPS coordinates. Generate 8-10 stops.`;
 
   const accessTypeText = (category === 'cold_spot' || category === 'landmark') && accessType === 'exterior_only'
@@ -146,9 +152,13 @@ export async function generateLocationTour(destination, state, coords, category 
     ? `\n\nACCESS TYPE: EXTERIOR AND INTERIOR — This tour covers both the exterior and interior of the property. Stops can include interior rooms, halls, basements, wings, AND exterior grounds, courtyards, and perimeter areas. Include stops that require interior access and paid admission where applicable. This is the full property investigation experience.`
     : '';
 
+  const abroadContext = isAbroad
+    ? `\n\nINTERNATIONAL DESTINATION: This tour is located in ${state}${locationType ? ` (${locationType})` : ''}. Use LOCAL address formats for this country/region — NOT US-style addresses. Use the LOCAL currency for entry fees (e.g. £, €, ¥, etc. — NOT $ unless the destination uses a dollar currency). Use real GPS coordinates for this international location. The "state" field in the output MUST be "${state}" (the country or region name).`
+    : '';
+
   const prompt = `Generate a paranormal ghost hunting tour for the haunted destination "${dest}" in ${state}.
 
-${categoryText}${accessTypeText}
+${categoryText}${accessTypeText}${abroadContext}
 
 ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
@@ -180,11 +190,11 @@ Return a JSON object with:
 - start_latitude: number (use real coordinates for "${dest}")
 - start_longitude: number (use real coordinates for "${dest}")
 - image_url: empty string
-- tags: array of 3-5 relevant strings
+- tags: array of 3-5 relevant strings${isAbroad ? ' (MUST include "abroad")' : ''}
 - safety_info: 2-3 practical safety notes for this specific location
 - best_time: best season/time for investigating
 
-PLUS a "stops" array (${category === 'cold_spot' ? '1-4 stops' : '8-10 stops'}) — each a LIGHTWEIGHT skeleton (full detail is generated later, so keep these fields brief):
+PLUS a "stops" array (${stopCount ? `${stopCount} stops` : (category === 'cold_spot' ? '1-4 stops' : '8-10 stops')}) — each a LIGHTWEIGHT skeleton (full detail is generated later, so keep these fields brief):
 - stop_number: starting from 1
 - name: for a PROPERTY tour, a specific area/building/room within the location; for AREA or ROAD TRIP tours, the name of that distinct haunted location
 - latitude: real coordinates (number) — EACH stop must have its OWN distinct, real GPS coordinates. For a PROPERTY tour, look up the actual coordinates of that specific area/building within the property (e.g., search "Battery 519 Fort Miles Lewes DE") — do NOT use the same coordinates for all stops. For AREA or ROAD TRIP tours, each stop has its own real coordinates at its own address.
@@ -236,7 +246,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
   // MINIMUM STOP ENFORCEMENT — prevents low-quality tours (e.g. 1-stop tours)
   // from being created. The LLM sometimes returns too few stops; we retry up to
   // 3 attempts and reject if the minimum still isn't met.
-  const MIN_STOPS_FOR = (cat) => cat === 'cold_spot' ? 1 : 5;
+  const MIN_STOPS_FOR = (cat) => stopCountMin ? stopCountMin : (cat === 'cold_spot' ? 1 : 5);
 
   // Process a raw LLM result into normalized tour data + stop records.
   const processResult = (raw) => {
@@ -296,7 +306,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
     // Cap at 10 stops — the prompt asks for 8-10, but the LLM sometimes
     // returns 15+ with near-duplicate variations of the same location.
     // Hard limit after all dedup passes prevents oversized tours.
-    const MAX_GENERATED_STOPS = 10;
+    const MAX_GENERATED_STOPS = stopCountMax || 10;
     if (validStops.length > MAX_GENERATED_STOPS) {
       validStops.length = MAX_GENERATED_STOPS;
     }
@@ -324,6 +334,8 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       }
     }
 
+    let tags = toStrArr(raw.tags);
+    if (isAbroad && !tags.includes('abroad')) tags.push('abroad');
     const tourData = {
       title: raw.title || `${dest} Paranormal Investigation`,
       tour_category: correctedCategory,
@@ -331,6 +343,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       state: normalizeStateName(state),
       city: raw.city || '',
       tour_type: normEnum(raw.tour_type, ['walking', 'driving', 'mixed'], 'walking'),
+      location_type: isAbroad ? (locationType || '') : '',
       description: toStr(raw.description),
       introduction: toStr(raw.introduction),
       conclusion: toStr(raw.conclusion),
@@ -341,7 +354,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       start_latitude: useCoords ? coords.lat : toNum(raw.start_latitude),
       start_longitude: useCoords ? coords.lng : toNum(raw.start_longitude),
       image_url: toStr(raw.image_url),
-      tags: toStrArr(raw.tags),
+      tags,
       safety_info: toStr(raw.safety_info),
       best_time: toStr(raw.best_time),
     };
