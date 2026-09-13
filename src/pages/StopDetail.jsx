@@ -722,7 +722,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           </button>
         </div>
 
-        <button onClick={() => navigate(`/evidence/new?tourId=${stop.tour_id}&stopId=${stop.id}&location=${encodeURIComponent(stop.name)}`)} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dim-purple/30 bg-dim-purple/10 text-dim-purple text-sm font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
+        <button onClick={() => navigate(`/evidence/new?tourId=${stop.tour_id}&stopId=${stop.id}&location=${encodeURIComponent(stop.name)}&lat=${stop.latitude || ''}&lng=${stop.longitude || ''}`)} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dim-purple/30 bg-dim-purple/10 text-dim-purple text-sm font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
           <BookOpen className="w-4 h-4" /> Log Evidence at This Stop
         </button>
       </div>

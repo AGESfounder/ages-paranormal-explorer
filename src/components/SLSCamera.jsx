@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Camera, CameraOff, Video, Save, X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
@@ -185,6 +186,7 @@ export default function SLSCamera() {
       const file = new File([recordedBlob], `anomaly_session.${ext}`, { type: recordedBlob.type });
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
+      const ctx = await buildEvidenceContext();
       await base44.entities.Evidence.create({
         title: `Anomaly Camera Session ${now.toISOString().split('T')[0]}`,
         type: 'video',
@@ -192,6 +194,7 @@ export default function SLSCamera() {
         file_url,
         date: now.toISOString().split('T')[0],
         time: now.toTimeString().slice(0, 5),
+        ...ctx,
       });
       setRecordedBlob(null);
       setRecordDuration(0);

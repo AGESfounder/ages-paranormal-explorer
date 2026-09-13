@@ -11,6 +11,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import { buildEvidenceContext } from '@/lib/evidenceContext';
 import ResearchDatabase from '../components/ResearchDatabase';
 import useGhostVoice from '../hooks/useGhostVoice';
 import useWakeLock from '../hooks/useWakeLock';
@@ -423,6 +424,7 @@ export default function Toolkit() {
       let description = (isRadio ? 'Radio Sweeper session — ' : 'Recorded EVP session — ') + formatDuration(recordDuration);
       if (recorderNotes.trim()) description += '\n\nNotes: ' + recorderNotes.trim();
       if (savedWords.length > 0) description += '\n\nWords heard: ' + savedWords.join(', ');
+      const ctx = await buildEvidenceContext();
       await base44.entities.Evidence.create({
         title: (isRadio ? 'Radio Sweeper Session ' : 'EVP Session ') + date,
         type: 'evp',
@@ -430,6 +432,7 @@ export default function Toolkit() {
         file_url: uploadRes.file_url,
         date,
         time,
+        ...ctx,
       });
       setRecordedBlob(null);
       setRecordDuration(0);

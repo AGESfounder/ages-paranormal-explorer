@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3 } from 'lucide-react';
+import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3, MapPin, Crosshair } from 'lucide-react';
+import { captureGPS } from '@/lib/evidenceContext';
 import EquipmentSelectDrawer from '@/components/EquipmentSelectDrawer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +48,8 @@ export default function Evidence() {
   const tourId = searchParams.get('tourId');
   const stopId = searchParams.get('stopId');
   const locationName = searchParams.get('location');
+  const stopLat = searchParams.get('lat');
+  const stopLng = searchParams.get('lng');
   const cameFromStop = tourId != null;
 
   const [evidences, setEvidences] = useState([]);
@@ -62,6 +65,8 @@ export default function Evidence() {
   const [initialDate] = useState(cameFromStop ? getTodayDate() : '');
   const [initialTime] = useState(cameFromStop ? getNowTime() : '');
   const [initialLocation] = useState(locationName ? decodeURIComponent(locationName) : '');
+  const [initialLat] = useState(stopLat ? parseFloat(stopLat) : '');
+  const [initialLng] = useState(stopLng ? parseFloat(stopLng) : '');
 
   const [form, setForm] = useState({
     title: '',
@@ -78,12 +83,13 @@ export default function Evidence() {
     emf_activity: 0,
     evp_quality: 0,
     personal_experience: 0,
-    latitude: '',
-    longitude: '',
+    latitude: initialLat,
+    longitude: initialLng,
     is_private: false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [gpsCapturing, setGpsCapturing] = useState(false);
 
   useEffect(() => { loadEvidence(); }, []);
 
@@ -134,6 +140,15 @@ export default function Evidence() {
     setUploading(false);
   };
 
+  const captureLocation = async () => {
+    setGpsCapturing(true);
+    const coords = await captureGPS();
+    if (coords) {
+      setForm(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude }));
+    }
+    setGpsCapturing(false);
+  };
+
   const resetStopForm = () => {
     setForm({
       title: '',
@@ -150,8 +165,8 @@ export default function Evidence() {
       emf_activity: 0,
       evp_quality: 0,
       personal_experience: 0,
-      latitude: '',
-      longitude: '',
+      latitude: initialLat,
+      longitude: initialLng,
       is_private: false,
     });
     setOtherDeviceText('');
@@ -176,7 +191,7 @@ export default function Evidence() {
         : await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
       setStopEvidences(stopData);
     } else {
-      setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0 });
+      setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0, latitude: '', longitude: '' });
       setOtherDeviceText('');
       setEquipmentOpen(false);
       setShowForm(false);
@@ -222,16 +237,23 @@ export default function Evidence() {
             <Input value={form.location_name} disabled className="bg-card/30 border-border/30 text-muted-foreground" />
           </div>
 
-          {/* GPS Coordinates */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Latitude</label>
-              <Input type="number" placeholder="e.g. 40.7128" value={form.latitude} onChange={e => setForm({...form, latitude: e.target.value})} className="bg-card/50 border-border/50" />
-            </div>
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Longitude</label>
-              <Input type="number" placeholder="e.g. -74.0060" value={form.longitude} onChange={e => setForm({...form, longitude: e.target.value})} className="bg-card/50 border-border/50" />
-            </div>
+          {/* GPS Location */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1.5">GPS Location</label>
+            {form.latitude && form.longitude ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <MapPin className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-xs text-primary flex-1">{Number(form.latitude).toFixed(5)}, {Number(form.longitude).toFixed(5)}</span>
+                <button onClick={captureLocation} disabled={gpsCapturing} className="text-[10px] text-muted-foreground hover:text-primary transition-colors">
+                  {gpsCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
+                </button>
+              </div>
+            ) : (
+              <button onClick={captureLocation} disabled={gpsCapturing} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/60 bg-card/30 text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50">
+                {gpsCapturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
+                <span className="text-xs font-heading uppercase tracking-wider">{gpsCapturing ? 'Capturing GPS…' : 'Capture My Location'}</span>
+              </button>
+            )}
           </div>
 
           {/* Privacy Toggle */}
@@ -427,16 +449,23 @@ export default function Evidence() {
             <Input value={form.location_name} onChange={e => setForm({...form, location_name: e.target.value})} placeholder="Where did this evidence come from?" className="bg-card/50 border-border/50" />
           </div>
 
-          {/* GPS Coordinates */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Latitude</label>
-              <Input type="number" placeholder="e.g. 40.7128" value={form.latitude} onChange={e => setForm({...form, latitude: e.target.value})} className="bg-card/50 border-border/50" />
-            </div>
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Longitude</label>
-              <Input type="number" placeholder="e.g. -74.0060" value={form.longitude} onChange={e => setForm({...form, longitude: e.target.value})} className="bg-card/50 border-border/50" />
-            </div>
+          {/* GPS Location */}
+          <div>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1.5">GPS Location</label>
+            {form.latitude && form.longitude ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <MapPin className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-xs text-primary flex-1">{Number(form.latitude).toFixed(5)}, {Number(form.longitude).toFixed(5)}</span>
+                <button onClick={captureLocation} disabled={gpsCapturing} className="text-[10px] text-muted-foreground hover:text-primary transition-colors">
+                  {gpsCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
+                </button>
+              </div>
+            ) : (
+              <button onClick={captureLocation} disabled={gpsCapturing} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/60 bg-card/30 text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50">
+                {gpsCapturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
+                <span className="text-xs font-heading uppercase tracking-wider">{gpsCapturing ? 'Capturing GPS…' : 'Capture My Location'}</span>
+              </button>
+            )}
           </div>
 
           {/* Privacy Toggle */}
@@ -587,7 +616,20 @@ export default function Evidence() {
                     <div className="p-2 rounded-lg bg-primary/10"><Icon className="w-4 h-4 text-primary" /></div>
                     <div>
                       <p className="text-sm font-medium text-foreground">{e.title}</p>
-                      <p className="text-[10px] text-muted-foreground">{typeLabel[e.type]} {e.location_name ? `• ${e.location_name}` : ''} {e.date ? `• ${e.date}` : ''}</p>
+                      <p className="text-[10px] text-muted-foreground">{typeLabel[e.type]} {e.date ? `• ${e.date}` : ''}</p>
+                      {e.location_name ? (
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+                          <MapPin className="w-2.5 h-2.5 shrink-0" /> {e.location_name}
+                        </p>
+                      ) : e.latitude && e.longitude ? (
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+                          <MapPin className="w-2.5 h-2.5 shrink-0" /> {Number(e.latitude).toFixed(4)}, {Number(e.longitude).toFixed(4)}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground/50 mt-0.5 flex items-center gap-1">
+                          <MapPin className="w-2.5 h-2.5 shrink-0" /> Location not recorded
+                        </p>
+                      )}
                       {e.equipment?.length > 0 && (
                         <p className="text-[10px] text-muted-foreground/70 mt-0.5">Equipment: {Array.isArray(e.equipment) ? e.equipment.join(', ') : e.equipment}</p>
                       )}

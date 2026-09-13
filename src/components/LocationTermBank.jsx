@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Library, MapPin, Play, Square, Save, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { buildEvidenceContext } from '@/lib/evidenceContext';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
@@ -651,6 +652,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       const now = new Date();
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
+      const ctx = await buildEvidenceContext({ location_name: locationLabel });
       await base44.entities.Evidence.create({
         title: `Term Sweeper — ${locationLabel} — ${date}`,
         type: 'video',
@@ -658,7 +660,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         file_url,
         date,
         time,
-        location_name: locationLabel,
+        ...ctx,
       });
       setVideoBlob(null);
       setCaptured([]);

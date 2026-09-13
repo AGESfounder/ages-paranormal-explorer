@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, Save, X, Video, AlertTriangle, Zap, Activity } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { buildEvidenceContext } from '@/lib/evidenceContext';
 
 const SENSITIVITY_THRESHOLDS = {
   accel: 0.12,  // m/s² delta from baseline
@@ -423,6 +424,7 @@ export default function PhoneREMDevice() {
       const now = new Date();
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
+      const ctx = await buildEvidenceContext();
       await base44.entities.Evidence.create({
         title: `Vibration Communicator Session ${date}`,
         type: 'video',
@@ -430,6 +432,7 @@ export default function PhoneREMDevice() {
         file_url,
         date,
         time,
+        ...ctx,
       });
       setVideoBlob(null);
       videoBlobRef.current = null;

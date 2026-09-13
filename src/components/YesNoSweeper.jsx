@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Square, Save, Info, X, Activity, Zap, Video, AlertTriangle, MessageCircle, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { buildEvidenceContext } from '@/lib/evidenceContext';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
@@ -536,6 +537,7 @@ export default function YesNoSweeper() {
       const now = new Date();
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
+      const ctx = await buildEvidenceContext();
       await base44.entities.Evidence.create({
         title: `Yes/No/IDK Sweeper — ${date}`,
         type: 'video',
@@ -543,6 +545,7 @@ export default function YesNoSweeper() {
         file_url,
         date,
         time,
+        ...ctx,
       });
       setVideoBlob(null);
       setCaptured([]);

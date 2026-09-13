@@ -1,0 +1,57 @@
+import { base44 } from '@/api/base44Client';
+
+/**
+ * Captures the current device GPS coordinates.
+ * Returns { latitude, longitude } or null if unavailable/denied.
+ */
+export function captureGPS() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+    );
+  });
+}
+
+/**
+ * Gets the user's active tour/stop context from their profile.
+ * StopDetail sets last_tour_id, last_stop_id, last_stop_name, last_tour_title
+ * when a stop is loaded, so toolkit tools can auto-link evidence to the
+ * active investigation.
+ * Returns { tour_id, stop_id, location_name } — empty object if no active tour.
+ */
+export async function getActiveContext() {
+  try {
+    const me = await base44.auth.me();
+    if (!me) return {};
+    const ctx = {};
+    if (me.last_tour_id) ctx.tour_id = me.last_tour_id;
+    if (me.last_stop_id) ctx.stop_id = me.last_stop_id;
+    if (me.last_stop_name) ctx.location_name = me.last_stop_name;
+    else if (me.last_tour_title) ctx.location_name = me.last_tour_title;
+    return ctx;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Builds a full evidence context: GPS coordinates + active tour/stop link.
+ * Call this at save time from any evidence save path and merge the result
+ * into the Evidence.create payload. Existing fields on the payload (e.g.
+ * a tool-specific location_name) take precedence — this only fills gaps.
+ */
+export async function buildEvidenceContext(overrides = {}) {
+  const [gps, activeCtx] = await Promise.all([captureGPS(), getActiveContext()]);
+  const ctx = {};
+  if (activeCtx.tour_id && !overrides.tour_id) ctx.tour_id = activeCtx.tour_id;
+  if (activeCtx.stop_id && !overrides.stop_id) ctx.stop_id = activeCtx.stop_id;
+  if (activeCtx.location_name && !overrides.location_name) ctx.location_name = activeCtx.location_name;
+  if (gps) {
+    if (overrides.latitude == null) ctx.latitude = gps.latitude;
+    if (overrides.longitude == null) ctx.longitude = gps.longitude;
+  }
+  return ctx;
+}
