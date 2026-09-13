@@ -70,7 +70,7 @@ export default function ReportContentDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Flag className="w-4 h-4 text-destructive" /> Report content</DialogTitle>
           <DialogDescription>
-            Help keep SGT by AGES safe. Reports are reviewed by our team and may result in content removal.
+            Help keep Explorer safe. Reports are reviewed by our team and may result in content removal.
           </DialogDescription>
         </DialogHeader>
 
