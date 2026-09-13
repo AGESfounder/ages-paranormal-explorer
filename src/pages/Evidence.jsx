@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3, MapPin, Crosshair } from 'lucide-react';
+import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3, MapPin, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
 import { captureGPS } from '@/lib/evidenceContext';
 import EquipmentSelectDrawer from '@/components/EquipmentSelectDrawer';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import PullToRefresh from '@/components/PullToRefresh';
 import BePatient from '@/components/BePatient';
+import EvidenceMiniMap from '@/components/EvidenceMiniMap';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
@@ -90,6 +91,7 @@ export default function Evidence() {
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [gpsCapturing, setGpsCapturing] = useState(false);
+  const [expandedMapId, setExpandedMapId] = useState(null);
 
   useEffect(() => { loadEvidence(); }, []);
 
@@ -622,17 +624,28 @@ export default function Evidence() {
                           <MapPin className="w-2.5 h-2.5 shrink-0" /> {e.location_name}
                         </p>
                       ) : !e.tour_id && e.latitude && e.longitude && e.location_name ? (
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+                        <button
+                          onClick={() => setExpandedMapId(expandedMapId === e.id ? null : e.id)}
+                          className="text-[10px] text-primary/80 mt-0.5 flex items-center gap-1 hover:text-primary transition-colors text-left"
+                        >
                           <MapPin className="w-2.5 h-2.5 shrink-0" /> {Number(e.latitude).toFixed(4)}, {Number(e.longitude).toFixed(4)} <span className="text-muted-foreground/50">({e.location_name})</span>
-                        </p>
+                          {expandedMapId === e.id ? <ChevronUp className="w-2.5 h-2.5 shrink-0" /> : <ChevronDown className="w-2.5 h-2.5 shrink-0" />}
+                        </button>
                       ) : e.latitude && e.longitude ? (
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+                        <button
+                          onClick={() => setExpandedMapId(expandedMapId === e.id ? null : e.id)}
+                          className="text-[10px] text-primary/80 mt-0.5 flex items-center gap-1 hover:text-primary transition-colors text-left"
+                        >
                           <MapPin className="w-2.5 h-2.5 shrink-0" /> {Number(e.latitude).toFixed(4)}, {Number(e.longitude).toFixed(4)}
-                        </p>
+                          {expandedMapId === e.id ? <ChevronUp className="w-2.5 h-2.5 shrink-0" /> : <ChevronDown className="w-2.5 h-2.5 shrink-0" />}
+                        </button>
                       ) : (
                         <p className="text-[10px] text-muted-foreground/50 mt-0.5 flex items-center gap-1">
                           <MapPin className="w-2.5 h-2.5 shrink-0" /> Location not recorded
                         </p>
+                      )}
+                      {!e.tour_id && e.latitude && e.longitude && expandedMapId === e.id && (
+                        <EvidenceMiniMap latitude={e.latitude} longitude={e.longitude} locationName={e.location_name} />
                       )}
                       {e.equipment?.length > 0 && (
                         <p className="text-[10px] text-muted-foreground/70 mt-0.5">Equipment: {Array.isArray(e.equipment) ? e.equipment.join(', ') : e.equipment}</p>
