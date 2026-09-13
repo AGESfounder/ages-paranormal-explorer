@@ -6,7 +6,7 @@ import SectionHeader from '../components/SectionHeader';
 const SECTIONS = [
   {
     h: 'Information We Collect',
-    p: 'SGT by AGES (the "App", by AGES — Accessible Ghost Exploration Solutions) collects the following data to provide its features:\n\n• Account data: email address, display name, and authentication token when you create an account.\n• Location data: approximate or precise GPS coordinates, only when you grant permission, used to find nearby tours and pin evidence on the community map.\n• Media and content: photos, videos, audio recordings, notes, and comments you choose to upload or post.\n• Device sensor data: microphone, camera, accelerometer, gyroscope, and magnetometer readings, only while an investigation tool is active and with your permission.\n• Usage data: anonymized analytics about app interactions to improve features.',
+    p: 'AGES Paranormal Explorer (the "App", by AGES — Accessible Ghost Exploration Solutions) collects the following data to provide its features:\n\n• Account data: email address, display name, and authentication token when you create an account.\n• Location data: approximate or precise GPS coordinates, only when you grant permission, used to find nearby tours and pin evidence on the community map.\n• Media and content: photos, videos, audio recordings, notes, and comments you choose to upload or post.\n• Device sensor data: microphone, camera, accelerometer, gyroscope, and magnetometer readings, only while an investigation tool is active and with your permission.\n• Usage data: anonymized analytics about app interactions to improve features.',
   },
   {
     h: 'How We Use Your Information',
@@ -49,12 +49,12 @@ const SECTIONS = [
 export default function PrivacyPolicy() {
   return (
     <PageContainer>
-      <SectionHeader title="Privacy Policy" subtitle="SGT by AGES" showBack />
+      <SectionHeader title="Privacy Policy" subtitle="AGES Paranormal Explorer" showBack />
       <div className="px-4 pb-28 pt-3 space-y-5">
         <div className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card/40">
           <Shield className="w-6 h-6 text-primary shrink-0" />
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Last updated: July 2026. This policy explains what SGT by AGES collects and how it is used.
+            Last updated: July 2026. This policy explains what AGES Paranormal Explorer collects and how it is used.
           </p>
         </div>
         {SECTIONS.map((s) => (

@@ -6,7 +6,7 @@ import SectionHeader from '../components/SectionHeader';
 const SECTIONS = [
   {
     h: 'Acceptance of Terms',
-    p: 'By creating an account or using SGT by AGES (the "App", by AGES — Accessible Ghost Exploration Solutions), you agree to these Terms of Service. If you do not agree, do not use the App.',
+    p: 'By creating an account or using AGES Paranormal Explorer (the "App", by AGES — Accessible Ghost Exploration Solutions), you agree to these Terms of Service. If you do not agree, do not use the App.',
   },
   {
     h: 'User-Generated Content & Conduct',
@@ -49,12 +49,12 @@ const SECTIONS = [
 export default function TermsOfService() {
   return (
     <PageContainer>
-      <SectionHeader title="Terms of Service" subtitle="SGT by AGES" showBack />
+      <SectionHeader title="Terms of Service" subtitle="AGES Paranormal Explorer" showBack />
       <div className="px-4 pb-28 pt-3 space-y-5">
         <div className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card/40">
           <ScrollText className="w-6 h-6 text-primary shrink-0" />
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Last updated: July 2026. These terms govern your use of SGT by AGES.
+            Last updated: July 2026. These terms govern your use of AGES Paranormal Explorer.
           </p>
         </div>
         {SECTIONS.map((s) => (

@@ -5,13 +5,13 @@ import PageContainer from '../components/PageContainer';
 import SectionHeader from '../components/SectionHeader';
 
 // TODO: Replace with your real support email address.
-const SUPPORT_EMAIL = 'support@agesparanormal.com';
+const SUPPORT_EMAIL = 'engageAGES@gmail.com';
 
 const SECTIONS = [
   {
     icon: Ghost,
-    h: 'About SGT by AGES',
-    p: 'SGT by AGES (Accessible Ghost Exploration Solutions) is a self-guided paranormal exploration app for ghost hunters and enthusiasts. It features AI-narrated haunted tours across all 50 U.S. states and international locations, a community evidence map, an investigation journal, and a toolkit of paranormal investigation utilities — all designed to help you explore the unexplained safely and at your own pace.',
+    h: 'About AGES',
+    p: 'AGES (Accessible Ghost Exploration Solutions) is a self-guided paranormal exploration app for ghost hunters and enthusiasts. It features AI-narrated haunted tours across all 50 U.S. states and international locations, a community evidence map, an investigation journal, and a toolkit of paranormal investigation utilities — all designed to help you explore the unexplained safely and at your own pace.',
   },
   {
     icon: Mail,
@@ -38,7 +38,7 @@ const SECTIONS = [
 export default function Support() {
   return (
     <PageContainer>
-      <SectionHeader title="Support" subtitle="SGT by AGES" showBack />
+      <SectionHeader title="Support" subtitle="AGES Paranormal Explorer" showBack />
       <div className="px-4 pb-28 pt-3 space-y-5">
         <div className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card/40">
           <LifeBuoy className="w-6 h-6 text-primary shrink-0" />
