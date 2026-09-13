@@ -632,7 +632,8 @@ Output ONLY valid JSON. No markdown fences.`;
       const coordInstruction = needsCoordVerification
         ? '\nCOORDINATES — CRITICAL: Look up the REAL GPS coordinates of each stop using web search. There are two cases:\n- DIFFERENT BUILDINGS/STRUCTURES on the property (e.g., separate buildings at Pennhurst Asylum, separate batteries at a fort): each MUST have its OWN distinct, real GPS coordinates. Search for each one individually (e.g., "Battery 519 Fort Miles Lewes DE").\n- ROOMS/AREAS WITHIN A SINGLE BUILDING (e.g., rooms in the Farnsworth House, floors of the Anthracite Hotel, Andy Gavin\'s mansion rooms): these stops SHOULD share the SAME coordinates — the building\'s real GPS coordinates. Set same_structure: true for these stops. It is CORRECT for them to stack at the same point on the map — they are all inside one structure.\nDo NOT invent fake distinct coordinates for rooms within one building. If all stops are inside the same building, they all get that building\'s real coordinates with same_structure: true.'
         : '\nCOORDINATES — Look up the REAL GPS coordinates of each stop using web search. Do NOT guess or estimate coordinates from training data — search for each location individually to find its actual coordinates. Each stop must have its own real coordinates at its real address.';
-      const prompt = `Generate 8-10 stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
+      const stopCountRange = tourData.tour_category === 'cold_spot' ? '1-4' : '8-10';
+      const prompt = `Generate ${stopCountRange} stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
 ${coordInstruction}
 Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand when a user opens the stop, so keep these fields brief:
 - stop_number: 1-10 in logical route order
@@ -663,7 +664,7 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
 6. MOST POPULAR STOPS: Include the most popular, most talked-about paranormal hotspots near ${tourData.city}, ${tourData.state} — the locations where paranormal activity and ghosts have been observed, recorded, and discussed most. Prioritize locations with the richest documented paranormal history, famous ghost sightings, and active investigations. Do NOT include obscure or unknown locations.
 
-7. UNIQUE STOPS ONLY: Each stop must be a DIFFERENT haunted location. Do NOT include the same building or site twice with slightly different names (e.g., "Frederick City Hall" and "Frederick City Hall Main Floor" are the same stop — combine them into one). Do NOT repeat stops. Generate exactly 8-10 stops, no more.
+7. UNIQUE STOPS ONLY: Each stop must be a DIFFERENT haunted location. Do NOT include the same building or site twice with slightly different names (e.g., "Frederick City Hall" and "Frederick City Hall Main Floor" are the same stop — combine them into one). Do NOT repeat stops. Generate exactly ${stopCountRange} stops, no more.
 
 ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations from existing ghost tour companies, walking tours, or tourism websites, you MUST find the ACTUAL STREET ADDRESS of each location independently. Do NOT copy a tour company's meeting point, starting location, or vague area description — tour companies often list only where their tour GROUPS MEET (e.g., "2nd & Market St") rather than the actual haunted building's address. For every stop, look up the real street address where the actual haunted building, landmark, or site is located (e.g., "43 Cape Henlopen Dr, Lewes, DE 19958" for the ferry terminal, NOT "Near the intersection of 2nd & Market"). The address must be the physical location of the haunted site itself, not a tour company's gathering point.
 
@@ -772,7 +773,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       // Cap at 10 stops — the prompt asks for 8-10, but the LLM sometimes
       // returns 15+ with near-duplicate variations. Hard limit prevents
       // oversized tours.
-      const MAX_STOPS = 10;
+      const MAX_STOPS = tourData.tour_category === 'cold_spot' ? 4 : 10;
       if (deduped.length > MAX_STOPS) deduped.length = MAX_STOPS;
       // Renumber sequentially to close any gaps left by dedup removing
       // duplicates after enforceWalkingDistance assigned stop_numbers.
