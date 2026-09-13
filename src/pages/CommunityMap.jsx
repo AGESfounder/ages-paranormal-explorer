@@ -150,18 +150,21 @@ export default function CommunityMap() {
                   </Marker>
                 ))}
               </MapContainer>
-
-              {/* Legend */}
-              <div className="mt-3 flex gap-3 flex-wrap">
-                {Object.entries(typeColors).map(([type, color]) => (
-                  <div key={type} className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-                    <span className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">{typeLabel[type]}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
+
+          {/* Legend — always visible */}
+          <div className="px-4 pb-28 pt-3">
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2">Pin Colors</p>
+            <div className="flex gap-3 flex-wrap">
+              {Object.entries(typeColors).map(([type, color]) => (
+                <div key={type} className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                  <span className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">{typeLabel[type]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </>
       )}
 
