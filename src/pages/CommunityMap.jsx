@@ -59,7 +59,7 @@ export default function CommunityMap() {
       uniqueIds.map(async (id) => {
         try {
           const user = await base44.entities.User.get(id);
-          names[id] = user.full_name || user.email || 'Explorer';
+          names[id] = user.display_name || user.full_name || 'Explorer';
         } catch {
           names[id] = 'Explorer';
         }
