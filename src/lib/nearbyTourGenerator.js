@@ -157,6 +157,16 @@ export async function generateNewNearbyTour(locationContext) {
     if (!tourData) continue;
     const existing = await findExistingTour(tourData.title, tourData.state, 'cold_spot', undefined, tourData.city);
     if (!existing) {
+      // REDUNDANCY GUARD: The LLM may ignore the avoid list and generate a
+      // cold spot for a city that already has a tour. Check the avoid list
+      // directly — if this city is already covered, skip it. This only
+      // applies to the Nearby auto-generation flow; manual cold spot creation
+      // for specific buildings (via generateLocationTour) is unaffected —
+      // it uses findExistingTour's title matching, not the avoid list.
+      const cityNorm = (tourData.city || '').toLowerCase().trim();
+      if (cityNorm && avoidLocations.some(loc => loc.toLowerCase().startsWith(cityNorm + ','))) {
+        continue;
+      }
       const saved = await base44.entities.Tour.create({ ...tourData, tour_category: 'cold_spot' });
       return { status: 'created', tour: saved };
     }
