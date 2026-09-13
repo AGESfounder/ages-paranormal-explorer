@@ -106,6 +106,19 @@ export default function CommunityMap() {
             </div>
           </div>
 
+          {/* Legend — always visible, above the map */}
+          <div className="px-4 pb-2">
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">Pin Colors</p>
+            <div className="flex gap-3 flex-wrap">
+              {Object.entries(typeColors).map(([type, color]) => (
+                <div key={type} className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                  <span className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">{typeLabel[type]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[50vh] gap-3 px-8 text-center">
               <Ghost className="w-12 h-12 text-muted-foreground/30" />
@@ -153,18 +166,6 @@ export default function CommunityMap() {
             </div>
           )}
 
-          {/* Legend — always visible */}
-          <div className="px-4 pb-28 pt-3">
-            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2">Pin Colors</p>
-            <div className="flex gap-3 flex-wrap">
-              {Object.entries(typeColors).map(([type, color]) => (
-                <div key={type} className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-                  <span className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">{typeLabel[type]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </>
       )}
 
