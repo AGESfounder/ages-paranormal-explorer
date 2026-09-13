@@ -11,7 +11,7 @@ import ReportContentDialog from '@/components/ReportContentDialog';
 import { getBlockedIds } from '@/lib/userBlocks';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
-const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
+const typeLabel = { evp: 'EVP', photo: 'Photograph', video: 'Video', note: 'Note' };
 
 const typeColors = {
   evp: '#a78bfa',
@@ -65,7 +65,7 @@ export default function CommunityMap() {
     : [39.5, -98.35];
 
   const filterTypes = ['all', 'note', 'photo', 'video', 'evp'];
-  const filterLabels = { all: 'All', note: 'Notes', photo: 'Photos', video: 'Videos', evp: 'Experiences' };
+  const filterLabels = { all: 'All', note: 'Notes', photo: 'Photos', video: 'Videos', evp: 'EVP' };
 
   return (
     <PageContainer>
@@ -75,19 +75,33 @@ export default function CommunityMap() {
       />
 
       <div className="px-4 pt-3 pb-2 flex gap-2 overflow-x-auto scrollbar-hide">
-        {filterTypes.map(t => (
-          <button
-            key={t}
-            onClick={() => setFilter(t)}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-heading uppercase tracking-wider border transition-all ${
-              filter === t
-                ? 'bg-primary/20 border-primary/60 text-primary'
-                : 'bg-card/30 border-border/40 text-muted-foreground'
-            }`}
-          >
-            {filterLabels[t]}
-          </button>
-        ))}
+        {filterTypes.map(t => {
+          const isActive = filter === t;
+          const color = typeColors[t];
+          return (
+            <button
+              key={t}
+              onClick={() => setFilter(t)}
+              style={t !== 'all' ? {
+                backgroundColor: isActive ? `${color}33` : `${color}15`,
+                borderColor: isActive ? color : `${color}50`,
+                color: isActive ? color : `${color}bb`,
+              } : undefined}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[10px] font-heading uppercase tracking-wider border transition-all flex items-center gap-1.5 ${
+                t === 'all'
+                  ? isActive
+                    ? 'bg-primary/20 border-primary/60 text-primary'
+                    : 'bg-card/30 border-border/40 text-muted-foreground'
+                  : ''
+              }`}
+            >
+              {t !== 'all' && (
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+              )}
+              {filterLabels[t]}
+            </button>
+          );
+        })}
       </div>
 
       {loading ? (
@@ -103,19 +117,6 @@ export default function CommunityMap() {
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Users className="w-3.5 h-3.5" />
               <span>{filtered.length} public {filter === 'all' ? 'sighting' : filterLabels[filter].toLowerCase()}{filtered.length !== 1 ? 's' : ''} on the map</span>
-            </div>
-          </div>
-
-          {/* Legend — always visible, above the map */}
-          <div className="px-4 pb-2">
-            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">Pin Colors</p>
-            <div className="flex gap-3 flex-wrap">
-              {Object.entries(typeColors).map(([type, color]) => (
-                <div key={type} className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-                  <span className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">{typeLabel[type]}</span>
-                </div>
-              ))}
             </div>
           </div>
 
