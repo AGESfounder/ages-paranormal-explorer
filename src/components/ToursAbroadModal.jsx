@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Loader2, Globe, Ghost, MapPin, Building2, Hash } from 'lucide-react';
+import { X, Loader2, Globe, Ghost, MapPin } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DrawerSelect from '@/components/DrawerSelect';
+import TourCategoryPicker from '@/components/TourCategoryPicker';
 import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
@@ -67,26 +68,12 @@ const LOCATION_OPTIONS = [
   { value: 'Indian Ocean', label: 'Indian Ocean' },
 ];
 
-const TYPE_OPTIONS = [
-  { value: 'Island', label: 'Island' },
-  { value: 'Ship', label: 'Ship' },
-  { value: 'Territory', label: 'Territory' },
-  { value: 'N/A', label: 'N/A' },
-];
-
-const STOP_OPTIONS = [
-  { value: '3-4', label: '3–4 stops' },
-  { value: '5-7', label: '5–7 stops' },
-  { value: '8-10', label: '8–10 stops' },
-];
-
 export default function ToursAbroadModal({ isOpen, onClose }) {
   const navigate = useNavigate();
   const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
   const [destinationName, setDestinationName] = useState('');
   const [location, setLocation] = useState('');
-  const [locationType, setLocationType] = useState('');
-  const [stopCount, setStopCount] = useState('5-7');
+  const [category, setCategory] = useState('');
   const [specifics, setSpecifics] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -95,9 +82,12 @@ export default function ToursAbroadModal({ isOpen, onClose }) {
   const handleGenerate = async () => {
     const dest = destinationName.trim();
     const loc = location.trim();
-    const locType = locationType.trim();
-    if (!dest || !loc || !locType) {
-      setError('Please fill in all fields.');
+    if (!dest || !loc) {
+      setError('Please fill in both fields.');
+      return;
+    }
+    if (!category) {
+      setError('Please select a tour type.');
       return;
     }
     if (!gateManifestation()) return;
@@ -105,7 +95,6 @@ export default function ToursAbroadModal({ isOpen, onClose }) {
     setLoading(true);
 
     try {
-      const category = locType === 'Ship' ? 'ship' : 'landmark';
       const specificLocations = specifics.trim() || undefined;
 
       // Check for an existing tour first — same dedup rules as domestic tours
@@ -125,14 +114,13 @@ export default function ToursAbroadModal({ isOpen, onClose }) {
         category,
         'exterior_interior',
         specificLocations,
-        { isAbroad: true, locationType: locType, stopCount }
+        { isAbroad: true }
       );
       spendManifestation();
       onClose();
       setDestinationName('');
       setLocation('');
-      setLocationType('');
-      setStopCount('5-7');
+      setCategory('');
       setSpecifics('');
       navigate(`/tour/${newTour.id}`);
     } catch (err) {
@@ -200,54 +188,39 @@ export default function ToursAbroadModal({ isOpen, onClose }) {
                 <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
                   Country / Region
                 </label>
-                <DrawerSelect
-                  icon={MapPin}
-                  value={location}
-                  onChange={setLocation}
-                  placeholder="Select a country..."
-                  options={LOCATION_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
-                />
+                <div className="relative">
+                  <DrawerSelect
+                    icon={MapPin}
+                    value={location}
+                    onChange={setLocation}
+                    placeholder="Select a country..."
+                    options={LOCATION_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Location Type
+                  Tour Type
                 </label>
-                <DrawerSelect
-                  icon={Building2}
-                  value={locationType}
-                  onChange={setLocationType}
-                  placeholder="Select type..."
-                  options={TYPE_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
-                />
+                <TourCategoryPicker value={category} onChange={setCategory} />
               </div>
 
-              <div>
-                <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Number of Stops
-                </label>
-                <DrawerSelect
-                  icon={Hash}
-                  value={stopCount}
-                  onChange={setStopCount}
-                  placeholder="Select stop count..."
-                  options={STOP_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
-                  Specific Areas (Optional)
-                </label>
-                <textarea
-                  placeholder="e.g. Great Hall, Vaults, Crown Room"
-                  value={specifics}
-                  onChange={e => setSpecifics(e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2.5 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors resize-none"
-                />
-                <p className="text-[10px] text-muted-foreground/60 mt-1">List specific areas within the destination you want included, separated by commas.</p>
-              </div>
+              {(category === 'area' || category === 'road_trip') && (
+                <div>
+                  <label className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Specific Locations (Optional)
+                  </label>
+                  <textarea
+                    placeholder="e.g. Sachs Bridge, Eisenhower Bridge"
+                    value={specifics}
+                    onChange={e => setSpecifics(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 rounded-lg bg-card/60 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors resize-none"
+                  />
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">List specific haunted locations you want included, separated by commas.</p>
+                </div>
+              )}
 
               {error && (
                 <p className="text-xs text-red-400 text-center">{error}</p>
@@ -272,7 +245,7 @@ export default function ToursAbroadModal({ isOpen, onClose }) {
               </button>
 
               <p className="text-[10px] text-muted-foreground/60 text-center">
-                All stops stay within the destination. Coordinates are verified and routes optimized — same rules as domestic tours.
+                Choose Cold Spot for a short 1-4 stop tour, Property for a specific property, Area for a city or town, or Road Trip for a wider driving tour.
               </p>
             </div>
           </motion.div>
