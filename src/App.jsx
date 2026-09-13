@@ -40,6 +40,7 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const ThankYou = lazy(() => import('@/pages/ThankYou'));
 const PlanAnalysis = lazy(() => import('@/pages/PlanAnalysis'));
 const DeveloperDocs = lazy(() => import('@/pages/DeveloperDocs'));
+const Support = lazy(() => import('@/pages/Support'));
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
@@ -82,6 +83,7 @@ const AuthenticatedApp = () => {
       <Route path="/ThankYou" element={<ThankYou />} />
       <Route path="/plan-analysis" element={<PlanAnalysis />} />
       <Route path="/dev-docs" element={<DeveloperDocs />} />
+      <Route path="/support" element={<Support />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         {/* Add your page Route elements here */}
         <Route path="/" element={<Home />} />
