@@ -1,3 +1,8 @@
+node_modules/
+
+# CatDoes metadata (managed automatically)
+.catdoes/
+
 #env
 .env
 .env.*
@@ -27,6 +32,5 @@ dist-ssr
 *.sln
 *.sw?
 
-.env
 .vite
 base44/.app.jsonc

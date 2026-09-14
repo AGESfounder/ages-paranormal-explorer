@@ -1,0 +1,63 @@
+workflows:
+  android-capacitor-build:
+    name: AGES Android Capacitor build
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      node: 20
+      java: 21
+    scripts:
+      - name: Install npm dependencies
+        script: npm ci
+      - name: Build the existing Vite app
+        script: npm run build
+      - name: Sync the existing web app into Capacitor Android
+        script: npx cap sync android
+      - name: Set the Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+      - name: Build Android release artifacts
+        script: |
+          cd "$CM_BUILD_DIR/android"
+          ./gradlew assembleRelease bundleRelease
+    artifacts:
+      - android/app/build/outputs/**/*.apk
+      - android/app/build/outputs/**/*.aab
+
+  ios-capacitor-build:
+    name: AGES iOS Capacitor build
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      node: 20
+      xcode: latest
+      cocoapods: default
+      vars:
+        XCODE_WORKSPACE: ios/App/App.xcworkspace
+        XCODE_SCHEME: App
+    scripts:
+      - name: Install npm dependencies
+        script: npm ci
+      - name: Build the existing Vite app
+        script: npm run build
+      - name: Sync the existing web app into Capacitor iOS
+        script: npx cap sync ios
+      - name: Install iOS CocoaPods dependencies
+        script: |
+          cd "$CM_BUILD_DIR/ios/App"
+          pod install
+      - name: Build the existing iOS app without signing
+        script: |
+          xcodebuild \
+            -workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$CM_BUILD_DIR/ios/App/build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+    artifacts:
+      - ios/App/build/DerivedData/Build/Products/**/*.app
+      - /tmp/xcodebuild_logs/*.log

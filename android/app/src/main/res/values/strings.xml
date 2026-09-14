@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AGES Paranormal Explorer</string>
+    <string name="title_activity_main">AGES Paranormal Explorer</string>
+    <string name="package_name">com.ages.explorer</string>
+    <string name="custom_url_scheme">com.ages.explorer</string>
+</resources>
