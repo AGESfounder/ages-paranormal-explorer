@@ -4,6 +4,8 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
+      android_signing:
+        - ages-explorer-upload
       node: 20
       java: 21
     scripts:
@@ -16,6 +18,14 @@ workflows:
       - name: Set the Android SDK location
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+      - name: Verify Android release signing credentials
+        script: |
+          set -eu
+          test -n "${CM_KEYSTORE_PATH:-}" || { echo "CM_KEYSTORE_PATH is missing. Check the ages-explorer-upload Codemagic keystore reference."; exit 1; }
+          test -f "$CM_KEYSTORE_PATH" || { echo "Android keystore was not found at $CM_KEYSTORE_PATH."; exit 1; }
+          test -n "${CM_KEYSTORE_PASSWORD:-}" || { echo "CM_KEYSTORE_PASSWORD is missing."; exit 1; }
+          test -n "${CM_KEY_ALIAS:-}" || { echo "CM_KEY_ALIAS is missing."; exit 1; }
+          test -n "${CM_KEY_PASSWORD:-}" || { echo "CM_KEY_PASSWORD is missing."; exit 1; }
       - name: Build Android release artifacts
         script: |
           cd "$CM_BUILD_DIR/android"
