@@ -30,6 +30,17 @@ workflows:
         script: |
           cd "$CM_BUILD_DIR/android"
           ./gradlew assembleRelease bundleRelease
+      - name: Verify the Android App Bundle signature
+        script: |
+          set -eu
+          AAB="$CM_BUILD_DIR/android/app/build/outputs/bundle/release/app-release.aab"
+          test -f "$AAB" || { echo "Expected Android App Bundle was not produced at $AAB."; exit 1; }
+          verification="$(jarsigner -verify -verbose -certs "$AAB" 2>&1)"
+          printf '%s\n' "$verification"
+          printf '%s\n' "$verification" | grep -q 'jar verified.' || {
+            echo "The Android App Bundle is not signed. Failing the workflow."
+            exit 1
+          }
     artifacts:
       - android/app/build/outputs/**/*.apk
       - android/app/build/outputs/**/*.aab
