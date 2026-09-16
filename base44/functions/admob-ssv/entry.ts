@@ -75,6 +75,36 @@ function logDiagnostic(level, { method, parameterNames, adUnit, keyId, stage, re
 }
 
 /**
+ * Build the same sanitized diagnostic as logDiagnostic, but as a compact
+ * one-line string safe to expose in an HTTP 400 response body. Contains
+ * ONLY: method, parameter names, optional ad_unit (explicitly approved),
+ * optional finite numeric key_id, stage, and a constant reason code.
+ * Never includes parameter values (signature, custom_data, user_id,
+ * transaction_id, ...), raw query strings, secrets, headers, or
+ * exception text. Non-numeric key_id is omitted, never echoed.
+ */
+function buildDiagnostic({ method, parameterNames, adUnit, keyId, stage, reason }) {
+  const parts = [
+    `method=${typeof method === 'string' && method ? method : 'UNKNOWN'}`,
+    `params=${Array.isArray(parameterNames) ? parameterNames.join(',') : ''}`,
+  ];
+  if (typeof adUnit === 'string' && adUnit) parts.push(`ad_unit=${adUnit}`);
+  const numericKeyId = Number(keyId);
+  if (Number.isFinite(numericKeyId)) parts.push(`key_id=${numericKeyId}`);
+  parts.push(`stage=${String(stage || 'unknown')}`);
+  parts.push(`reason=${String(reason || 'internal_error')}`);
+  return parts.join('; ');
+}
+
+/**
+ * HTTP 400 response preserving the existing `error` field and status,
+ * plus a sanitized `diagnostic` field mirroring the server-side log.
+ */
+function badRequest(error, diag) {
+  return jsonResponse({ error, diagnostic: buildDiagnostic(diag) }, 400);
+}
+
+/**
  * Extract the raw query string without re-encoding or reordering.
  * Prefer the request URL as received so signature bytes stay intact.
  */
@@ -314,7 +344,12 @@ export default async function (req) {
         stage: 'receive',
         reason: 'missing_query',
       });
-      return jsonResponse({ error: 'Missing query string' }, 400);
+      return badRequest('Missing query string', {
+        method,
+        parameterNames,
+        stage: 'receive',
+        reason: 'missing_query',
+      });
     }
 
     let content;
@@ -329,7 +364,12 @@ export default async function (req) {
         stage: 'query_split',
         reason: 'query_split_failed',
       });
-      return jsonResponse({ error: 'Invalid signed query' }, 400);
+      return badRequest('Invalid signed query', {
+        method,
+        parameterNames,
+        stage: 'query_split',
+        reason: 'query_split_failed',
+      });
     }
 
     try {
@@ -342,7 +382,13 @@ export default async function (req) {
         stage: 'signature_verification',
         reason: 'signature_verification_failed',
       });
-      return jsonResponse({ error: 'Invalid signature' }, 400);
+      return badRequest('Invalid signature', {
+        method,
+        parameterNames,
+        keyId,
+        stage: 'signature_verification',
+        reason: 'signature_verification_failed',
+      });
     }
 
     const fields = parseQueryFields(rawQuery);
@@ -357,7 +403,14 @@ export default async function (req) {
         stage: 'field_validation',
         reason: 'field_validation_failed',
       });
-      return jsonResponse({ error: e.message }, 400);
+      return badRequest(e.message, {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'field_validation',
+        reason: 'field_validation_failed',
+      });
     }
 
     const custom = parseCustomData(fields.custom_data);
@@ -403,7 +456,14 @@ export default async function (req) {
         stage: 'custom_data_validation',
         reason: 'custom_data_user_mismatch',
       });
-      return jsonResponse({ error: 'user_id mismatch' }, 400);
+      return badRequest('user_id mismatch', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'custom_data_validation',
+        reason: 'custom_data_user_mismatch',
+      });
     }
 
     // Google has no Base44 bearer token — service role only.
@@ -456,10 +516,24 @@ export default async function (req) {
         stage: 'user_lookup',
         reason: 'user_lookup_failed',
       });
-      return jsonResponse({ error: 'Unknown user' }, 400);
+      return badRequest('Unknown user', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'user_lookup',
+        reason: 'user_lookup_failed',
+      });
     }
     if (!user) {
-      return jsonResponse({ error: 'Unknown user' }, 400);
+      return badRequest('Unknown user', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'user_lookup',
+        reason: 'user_not_found',
+      });
     }
 
     const paid = isPaidAccess(user);
