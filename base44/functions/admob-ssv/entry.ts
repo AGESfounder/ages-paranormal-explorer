@@ -5,6 +5,9 @@ import { isPaidAccess } from '../../shared/access.js';
 // Google sends an unauthenticated HTTPS GET with a signed query string.
 // This endpoint verifies the signature, allow-lists production rewarded units,
 // and writes a durable AdMobReward ledger row keyed by transaction_id.
+// user_id is OPTIONAL per Google's SSV docs: a valid signed request without
+// it (e.g. the AdMob console "Verify URL" test) still gets HTTP 200, but with
+// no user lookup, no ledger row, and no energy grant.
 //
 // IMPORTANT: This phase preserves immediate client grant-ad-reward for UX.
 // A verified SSV row is an audit/reconciliation record only — it does NOT
@@ -219,7 +222,8 @@ function validateSignedFields(fields) {
   if (!fields.reward_amount) throw new Error('missing reward_amount');
   if (!fields.reward_item) throw new Error('missing reward_item');
   if (!fields.timestamp) throw new Error('missing timestamp');
-  if (!fields.user_id) throw new Error('missing user_id');
+  // user_id is OPTIONAL per Google SSV docs — its absence is handled in the
+  // handler after signature verification; do not reject the request here.
 
   const amount = Number(fields.reward_amount);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -290,6 +294,36 @@ export default async function (req) {
 
     const custom = parseCustomData(fields.custom_data);
     const userId = String(fields.user_id);
+
+    // Google documents user_id as optional. A signature-verified request
+    // without it (e.g. AdMob's "Verify URL" test) is authentic but cannot be
+    // correlated to a Base44 user. Acknowledge with 200 so AdMob treats the
+    // endpoint as healthy: no User.get, no AdMobReward row, no energy grant.
+    // Signature and ad-unit allow-list checks above still gate this path.
+    if (!userId) {
+      console.log(
+        'admob-ssv verified signed request without user_id; transaction_id:',
+        fields.transaction_id,
+        'ad_unit:',
+        fields.ad_unit
+      );
+      return jsonResponse(
+        {
+          success: true,
+          verified: true,
+          audit_only: true,
+          user_linked: false,
+          granted: false,
+          transaction_id: fields.transaction_id,
+          ad_unit: fields.ad_unit,
+          custom_data_user_id_present: Boolean(custom?.userId),
+          detail:
+            'Valid Google-signed SSV request without user_id (optional per AdMob docs). No user lookup performed, no AdMobReward row written, no energy granted.',
+        },
+        200
+      );
+    }
+
     if (custom?.userId && custom.userId !== userId) {
       console.error('admob-ssv custom_data user mismatch', custom.userId, userId);
       return jsonResponse({ error: 'user_id mismatch' }, 400);
