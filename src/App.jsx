@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
@@ -12,6 +12,7 @@ import TabNavigationProvider from '@/components/TabNavigationProvider';
 import HauntedMusic from '@/components/HauntedMusic';
 import PageLoader from '@/components/PageLoader';
 import { Navigate } from 'react-router-dom';
+import { initializeAdMob } from '@/lib/adService';
 // Lazy page imports — loaded on-demand for smaller initial bundle
 const PageNotFound = lazy(() => import('./lib/PageNotFound'));
 const Login = lazy(() => import('@/pages/Login'));
@@ -45,6 +46,13 @@ const Support = lazy(() => import('@/pages/Support'));
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
   const location = useLocation();
+
+  // Native-only AdMob/UMP/ATT bootstrap once auth/public settings settle.
+  // Web is a no-op inside initializeAdMob. Failures stay soft so the app remains usable.
+  useEffect(() => {
+    if (isLoadingPublicSettings || isLoadingAuth) return;
+    initializeAdMob().catch(() => {});
+  }, [isLoadingPublicSettings, isLoadingAuth]);
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {

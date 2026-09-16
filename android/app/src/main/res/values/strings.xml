@@ -4,4 +4,5 @@
     <string name="title_activity_main">AGES Paranormal Explorer</string>
     <string name="package_name">com.ages.explorer</string>
     <string name="custom_url_scheme">com.ages.explorer</string>
+    <string name="admob_app_id">ca-app-pub-7999682122277742~1488495964</string>
 </resources>

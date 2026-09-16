@@ -25,12 +25,16 @@ const SECTIONS = [
     p: 'The App uses third-party services for mapping (CARTO/Leaflet), payments (Base44 Payments), and authentication. These providers may process data under their own privacy policies. We do not share more information than necessary to enable these features.',
   },
   {
+    h: 'Advertising & Privacy Choices',
+    p: 'On the iOS and Android apps, AGES Paranormal Explorer shows ads through Google AdMob.\n\n• Free (Observer) users may see full-screen interstitial ads when opening paranormal stop content after the first stop.\n• Paid users may optionally watch a rewarded video ad to earn in-app energy. Completing a rewarded ad may send a server-side verification callback from Google to our backend so we can audit the reward event; that callback can include a user identifier and related reward metadata supplied for verification.\n• AdMob and its partners may process advertising identifiers and device/app signals under Google\'s policies. Where required (for example in the EEA, UK, and Switzerland), we request consent through Google\'s User Messaging Platform (UMP) before loading ads.\n• On iOS, the system may ask for App Tracking Transparency (ATT) permission before personalized advertising. If you decline tracking or tracking is otherwise unavailable, the app requests non-personalized or limited ads when possible.\n• You can change tracking and related permissions in your device settings. Declining personalized ads does not remove all ads; it limits personalization where the platform allows.\n• Web preview builds simulate ad flows and do not load the native AdMob SDK.',
+  },
+  {
     h: 'Data Retention & Account Deletion',
     p: 'We retain your data for as long as your account is active. You can permanently delete your account and associated data at any time from Settings → Danger Zone → Delete Account. Account deletion is irreversible.',
   },
   {
     h: 'Your Privacy Choices',
-    p: 'You can control location access, microphone, and camera permissions from your device settings at any time. You can mark evidence entries as private so they do not appear on the public Community Map.',
+    p: 'You can control location access, microphone, camera, and (on iOS) tracking permissions from your device settings at any time. Where a consent form was shown for ads, your choices are remembered by the platform messaging tools until you reset app data or change device settings. You can mark evidence entries as private so they do not appear on the public Community Map.',
   },
   {
     h: 'Children\'s Privacy',

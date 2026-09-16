@@ -1,7 +1,7 @@
 # AGES Explorer
 
 ## Architecture
-- The primary app is a Vite + React web SPA in `src/`.
+- The primary app is a Vite + React SPA in `src/`.
 - Routing uses `react-router-dom` in `src/App.jsx`.
 - Base44 provides authentication, entities, file storage, LLM/TTS workflows, and server functions in `base44/`.
 - The app remains the source of truth for screens, navigation, branding, data, audio, tours, maps, evidence tools, and backend behavior.
@@ -11,6 +11,16 @@
 - Native projects live in `ios/` and `android/`.
 - `capacitor.config.ts` loads the Vite output from `dist/` with app id `com.ages.explorer`.
 - The Capacitor layer is an integration shell. Do not recreate the existing UI in React Native or redesign pages.
+
+## Ads (AdMob)
+- Plugin: `@capacitor-community/admob@7.0.0` (Capacitor 7-compatible).
+- Seam: `src/lib/adService.js` — production interstitial/rewarded unit IDs, UMP consent bootstrap, iOS ATT, NPA when tracking unavailable, web simulation fallback.
+- Bootstrap: `initializeAdMob()` from `src/App.jsx` after auth/public-settings settle (native only; web no-op).
+- UI callers unchanged: `AdGate` (interstitial fail-open), `AdRewardCard` / `UpgradePrompt` (rewarded → client `grant-ad-reward`).
+- Consent: conservative fail-closed gate (`OBTAINED` / `NOT_REQUIRED` only). No privacy-options button (v7 lacks live privacy-options API; do not fake with `resetConsentInfo`).
+- Audience: general public — `MaxAdContentRating.General`, not child-directed / under-age.
+- SSV audit: `base44/functions/admob-ssv` verifies Google's signed GET callback, allow-lists the two production rewarded units, and writes `AdMobReward` by `transaction_id` (idempotent). Does **not** grant a second energy reward. Immediate client `grant-ad-reward` remains the UX path and is not SSV-proof against a malicious direct invoke.
+- Native App IDs live in Android `strings.xml` / manifest meta-data and iOS `GADApplicationIdentifier` (never put ad-unit IDs in App ID slots).
 
 ## Billing
 - **Web / iOS checkout:** Wix via `create-subscription` + `payments-webhook` (unchanged). Explorer, Investigator, Aura bundles, and web/iOS Trailblazer still use this path.
@@ -28,4 +38,4 @@
 
 ## Native notes
 - Android `MainActivity` launchMode is `standard` (required for Google Play purchase flows).
-- AdMob is not integrated yet. Preserve existing ad gate / reward flows until native ads are verified.
+- AdMob App IDs, ATT usage description, and SKAdNetwork items are configured in the native shells; exercise consent/ads/SSV on physical devices before release.

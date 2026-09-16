@@ -1,0 +1,104 @@
+{
+  "name": "AdMobReward",
+  "type": "object",
+  "description": "Durable AdMob rewarded SSV audit ledger. Idempotent by transaction_id. Does not grant energy — client grant-ad-reward remains the UX path in this phase.",
+  "properties": {
+    "transaction_id": {
+      "type": "string",
+      "description": "AdMob SSV transaction_id. Primary idempotency key for verified callbacks."
+    },
+    "user_id": {
+      "type": "string",
+      "description": "Base44 user id from signed user_id (and/or verified custom_data)."
+    },
+    "ad_unit": {
+      "type": "string",
+      "description": "Signed ad_unit from the SSV callback (full unit id or numeric suffix)."
+    },
+    "ad_network": {
+      "type": "string",
+      "description": "Signed ad_network identifier from the SSV callback."
+    },
+    "reward_amount": {
+      "type": "string",
+      "description": "Signed reward_amount from AdMob (string as received)."
+    },
+    "reward_item": {
+      "type": "string",
+      "description": "Signed reward_item from AdMob (string as received)."
+    },
+    "reward_timestamp": {
+      "type": "string",
+      "description": "Signed timestamp from AdMob (epoch ms as string)."
+    },
+    "custom_data": {
+      "type": "string",
+      "description": "Signed custom_data after verification, if present."
+    },
+    "key_id": {
+      "type": "string",
+      "description": "AdMob verifying key_id used for the signature."
+    },
+    "signature": {
+      "type": "string",
+      "description": "AdMob callback signature (audit only)."
+    },
+    "raw_query": {
+      "type": "string",
+      "description": "Raw query string as received (order preserved) for audit."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "verified",
+        "duplicate"
+      ],
+      "default": "verified",
+      "description": "verified on first durable write; duplicate responses reuse the existing row."
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this ledger row was first accepted."
+    },
+    "note": {
+      "type": "string",
+      "description": "Optional audit note (e.g. paid-access check result). No second energy grant is performed from SSV."
+    }
+  },
+  "required": [
+    "transaction_id",
+    "ad_unit",
+    "status",
+    "processed_at"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
