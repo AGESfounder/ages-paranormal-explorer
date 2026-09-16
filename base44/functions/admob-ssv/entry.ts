@@ -25,6 +25,16 @@ const ALLOWED_REWARDED_AD_UNITS = new Set([
   '6074658562',
 ]);
 
+/**
+ * Google's official AdMob console "Verify URL" test values. The test request
+ * is signed with Google's real SSV key (observed key_id 3335741209) but uses
+ * the reserved test ad unit 1234567890 with blank user_id/custom_data.
+ * These are deliberately NOT in the production allow-list above; the test is
+ * acknowledged separately, only after signature verification succeeds.
+ */
+const GOOGLE_VERIFY_TEST_AD_UNIT = '1234567890';
+const GOOGLE_VERIFY_TEST_KEY_ID = 3335741209;
+
 /** @type {{ fetchedAt: number, byKeyId: Map<number, string> } | null} */
 let publicKeyCache = null;
 
@@ -284,10 +294,15 @@ async function verifyAdMobSignature(content, signatureB64, keyId) {
   if (!ok) throw new Error('ECDSA signature verification failed');
 }
 
-function validateSignedFields(fields) {
+function validateSignedFields(fields, allowTestAdUnit = false) {
   if (!fields.transaction_id) throw new Error('missing transaction_id');
   if (!fields.ad_unit) throw new Error('missing ad_unit');
-  if (!ALLOWED_REWARDED_AD_UNITS.has(fields.ad_unit)) {
+  // Production allow-list only. The Google "Verify URL" test ad unit is NOT
+  // added here; callers may exempt it separately via allowTestAdUnit after
+  // confirming the full signed test tuple (ad_unit + key_id + blank
+  // user_id/custom_data). Every other required-field and numeric check in
+  // this function still runs for the test request.
+  if (!ALLOWED_REWARDED_AD_UNITS.has(fields.ad_unit) && !allowTestAdUnit) {
     throw new Error(`ad_unit not allow-listed: ${fields.ad_unit}`);
   }
   if (!fields.ad_network) throw new Error('missing ad_network');
@@ -392,8 +407,25 @@ export default async function (req) {
     }
 
     const fields = parseQueryFields(rawQuery);
+
+    // Recognize Google's AdMob console "Verify URL" test tuple: signed by
+    // Google's real SSV key (observed key_id 3335741209) with the reserved
+    // test ad unit 1234567890 and blank user_id/custom_data. The test unit is
+    // deliberately NOT in the production allow-list; it is exempted from the
+    // ad_unit allow-list check only when this exact tuple matches. All other
+    // required-field and numeric validation below still runs for the test
+    // request before any 200 is returned. A signed request with ad_unit
+    // 1234567890 but a different key_id, a user_id, or custom_data is not the
+    // test tuple and still fails validation (400), as does any other
+    // unrecognized ad unit.
+    const isGoogleVerifyTest =
+      fields.ad_unit === GOOGLE_VERIFY_TEST_AD_UNIT &&
+      keyId === GOOGLE_VERIFY_TEST_KEY_ID &&
+      !fields.user_id &&
+      !fields.custom_data;
+
     try {
-      validateSignedFields(fields);
+      validateSignedFields(fields, isGoogleVerifyTest);
     } catch (e) {
       logDiagnostic('error', {
         method,
@@ -411,6 +443,37 @@ export default async function (req) {
         stage: 'field_validation',
         reason: 'field_validation_failed',
       });
+    }
+
+    // Verified Google "Verify URL" test tuple: signature verified and every
+    // required signed field validated above. Acknowledge with 200 so the
+    // AdMob console treats the endpoint as healthy. Test/audit only: no user
+    // lookup, no AdMobReward ledger row, no energy grant.
+    if (isGoogleVerifyTest) {
+      logDiagnostic('info', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'verify_url_test',
+        reason: 'google_verify_url_test',
+      });
+      return jsonResponse(
+        {
+          success: true,
+          verified: true,
+          test: true,
+          audit_only: true,
+          user_linked: false,
+          ledger_written: false,
+          granted: false,
+          ad_unit: fields.ad_unit,
+          key_id: keyId,
+          detail:
+            'Google AdMob Verify URL test acknowledged. Signature verified; ad_unit 1234567890 is a Google test unit, not a production rewarded unit. No user lookup, no AdMobReward row, no energy granted.',
+        },
+        200
+      );
     }
 
     const custom = parseCustomData(fields.custom_data);
