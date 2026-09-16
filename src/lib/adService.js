@@ -20,8 +20,8 @@ import { isPaidAccess } from '@/lib/access';
 import { base44 } from '@/api/base44Client';
 
 // Production AdMob interstitial ad-unit IDs.
-export const INTERSTITIAL_AD_ID_IOS = 'ca-app-pub-7999682122277742/9917700653';
-export const INTERSTITIAL_AD_ID_ANDROID = 'ca-app-pub-7999682122277742/8903951557';
+export const INTERSTITIAL_AD_ID_IOS = 'ca-app-pub-7999682122277742/8903951557';
+export const INTERSTITIAL_AD_ID_ANDROID = 'ca-app-pub-7999682122277742/9917700653';
 
 // Production AdMob rewarded ad-unit IDs.
 export const REWARDED_AD_ID_IOS = 'ca-app-pub-7999682122277742/6074658562';
