@@ -33,11 +33,53 @@ function jsonResponse(body, status = 200) {
 }
 
 /**
+ * Extract query parameter NAMES only from a raw query string.
+ * Never decodes, logs, or returns values. Safe on absent/malformed input.
+ */
+function getQueryParamNames(rawQuery) {
+  if (typeof rawQuery !== 'string' || !rawQuery) return [];
+  const names = [];
+  for (const pair of rawQuery.split('&')) {
+    if (!pair) continue;
+    const eq = pair.indexOf('=');
+    const name = eq === -1 ? pair : pair.slice(0, eq);
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * Safe diagnostic logger. Emits ONLY an allow-listed structured object:
+ * method, parameter_names, optional ad_unit, optional numeric key_id,
+ * stage, and a sanitized constant reason code. Never logs signature
+ * values, raw query strings, secrets/authorization headers, custom_data
+ * values, full user IDs, transaction IDs, or raw exception messages.
+ * Unknown extra fields passed by callers are dropped by construction.
+ */
+function logDiagnostic(level, { method, parameterNames, adUnit, keyId, stage, reason }) {
+  const entry = {
+    function: 'admob-ssv',
+    method: typeof method === 'string' && method ? method : 'UNKNOWN',
+    parameter_names: Array.isArray(parameterNames) ? parameterNames : [],
+    stage: String(stage || 'unknown'),
+    reason: String(reason || 'internal_error'),
+  };
+  if (typeof adUnit === 'string' && adUnit) entry.ad_unit = adUnit;
+  const numericKeyId = Number(keyId);
+  if (Number.isFinite(numericKeyId)) entry.key_id = numericKeyId;
+  if (level === 'error') {
+    console.error('admob-ssv diagnostic:', JSON.stringify(entry));
+  } else {
+    console.log('admob-ssv diagnostic:', JSON.stringify(entry));
+  }
+}
+
+/**
  * Extract the raw query string without re-encoding or reordering.
  * Prefer the request URL as received so signature bytes stay intact.
  */
 function getRawQuery(req) {
-  const rawUrl = req.url || '';
+  const rawUrl = req?.url || '';
   const q = rawUrl.indexOf('?');
   if (q === -1) return '';
   // Strip any fragment if present
@@ -257,13 +299,21 @@ function parseCustomData(customData) {
 }
 
 export default async function (req) {
+  const method = req?.method || 'UNKNOWN';
+  const rawQuery = getRawQuery(req);
+  const parameterNames = getQueryParamNames(rawQuery);
   try {
-    if (req.method !== 'GET') {
+    if (method !== 'GET') {
       return jsonResponse({ error: 'Method not allowed' }, 405);
     }
 
-    const rawQuery = getRawQuery(req);
     if (!rawQuery) {
+      logDiagnostic('error', {
+        method,
+        parameterNames,
+        stage: 'receive',
+        reason: 'missing_query',
+      });
       return jsonResponse({ error: 'Missing query string' }, 400);
     }
 
@@ -272,15 +322,26 @@ export default async function (req) {
     let keyId;
     try {
       ({ content, signature, keyId } = splitSignedQuery(rawQuery));
-    } catch (e) {
-      console.error('admob-ssv query split failed:', e.message);
+    } catch {
+      logDiagnostic('error', {
+        method,
+        parameterNames,
+        stage: 'query_split',
+        reason: 'query_split_failed',
+      });
       return jsonResponse({ error: 'Invalid signed query' }, 400);
     }
 
     try {
       await verifyAdMobSignature(content, signature, keyId);
-    } catch (e) {
-      console.error('admob-ssv signature verification failed:', e.message);
+    } catch {
+      logDiagnostic('error', {
+        method,
+        parameterNames,
+        keyId,
+        stage: 'signature_verification',
+        reason: 'signature_verification_failed',
+      });
       return jsonResponse({ error: 'Invalid signature' }, 400);
     }
 
@@ -288,7 +349,14 @@ export default async function (req) {
     try {
       validateSignedFields(fields);
     } catch (e) {
-      console.error('admob-ssv field validation failed:', e.message);
+      logDiagnostic('error', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'field_validation',
+        reason: 'field_validation_failed',
+      });
       return jsonResponse({ error: e.message }, 400);
     }
 
@@ -301,12 +369,14 @@ export default async function (req) {
     // endpoint as healthy: no User.get, no AdMobReward row, no energy grant.
     // Signature and ad-unit allow-list checks above still gate this path.
     if (!userId) {
-      console.log(
-        'admob-ssv verified signed request without user_id; transaction_id:',
-        fields.transaction_id,
-        'ad_unit:',
-        fields.ad_unit
-      );
+      logDiagnostic('info', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'user_resolution',
+        reason: 'no_user_id_audit_only',
+      });
       return jsonResponse(
         {
           success: true,
@@ -325,7 +395,14 @@ export default async function (req) {
     }
 
     if (custom?.userId && custom.userId !== userId) {
-      console.error('admob-ssv custom_data user mismatch', custom.userId, userId);
+      logDiagnostic('error', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'custom_data_validation',
+        reason: 'custom_data_user_mismatch',
+      });
       return jsonResponse({ error: 'user_id mismatch' }, 400);
     }
 
@@ -338,13 +415,27 @@ export default async function (req) {
       existing = await base44.asServiceRole.entities.AdMobReward.filter({
         transaction_id: fields.transaction_id,
       });
-    } catch (e) {
-      console.error('admob-ssv ledger lookup failed:', e.message);
+    } catch {
+      logDiagnostic('error', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'ledger_lookup',
+        reason: 'ledger_lookup_failed',
+      });
       return jsonResponse({ error: 'Ledger lookup failed' }, 500);
     }
 
     if (existing && existing.length > 0) {
-      console.log('admob-ssv duplicate transaction_id:', fields.transaction_id);
+      logDiagnostic('info', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'idempotency_check',
+        reason: 'duplicate',
+      });
       return jsonResponse({
         success: true,
         duplicate: true,
@@ -356,8 +447,15 @@ export default async function (req) {
     let user = null;
     try {
       user = await base44.asServiceRole.entities.User.get(userId);
-    } catch (e) {
-      console.error('admob-ssv user lookup failed:', e.message);
+    } catch {
+      logDiagnostic('error', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'user_lookup',
+        reason: 'user_lookup_failed',
+      });
       return jsonResponse({ error: 'Unknown user' }, 400);
     }
     if (!user) {
@@ -387,14 +485,21 @@ export default async function (req) {
         processed_at: processedAt,
         note,
       });
-    } catch (e) {
+    } catch {
       // Concurrent duplicate create — re-check and treat as idempotent success.
       try {
         const again = await base44.asServiceRole.entities.AdMobReward.filter({
           transaction_id: fields.transaction_id,
         });
         if (again && again.length > 0) {
-          console.log('admob-ssv concurrent duplicate:', fields.transaction_id);
+          logDiagnostic('info', {
+            method,
+            parameterNames,
+            adUnit: fields.ad_unit,
+            keyId,
+            stage: 'ledger_write',
+            reason: 'duplicate',
+          });
           return jsonResponse({
             success: true,
             duplicate: true,
@@ -404,18 +509,25 @@ export default async function (req) {
       } catch {
         // fall through
       }
-      console.error('admob-ssv ledger write failed:', e.message);
+      logDiagnostic('error', {
+        method,
+        parameterNames,
+        adUnit: fields.ad_unit,
+        keyId,
+        stage: 'ledger_write',
+        reason: 'ledger_write_failed',
+      });
       return jsonResponse({ error: 'Ledger write failed' }, 500);
     }
 
-    console.log(
-      'admob-ssv verified transaction_id:',
-      fields.transaction_id,
-      'user:',
-      userId,
-      'ad_unit:',
-      fields.ad_unit
-    );
+    logDiagnostic('info', {
+      method,
+      parameterNames,
+      adUnit: fields.ad_unit,
+      keyId,
+      stage: 'complete',
+      reason: 'verified',
+    });
 
     // No second energy grant — audit/reconciliation only.
     return jsonResponse({
@@ -425,8 +537,13 @@ export default async function (req) {
       granted: false,
       audit_only: true,
     }, 200);
-  } catch (error) {
-    console.error('admob-ssv error:', error.message);
+  } catch {
+    logDiagnostic('error', {
+      method,
+      parameterNames,
+      stage: 'handler',
+      reason: 'internal_error',
+    });
     return jsonResponse({ error: 'Internal error' }, 500);
   }
 }
