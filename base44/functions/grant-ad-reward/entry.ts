@@ -4,6 +4,7 @@ import {
   getAdRewardSplit,
   getTodayDateString,
 } from '../../shared/adRewards.js';
+import { isPaidAccess } from '../../shared/access.js';
 
 // Grants energy to a paid user after they watch a rewarded ad.
 // The daily cap (5/day) is enforced server-side to prevent farming.
@@ -20,7 +21,7 @@ export default async function(req) {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     // Only paid users (or admins) can earn ad rewards
-    const isPaid = user.role === 'admin' || (user.plan && user.plan !== 'observer');
+    const isPaid = isPaidAccess(user);
     if (!isPaid) {
       return Response.json(
         { error: 'Ad rewards are available for paid plans only' },

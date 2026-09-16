@@ -1,229 +1,409 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.44';
-import { secrets } from 'base44:runtime';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { PLANS, getNextResetDate } from '../../shared/plans.js';
+import {
+  GOOGLE_TRAILBLAZER_PRODUCT_ID,
+  GRANT_EVENT_TYPES,
+  REVOKE_EVENT_TYPES,
+  buildGoogleTrailblazerGrantFields,
+  computeGoogleTrailblazerExpiration,
+  maxActiveGoogleExpiration,
+  normalizeLedgerFields,
+  resolveAppUserId,
+  shouldProcessGoogleTrailblazerEvent,
+} from '../../shared/revenuecat.js';
 
-// Trailblazer product IDs (Google Play + Apple)
-const TRAILBLAZER_PRODUCT_IDS = [
-  'trailblazer.30month',                    // Google Play
-  'com.ages.explorer.trailblazer.30month',  // Apple App Store
-];
-const TRAILBLAZER_DURATION_MONTHS = PLANS.trailblazer.duration_months; // 30
-
-// Add calendar months to a date
-function addMonths(date, months) {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
+/**
+ * Verify RevenueCat Authorization header (shared secret).
+ * RevenueCat dashboard → Webhooks → Authorization header value.
+ * Store the full expected header value (e.g. "Bearer <token>" or bare token)
+ * in REVENUECAT_WEBHOOK_AUTH.
+ */
+function verifyAuthorization(req: Request): boolean {
+  const expected = Deno.env.get('REVENUECAT_WEBHOOK_AUTH');
+  if (!expected) {
+    console.error('Missing REVENUECAT_WEBHOOK_AUTH');
+    return false;
+  }
+  const header = req.headers.get('Authorization') || req.headers.get('authorization') || '';
+  if (!header) return false;
+  // Accept exact match, or Bearer-prefixed forms either side.
+  if (header === expected) return true;
+  if (header === `Bearer ${expected}`) return true;
+  if (expected.startsWith('Bearer ') && header === expected.slice(7)) return true;
+  return false;
 }
 
-// Constant-time string comparison (prevents timing attacks)
-function safeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
+/**
+ * Optional HMAC verification when RevenueCat webhook signing is enabled.
+ * Header format: t=<unix_seconds>,v1=<hex>
+ * Signed payload: `${timestamp}.${rawBody}`
+ * Secret: REVENUECAT_WEBHOOK_SECRET
+ */
+async function verifyHmacIfConfigured(req: Request, rawBody: string): Promise<boolean> {
+  const secret = Deno.env.get('REVENUECAT_WEBHOOK_SECRET');
+  if (!secret) {
+    // HMAC not configured — authorization header alone is enough.
+    return true;
+  }
 
-// HMAC-SHA256 signature verification (optional, if signing secret is set)
-async function verifyHmac(body, sigHeader, secret, toleranceSec = 300) {
-  const parts = {};
-  sigHeader.split(',').forEach(p => {
-    const idx = p.indexOf('=');
-    if (idx > -1) parts[p.slice(0, idx)] = p.slice(idx + 1);
-  });
+  const sigHeader =
+    req.headers.get('X-RevenueCat-Signature') ||
+    req.headers.get('X-RevenueCat-Webhook-Signature') ||
+    req.headers.get('x-revenuecat-signature') ||
+    '';
+
+  if (!sigHeader) {
+    console.error('REVENUECAT_WEBHOOK_SECRET set but signature header missing');
+    return false;
+  }
+
+  const parts: Record<string, string> = {};
+  for (const segment of sigHeader.split(',')) {
+    const idx = segment.indexOf('=');
+    if (idx > -1) {
+      parts[segment.slice(0, idx).trim()] = segment.slice(idx + 1).trim();
+    }
+  }
+
   const timestamp = parts['t'];
   const signature = parts['v1'];
   if (!timestamp || !signature) return false;
+
   const ageSec = Date.now() / 1000 - parseInt(timestamp, 10);
-  if (ageSec > toleranceSec) return false;
-  const signedPayload = `${timestamp}.${body}`;
+  if (Number.isNaN(ageSec) || Math.abs(ageSec) > 86400) {
+    // Reject timestamps older/newer than 24h to limit replay window
+    console.error('RevenueCat HMAC timestamp out of range');
+    return false;
+  }
+
+  const signedPayload = `${timestamp}.${rawBody}`;
   const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
   const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(signedPayload));
-  const expected = [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('');
-  return safeEqual(expected, signature);
+  const expected = [...new Uint8Array(sigBuf)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  // Constant-time-ish compare
+  if (expected.length !== signature.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < expected.length; i++) {
+    mismatch |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+  return mismatch === 0;
 }
 
-export default async function(req) {
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return Response.json(body, { status });
+}
+
+async function findLedgerByTransaction(base44: any, transactionId: string) {
+  if (!transactionId) return null;
+  const rows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+    transaction_id: transactionId,
+  });
+  if (rows?.length) return rows[0];
+
+  // Fallback: some refunds key on original_transaction_id
+  const byOriginal = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+    original_transaction_id: transactionId,
+  });
+  return byOriginal?.length ? byOriginal[0] : null;
+}
+
+async function listUserGoogleLedger(base44: any, userId: string) {
+  const rows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+    user_id: userId,
+    product_id: GOOGLE_TRAILBLAZER_PRODUCT_ID,
+  });
+  return rows || [];
+}
+
+function eventAlreadyApplied(row: any, eventId: string) {
+  if (!eventId) return false;
+  if (row.event_id === eventId) return true;
+  if (Array.isArray(row.event_ids) && row.event_ids.includes(eventId)) return true;
+  return false;
+}
+
+function mergeEventIds(row: any, eventId: string) {
+  const set = new Set<string>(Array.isArray(row?.event_ids) ? row.event_ids : []);
+  if (row?.event_id) set.add(row.event_id);
+  if (eventId) set.add(eventId);
+  return [...set];
+}
+
+/**
+ * Apply a Google Trailblazer grant without touching Apple/Wix plan fields.
+ * Extends google_trailblazer_expiration_date to max(existing, new) so out-of-order
+ * events cannot shorten access. Energy is only filled on first active grant or
+ * when the previous Google grant had already expired.
+ */
+async function applyGoogleGrant(base44: any, user: any, expirationIso: string, purchaseDateIso: string) {
+  const plan = PLANS.trailblazer;
+  const now = new Date();
+  const existingExp = user.google_trailblazer_expiration_date
+    ? new Date(user.google_trailblazer_expiration_date).getTime()
+    : null;
+  const newExp = new Date(expirationIso).getTime();
+
+  let finalExpiration = expirationIso;
+  if (existingExp !== null && !Number.isNaN(existingExp) && existingExp > newExp) {
+    finalExpiration = user.google_trailblazer_expiration_date;
+  }
+
+  const googleStillActive =
+    existingExp !== null && !Number.isNaN(existingExp) && existingExp > now.getTime();
+
+  const fields = buildGoogleTrailblazerGrantFields({
+    expirationIso: finalExpiration,
+    // Only reset energy pools when there is no currently-active Google grant
+    // (fresh purchase or re-purchase after expiry). Avoids duplicate energy on retries.
+    manifestationEnergy: googleStillActive
+      ? (user.google_trailblazer_manifestation_energy ?? plan.manifestation_energy)
+      : plan.manifestation_energy,
+    narrationEnergy: googleStillActive
+      ? (user.google_trailblazer_narration_energy ?? plan.narration_energy)
+      : plan.narration_energy,
+    energyResetDate: googleStillActive && user.google_trailblazer_energy_reset_date
+      ? user.google_trailblazer_energy_reset_date
+      : getNextResetDate(),
+  });
+
+  // Never write plan, plan_expiration_date, subscription_*, or generic energy.
+  await base44.asServiceRole.entities.User.update(user.id, fields);
+  console.log(
+    'Google Trailblazer grant applied',
+    user.id,
+    'expires',
+    finalExpiration,
+    'purchased',
+    purchaseDateIso,
+  );
+}
+
+/**
+ * Recompute Google-only fields after a refund. Clears Google expiry when no
+ * paid non-expired ledger rows remain. Never sets plan to observer.
+ */
+async function recomputeGoogleAccessAfterRefund(base44: any, userId: string) {
+  const user = await base44.asServiceRole.entities.User.get(userId);
+  if (!user) return;
+
+  const ledger = await listUserGoogleLedger(base44, userId);
+  const maxExp = maxActiveGoogleExpiration(ledger, new Date());
+
+  if (!maxExp) {
+    await base44.asServiceRole.entities.User.update(userId, {
+      google_trailblazer_expiration_date: null,
+      google_trailblazer_manifestation_energy: 0,
+      google_trailblazer_narration_energy: 0,
+      google_trailblazer_energy_reset_date: null,
+    });
+    console.log('Google Trailblazer access cleared after refund:', userId);
+    return;
+  }
+
+  await base44.asServiceRole.entities.User.update(userId, {
+    google_trailblazer_expiration_date: maxExp,
+  });
+  console.log('Google Trailblazer expiry recomputed after refund:', userId, maxExp);
+}
+
+export default async function (req: Request) {
   try {
+    if (req.method !== 'POST') {
+      return jsonResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    if (!verifyAuthorization(req)) {
+      return jsonResponse({ error: 'Unauthorized' }, 401);
+    }
+
+    const rawBody = await req.text();
+
+    const hmacOk = await verifyHmacIfConfigured(req, rawBody);
+    if (!hmacOk) {
+      return jsonResponse({ error: 'Invalid signature' }, 401);
+    }
+
+    let payload: any;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return jsonResponse({ error: 'Invalid JSON' }, 400);
+    }
+
+    // RevenueCat wraps the event: { api_version, event: { ... } }
+    const event = payload?.event || payload;
+
+    if (!event || typeof event !== 'object') {
+      return jsonResponse({ received: true, skipped: 'empty' });
+    }
+
+    // TEST pings and unrelated events: acknowledge without granting.
+    if (event.type === 'TEST') {
+      console.log('RevenueCat TEST event received');
+      return jsonResponse({ received: true, test: true });
+    }
+
+    if (!shouldProcessGoogleTrailblazerEvent(event)) {
+      console.log(
+        'RevenueCat event ignored (store/product/type filter):',
+        event.type,
+        event.store,
+        event.product_id,
+      );
+      return jsonResponse({ received: true, skipped: 'filtered' });
+    }
+
     const base44 = createClientFromRequest(req);
-    const body = await req.text();
+    const eventId = event.id || event.event_id || '';
+    const transactionId = event.transaction_id || event.original_transaction_id || '';
 
-    // ── Security layer 1: Authorization header ──
-    const authHeader = req.headers.get('authorization') || '';
-    const expectedAuth = secrets.get('REVENUECAT_WEBHOOK_AUTHORIZATION');
-    if (!expectedAuth) {
-      console.error('Missing REVENUECAT_WEBHOOK_AUTHORIZATION secret');
-      return new Response(null, { status: 500 });
-    }
-    if (!authHeader || !safeEqual(authHeader, expectedAuth)) {
-      console.error('Authorization header mismatch');
-      return new Response(null, { status: 401 });
+    if (!transactionId) {
+      console.error('RevenueCat event missing transaction_id', eventId);
+      return jsonResponse({ received: true, skipped: 'no_transaction' });
     }
 
-    // ── Security layer 2: HMAC signature (optional, if signing secret is set) ──
-    const signingSecret = secrets.get('REVENUECAT_WEBHOOK_SIGNING_SECRET');
-    if (signingSecret) {
-      const sigHeader = req.headers.get('x-revenuecat-webhook-signature');
-      if (!sigHeader) {
-        console.error('Missing X-RevenueCat-Webhook-Signature header');
-        return new Response(null, { status: 401 });
-      }
-      const ok = await verifyHmac(body, sigHeader, signingSecret);
-      if (!ok) {
-        console.error('HMAC signature verification failed');
-        return new Response(null, { status: 401 });
-      }
+    const appUserId = resolveAppUserId(event);
+    if (!appUserId) {
+      console.error('RevenueCat event has no mappable app_user_id', eventId);
+      return jsonResponse({ received: true, skipped: 'anonymous_user' });
     }
 
-    // ── Parse event ──
-    const payload = JSON.parse(body);
-    const event = payload.event;
-    if (!event) {
-      console.error('No event in payload');
-      return new Response(null, { status: 400 });
+    // Resolve Base44 user — app_user_id is the Base44 user.id set by the client.
+    let user: any = null;
+    try {
+      user = await base44.asServiceRole.entities.User.get(appUserId);
+    } catch (e) {
+      console.error('User lookup failed for', appUserId, (e as Error).message);
     }
 
-    const eventId = event.id;
-    const eventType = event.type;
-    const appUserId = event.app_user_id;
-    const productId = event.product_id;
-    const store = event.store;
-    const environment = event.environment;
-    const purchasedAtMs = event.purchased_at_ms;
-    const originalTransactionId = event.original_transaction_id;
-    const transactionId = event.transaction_id;
-    const price = event.price;
-    const currency = event.currency;
-
-    // ── Idempotency: skip if this event was already processed ──
-    if (eventId) {
-      const existing = await base44.asServiceRole.entities.RevenueCatPurchase.filter({ event_id: eventId });
-      if (existing.length > 0) {
-        console.log('Duplicate event skipped:', eventId);
-        return new Response(null, { status: 200 });
-      }
+    if (!user) {
+      console.error('No Base44 user for RevenueCat app_user_id', appUserId);
+      // 200 so RC does not retry forever for permanently unmapped ids
+      return jsonResponse({ received: true, skipped: 'user_not_found' });
     }
 
-    // Only handle Trailblazer products
-    if (!TRAILBLAZER_PRODUCT_IDS.includes(productId)) {
-      console.log('Ignoring non-Trailblazer product:', productId);
-      return new Response(null, { status: 200 });
-    }
+    const existing = await findLedgerByTransaction(base44, transactionId);
 
-    // ── INITIAL_PURCHASE / NON_RENEWING_PURCHASE: grant 30-month access ──
-    if (eventType === 'INITIAL_PURCHASE' || eventType === 'NON_RENEWING_PURCHASE') {
-      const purchasedAt = purchasedAtMs ? new Date(purchasedAtMs).toISOString() : new Date().toISOString();
-      const expiration = addMonths(new Date(purchasedAt), TRAILBLAZER_DURATION_MONTHS).toISOString();
-
-      // Look up the user
-      let user = null;
-      try {
-        user = await base44.asServiceRole.entities.User.get(appUserId);
-      } catch (e) {
-        console.error('User lookup failed:', appUserId, e.message);
+    // ── GRANT ──
+    if (GRANT_EVENT_TYPES.has(event.type)) {
+      if (existing && eventAlreadyApplied(existing, eventId)) {
+        console.log('Duplicate grant event, skipping:', eventId);
+        return jsonResponse({ received: true, duplicate: true });
       }
 
-      if (user) {
-        // Only grant if new expiration is later than current, or user isn't already trailblazer
-        const currentExpiration = user.plan_expiration_date ? new Date(user.plan_expiration_date) : null;
-        const shouldGrant = !currentExpiration || new Date(expiration) > currentExpiration || user.plan !== 'trailblazer';
-
-        if (shouldGrant) {
-          await base44.asServiceRole.entities.User.update(user.id, {
-            plan: 'trailblazer',
-            manifestation_energy: PLANS.trailblazer.manifestation_energy,
-            narration_energy: PLANS.trailblazer.narration_energy,
-            energy_reset_date: getNextResetDate(),
-            subscription_status: 'none',
-            plan_expiration_date: expiration,
-          });
-          console.log('Trailblazer access granted:', user.id, 'expires', expiration);
-        } else {
-          console.log('Trailblazer already active with later expiration:', user.id);
-        }
-      }
-
-      // Record the purchase
-      await base44.asServiceRole.entities.RevenueCatPurchase.create({
-        event_id: eventId,
-        event_type: eventType,
-        app_user_id: appUserId,
-        user_id: appUserId,
-        original_transaction_id: originalTransactionId || '',
-        transaction_id: transactionId || '',
-        product_id: productId,
-        store: store || '',
-        environment: environment || '',
-        price: price || 0,
-        currency: currency || '',
-        purchased_at: purchasedAt,
-        expiration_at: expiration,
-        status: 'active',
-      });
-      console.log('Purchase recorded:', eventId);
-    }
-
-    // ── CANCELLATION (refund): revoke access ──
-    else if (eventType === 'CANCELLATION') {
-      // Mark the original purchase as refunded
-      if (originalTransactionId) {
-        const purchases = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
-          original_transaction_id: originalTransactionId,
-          product_id: productId,
+      // Already paid for this transaction with a different event id — record event, no re-grant energy
+      if (existing && existing.status === 'paid') {
+        const eventIds = mergeEventIds(existing, eventId);
+        await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, {
+          event_id: eventId || existing.event_id,
+          event_ids: eventIds,
+          event_type: event.type,
         });
-        for (const p of purchases) {
-          if (p.status === 'refunded') continue;
-          await base44.asServiceRole.entities.RevenueCatPurchase.update(p.id, { status: 'refunded' });
-        }
-      }
 
-      // Downgrade the user if their current plan is trailblazer
-      if (appUserId) {
+        // Still ensure user expiry is at least this purchase's expiry (max)
+        const purchasedAt = event.purchased_at_ms || Date.parse(existing.purchase_date);
         try {
-          const user = await base44.asServiceRole.entities.User.get(appUserId);
-          if (user && user.plan === 'trailblazer') {
-            await base44.asServiceRole.entities.User.update(user.id, {
-              plan: 'observer',
-              manifestation_energy: 0,
-              narration_energy: 0,
-              subscription_status: 'none',
-              plan_expiration_date: null,
-            });
-            console.log('Trailblazer access revoked (refund):', appUserId);
-          }
+          const expiration = computeGoogleTrailblazerExpiration(purchasedAt);
+          await applyGoogleGrant(
+            base44,
+            user,
+            expiration.toISOString(),
+            new Date(Number(purchasedAt)).toISOString(),
+          );
         } catch (e) {
-          console.error('Failed to revoke access:', e.message);
+          console.error('Re-apply grant on duplicate transaction failed:', (e as Error).message);
         }
+
+        return jsonResponse({ received: true, idempotent: true });
       }
 
-      // Record the cancellation event
-      await base44.asServiceRole.entities.RevenueCatPurchase.create({
-        event_id: eventId,
-        event_type: eventType,
-        app_user_id: appUserId || '',
-        user_id: appUserId || '',
-        original_transaction_id: originalTransactionId || '',
-        transaction_id: transactionId || '',
-        product_id: productId,
-        store: store || '',
-        environment: environment || '',
-        price: 0,
-        currency: currency || '',
-        purchased_at: purchasedAtMs ? new Date(purchasedAtMs).toISOString() : new Date().toISOString(),
-        expiration_at: '',
-        status: 'refunded',
+      const purchasedAtMs = event.purchased_at_ms;
+      if (!purchasedAtMs) {
+        console.error('Grant event missing purchased_at_ms', eventId);
+        return jsonResponse({ error: 'missing purchased_at_ms' }, 400);
+      }
+
+      let expiration: Date;
+      try {
+        expiration = computeGoogleTrailblazerExpiration(purchasedAtMs);
+      } catch (e) {
+        console.error('Expiry calculation failed:', (e as Error).message);
+        return jsonResponse({ error: 'invalid purchase date' }, 400);
+      }
+
+      const purchaseDateIso = new Date(Number(purchasedAtMs)).toISOString();
+      const expirationIso = expiration.toISOString();
+      const eventIds = mergeEventIds(existing, eventId);
+      const ledgerFields = normalizeLedgerFields(event, {
+        userId: user.id,
+        purchaseDateIso,
+        expirationIso,
+        status: 'paid',
+        eventIds,
       });
+
+      try {
+        if (existing) {
+          // Previously refunded transaction being re-granted, or pending row
+          await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, ledgerFields);
+        } else {
+          await base44.asServiceRole.entities.RevenueCatPurchase.create(ledgerFields);
+        }
+
+        await applyGoogleGrant(base44, user, expirationIso, purchaseDateIso);
+      } catch (e) {
+        console.error('Grant persistence failed:', (e as Error).message);
+        // 5xx so RevenueCat retries
+        return jsonResponse({ error: 'persistence_failed' }, 500);
+      }
+
+      return jsonResponse({ received: true, granted: true, expires: expirationIso });
     }
 
-    // Other event types (RENEWAL, EXPIRATION, etc.) — not applicable to one-time Trailblazer
-    else {
-      console.log('Unhandled event type for Trailblazer:', eventType);
+    // ── REVOKE / REFUND ──
+    if (REVOKE_EVENT_TYPES.has(event.type)) {
+      if (!existing) {
+        // No matching paid row — acknowledge. Optionally record a refund stub.
+        console.log('Refund event with no ledger row:', transactionId);
+        return jsonResponse({ received: true, skipped: 'no_ledger' });
+      }
+
+      if (eventAlreadyApplied(existing, eventId) && existing.status === 'refunded') {
+        return jsonResponse({ received: true, duplicate: true });
+      }
+
+      const eventIds = mergeEventIds(existing, eventId);
+
+      try {
+        await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, {
+          status: 'refunded',
+          event_id: eventId || existing.event_id,
+          event_ids: eventIds,
+          event_type: event.type,
+        });
+
+        await recomputeGoogleAccessAfterRefund(base44, existing.user_id || user.id);
+      } catch (e) {
+        console.error('Refund persistence failed:', (e as Error).message);
+        return jsonResponse({ error: 'persistence_failed' }, 500);
+      }
+
+      return jsonResponse({ received: true, refunded: true });
     }
 
-    return new Response(null, { status: 200 });
+    return jsonResponse({ received: true, skipped: 'unhandled_type' });
   } catch (error) {
-    console.error('revenuecat-webhook error:', error.message);
-    return new Response(null, { status: 500 });
+    console.error('revenuecat-webhook error:', (error as Error).message);
+    return jsonResponse({ error: (error as Error).message }, 500);
   }
 }

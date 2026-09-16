@@ -84,6 +84,26 @@
       "type": "string",
       "format": "date",
       "description": "The date (YYYY-MM-DD) for the current ad_rewards_count. Used to reset the daily counter."
+    },
+    "google_trailblazer_expiration_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Isolated Google Play Trailblazer expiry (purchase_date + 30 calendar months). Independent of Apple/Wix plan_expiration_date."
+    },
+    "google_trailblazer_manifestation_energy": {
+      "type": "number",
+      "default": 0,
+      "description": "Monthly Manifestation Energy pool for an active Google Trailblazer grant. Isolated from generic manifestation_energy."
+    },
+    "google_trailblazer_narration_energy": {
+      "type": "number",
+      "default": 0,
+      "description": "Monthly Narration Energy pool for an active Google Trailblazer grant. Isolated from generic narration_energy."
+    },
+    "google_trailblazer_energy_reset_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO datetime when the isolated Google Trailblazer monthly energy pools reset."
     }
   },
   "required": [

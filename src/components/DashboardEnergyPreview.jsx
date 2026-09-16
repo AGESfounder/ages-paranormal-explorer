@@ -1,16 +1,17 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, Volume2, AlertTriangle } from 'lucide-react';
-import { PLANS } from '@/lib/plans';
+import { getEffectivePlan, getDisplayEnergy, isPaidAccess } from '@/lib/access';
 
 export default function DashboardEnergyPreview({ user }) {
-  const plan = PLANS[user?.plan || 'observer'];
-  const isObserver = plan.id === 'observer';
+  const plan = getEffectivePlan(user);
+  const isObserver = !isPaidAccess(user);
+  const energy = getDisplayEnergy(user);
 
-  const manCurrent = (user?.manifestation_energy || 0) + (user?.aura_manifestation_energy || 0);
-  const manMax = plan.manifestation_energy + (user?.aura_manifestation_energy || 0);
-  const narCurrent = (user?.narration_energy || 0) + (user?.aura_narration_energy || 0);
-  const narMax = plan.narration_energy + (user?.aura_narration_energy || 0);
+  const manCurrent = energy.manifestation + energy.auraManifestation;
+  const manMax = (plan.manifestation_energy || 0) + energy.auraManifestation;
+  const narCurrent = energy.narration + energy.auraNarration;
+  const narMax = (plan.narration_energy || 0) + energy.auraNarration;
 
   const manPct = manMax > 0 ? Math.min(100, (manCurrent / manMax) * 100) : 0;
   const narPct = narMax > 0 ? Math.min(100, (narCurrent / narMax) * 100) : 0;

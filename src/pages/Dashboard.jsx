@@ -10,6 +10,18 @@ import TierToolkitAccess from '@/components/TierToolsComparison';
 import { base44 } from '@/api/base44Client';
 import { PLANS, AURA_BUNDLES, PLAN_ORDER } from '@/lib/plans';
 import AdRewardCard from '@/components/AdRewardCard';
+import {
+  getDisplayEnergy,
+  getEffectiveExpirationDate,
+  getEffectivePlan,
+  getEffectivePlanId,
+  isPaidAccess,
+} from '@/lib/access';
+import {
+  isAndroidNative,
+  purchaseGoogleTrailblazer,
+  waitForGoogleTrailblazerGrant,
+} from '@/lib/revenuecat';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -21,8 +33,37 @@ export default function Dashboard() {
     try {
       const userData = await base44.auth.me();
       setUser(userData);
-      const purchaseHistory = await base44.entities.Base44Purchase.list('-created_date', 20);
-      setPurchases(purchaseHistory);
+      const [wixHistory, rcHistory] = await Promise.all([
+        base44.entities.Base44Purchase.list('-created_date', 20).catch(() => []),
+        // RevenueCatPurchase may not exist until the entity is deployed — fail soft
+        (base44.entities.RevenueCatPurchase
+          ? base44.entities.RevenueCatPurchase.list('-created_date', 20)
+          : Promise.resolve([])).catch(() => []),
+      ]);
+      const normalized = [
+        ...(wixHistory || []).map((p) => ({
+          id: p.id,
+          product_name: p.product_name,
+          amount: p.amount,
+          status: p.status,
+          created_date: p.created_date || p.purchase_date,
+          source: 'wix',
+        })),
+        ...(rcHistory || []).map((p) => ({
+          id: p.id,
+          product_name: p.product_name || p.product_id,
+          amount: p.amount,
+          status: p.status,
+          created_date: p.purchase_date || p.created_date,
+          source: 'revenuecat',
+        })),
+      ].sort((a, b) => {
+          const bt = new Date(b.created_date || 0).getTime();
+          const at = new Date(a.created_date || 0).getTime();
+          return (Number.isNaN(bt) ? 0 : bt) - (Number.isNaN(at) ? 0 : at);
+        })
+        .slice(0, 20);
+      setPurchases(normalized);
     } catch (e) {
       console.error('Dashboard load error:', e);
     }
@@ -34,6 +75,43 @@ export default function Dashboard() {
   const handlePurchase = async (productId) => {
     setRedirecting(productId);
     try {
+      // Android Trailblazer → RevenueCat / Google Play one-time product.
+      // iOS and web keep the existing Wix create-subscription path.
+      if (productId === 'trailblazer' && isAndroidNative()) {
+        const result = await purchaseGoogleTrailblazer(user?.id);
+        if (result.cancelled) {
+          setRedirecting(null);
+          return;
+        }
+        if (!result.ok) {
+          const msg = result.error?.message || result.reason || 'Purchase failed';
+          if (result.reason === 'product_unavailable') {
+            alert('Trailblazer is not available on Google Play yet. Please try again later or contact support.');
+          } else {
+            alert(msg);
+          }
+          setRedirecting(null);
+          return;
+        }
+
+        // Wait for the Base44 webhook to write the isolated Google grant.
+        // Never grant access from the SDK result alone.
+        const grant = await waitForGoogleTrailblazerGrant(() => base44.auth.me(), {
+          timeoutMs: 45000,
+          intervalMs: 1500,
+        });
+        if (grant.ok && grant.user) {
+          setUser(grant.user);
+          await loadData();
+        } else {
+          // Purchase succeeded at the store; webhook may still be in flight.
+          alert('Purchase complete. Access will activate in a moment — pull to refresh if needed.');
+          await loadData();
+        }
+        setRedirecting(null);
+        return;
+      }
+
       const response = await base44.functions.invoke('create-subscription', { product_id: productId });
       if (response.data?.redirectUrl) {
         window.location.href = response.data.redirectUrl;
@@ -59,16 +137,23 @@ export default function Dashboard() {
     );
   }
 
-  const currentPlan = PLANS[user?.plan || 'observer'];
-  const isPaid = currentPlan.id !== 'observer';
+  const currentPlan = getEffectivePlan(user);
+  const effectivePlanId = getEffectivePlanId(user);
+  const isPaid = isPaidAccess(user);
+  const displayEnergy = getDisplayEnergy(user);
 
   // Calculate days until reset
-  const resetDate = user?.energy_reset_date ? new Date(user.energy_reset_date) : null;
-  const daysUntilReset = resetDate ? Math.ceil((resetDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
+  const resetDate = displayEnergy.resetDate ? new Date(displayEnergy.resetDate) : null;
+  const daysUntilReset = resetDate
+    ? Math.ceil((resetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
 
   // Calculate days until plan expiration (Trailblazer)
-  const expirationDate = user?.plan_expiration_date ? new Date(user.plan_expiration_date) : null;
-  const daysUntilExpiration = expirationDate ? Math.ceil((expirationDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
+  const effectiveExpiration = getEffectiveExpirationDate(user);
+  const expirationDate = effectiveExpiration ? new Date(effectiveExpiration) : null;
+  const daysUntilExpiration = expirationDate
+    ? Math.ceil((expirationDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
 
   return (
     <PageContainer>
@@ -124,7 +209,7 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <TierToolkitAccess planId={user?.plan || 'observer'} />
+          <TierToolkitAccess planId={effectivePlanId} />
 
           {/* Expiration / renewal info */}
           {daysUntilExpiration !== null && daysUntilExpiration > 0 && (
@@ -145,7 +230,7 @@ export default function Dashboard() {
             </h3>
             <EnergyMeter
               label="Monthly Manifestation"
-              current={user?.manifestation_energy || 0}
+              current={displayEnergy.manifestation}
               max={currentPlan.manifestation_energy}
               icon={Sparkles}
               color="primary"
@@ -167,7 +252,7 @@ export default function Dashboard() {
             </h3>
             <EnergyMeter
               label="Monthly Narration"
-              current={user?.narration_energy || 0}
+              current={displayEnergy.narration}
               max={currentPlan.narration_energy}
               icon={Volume2}
               color="accent"
@@ -224,7 +309,7 @@ export default function Dashboard() {
             <TrendingUp className="w-4 h-4 text-primary" /> Upgrade Your Access
           </h3>
           <div className="space-y-3">
-            {PLAN_ORDER.filter(id => id !== user?.plan).map(planId => {
+            {PLAN_ORDER.filter(id => id !== effectivePlanId).map(planId => {
               const plan = PLANS[planId];
               const isObserver = planId === 'observer';
               const isTrailblazer = planId === 'trailblazer';

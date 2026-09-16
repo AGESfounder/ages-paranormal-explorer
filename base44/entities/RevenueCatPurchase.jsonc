@@ -1,42 +1,82 @@
 {
   "name": "RevenueCatPurchase",
   "type": "object",
+  "description": "Provider-isolated ledger for RevenueCat / Google Play purchases. Do not reuse Base44Purchase (Wix-only).",
   "properties": {
     "event_id": {
       "type": "string",
-      "description": "RevenueCat webhook event ID (event.id). Unique per event \u2014 used for idempotency. Duplicate events (retries) are skipped."
+      "description": "RevenueCat event id for the latest processed event on this row. Used for event-level idempotency."
     },
-    "event_type": {
-      "type": "string",
-      "description": "RevenueCat event type: INITIAL_PURCHASE, NON_RENEWING_PURCHASE, CANCELLATION, RENEWAL, EXPIRATION, etc."
-    },
-    "app_user_id": {
-      "type": "string",
-      "description": "RevenueCat app_user_id \u2014 the Base44 user ID passed to RevenueCat at purchase time."
+    "event_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "All RevenueCat event ids already applied to this transaction (duplicate delivery safety)."
     },
     "user_id": {
       "type": "string",
-      "description": "Base44 user ID (same as app_user_id). Duplicated for direct User entity lookups."
+      "description": "Base44 user id resolved from RevenueCat app_user_id."
     },
-    "original_transaction_id": {
+    "app_user_id": {
       "type": "string",
-      "description": "Store-level original transaction ID. Stable across retries/renewals for the same purchase. Used to match refund events to the original purchase."
+      "description": "RevenueCat app_user_id at event time."
     },
-    "transaction_id": {
+    "original_app_user_id": {
       "type": "string",
-      "description": "Store-level transaction ID for this specific event."
+      "description": "RevenueCat original_app_user_id when present."
     },
     "product_id": {
       "type": "string",
-      "description": "RevenueCat product ID. Google Play Trailblazer = 'trailblazer.30month'. Apple Trailblazer = 'com.ages.explorer.trailblazer.30month'."
+      "description": "Store product id, e.g. trailblazer.30month"
     },
     "store": {
       "type": "string",
-      "description": "Store source: PLAY_STORE, APP_STORE, etc."
+      "description": "RevenueCat store, e.g. PLAY_STORE"
     },
     "environment": {
       "type": "string",
-      "description": "SANDBOX or PRODUCTION."
+      "description": "SANDBOX or PRODUCTION"
+    },
+    "transaction_id": {
+      "type": "string",
+      "description": "Store transaction id. Primary idempotency key with product_id."
+    },
+    "original_transaction_id": {
+      "type": "string",
+      "description": "Original store transaction id when distinct from transaction_id."
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Latest RevenueCat event type applied to this row"
+    },
+    "purchase_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Purchase timestamp from RevenueCat purchased_at_ms"
+    },
+    "purchased_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Purchase timestamp alias for integrations that use purchased_at."
+    },
+    "plan_expiration_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "App-owned expiry: purchase_date + 30 calendar months (UTC clamp)"
+    },
+    "expiration_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Expiry timestamp alias for integrations that use expiration_at."
+    },
+    "product_name": {
+      "type": "string",
+      "description": "Display name for purchase history"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Price amount from RevenueCat event (absolute)"
     },
     "price": {
       "type": "number",
@@ -44,39 +84,32 @@
     },
     "currency": {
       "type": "string",
-      "description": "ISO currency code (e.g. USD)."
-    },
-    "purchased_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "When the purchase was made (from event.purchased_at_ms). Used as the start of the 30-month Trailblazer access window."
-    },
-    "expiration_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "When access expires = purchased_at + 30 calendar months (PLANS.trailblazer.duration_months). Empty for refund records."
+      "description": "ISO currency code"
     },
     "status": {
       "type": "string",
       "enum": [
+        "paid",
         "active",
         "refunded",
         "expired"
       ],
-      "default": "active"
+      "default": "paid"
     }
   },
   "required": [
     "event_id",
+    "user_id",
     "app_user_id",
     "product_id",
+    "transaction_id",
     "status"
   ],
   "rls": {
     "read": {
       "$or": [
         {
-          "created_by_id": "{{user.id}}"
+          "user_id": "{{user.id}}"
         },
         {
           "user_condition": {

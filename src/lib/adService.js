@@ -23,7 +23,7 @@
 //   Android interstitial ad unit: INTERSTITIAL_AD_ID_ANDROID
 // ─────────────────────────────────────────────────────────────────────
 
-const FREE_PLAN = 'observer';
+import { isPaidAccess } from '@/lib/access';
 
 // Replace these with your real AdMob interstitial ad-unit IDs before publishing.
 export const INTERSTITIAL_AD_ID_IOS = 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX';
@@ -35,8 +35,8 @@ export const INTERSTITIAL_AD_ID_ANDROID = 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXX
  * Stop 1 is always ad-free. Paid users never see ads.
  */
 export function shouldShowAd(user, stopNumber) {
-  const plan = user?.plan || FREE_PLAN;
-  if (plan !== FREE_PLAN) return false;
+  // Honors Apple/Wix expiry and isolated Google Trailblazer expiry
+  if (isPaidAccess(user)) return false;
   if (!stopNumber || stopNumber <= 1) return false;
   return true;
 }

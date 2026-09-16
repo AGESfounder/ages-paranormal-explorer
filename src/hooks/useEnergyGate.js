@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
+import {
+  isPaidAccess,
+  getSpendableEnergy,
+  applyManifestationSpend,
+  applyNarrationSpend,
+} from '@/lib/access';
 
 /**
  * Central energy-gating hook. Checks the user's subscription plan and energy
@@ -43,11 +49,16 @@ export function useEnergyGate() {
   }, []);
 
   const isAdmin = user?.role === 'admin';
-  const isPaid = isAdmin || (user?.plan && user.plan !== 'observer');
-  const manEnergy = user?.manifestation_energy || 0;
+  // Honors generic plan_expiration_date AND isolated Google Trailblazer expiry
+  const isPaid = isPaidAccess(user);
+  const spendable = getSpendableEnergy(user);
+  const manEnergy = spendable.manifestation - (user?.aura_manifestation_energy || 0);
   const auraManEnergy = user?.aura_manifestation_energy || 0;
-  const narEnergy = user?.narration_energy || 0;
+  const narEnergy = spendable.narration - (user?.aura_narration_energy || 0);
   const auraNarEnergy = user?.aura_narration_energy || 0;
+  // Display/gate totals include monthly (all active sources) + aura
+  const totalMan = spendable.manifestation;
+  const totalNar = spendable.narration;
 
   const estimateNarrationCost = useCallback((text) => {
     return Math.min(100, Math.max(1, Math.ceil((text || '').length / 50)));
@@ -55,61 +66,58 @@ export function useEnergyGate() {
 
   const canManifest = useCallback(() => {
     if (isAdmin) return true;
-    return isPaid && (manEnergy > 0 || auraManEnergy > 0);
-  }, [isAdmin, isPaid, manEnergy, auraManEnergy]);
+    return isPaid && totalMan > 0;
+  }, [isAdmin, isPaid, totalMan]);
 
   const canNarrate = useCallback((text) => {
     if (isAdmin) return true;
     if (!isPaid) return false;
     const cost = estimateNarrationCost(text);
-    return (narEnergy + auraNarEnergy) >= cost;
-  }, [isAdmin, isPaid, narEnergy, auraNarEnergy, estimateNarrationCost]);
+    return totalNar >= cost;
+  }, [isAdmin, isPaid, totalNar, estimateNarrationCost]);
 
   const spendManifestation = useCallback(async () => {
     if (isAdmin) return; // Admins don't spend energy
-    let newMan = manEnergy;
-    let newAura = auraManEnergy;
-    if (newMan > 0) newMan -= 1;
-    else if (newAura > 0) newAura -= 1;
+    const { updates, next } = applyManifestationSpend(user);
+    if (Object.keys(updates).length === 0) return;
     try {
-      await base44.auth.updateMe({ manifestation_energy: newMan, aura_manifestation_energy: newAura });
-      setUser(prev => ({ ...prev, manifestation_energy: newMan, aura_manifestation_energy: newAura }));
+      await base44.auth.updateMe(updates);
+      setUser(prev => ({ ...prev, ...next }));
     } catch (e) { console.error('Failed to update manifestation energy:', e); }
-  }, [isAdmin, manEnergy, auraManEnergy]);
+  }, [isAdmin, user]);
 
   const spendNarration = useCallback(async (cost) => {
     if (isAdmin) return; // Admins don't spend energy
-    let newNar = narEnergy;
-    let newAura = auraNarEnergy;
-    if (newNar >= cost) newNar -= cost;
-    else { const rem = cost - newNar; newNar = 0; newAura = Math.max(0, newAura - rem); }
+    const { updates, next } = applyNarrationSpend(user, cost);
+    if (Object.keys(updates).length === 0) return;
     try {
-      await base44.auth.updateMe({ narration_energy: newNar, aura_narration_energy: newAura });
-      setUser(prev => ({ ...prev, narration_energy: newNar, aura_narration_energy: newAura }));
+      await base44.auth.updateMe(updates);
+      setUser(prev => ({ ...prev, ...next }));
     } catch (e) { console.error('Failed to update narration energy:', e); }
-  }, [isAdmin, narEnergy, auraNarEnergy]);
+  }, [isAdmin, user]);
 
   // Gate a manifestation (InvokeLLM) action. Returns true if allowed.
   // If blocked, shows the upgrade prompt automatically.
   const gateManifestation = useCallback(() => {
     if (isAdmin) return true;
     if (!isPaid) { setGateReason('plan'); setShowUpgrade(true); return false; }
-    if (manEnergy <= 0 && auraManEnergy <= 0) { setGateReason('energy'); setShowUpgrade(true); return false; }
+    if (totalMan <= 0) { setGateReason('energy'); setShowUpgrade(true); return false; }
     return true;
-  }, [isAdmin, isPaid, manEnergy, auraManEnergy]);
+  }, [isAdmin, isPaid, totalMan]);
 
   // Gate a narration (GenerateSpeech) action. Returns true if allowed.
   const gateNarration = useCallback((text) => {
     if (isAdmin) return true;
     if (!isPaid) { setGateReason('plan'); setShowUpgrade(true); return false; }
     const cost = estimateNarrationCost(text);
-    if (narEnergy + auraNarEnergy < cost) { setGateReason('energy'); setShowUpgrade(true); return false; }
+    if (totalNar < cost) { setGateReason('energy'); setShowUpgrade(true); return false; }
     return true;
-  }, [isAdmin, isPaid, narEnergy, auraNarEnergy, estimateNarrationCost]);
+  }, [isAdmin, isPaid, totalNar, estimateNarrationCost]);
 
   return {
     user, isPaid,
-    manEnergy, auraManEnergy, narEnergy, auraNarEnergy,
+    manEnergy: Math.max(0, manEnergy), auraManEnergy,
+    narEnergy: Math.max(0, narEnergy), auraNarEnergy,
     canManifest, canNarrate, estimateNarrationCost,
     spendManifestation, spendNarration,
     gateManifestation, gateNarration,
@@ -125,11 +133,9 @@ export async function checkManifestationGate() {
   try {
     const user = await base44.auth.me();
     if (user?.role === 'admin') return { allowed: true };
-    const isPaid = user?.plan && user.plan !== 'observer';
-    if (!isPaid) return { allowed: false, reason: 'plan' };
-    const manE = user?.manifestation_energy || 0;
-    const auraManE = user?.aura_manifestation_energy || 0;
-    if (manE <= 0 && auraManE <= 0) return { allowed: false, reason: 'energy' };
+    if (!isPaidAccess(user)) return { allowed: false, reason: 'plan' };
+    const { manifestation } = getSpendableEnergy(user);
+    if (manifestation <= 0) return { allowed: false, reason: 'energy' };
     return { allowed: true };
   } catch (e) {
     return { allowed: false, reason: 'plan' };
@@ -140,10 +146,8 @@ export async function spendManifestationEnergy() {
   try {
     const user = await base44.auth.me();
     if (user?.role === 'admin') return; // Admins don't spend energy
-    let newMan = user?.manifestation_energy || 0;
-    let newAura = user?.aura_manifestation_energy || 0;
-    if (newMan > 0) newMan -= 1;
-    else if (newAura > 0) newAura -= 1;
-    await base44.auth.updateMe({ manifestation_energy: newMan, aura_manifestation_energy: newAura });
+    const { updates } = applyManifestationSpend(user);
+    if (Object.keys(updates).length === 0) return;
+    await base44.auth.updateMe(updates);
   } catch (e) { console.error('Failed to spend manifestation energy:', e); }
 }

@@ -4,6 +4,7 @@ import { Check, Loader2, Ghost } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import { base44 } from '@/api/base44Client';
+import { isPaidAccess, getEffectivePlanId } from '@/lib/access';
 
 export default function ThankYou() {
   const [status, setStatus] = useState('confirming'); // confirming | success | timeout
@@ -19,7 +20,8 @@ export default function ThankYou() {
         const userData = await base44.auth.me();
         setUser(userData);
         // If the user has a paid plan, payment was confirmed
-        if (userData.plan && userData.plan !== 'observer') {
+        // Honors Apple/Wix and isolated Google Trailblazer grants
+        if (isPaidAccess(userData)) {
           setStatus('success');
           return;
         }
@@ -72,7 +74,7 @@ export default function ThankYou() {
             </div>
             <h1 className="font-heading text-xl font-bold text-foreground">Payment Confirmed!</h1>
             <p className="text-sm text-muted-foreground max-w-xs">
-              Your <span className="text-primary font-heading uppercase">{user?.plan}</span> access is now active.
+              Your <span className="text-primary font-heading uppercase">{getEffectivePlanId(user)}</span> access is now active.
             </p>
             <Link
               to="/dashboard"
