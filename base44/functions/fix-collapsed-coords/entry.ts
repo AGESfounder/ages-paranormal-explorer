@@ -548,9 +548,14 @@ export default async function (req) {
       const unmatched = stops.filter((s) => !matched.has(s.id));
       if (unmatched.length > 0) {
         let needsPlacementIdx = 0;
-        const parkingStopData = allStops.find(s => s.stop_type === 'parking');
-        const placementLat = (parkingStopData?.latitude || centerLat);
-        const placementLon = (parkingStopData?.longitude || centerLon);
+        // Use the verified property center for needs_placement stops, NOT
+        // the parking stop's coordinates. The center was just geocoded
+        // (possibly via the ZIP fallback) and is the trusted location. The
+        // parking stop's coordinates may still be the LLM's original wrong
+        // values (e.g. 200 miles off) — they're only corrected at the END
+        // of this function, after needs_placement stops are already placed.
+        const placementLat = centerLat;
+        const placementLon = centerLon;
         for (const stop of unmatched) {
           const cleanName = stop.name.replace(/\s*\([^)]*\)\s*/g, '').trim();
           const looksLikeRoom = looksLikeRoomOrArea(cleanName);
