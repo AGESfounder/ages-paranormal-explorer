@@ -49,7 +49,12 @@ workflows:
     name: AGES iOS Capacitor build
     max_build_duration: 120
     instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: ages-explorer-appstore
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.ages.explorer
       node: 20
       xcode: latest
       cocoapods: default
@@ -67,18 +72,21 @@ workflows:
         script: |
           cd "$CM_BUILD_DIR/ios/App"
           pod install
-      - name: Build the existing iOS app without signing
+      - name: Set up code signing settings on the Xcode project
         script: |
-          xcodebuild \
-            -workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
-            -scheme "$XCODE_SCHEME" \
-            -configuration Release \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$CM_BUILD_DIR/ios/App/build/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            build
+          cd "$CM_BUILD_DIR"
+          xcode-project use-profiles
+      - name: Build the signed App Store IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --config Release \
+            --ipa-directory "$CM_BUILD_DIR/build/ios/ipa"
     artifacts:
-      - ios/App/build/DerivedData/Build/Products/**/*.app
+      - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
