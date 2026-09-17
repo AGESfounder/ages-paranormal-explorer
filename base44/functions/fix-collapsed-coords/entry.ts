@@ -25,14 +25,56 @@ function isLargeProperty(tour) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Geocode a query via Nominatim
-async function geocode(query) {
+// Query Nominatim once and return the first result (or null).
+async function geocodeOnce(query) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { headers: { 'User-Agent': 'AGES-Paranormal-Explorer/1.0' } });
   if (!res.ok) return null;
   const data = await res.json();
   if (!data || data.length === 0) return null;
   return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+}
+
+// Geocode a query via Nominatim, with fallback variants for the common
+// "postal city ≠ actual municipality" problem. Nominatim matches the city
+// name against mapped municipal boundaries, so an address like
+// "200 Sanders Road, Gettysburg, PA 17325" returns EMPTY even though the
+// address is real — Sanders Road is in Straban Township but uses the
+// Gettysburg post office. The ZIP code boundary correctly includes the
+// township, so retrying without the city name (keeping the ZIP) finds it.
+async function geocode(query) {
+  // 1. Try the full query as-is.
+  let result = await geocodeOnce(query);
+  if (result) return result;
+  await sleep(1100);
+
+  // 2. If the query contains a ZIP code, retry with the city stripped out —
+  //    "200 Sanders Road, Gettysburg, PA 17325" → "200 Sanders Road, PA 17325".
+  //    The ZIP alone locates the right postal area without the city-name
+  //    mismatch that causes Nominatim to return empty.
+  const zipMatch = query.match(/\b(\d{5})\b/);
+  if (zipMatch) {
+    const zip = zipMatch[1];
+    // Strip the city component: keep everything before the first comma,
+    // drop the city, keep state + zip.
+    const beforeFirstComma = query.split(',')[0].trim();
+    const stateMatch = query.match(/\b([A-Z]{2})\b/);
+    const statePart = stateMatch ? stateMatch[1] : '';
+    const variant = [beforeFirstComma, statePart, zip].filter(Boolean).join(', ');
+    if (variant && variant !== query) {
+      result = await geocodeOnce(variant);
+      if (result) return result;
+      await sleep(1100);
+    }
+    // 3. Last resort: street + ZIP only (no state, no city).
+    const streetOnly = beforeFirstComma;
+    const variant2 = `${streetOnly} ${zip}`.trim();
+    if (variant2 && variant2 !== query && variant2 !== variant) {
+      result = await geocodeOnce(variant2);
+      if (result) return result;
+    }
+  }
+  return null;
 }
 
 // Search Nominatim for a landmark by name (not address). Returns the best
