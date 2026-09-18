@@ -61,6 +61,7 @@ workflows:
       vars:
         XCODE_WORKSPACE: ios/App/App.xcworkspace
         XCODE_SCHEME: App
+        VITE_BASE44_APP_ID: 6a2dfe40e73c2bacfe73eeb1
         VITE_BASE44_APP_BASE_URL: https://accessible-ghost-exploration-solutions.base44.app
     scripts:
       - name: Install npm dependencies
