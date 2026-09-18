@@ -19,6 +19,7 @@
     "@base44/vite-plugin": "^1.0.41",
     "@capacitor-community/admob": "7.2.0",
     "@capacitor/android": "^7.6.9",
+    "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.6.9",
     "@capacitor/ios": "^7.6.9",
     "@hello-pangea/dnd": "^17.0.0",

@@ -1,10 +1,58 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { base44, base44ServerUrl } from '@/api/base44Client';
 import { appParams } from '@/lib/app-params';
 import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 import { identifyRevenueCatUser, resetRevenueCatUser } from '@/lib/revenuecat';
 
 const AuthContext = createContext();
+
+// --- Native iOS OAuth callback helpers --------------------------------------
+// The Google/Apple provider flow (base44.auth.loginWithProvider) ends with a
+// redirect to the app's own scheme, e.g. capacitor://localhost/?access_token=<token>.
+// On native iOS that URL is delivered to the app through the Capacitor App
+// plugin (appUrlOpen / getLaunchUrl) instead of reloading the WebView, so the
+// token is picked up here and handed to the Base44 client explicitly. Web and
+// Android behavior is unchanged: web keeps relying on app-params.js reading
+// `access_token` from the query string on a full page load.
+const isIosNativePlatform = () => {
+  try {
+    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
+  } catch {
+    return false;
+  }
+};
+
+// Extract the Base44 access token from a callback URL. Returns null when the
+// URL carries no token (e.g. an unrelated deep link).
+const extractAccessTokenFromUrl = (url) => {
+  if (typeof url !== 'string' || !url.includes('access_token=')) return null;
+  try {
+    const parsed = new URL(url);
+    const fromQuery = parsed.searchParams.get('access_token');
+    if (fromQuery) return fromQuery;
+    if (parsed.hash.includes('access_token=')) {
+      return new URLSearchParams(parsed.hash.replace(/^#/, '')).get('access_token');
+    }
+    return null;
+  } catch {
+    const match = url.match(/[?&#]access_token=([^&#]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+};
+
+// Ensure the token never lingers in the visible WebView URL. It normally
+// arrives only via the native event, but clean up if it also landed in
+// window.location. Mirrors the cleanup app-params.js does on web.
+const removeAccessTokenFromVisibleUrl = () => {
+  try {
+    const current = new URL(window.location.href);
+    if (!current.searchParams.has('access_token')) return;
+    current.searchParams.delete('access_token');
+    window.history.replaceState({}, document.title, `${current.pathname}${current.search}${current.hash}`);
+  } catch { /* ignore */ }
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -17,6 +65,58 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkAppState();
+  }, []);
+
+  // Native iOS only: receive the OAuth callback URL
+  // (capacitor://localhost/?access_token=...) through Capacitor, store the
+  // token on the Base44 client, and refresh auth state. The app is never
+  // considered authenticated from Safari's session alone — only from a
+  // callback token actually received and stored here.
+  useEffect(() => {
+    if (!isIosNativePlatform()) return undefined;
+
+    let cancelled = false;
+    let listenerHandle;
+    let lastHandledUrl = null;
+    let handlingInFlight = false;
+
+    const handleAuthCallbackUrl = async (url) => {
+      // A cold start can deliver the same URL twice (getLaunchUrl and
+      // appUrlOpen); ignore duplicate deliveries and concurrent runs.
+      if (!url || url === lastHandledUrl || handlingInFlight) return;
+      const token = extractAccessTokenFromUrl(url);
+      if (!token) return; // Not an auth callback — leave other deep links alone.
+      lastHandledUrl = url;
+      handlingInFlight = true;
+      try {
+        base44.setToken(token);
+        appParams.token = token;
+        removeAccessTokenFromVisibleUrl();
+        await checkUserAuth();
+      } catch (error) {
+        console.error('Failed to process native auth callback:', error);
+      } finally {
+        handlingInFlight = false;
+      }
+    };
+
+    CapacitorApp.addListener('appUrlOpen', (event) => {
+      handleAuthCallbackUrl(event?.url);
+    }).then((handle) => {
+      if (cancelled) handle.remove();
+      else listenerHandle = handle;
+    }).catch(() => {});
+
+    CapacitorApp.getLaunchUrl()
+      .then((launchUrl) => {
+        if (launchUrl?.url) handleAuthCallbackUrl(launchUrl.url);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      listenerHandle?.remove();
+    };
   }, []);
 
   const fetchPublicSettings = async (useToken) => {
