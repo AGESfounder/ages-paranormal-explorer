@@ -24,6 +24,17 @@ const isIosNativePlatform = () => {
   }
 };
 
+// True inside the Capacitor native shell on any platform (iOS or Android).
+// Mirrors the helper in base44Client.js. Used to keep the SDK logout()'s
+// forced external redirect off native while leaving the web path untouched.
+const isNativePlatform = () => {
+  try {
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+};
+
 // Extract the Base44 access token from a callback URL. Returns null when the
 // URL carries no token (e.g. an unrelated deep link).
 const extractAccessTokenFromUrl = (url) => {
@@ -244,15 +255,33 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = (shouldRedirect = true) => {
+  const logout = (shouldRedirect = true, redirectUrl) => {
     setUser(null);
     setIsAuthenticated(false);
     // Clear RevenueCat identity on native; ignore failures
     resetRevenueCatUser().catch(() => {});
-    
+
+    // Native Capacitor only: the SDK's logout() always ends by pointing
+    // window.location at the external Base44 logout page
+    // (<appBaseUrl>/api/apps/auth/logout), which the OS hands off to Safari /
+    // the system browser — abandoning the app while the WebView keeps the
+    // authenticated session. Instead, drop the stored token and in-memory
+    // app params, then reload the WebView straight to /login. This mirrors
+    // the full-reload pattern Login/Register already use after sign-in
+    // (window.location.href = "/"), so the SDK re-initializes with no token
+    // exactly as on a fresh launch. No external URL is ever loaded.
+    if (isNativePlatform()) {
+      clearStoredTokens();
+      appParams.token = null;
+      if (shouldRedirect) {
+        window.location.replace('/login');
+      }
+      return;
+    }
+
     if (shouldRedirect) {
       // Use the SDK's logout method which handles token cleanup and redirect
-      base44.auth.logout(window.location.href);
+      base44.auth.logout(redirectUrl || window.location.href);
     } else {
       // Just remove the token without redirect
       base44.auth.logout();

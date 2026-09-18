@@ -7,6 +7,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
 
 const achievements = [
   { id: 'first',    name: 'First Investigation', desc: 'Complete your first investigation',           icon: Ghost       },
@@ -19,6 +20,7 @@ const achievements = [
 ];
 
 export default function Profile() {
+  const { logout } = useAuth();
   const [user, setUser] = useState(null);
   const [investigations, setInvestigations] = useState([]);
   const [favorites, setFavorites] = useState([]);
@@ -240,7 +242,7 @@ export default function Profile() {
 
         {/* Logout */}
         <button
-          onClick={() => base44.auth.logout('/login')}
+          onClick={() => logout(true, '/login')}
           className="w-full p-3 rounded-lg border border-red-500/20 bg-red-500/5 text-red-400 text-sm font-heading uppercase tracking-wider hover:bg-red-500/10 transition-colors"
         >
           Sign Out
