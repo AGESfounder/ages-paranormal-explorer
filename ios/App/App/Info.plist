@@ -60,6 +60,14 @@
 	<string>ca-app-pub-7999682122277742~5236169283</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>AGES Paranormal Explorer uses this identifier to deliver more relevant ads when you choose to allow tracking. You can still use the app and see ads if you decline; those ads may be less personalized.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>AGES Paranormal Explorer uses your location to find haunted tours near you and tag investigation evidence with where it was recorded.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>AGES Paranormal Explorer uses the camera for anomaly detection, investigation recording, and evidence capture in the Toolkit.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AGES Paranormal Explorer uses the microphone for EVP recording, spirit box sessions, and investigation audio evidence.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>AGES Paranormal Explorer uses motion sensors for the vibration communicator and environment-triggered investigation tools.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>

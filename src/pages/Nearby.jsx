@@ -12,6 +12,7 @@ import TourCategoryBadge from '@/components/TourCategoryBadge';
 import TourListItem from '@/components/TourListItem';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import { generateNewNearbyTour } from '@/lib/nearbyTourGenerator';
+import { getDevicePosition, haversineMiles } from '@/lib/deviceCapabilities';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 
@@ -43,7 +44,13 @@ export default function Nearby() {
     setGeneratingRange(range.label);
     try {
       const locationContext = `${range.min}-${range.max} miles from these coordinates: (${coords.lat}, ${coords.lng}). The tour's start_latitude and start_longitude MUST place it ${range.min}-${range.max} miles away — pick a real town or city in that distance band`;
-      const result = await generateNewNearbyTour(locationContext);
+      const originOpts = {
+        originLat: coords.lat,
+        originLng: coords.lng,
+        minMiles: range.min,
+        maxMiles: range.max,
+      };
+      const result = await generateNewNearbyTour(locationContext, originOpts);
       if (result.status === 'created') {
         spendManifestation();
         setGeneratingRange(null);
@@ -90,7 +97,12 @@ export default function Nearby() {
         return;
       }
       const locationContext = `within a 30-mile radius of ${zipLabel} (latitude ${zipLat}, longitude ${zipLon}, zip code ${zipCodeParam.trim()}). Find a real haunted location within 30 miles of these coordinates`;
-      const result = await generateNewNearbyTour(locationContext);
+      const originOpts = {
+        originLat: zipLat,
+        originLng: zipLon,
+        radiusMiles: 30,
+      };
+      const result = await generateNewNearbyTour(locationContext, originOpts);
       if (result.status === 'created') {
         spendManifestation();
         setGeneratingRange(null);
@@ -102,8 +114,19 @@ export default function Nearby() {
         if (result.existingTours.length > 0) {
           setDialogMode('no_new');
           setExistingTour(result.existingTours[0]);
+          // Surface all radius-eligible existing tours (deduped) in the list —
+          // not only the first/global-recent item.
+          setTours((prev) => {
+            const byId = new Map();
+            for (const t of prev || []) byId.set(t.id, t);
+            for (const t of result.existingTours) byId.set(t.id, t);
+            return Array.from(byId.values()).sort(
+              (a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity)
+            );
+          });
+          setLoading(false);
         } else {
-          setError('No new tours could be created near this zip code, and no existing tours were found.');
+          setError('No new tours could be created within 30 miles of this zip code, and no existing tours were found in that radius.');
         }
       }
     } catch (err) {
@@ -113,26 +136,24 @@ export default function Nearby() {
   };
 
   const requestLocation = () => {
-    if (!navigator.geolocation) {
-      setError('Geolocation not supported');
-      setLocating(false);
-      loadAllTours();
-      return;
-    }
     setLocating(true);
     setError('');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocating(false);
-      },
-      () => {
-        setError('Location access denied');
+    getDevicePosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 })
+      .then((result) => {
+        if (result.ok) {
+          setCoords(result.coords);
+          setLocating(false);
+        } else {
+          setError(result.message || 'Location access denied');
+          setLocating(false);
+          loadAllTours();
+        }
+      })
+      .catch(() => {
+        setError('Could not determine your location. Enter a zip code or try again.');
         setLocating(false);
         loadAllTours();
-      },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
-    );
+      });
   };
 
   useEffect(() => {
@@ -184,11 +205,7 @@ export default function Nearby() {
   };
 
   const getDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 3959;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return haversineMiles(lat1, lon1, lat2, lon2);
   };
 
   const visibleTours = coords && selectedRange
@@ -212,7 +229,7 @@ export default function Nearby() {
                   <button
                     key={range.label}
                     onClick={() => { setZipMode(false); setSelectedRange(range); }}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+                    className={`flex flex-col items-center gap-1.5 p-3 min-h-[44px] rounded-xl border transition-all ${
                       isSelected
                         ? 'border-primary/50 bg-primary/10 text-primary'
                         : 'border-border/40 bg-card/40 hover:border-primary/30 hover:bg-card/50 text-foreground'
@@ -238,7 +255,7 @@ export default function Nearby() {
             <button
               onClick={() => generateTourForRange(selectedRange)}
               disabled={!!generatingRange || !selectedRange}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-xs uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-lg bg-primary text-primary-foreground font-heading text-xs uppercase tracking-wider hover:bg-primary/80 transition-colors disabled:opacity-50"
             >
               {generatingRange ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {generatingRange ? 'Be Patient: Complex Tour Build in Progress…' : `Create New Tour${selectedRange ? ` · ${selectedRange.label}` : ''}`}

@@ -90,7 +90,7 @@ export default function PhoneREMDevice() {
         const res = await DeviceMotionEvent.requestPermission();
         if (res !== 'granted') throw new Error('Motion permission denied');
       } catch (e) {
-        setSensorError('Motion sensor permission was denied. To fix: on iPhone, go to Settings → Safari → Motion & Orientation Access and enable it, then reload this page. On Android, allow sensor access in your browser settings and try again.');
+        setSensorError('Motion sensor permission was denied. On iPhone: Settings → AGES Paranormal Explorer (or Safari) → enable Motion & Orientation. On Android: allow motion/sensors for this app, then try again.');
         return false;
       }
     }

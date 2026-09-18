@@ -18,6 +18,7 @@ import useWakeLock from '../hooks/useWakeLock';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EvidenceSaveButtons from '@/components/EvidenceSaveButtons';
+import { getDevicePosition } from '@/lib/deviceCapabilities';
 
 const DEFAULT_TOOLS = [
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
@@ -70,6 +71,7 @@ export default function Toolkit() {
   const [recordDuration, setRecordDuration] = useState(0);
   const [savingRec, setSavingRec] = useState(false);
   const [recorderNotes, setRecorderNotes] = useState('');
+  const [mediaError, setMediaError] = useState('');
   const [weatherData, setWeatherData] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherLocation, setWeatherLocation] = useState('');
@@ -166,6 +168,7 @@ export default function Toolkit() {
 
   const startRadioSweep = async () => {
     stopRadioAudio();
+    setMediaError('');
     setRadioActive(true);
     setSavedWords([]);
     setHeardWord('');
@@ -278,6 +281,7 @@ export default function Toolkit() {
       micSource.connect(dest);
     } catch (err) {
       console.error('Microphone access denied', err);
+      setMediaError('Microphone access denied. Radio sweep will play without mic capture. Allow microphone permission to record ambient audio.');
     }
 
     // Record the mixed stream (sweep + mic)
@@ -303,6 +307,7 @@ export default function Toolkit() {
       }, 1000);
     } catch (err) {
       console.error('MediaRecorder setup failed', err);
+      setMediaError('Recording is not available in this browser. The radio sweep can still play, but sessions will not be saved as audio files.');
     }
 
     // Sweep the radio display AND map to audible filter range (200–6000 Hz)
@@ -377,6 +382,7 @@ export default function Toolkit() {
 
   const startRecording = async () => {
     try {
+      setMediaError('');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorderRef.current = mediaRecorder;
@@ -401,6 +407,16 @@ export default function Toolkit() {
       }, 1000);
     } catch (err) {
       console.error('Microphone access denied', err);
+      const name = err?.name || '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setMediaError('Microphone access denied. Allow microphone permission in your device settings, then try again.');
+      } else if (name === 'NotFoundError') {
+        setMediaError('No microphone was found on this device.');
+      } else if (name === 'NotReadableError') {
+        setMediaError('Microphone is in use by another app. Close other audio apps and try again.');
+      } else {
+        setMediaError('Could not start the microphone. Please try again.');
+      }
     }
   };
 
@@ -504,12 +520,11 @@ export default function Toolkit() {
 
   const autoFetchWeather = () => {
     if (weatherData) return;
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        pos => fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude),
-        () => { /* fallback to manual */ }
-      );
-    }
+    getDevicePosition({ enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 })
+      .then((result) => {
+        if (result.ok) fetchWeatherByCoords(result.coords.lat, result.coords.lng);
+      })
+      .catch(() => { /* manual entry remains available */ });
   };
 
   const renderToolContent = () => {
@@ -525,6 +540,11 @@ export default function Toolkit() {
                 {recording ? '● Recording... ' + formatDuration(recordDuration) : recordedBlob ? 'Recording complete — ' + formatDuration(recordDuration) : 'Ready to record'}
               </p>
             </div>
+            {mediaError && (
+              <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/10">
+                <p className="text-xs text-red-300">{mediaError}</p>
+              </div>
+            )}
             {recording ? (
               <button onClick={stopRecording} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-heading text-xs uppercase tracking-wider hover:bg-red-500/20 transition-colors">
                 <Pause className="w-3.5 h-3.5" /> Stop Recording
@@ -580,6 +600,11 @@ export default function Toolkit() {
       case 'audio':
         return (
           <div className="space-y-4">
+            {mediaError && (
+              <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10">
+                <p className="text-xs text-amber-200">{mediaError}</p>
+              </div>
+            )}
             <div className="flex gap-1.5">
               <button onClick={() => { stopRadioSweep(); setRecordedBlob(null); setRecordDuration(0); setSavedWords([]); setRadioBand('AM'); setRadioFrequency(530); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${!radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
                 AM 530–1700 kHz
@@ -1318,9 +1343,9 @@ Best Practices
   };
 
   return (
-    <PageContainer className="h-screen flex flex-col overflow-hidden">
+    <PageContainer className="h-dvh flex flex-col overflow-hidden">
       <SectionHeader title="Investigation Toolkit" subtitle="Ghost Hunting Tools" showBack />
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 pb-28 pt-3 toolkit-scroll">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-28 pt-3 toolkit-scroll">
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 mb-4">
           <p className="text-xs text-muted-foreground leading-relaxed">
             Your paranormal investigation toolkit. Tap any tool to open its interactive interface. Always bring physical equipment as backup.

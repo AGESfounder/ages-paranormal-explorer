@@ -21,6 +21,7 @@
     "@capacitor/android": "^7.6.9",
     "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.6.9",
+    "@capacitor/geolocation": "^7.1.8",
     "@capacitor/ios": "^7.6.9",
     "@hello-pangea/dnd": "^17.0.0",
     "@hookform/resolvers": "^4.1.2",

@@ -52,9 +52,10 @@ export default function StopDetail() {
   const [showAccessInfo, setShowAccessInfo] = useState(false);
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
+  const [enrichStatus, setEnrichStatus] = useState(null); // null | { state, reason?, message? }
   const [selectedPerson, setSelectedPerson] = useState(null);
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
-  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
+  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, setGateReason, user, isPaid } = useEnergyGate();
   const isAdmin = user?.role === 'admin';
   const [verifying, setVerifying] = useState(false);
   const [showDeleteStop, setShowDeleteStop] = useState(false);
@@ -86,10 +87,31 @@ export default function StopDetail() {
   // persisted. Stops that already have rich content only get people filled in.
   const ensureRichContent = async (currentStop, isFinalStop) => {
     const gate = await checkManifestationGate();
-    if (!gate.allowed) return;
+    if (!gate.allowed) {
+      setEnrichStatus({
+        state: 'blocked',
+        reason: gate.reason,
+        message: gate.message || (
+          gate.reason === 'energy'
+            ? 'Out of manifestation energy — detailed content could not be generated.'
+            : gate.reason === 'network'
+              ? 'Could not verify access. Check your connection and reopen this stop.'
+              : gate.reason === 'auth'
+                ? 'Sign in to generate detailed stop content.'
+                : 'Detailed stop generation requires a paid plan.'
+        ),
+      });
+      // Observer/manual path: opening a stop is an explicit user action — surface the gate.
+      if (gate.reason === 'plan' || gate.reason === 'energy') {
+        setGateReason(gate.reason);
+        setShowUpgrade(true);
+      }
+      return;
+    }
     const needsFull = isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info);
     if (!needsFull && currentStop.people && currentStop.people.length > 0) return;
     setPeopleLoading(true);
+    setEnrichStatus({ state: 'loading', message: 'Generating detailed stop content…' });
     try {
       let updates = {};
       let generatedPeople = [];
@@ -132,12 +154,45 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         }
       }
       if (Object.keys(updates).length) {
-        try { await base44.entities.TourStop.update(currentStop.id, updates); } catch (e) {}
-        setStop(prev => ({ ...prev, ...updates }));
+        try {
+          await base44.entities.TourStop.update(currentStop.id, updates);
+          try {
+            const refreshed = await base44.entities.TourStop.filter({ id: currentStop.id });
+            if (refreshed?.[0]) {
+              setStop(refreshed[0]);
+              setPeople(refreshed[0].people || generatedPeople);
+            } else {
+              setStop(prev => ({ ...prev, ...updates }));
+              if (generatedPeople.length) setPeople(generatedPeople);
+            }
+          } catch {
+            setStop(prev => ({ ...prev, ...updates }));
+            if (generatedPeople.length) setPeople(generatedPeople);
+          }
+          setEnrichStatus({ state: 'ready' });
+        } catch (e) {
+          setStop(prev => ({ ...prev, ...updates }));
+          if (generatedPeople.length) setPeople(generatedPeople);
+          setEnrichStatus({
+            state: 'error',
+            message: 'Detailed content was generated but could not be saved. Check your connection and reopen this stop.',
+          });
+        }
+        spendManifestationEnergy();
+      } else {
+        setEnrichStatus({
+          state: needsFull ? 'error' : 'ready',
+          message: needsFull
+            ? 'Detailed content could not be generated right now. Check your connection and try reopening this stop.'
+            : undefined,
+        });
       }
-      spendManifestationEnergy();
-      setPeople(generatedPeople);
-    } catch (e) {}
+    } catch (e) {
+      setEnrichStatus({
+        state: 'error',
+        message: e?.message || 'Detailed content generation failed. Check your connection and try again.',
+      });
+    }
     setPeopleLoading(false);
   };
 
@@ -148,6 +203,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
 
   const loadStop = async () => {
     setLoading(true);
+    setEnrichStatus(null);
     try {
       const results = await base44.entities.TourStop.filter({ id: stopId });
       if (results.length > 0) {
@@ -618,6 +674,31 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         )}
         {isAdmin && (
           <p className="text-[10px] text-amber-400/70 text-center">Admin: drag the map marker to adjust the exact location</p>
+        )}
+
+        {enrichStatus?.state === 'blocked' && (
+          <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 space-y-2">
+            <p className="text-xs text-amber-200">{enrichStatus.message}</p>
+            {(enrichStatus.reason === 'plan' || enrichStatus.reason === 'energy') && (
+              <button
+                type="button"
+                onClick={() => { setGateReason(enrichStatus.reason); setShowUpgrade(true); }}
+                className="text-[11px] font-heading uppercase tracking-wider text-primary underline-offset-2 hover:underline"
+              >
+                View options
+              </button>
+            )}
+          </div>
+        )}
+        {enrichStatus?.state === 'error' && (
+          <div className="p-3 rounded-xl border border-red-500/30 bg-red-500/10">
+            <p className="text-xs text-red-300">{enrichStatus.message}</p>
+          </div>
+        )}
+        {enrichStatus?.state === 'loading' && !peopleLoading && (
+          <div className="p-3 rounded-xl border border-primary/20 bg-primary/5">
+            <p className="text-[10px] text-muted-foreground italic animate-glow-pulse">Be Patient: {enrichStatus.message || 'Generating detailed stop content…'}</p>
+          </div>
         )}
 
         {stop.narration_text && (

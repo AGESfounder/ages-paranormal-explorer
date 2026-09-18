@@ -108,6 +108,15 @@
     @apply bg-background text-foreground font-body;
     text-shadow: 0 0 6px hsl(199 89% 48% / 0.10);
     overscroll-behavior-y: none;
+    min-height: 100dvh;
+    /* Native notch / home-indicator safe area is applied on sticky headers and
+       fixed nav; keep body free of global zoom or forced scale. */
+  }
+
+  html {
+    height: 100%;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   h1, h2, h3, h4, h5, h6, .font-heading, .font-display {

@@ -1,11 +1,12 @@
 import { base44 } from '@/api/base44Client';
 import { findExistingTour } from '@/lib/generateTour';
+import { haversineMiles } from '@/lib/deviceCapabilities';
 
 // Phase 1: Try up to AREA_MAX_ATTEMPTS times to create a new Area tour in a
 // location that doesn't already have one. Each redundant result adds its city
 // to the avoid-list so the next attempt picks somewhere different.
 // Phase 2: If every Area attempt is redundant, try once for a Cold Spot tour.
-// Phase 3: If that also fails, return existing tours so the UI can suggest one.
+// Phase 3: If that also fails, return existing eligible tours so the UI can suggest one.
 const AREA_MAX_ATTEMPTS = 2;
 const COLD_SPOT_MAX_ATTEMPTS = 1;
 
@@ -57,11 +58,31 @@ ROUTING & ACCESS RULES — FOLLOW EXACTLY:
 
 Use real locations with documented paranormal history only.`;
 
-async function getExistingTourLocations() {
+/**
+ * @typedef {{ originLat?: number, originLng?: number, minMiles?: number, maxMiles?: number, radiusMiles?: number }} NearbyOriginOpts
+ * When radiusMiles is set (ZIP search), eligible existing tours are those within
+ * that radius. When min/max are set (distance bands), eligible tours fall in band.
+ */
+
+async function getExistingTourLocations(originOpts = null) {
   try {
     const tours = await base44.entities.Tour.list('-created_date', 500);
     const locations = [];
     for (const t of tours) {
+      // Prefer avoiding only nearby-area cities when an origin is known, so the
+      // model is not blocked by far-away historical tours worldwide.
+      if (originOpts && Number.isFinite(originOpts.originLat) && Number.isFinite(originOpts.originLng)) {
+        if (!Number.isFinite(t.start_latitude) || !Number.isFinite(t.start_longitude)) continue;
+        const d = haversineMiles(
+          originOpts.originLat,
+          originOpts.originLng,
+          t.start_latitude,
+          t.start_longitude
+        );
+        const max = originOpts.radiusMiles ?? originOpts.maxMiles ?? 60;
+        // Keep a modest buffer so the model avoids near-duplicates just outside the band.
+        if (d > max + 15) continue;
+      }
       if (t.city && t.state) {
         locations.push(`${t.city.trim()}, ${t.state.trim()}`);
       }
@@ -122,28 +143,99 @@ async function attemptGeneration(locationContext, category, avoidLocations) {
   }
 }
 
+/** True when tour start coords fall inside the requested radius or distance band. */
+export function isTourWithinOrigin(tour, originOpts) {
+  if (!originOpts || !Number.isFinite(originOpts.originLat) || !Number.isFinite(originOpts.originLng)) {
+    return true;
+  }
+  const lat = Number(tour?.start_latitude);
+  const lng = Number(tour?.start_longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  const d = haversineMiles(originOpts.originLat, originOpts.originLng, lat, lng);
+  if (Number.isFinite(originOpts.radiusMiles)) {
+    return d <= originOpts.radiusMiles + 0.5; // small tolerance for geocode noise
+  }
+  const min = Number.isFinite(originOpts.minMiles) ? originOpts.minMiles : 0;
+  const max = Number.isFinite(originOpts.maxMiles) ? originOpts.maxMiles : Infinity;
+  return d >= Math.max(0, min - 0.5) && d <= max + 0.5;
+}
+
+/**
+ * Fetch existing tours eligible for the origin (radius or distance band),
+ * sorted by distance ascending. Does NOT fall back to global recency.
+ */
+export async function getEligibleExistingTours(originOpts, limit = 50) {
+  if (!originOpts || !Number.isFinite(originOpts.originLat) || !Number.isFinite(originOpts.originLng)) {
+    return [];
+  }
+  try {
+    const all = await base44.entities.Tour.list('-created_date', 500);
+    const withDist = [];
+    for (const t of all) {
+      if (!Number.isFinite(t.start_latitude) || !Number.isFinite(t.start_longitude)) continue;
+      const distance = haversineMiles(
+        originOpts.originLat,
+        originOpts.originLng,
+        t.start_latitude,
+        t.start_longitude
+      );
+      const probe = { ...t, start_latitude: t.start_latitude, start_longitude: t.start_longitude };
+      if (!isTourWithinOrigin(probe, originOpts)) continue;
+      withDist.push({ ...t, distance });
+    }
+    withDist.sort((a, b) => a.distance - b.distance);
+    return withDist.slice(0, limit);
+  } catch (e) {
+    return [];
+  }
+}
+
+function dedupeToursById(tours) {
+  const seen = new Set();
+  const out = [];
+  for (const t of tours || []) {
+    if (!t?.id || seen.has(t.id)) continue;
+    seen.add(t.id);
+    out.push(t);
+  }
+  return out;
+}
+
 /**
  * Try to create a NEW non-redundant tour near the given location.
  *
  * Flow:
- *   1. Try up to 2 Area tours, avoiding cities that already have tours.
+ *   1. Try up to 2 Area tours, avoiding cities that already have tours nearby.
  *   2. If all Area attempts are redundant, try 1 Cold Spot tour.
- *    3. If that also fails, return existing tours for the UI to suggest.
+ *   3. If that also fails, return existing eligible tours for the UI to suggest.
  *
- * @param {string} locationContext — e.g. "1-20 miles from (lat, lng)"
- * @returns {Promise<{status: 'created', tour: object} | {status: 'none', existingTours: array}>}
+ * @param {string} locationContext — e.g. "within a 30-mile radius of ..."
+ * @param {NearbyOriginOpts} [originOpts] — origin lat/lng + radius or min/max band
+ * @returns {Promise<{status: 'created', tour: object, existingTours: array} | {status: 'none', existingTours: array}>}
  */
-export async function generateNewNearbyTour(locationContext) {
-  const avoidLocations = await getExistingTourLocations();
+export async function generateNewNearbyTour(locationContext, originOpts = null) {
+  const avoidLocations = await getExistingTourLocations(originOpts);
+  const eligibleExisting = await getEligibleExistingTours(originOpts);
 
   // Phase 1: Area tours
   for (let i = 0; i < AREA_MAX_ATTEMPTS; i++) {
     const tourData = await attemptGeneration(locationContext, 'area', avoidLocations);
     if (!tourData) continue;
+    // Reject generations whose coordinates fall outside the requested radius/band.
+    if (originOpts && !isTourWithinOrigin(tourData, originOpts)) {
+      if (tourData.city && tourData.state) {
+        avoidLocations.push(`${tourData.city.trim()}, ${tourData.state.trim()}`);
+      }
+      continue;
+    }
     const existing = await findExistingTour(tourData.title, tourData.state, 'area', undefined, tourData.city);
     if (!existing) {
       const saved = await base44.entities.Tour.create({ ...tourData, tour_category: 'area' });
-      return { status: 'created', tour: saved };
+      return {
+        status: 'created',
+        tour: saved,
+        existingTours: dedupeToursById(eligibleExisting),
+      };
     }
     // Redundant — add to avoid list and retry with a different area
     if (tourData.city && tourData.state) {
@@ -155,20 +247,30 @@ export async function generateNewNearbyTour(locationContext) {
   for (let i = 0; i < COLD_SPOT_MAX_ATTEMPTS; i++) {
     const tourData = await attemptGeneration(locationContext, 'cold_spot', avoidLocations);
     if (!tourData) continue;
+    if (originOpts && !isTourWithinOrigin(tourData, originOpts)) {
+      if (tourData.city && tourData.state) {
+        avoidLocations.push(`${tourData.city.trim()}, ${tourData.state.trim()}`);
+      }
+      continue;
+    }
     const existing = await findExistingTour(tourData.title, tourData.state, 'cold_spot', undefined, tourData.city);
     if (!existing) {
       const saved = await base44.entities.Tour.create({ ...tourData, tour_category: 'cold_spot' });
-      return { status: 'created', tour: saved };
+      return {
+        status: 'created',
+        tour: saved,
+        existingTours: dedupeToursById(eligibleExisting),
+      };
     }
     if (tourData.city && tourData.state) {
       avoidLocations.push(`${tourData.city.trim()}, ${tourData.state.trim()}`);
     }
   }
 
-  // Phase 3: No new tour possible — gather existing tours to suggest
-  let existingTours = [];
-  try {
-    existingTours = await base44.entities.Tour.list('-created_date', 20);
-  } catch (e) { /* ignore */ }
-  return { status: 'none', existingTours };
+  // Phase 3: No new tour possible — return eligible existing tours only
+  // (radius/band filtered). Never fall back to global recency / first-item-only.
+  return {
+    status: 'none',
+    existingTours: dedupeToursById(eligibleExisting),
+  };
 }

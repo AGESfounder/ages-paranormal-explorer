@@ -1,18 +1,17 @@
 import { base44 } from '@/api/base44Client';
+import { getDevicePosition } from '@/lib/deviceCapabilities';
 
 /**
  * Captures the current device GPS coordinates.
  * Returns { latitude, longitude } or null if unavailable/denied.
  */
 export function captureGPS() {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-      () => resolve(null),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
-    );
-  });
+  return getDevicePosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 })
+    .then((result) => {
+      if (!result?.ok) return null;
+      return { latitude: result.coords.lat, longitude: result.coords.lng };
+    })
+    .catch(() => null);
 }
 
 /**

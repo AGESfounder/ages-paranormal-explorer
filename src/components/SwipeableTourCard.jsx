@@ -79,16 +79,47 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
     e.stopPropagation();
     reset();
     if (isDownloaded) {
-      removeTourOffline(tour.id);
+      const removed = removeTourOffline(tour.id);
+      if (removed?.ok === false) {
+        toast({
+          title: 'Could not remove offline tour',
+          description: removed.message || 'Please try again.',
+          variant: 'destructive',
+        });
+        return;
+      }
       setIsDownloaded(false);
+      toast({
+        title: 'Offline copy removed',
+        description: 'Tour text snapshot removed from this device.',
+      });
       return;
     }
     setActionLoading('download');
     try {
       const stops = await base44.entities.TourStop.filter({ tour_id: tour.id });
-      saveTourOffline(tour, stops);
-      setIsDownloaded(true);
-    } catch (err) { /* ignore */ }
+      const result = saveTourOffline(tour, stops);
+      if (!result?.ok) {
+        toast({
+          title: 'Download failed',
+          description: result?.message || 'Could not save this tour offline.',
+          variant: 'destructive',
+        });
+        setIsDownloaded(false);
+      } else {
+        setIsDownloaded(true);
+        toast({
+          title: 'Saved for offline',
+          description: 'Tour and stop text saved on this device. Media, maps, and live generation are not included.',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Download failed',
+        description: err?.message || 'Could not fetch stops to save offline. Check your connection and try again.',
+        variant: 'destructive',
+      });
+    }
     setActionLoading(null);
   };
 

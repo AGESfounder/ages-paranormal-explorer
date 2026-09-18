@@ -121,7 +121,7 @@ export function useEnergyGate() {
     canManifest, canNarrate, estimateNarrationCost,
     spendManifestation, spendNarration,
     gateManifestation, gateNarration,
-    showUpgrade, setShowUpgrade, gateReason,
+    showUpgrade, setShowUpgrade, gateReason, setGateReason,
   };
 }
 
@@ -132,13 +132,30 @@ export function useEnergyGate() {
 export async function checkManifestationGate() {
   try {
     const user = await base44.auth.me();
-    if (user?.role === 'admin') return { allowed: true };
-    if (!isPaidAccess(user)) return { allowed: false, reason: 'plan' };
+    if (!user) return { allowed: false, reason: 'auth', message: 'Sign in to generate detailed stop content.' };
+    if (user?.role === 'admin') return { allowed: true, reason: null };
+    if (!isPaidAccess(user)) {
+      return {
+        allowed: false,
+        reason: 'plan',
+        message: 'Detailed stop generation requires an Investigator plan or higher.',
+      };
+    }
     const { manifestation } = getSpendableEnergy(user);
-    if (manifestation <= 0) return { allowed: false, reason: 'energy' };
-    return { allowed: true };
+    if (manifestation <= 0) {
+      return {
+        allowed: false,
+        reason: 'energy',
+        message: 'You are out of manifestation energy. Earn more with a rewarded ad or wait for your monthly refill.',
+      };
+    }
+    return { allowed: true, reason: null };
   } catch (e) {
-    return { allowed: false, reason: 'plan' };
+    return {
+      allowed: false,
+      reason: 'network',
+      message: 'Could not verify your plan or energy. Check your connection and try again.',
+    };
   }
 }
 

@@ -101,7 +101,18 @@ export default function SLSCamera() {
       setRecordDuration(0);
       timerRef.current = setInterval(() => setRecordDuration(prev => prev + 1), 1000);
     } catch (e) {
-      setError('Camera access denied. Please allow camera permissions.');
+      const name = e?.name || '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setError('Camera access denied. Allow camera and microphone permissions in your device settings, then try again.');
+      } else if (name === 'NotFoundError') {
+        setError('No camera was found on this device.');
+      } else if (name === 'NotReadableError') {
+        setError('Camera is in use by another app. Close other camera apps and try again.');
+      } else if (name === 'NotSupportedError' || /MediaRecorder/i.test(String(e?.message || ''))) {
+        setError('Live camera recording is not supported in this browser. Still-photo capture cannot replace session recording.');
+      } else {
+        setError('Could not start the camera. Please try again.');
+      }
     }
   };
 

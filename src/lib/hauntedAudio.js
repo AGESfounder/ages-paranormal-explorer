@@ -44,6 +44,24 @@ export function onMusicSettingsChange(cb) {
   return () => musicListeners.delete(cb);
 }
 
+// Playback health for validation / Settings diagnostics. Does not change product.
+let playbackState = { status: 'idle', error: null, updatedAt: 0 };
+const playbackListeners = new Set();
+export function getHauntedPlaybackState() {
+  return playbackState;
+}
+export function setHauntedPlaybackState(partial) {
+  playbackState = { ...playbackState, ...partial, updatedAt: Date.now() };
+  playbackListeners.forEach((l) => {
+    try { l(playbackState); } catch {}
+  });
+}
+export function onHauntedPlaybackStateChange(cb) {
+  playbackListeners.add(cb);
+  try { cb(playbackState); } catch {}
+  return () => playbackListeners.delete(cb);
+}
+
 // Patch MediaRecorder so any recording session (EVP, radio sweep, SLS, REM,
 // sweepers) signals the busy bus — the music ducks while recording.
 if (typeof window !== 'undefined' && window.MediaRecorder && !window.MediaRecorder.__hauntedPatched) {

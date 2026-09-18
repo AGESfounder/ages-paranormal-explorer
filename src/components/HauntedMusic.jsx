@@ -6,6 +6,7 @@ import {
   getMusicSettings,
   setMusicSettings,
   isAudioBusy,
+  setHauntedPlaybackState,
 } from '@/lib/hauntedAudio';
 
 // Window-level singleton: survives HMR module re-evaluation so a stale player
@@ -188,16 +189,40 @@ export default function HauntedMusic() {
       } else {
         a.volume = vol * 0.9; // fallback before Web Audio is set up
       }
-      if (shouldPlay && a.paused) a.play().catch(() => {});
-      else if (!shouldPlay && !a.paused) a.pause();
+      if (shouldPlay && a.paused) {
+        a.play()
+          .then(() => setHauntedPlaybackState({ status: 'playing', error: null }))
+          .catch((err) => {
+            setHauntedPlaybackState({
+              status: 'blocked',
+              error: err?.message || 'Playback blocked until a user gesture or app foreground.',
+            });
+          });
+      } else if (!shouldPlay && !a.paused) {
+        a.pause();
+        setHauntedPlaybackState({ status: hauntedEnabled ? 'ducked' : 'paused', error: null });
+      } else if (shouldPlay && !a.paused) {
+        setHauntedPlaybackState({ status: 'playing', error: null });
+      }
     };
 
     // Browsers require a user gesture to start audio — play on first tap.
     const unlock = () => {
       if (!audioRef.current) return;
       setupWebAudio();
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-      audioRef.current.play().then(applyVolume).catch(() => {});
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume()
+          .then(() => setHauntedPlaybackState({ status: 'ready', error: null }))
+          .catch((err) => setHauntedPlaybackState({ status: 'error', error: err?.message || 'AudioContext resume failed' }));
+      }
+      audioRef.current.play()
+        .then(() => { applyVolume(); setHauntedPlaybackState({ status: 'playing', error: null }); })
+        .catch((err) => {
+          setHauntedPlaybackState({
+            status: 'blocked',
+            error: err?.message || 'Tap anywhere to enable haunted ambience.',
+          });
+        });
     };
     // Stop playback when the app is backgrounded / closed.
     const onVisibility = () => {
@@ -210,6 +235,27 @@ export default function HauntedMusic() {
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', onVisibility);
 
+    // Native foreground resume via Capacitor App plugin when available.
+    let removeAppListener = null;
+    try {
+      import('@capacitor/app').then(({ App }) => {
+        App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) {
+            setupWebAudio();
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+            applyVolume();
+          } else {
+            audioRef.current?.pause();
+            setHauntedPlaybackState({ status: 'paused', error: null });
+          }
+        }).then((handle) => {
+          removeAppListener = () => { try { handle?.remove?.(); } catch {} };
+        }).catch(() => {});
+      }).catch(() => {});
+    } catch {}
+
+    setHauntedPlaybackState({ status: 'ready', error: null });
+
     const unsubBusy = onAudioBusyChange(applyVolume);
     const unsubMusic = onMusicSettingsChange(applyVolume);
     // Safety net: keep the player's volume in sync with the live settings even
@@ -220,6 +266,7 @@ export default function HauntedMusic() {
       unsubBusy && unsubBusy();
       unsubMusic && unsubMusic();
       clearInterval(poll);
+      try { removeAppListener?.(); } catch {}
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('touchstart', unlock);
       window.removeEventListener('keydown', unlock);
@@ -231,6 +278,7 @@ export default function HauntedMusic() {
       if (audioCtx) { try { audioCtx.close(); } catch {} }
       if (window.__hauntedAudioEl === audio) window.__hauntedAudioEl = null;
       if (window.__hauntedAudioUrl) { try { URL.revokeObjectURL(window.__hauntedAudioUrl); } catch {} window.__hauntedAudioUrl = null; }
+      setHauntedPlaybackState({ status: 'idle', error: null });
     };
   }, []);
 
