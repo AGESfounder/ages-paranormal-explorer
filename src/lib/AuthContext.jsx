@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { base44, base44ServerUrl } from '@/api/base44Client';
 import { appParams } from '@/lib/app-params';
 import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 import { identifyRevenueCatUser, resetRevenueCatUser } from '@/lib/revenuecat';
@@ -21,7 +21,10 @@ export const AuthProvider = ({ children }) => {
 
   const fetchPublicSettings = async (useToken) => {
     const appClient = createAxiosClient({
-      baseURL: `/api/apps/public`,
+      // On native, base44ServerUrl is the remote Base44 app origin so this hits
+      // https://<app>.base44.app/api/apps/public; on web it is '' and the path
+      // stays relative `/api/apps/public` as before.
+      baseURL: `${base44ServerUrl}/api/apps/public`,
       headers: {
         'X-App-Id': appParams.appId
       },
