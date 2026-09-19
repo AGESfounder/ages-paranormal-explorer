@@ -271,10 +271,13 @@ export default function useGhostVoice() {
   const narrate = useCallback((text, opts = {}) => {
     if (isSpeaking || isGenerating) {
       stop();
+    } else if (opts?.preGenerated) {
+      // Play a pre-generated audio URL directly (no GenerateSpeech call)
+      playPreGenerated(text, opts);
     } else {
       speak(text, opts);
     }
-  }, [isSpeaking, isGenerating, speak, stop]);
+  }, [isSpeaking, isGenerating, speak, stop, playPreGenerated]);
 
   // Connect the mic into the same Web Audio destination that captures the
   // dictated speech, returning one audio track containing both — so the

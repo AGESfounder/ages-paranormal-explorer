@@ -12,7 +12,8 @@ import HighlightPeople from '../components/HighlightPeople';
 import PersonStoryDialog from '../components/PersonStoryDialog';
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
-import { getOfflineStop } from '@/lib/offlineTours';
+import { getOfflineStop, getOfflineTour } from '@/lib/offlineTours';
+import { getOfflineStopAudio } from '@/lib/offlineAudio';
 import BePatient from '@/components/BePatient';
 import AdGate from '@/components/AdGate';
 import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
@@ -62,10 +63,19 @@ export default function StopDetail() {
   const [deletingStop, setDeletingStop] = useState(false);
   const [addingShuttle, setAddingShuttle] = useState(false);
 
-  // Gated narration wrapper — checks energy before speaking, toggles off for free.
-  const narrate = (text, opts = {}) => {
+  // Gated narration wrapper — checks for pre-generated offline audio first,
+  // then falls back to live TTS generation (which costs narration credits).
+  const narrate = async (text, opts = {}) => {
     const cleanText = stripUrlsForNarration(text);
     if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
+    // Check for pre-generated offline audio (from a full download)
+    if (stop?.tour_id && stop?.id) {
+      const offlineUrl = await getOfflineStopAudio(stop.tour_id, stop.id);
+      if (offlineUrl) {
+        rawNarrate(offlineUrl, { ...opts, preGenerated: true });
+        return;
+      }
+    }
     if (!gateNarration(cleanText)) return;
     rawNarrate(cleanText, opts);
     spendNarration(estimateNarrationCost(cleanText));

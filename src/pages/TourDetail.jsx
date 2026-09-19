@@ -10,6 +10,7 @@ import TourMap from '../components/TourMap';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { base44 } from '@/api/base44Client';
 import { getOfflineTour } from '@/lib/offlineTours';
+import { getOfflineAudio } from '@/lib/offlineAudio';
 import { callJson } from '@/lib/llmJson';
 import BePatient from '@/components/BePatient';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
@@ -190,10 +191,22 @@ export default function TourDetail() {
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
 
-  // Gated narration wrapper — checks energy before speaking, toggles off for free.
-  const narrate = (text, opts = {}) => {
+  // Gated narration wrapper — checks for pre-generated offline audio first,
+  // then falls back to live TTS generation (which costs narration credits).
+  const narrate = async (text, opts = {}) => {
     const cleanText = stripUrlsForNarration(text);
     if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
+    // Check for pre-generated offline audio (from a full download)
+    if (tour?.id) {
+      const audioKey = opts?.audioKey || (text === tour.introduction ? 'intro' : text === tour.conclusion ? 'conclusion' : null);
+      if (audioKey) {
+        const offlineUrl = await getOfflineAudio(tour.id, audioKey);
+        if (offlineUrl) {
+          rawNarrate(offlineUrl, { ...opts, preGenerated: true });
+          return;
+        }
+      }
+    }
     if (!gateNarration(cleanText)) return;
     rawNarrate(cleanText, opts);
     spendNarration(estimateNarrationCost(cleanText));

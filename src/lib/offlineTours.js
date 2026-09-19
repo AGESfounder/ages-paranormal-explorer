@@ -119,3 +119,14 @@ export function getOfflineStop(stopId) {
 export function listOfflineTourIds() {
   return Object.keys(readAll());
 }
+
+/**
+ * List all saved offline tours as full entries (for the Saved tab).
+ * Returns array of { tour, stops, savedAt, level, hasAudio } sorted newest first.
+ */
+export function listOfflineTours() {
+  const map = readAll();
+  return Object.values(map)
+    .filter((e) => e && e.tour)
+    .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+}

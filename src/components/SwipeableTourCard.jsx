@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Heart, Plus, Trash2, Loader2, Download, CheckCircle2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
-import { isTourOffline, saveTourOffline, removeTourOffline } from '@/lib/offlineTours';
+import { isTourOffline, removeTourOffline } from '@/lib/offlineTours';
 import { addTourStops } from '@/lib/addTourStops';
 import { toast } from '@/components/ui/use-toast';
+import DownloadTourDialog from '@/components/DownloadTourDialog';
 
 const BUTTON_WIDTH = 60;
 const SWIPE_THRESHOLD = 50;
@@ -17,6 +18,8 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+  const [downloadStops, setDownloadStops] = useState([]);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const swiping = useRef(false);
@@ -91,36 +94,30 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
       setIsDownloaded(false);
       toast({
         title: 'Offline copy removed',
-        description: 'Tour text snapshot removed from this device.',
+        description: 'Tour removed from this device.',
       });
       return;
     }
+    // Fetch stops then open the download options dialog
     setActionLoading('download');
     try {
       const stops = await base44.entities.TourStop.filter({ tour_id: tour.id });
-      const result = saveTourOffline(tour, stops);
-      if (!result?.ok) {
-        toast({
-          title: 'Download failed',
-          description: result?.message || 'Could not save this tour offline.',
-          variant: 'destructive',
-        });
-        setIsDownloaded(false);
-      } else {
-        setIsDownloaded(true);
-        toast({
-          title: 'Saved for offline',
-          description: 'Tour and stop text saved on this device. Media, maps, and live generation are not included.',
-        });
-      }
+      setDownloadStops(stops);
+      setShowDownloadDialog(true);
     } catch (err) {
       toast({
         title: 'Download failed',
-        description: err?.message || 'Could not fetch stops to save offline. Check your connection and try again.',
+        description: err?.message || 'Could not fetch tour data. Check your connection and try again.',
         variant: 'destructive',
       });
     }
     setActionLoading(null);
+  };
+
+  const handleDownloaded = () => {
+    setIsDownloaded(true);
+    setShowDownloadDialog(false);
+    if (onRefresh) onRefresh(tour.id);
   };
 
   const handleAddStops = async (e) => {
@@ -225,6 +222,14 @@ export default function SwipeableTourCard({ tour, onRefresh, onDelete, children 
       >
         {children}
       </div>
+
+      <DownloadTourDialog
+        tour={tour}
+        stops={downloadStops}
+        open={showDownloadDialog}
+        onClose={() => setShowDownloadDialog(false)}
+        onDownloaded={handleDownloaded}
+      />
     </div>
   );
 }
