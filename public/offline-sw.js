@@ -1,61 +1,25 @@
-// AGES Paranormal Explorer — offline service worker
-// ONLY intercepts map tiles and cached audio. Everything else passes through
-// to the browser untouched (no event.respondWith) so the app is never broken.
+// AGES Paranormal Explorer — service worker self-uninstaller.
+// A previous version of this SW intercepted all fetch requests and caused
+// a black screen. This version's ONLY job is to unregister itself and tell
+// all open clients to reload, so the app returns to normal (no SW control).
 
-const TILE_CACHE = 'ages-tiles-v1';
-const AUDIO_CACHE = 'ages-audio-v1';
-
-self.addEventListener('install', () => {
+self.addEventListener('install', (event) => {
+  // Activate immediately — don't wait for old SW to die.
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((names) =>
-      Promise.all(
-        names
-          .filter((name) => ![TILE_CACHE, AUDIO_CACHE].includes(name))
-          .map((name) => caches.delete(name))
-      )
-    )
+    (async () => {
+      // Unregister this service worker so it stops controlling the app.
+      await self.registration.unregister();
+      // Tell all open tabs/windows to reload with no SW interference.
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach((client) => {
+        try { client.navigate(client.url); } catch {}
+      });
+    })()
   );
-  self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  const url = new URL(req.url);
-
-  // Cache-first for map tiles (Esri ArcGIS) only
-  if (url.hostname.includes('arcgisonline.com')) {
-    event.respondWith(
-      caches.open(TILE_CACHE).then(async (cache) => {
-        const cached = await cache.match(req, { ignoreSearch: true });
-        if (cached) return cached;
-        try {
-          const resp = await fetch(req);
-          if (resp.ok || resp.type === 'opaque') cache.put(req, resp.clone());
-          return resp;
-        } catch {
-          return new Response('', { status: 504 });
-        }
-      })
-    );
-    return;
-  }
-
-  // Cache-first for audio blobs only
-  if (url.protocol === 'blob:' || url.href.includes('ages-offline-audio:')) {
-    event.respondWith(
-      caches.open(AUDIO_CACHE).then(async (cache) => {
-        const cached = await cache.match(req);
-        if (cached) return cached;
-        return fetch(req);
-      })
-    );
-    return;
-  }
-
-  // Everything else: do NOTHING — let the browser handle it normally.
-  // Calling event.respondWith with undefined or a failed cache match crashes the app.
-});
+// Do NOT add a fetch handler — let the browser handle everything normally.
