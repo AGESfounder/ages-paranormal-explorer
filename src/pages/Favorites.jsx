@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Heart, MapPin, Loader2, Ghost, Download } from 'lucide-react';
+import { Heart, MapPin, Loader2, Ghost, Download, Trash2 } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -14,9 +14,21 @@ import SavedToursList from '@/components/SavedToursList';
 export default function Favorites() {
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [removingId, setRemovingId] = useState(null);
   const [activeTab, setActiveTab] = useState('favorites');
 
   useEffect(() => { loadFavorites(); }, []);
+
+  const handleRemoveFavorite = async (favId) => {
+    setRemovingId(favId);
+    try {
+      await base44.entities.Favorite.delete(favId);
+      setFavorites(prev => prev.filter(f => f.id !== favId));
+    } catch (e) {
+      // ignore — item stays in list
+    }
+    setRemovingId(null);
+  };
 
   const loadFavorites = async () => {
     const data = await base44.entities.Favorite.list('-created_date');
@@ -78,7 +90,18 @@ export default function Favorites() {
               <div className="space-y-3">
                 {favorites.map((fav, i) => (
                   <motion.div key={fav.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                    <TourListItem tour={fav.tour} />
+                    <div className="flex">
+                      <div className="flex-1 min-w-0">
+                        <TourListItem tour={fav.tour} />
+                      </div>
+                      <button
+                        onClick={() => handleRemoveFavorite(fav.id)}
+                        disabled={removingId === fav.id}
+                        className="p-3 self-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 disabled:opacity-50"
+                      >
+                        {removingId === fav.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </motion.div>
                 ))}
               </div>
