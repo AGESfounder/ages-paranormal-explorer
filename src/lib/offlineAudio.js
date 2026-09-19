@@ -3,6 +3,8 @@
 // stores the audio blobs in the Cache API so they play offline.
 
 import { base44 } from '@/api/base44Client';
+import { condenseTextsBatch, cacheCondensation, truncateText } from '@/lib/narrationLength';
+import { spendManifestationEnergy } from '@/hooks/useEnergyGate';
 
 const AUDIO_CACHE = 'ages-audio-v1';
 
@@ -13,21 +15,23 @@ export function estimateNarrationCredits(text) {
 
 // Calculate total narration credits for a full tour download.
 // Includes intro, conclusion, and each stop's narration text.
-export function estimateTourNarrationCredits(tour, stops) {
+export function estimateTourNarrationCredits(tour, stops, narrationLength = 'manifestation') {
+  const fraction = narrationLength === 'whisper' ? 1 / 3 : narrationLength === 'echo' ? 2 / 3 : 1;
   let totalChars = 0;
-  if (tour?.introduction) totalChars += tour.introduction.length;
-  if (tour?.conclusion) totalChars += tour.conclusion.length;
+  if (tour?.introduction) totalChars += tour.introduction.length * fraction;
+  if (tour?.conclusion) totalChars += tour.conclusion.length * fraction;
   for (const s of stops || []) {
-    if (s.narration_text) totalChars += s.narration_text.length;
+    if (s.narration_text) totalChars += s.narration_text.length * fraction;
   }
-  return Math.min(100 * ((tour?.introduction ? 1 : 0) + (tour?.conclusion ? 1 : 0) + (stops?.length || 0)),
-    Math.max(1, Math.ceil(totalChars / 50)));
+  const segmentCount = (tour?.introduction ? 1 : 0) + (tour?.conclusion ? 1 : 0) +
+    (stops?.filter(s => s.narration_text && s.stop_type !== 'parking' && s.stop_type !== 'shuttle').length || 0);
+  return Math.min(100 * segmentCount, Math.max(1, Math.ceil(totalChars / 50)));
 }
 
 // Generate and cache TTS audio for all narratable tour content.
 // Calls onProgress(completed, total, currentLabel) as each piece generates.
 // Returns { audioMap, errors } where audioMap is { [key]: url }.
-export async function generateTourAudio(tour, stops, onProgress) {
+export async function generateTourAudio(tour, stops, onProgress, narrationLength = 'manifestation') {
   if (!('caches' in window)) {
     return { audioMap: {}, errors: 0, reason: 'Cache API unavailable' };
   }
@@ -47,6 +51,33 @@ export async function generateTourAudio(tour, stops, onProgress) {
   for (const s of stops || []) {
     if (s.narration_text && s.stop_type !== 'parking' && s.stop_type !== 'shuttle') {
       items.push({ key: `stop:${s.id}`, text: s.narration_text, label: s.name || `Stop ${s.stop_number}` });
+    }
+  }
+
+  // Condense texts for whisper/echo modes. The condensed text is used for
+  // audio generation AND cached in localStorage so the display layer
+  // (useCondensedTexts) finds it offline without a live LLM call.
+  if (narrationLength !== 'manifestation') {
+    const textMap = {};
+    for (const item of items) {
+      textMap[item.key] = item.text;
+    }
+    try {
+      const condensed = await condenseTextsBatch(textMap, narrationLength);
+      for (const item of items) {
+        if (condensed[item.key]) {
+          cacheCondensation(item.text, narrationLength, condensed[item.key]);
+          item.text = condensed[item.key];
+        } else {
+          item.text = truncateText(item.text, narrationLength);
+        }
+      }
+      await spendManifestationEnergy();
+    } catch (e) {
+      console.error('Condensation failed, using truncated fallback:', e);
+      for (const item of items) {
+        item.text = truncateText(item.text, narrationLength);
+      }
     }
   }
 

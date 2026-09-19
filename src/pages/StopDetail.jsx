@@ -67,15 +67,17 @@ export default function StopDetail() {
   // then falls back to live TTS generation (which costs narration credits).
   const narrate = async (text, opts = {}) => {
     const cleanText = stripUrlsForNarration(text);
-    if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
-    // Check for pre-generated offline audio (from a full download)
-    if (stop?.tour_id && stop?.id) {
+    // Check for pre-generated offline audio FIRST — only for the stop's
+    // narration text (flagged by opts.offlineAudio). Other texts (paranormal
+    // info, historical info) don't have cached audio and use live TTS.
+    if (opts?.offlineAudio && stop?.tour_id && stop?.id) {
       const offlineUrl = await getOfflineStopAudio(stop.tour_id, stop.id);
       if (offlineUrl) {
         rawNarrate(offlineUrl, { ...opts, preGenerated: true });
         return;
       }
     }
+    if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
     if (!gateNarration(cleanText)) return;
     rawNarrate(cleanText, opts);
     spendNarration(estimateNarrationCost(cleanText));
@@ -587,7 +589,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         showBack
         onBack={() => navigate(`/tour/${stop.tour_id}`)}
         rightAction={
-          <button onClick={() => narrate(displayNarrationText || displayParanormalInfo)} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
+          <button onClick={() => narrate(displayNarrationText || displayParanormalInfo, { offlineAudio: !!displayNarrationText })} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
             {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
         }
@@ -718,7 +720,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 <Ghost className="w-4 h-4 text-primary" />
                 <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Ghost Story</span>
               </div>
-              <button onClick={() => narrate(displayNarrationText)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+              <button onClick={() => narrate(displayNarrationText, { offlineAudio: true })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
                 {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={displayNarrationText} /></>}
               </button>
             </div>

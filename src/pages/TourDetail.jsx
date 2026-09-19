@@ -195,8 +195,9 @@ export default function TourDetail() {
   // then falls back to live TTS generation (which costs narration credits).
   const narrate = async (text, opts = {}) => {
     const cleanText = stripUrlsForNarration(text);
-    if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
-    // Check for pre-generated offline audio (from a full download)
+    // Check for pre-generated offline audio FIRST — before the isSpeaking
+    // check, so offline audio plays even if a previous live TTS attempt
+    // left isSpeaking/isGenerating stuck.
     if (tour?.id) {
       const audioKey = opts?.audioKey || (text === tour.introduction ? 'intro' : text === tour.conclusion ? 'conclusion' : null);
       if (audioKey) {
@@ -207,6 +208,7 @@ export default function TourDetail() {
         }
       }
     }
+    if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
     if (!gateNarration(cleanText)) return;
     rawNarrate(cleanText, opts);
     spendNarration(estimateNarrationCost(cleanText));
