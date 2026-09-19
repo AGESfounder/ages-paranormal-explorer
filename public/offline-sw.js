@@ -1,76 +1,70 @@
-// Service worker for offline map tile + audio caching.
-// Cache-first for Esri tile URLs and pre-generated audio URLs.
-// Everything else passes through to the network.
+// AGES Paranormal Explorer — offline service worker
+// Caches map tiles and narration audio for offline tour playback.
+// Uses a cache-first strategy for cached resources, network-first for everything else.
 
 const TILE_CACHE = 'ages-tiles-v1';
 const AUDIO_CACHE = 'ages-audio-v1';
+const CORE_CACHE = 'ages-core-v1';
 
-const TILE_PATTERNS = [
-  'server.arcgisonline.com/ArcGIS/rest/services',
-];
-
-// Pre-generated audio URLs are stored with a known prefix so we can identify
-// them in fetch events. The app stores audio blobs keyed by their original
-// remote URL, so when the app plays a pre-generated URL offline, this SW
-// intercepts the fetch and serves the cached blob.
-const AUDIO_URL_PREFIX = 'ages-offline-audio:';
+// Core app assets to precache (minimal — just the shell)
+const CORE_ASSETS = ['/'];
 
 self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CORE_CACHE).then((cache) => cache.addAll(CORE_ASSETS)).catch(() => {})
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    (async () => {
-      // Clean up old caches
-      const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter((k) => k !== TILE_CACHE && k !== AUDIO_CACHE)
-          .map((k) => caches.delete(k))
-      );
-      await self.clients.claim();
-    })()
+    caches.keys().then((names) =>
+      Promise.all(
+        names
+          .filter((name) => ![TILE_CACHE, AUDIO_CACHE, CORE_CACHE].includes(name))
+          .map((name) => caches.delete(name))
+      )
+    )
   );
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Only handle GET requests
-  if (req.method !== 'GET') return;
-
-  const isTile = TILE_PATTERNS.some((p) => url.href.includes(p));
-  const isAudio = url.href.includes(AUDIO_URL_PREFIX) || req.headers.get('X-Ages-Offline-Audio') === '1';
-
-  if (!isTile && !isAudio) return;
-
-  const cacheName = isAudio ? AUDIO_CACHE : TILE_CACHE;
-
-  event.respondWith(
-    (async () => {
-      const cache = await caches.open(cacheName);
-      const cached = await cache.match(req, { ignoreSearch: true });
-      if (cached) return cached;
-
-      try {
-        const resp = await fetch(req);
-        // Only cache successful responses
-        if (resp.ok || resp.type === 'opaque') {
-          cache.put(req, resp.clone());
+  // Cache-first for map tiles (Esri ArcGIS)
+  if (url.hostname.includes('arcgisonline.com')) {
+    event.respondWith(
+      caches.open(TILE_CACHE).then(async (cache) => {
+        const cached = await cache.match(req, { ignoreSearch: true });
+        if (cached) return cached;
+        try {
+          const resp = await fetch(req);
+          if (resp.ok || resp.type === 'opaque') {
+            cache.put(req, resp.clone());
+          }
+          return resp;
+        } catch {
+          return new Response('', { status: 504 });
         }
-        return resp;
-      } catch (err) {
-        // Offline and not cached — return a transparent 1px placeholder for tiles
-        if (isTile) {
-          return new Response(
-            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-            { headers: { 'Content-Type': 'image/png' } }
-          );
-        }
-        throw err;
-      }
-    })()
-  );
+      })
+    );
+    return;
+  }
+
+  // Cache-first for audio blobs stored in our audio cache
+  if (url.protocol === 'blob:' || url.href.includes('ages-offline-audio:')) {
+    event.respondWith(
+      caches.open(AUDIO_CACHE).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        return fetch(req);
+      })
+    );
+    return;
+  }
+
+  // Network-first for everything else (don't break the app offline — just let it fail)
+  event.respondWith(fetch(req).catch(() => caches.match(req)));
 });
