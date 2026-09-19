@@ -353,6 +353,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     speechStartedRef.current = false;
     // Let the female voice finish the current word, then speak male
     const speakMale = () => {
+      if (!gateNarration(formatForSpeech(word))) return;
       try { speak(formatForSpeech(word), {}); spendNarration(1); } catch {}
     };
     if (femaleBusyRef.current) {

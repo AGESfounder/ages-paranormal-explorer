@@ -220,6 +220,7 @@ export default function YesNoSweeper() {
     sweepingRef.current = false;
     // Let the female voice finish the current phrase, then speak male
     const speakMale = () => {
+      if (!gateNarration(phrase.speech)) return;
       try { speak(phrase.speech, {}); spendNarration(1); } catch {} // deep male "storm" voice
     };
     if (femaleBusyRef.current) {

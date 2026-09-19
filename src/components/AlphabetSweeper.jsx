@@ -229,6 +229,7 @@ export default function AlphabetSweeper() {
     // Yes/No/IDK sweeper: speak() from useGhostVoice (GenerateSpeech "storm"
     // voice via Web Audio, connected to the recording destination).
     const speakMale = () => {
+      if (!gateNarration(LETTER_TEXT[letter] || letter.toLowerCase())) return;
       try { speak(LETTER_TEXT[letter] || letter.toLowerCase(), { volume: 1.6 }); spendNarration(1); } catch {}
     };
     if (femaleBusyRef.current) {

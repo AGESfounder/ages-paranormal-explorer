@@ -15,6 +15,8 @@ import TourCategoryDialog from '@/components/TourCategoryDialog';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
 import TourListItem from '@/components/TourListItem';
 import PullToRefresh from '@/components/PullToRefresh';
+import { useEnergyGate } from '@/hooks/useEnergyGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function StateTours() {
   const { stateAbbr } = useParams();
@@ -26,6 +28,8 @@ export default function StateTours() {
   const [error, setError] = useState('');
   const [existingTour, setExistingTour] = useState(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+
+  const { gateManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const stateName = US_STATES.find(s => s.abbr === stateAbbr)?.name || stateAbbr;
 
@@ -180,6 +184,7 @@ Use real locations with documented paranormal history only.`,
   // generates a brand-new tour there. Keeps the state's catalogue growing into
   // untouched paranormal territory instead of re-covering the same cities.
   const handleCreateNewTour = async (category, accessType) => {
+    if (!gateManifestation()) return;
     setCreatingNew(true);
     setError('');
     try {
@@ -286,6 +291,7 @@ Use real locations with documented paranormal history only.`,
         onSelect={(category, accessType) => { setShowCategoryDialog(false); handleCreateNewTour(category, accessType); }}
         destination={stateName}
       />
+      <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
       <NavBar />
     </PageContainer>
   );

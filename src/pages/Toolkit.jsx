@@ -11,6 +11,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import { getEffectivePlanId } from '@/lib/access';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import ResearchDatabase from '../components/ResearchDatabase';
 import useGhostVoice from '../hooks/useGhostVoice';
@@ -34,6 +35,14 @@ const DEFAULT_TOOLS = [
   { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
 ];
+
+// Tier-based tool access. null = all tools. Mirrors TierToolsComparison.jsx.
+const TIER_TOOLS = {
+  observer: ['Equipment Guide', 'Safety Protocol'],
+  explorer: ['Audio Recorder', 'Radio Sweeper', 'Yes/No/IDK Sweeper', 'Equipment Guide', 'Weather Monitor', 'Moon Phase', 'Paranormal Research: Terms', 'Safety Protocol'],
+  investigator: null,
+  trailblazer: null,
+};
 
 const SWEEP_SPEEDS = {
   slow: { label: 'Slow', ms: 400 },
@@ -59,6 +68,10 @@ export default function Toolkit() {
   useEffect(() => {
     base44.auth.me().then(u => {
       setIsAdmin(u?.role === 'admin');
+      const planId = getEffectivePlanId(u);
+      const allowed = TIER_TOOLS[planId];
+      const baseTools = allowed ? DEFAULT_TOOLS.filter(t => allowed.includes(t.name)) : DEFAULT_TOOLS;
+      setTools(applyOrder(baseTools, u?.toolkit_order));
     }).catch(() => {});
   }, []);
 
