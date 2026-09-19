@@ -47,7 +47,7 @@ export default function TourStopRow({ stop, onNavigate, onNarrate, isSpeaking, i
           </div>
         )}
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNarrate(truncateText(stop.narration_text || stop.paranormal_info, narrationLength)); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNarrate(truncateText(stop.narration_text || stop.paranormal_info, narrationLength), { audioKey: `stop:${stop.id}` }); }}
           className={`p-1.5 rounded-md shrink-0 transition-colors ${isSpeaking || isGenerating ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}
         >
           {isSpeaking || isGenerating ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}

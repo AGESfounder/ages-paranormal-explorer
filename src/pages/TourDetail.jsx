@@ -2,15 +2,15 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign, CheckCircle2, PartyPopper, Route, Plus } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign, CheckCircle2, PartyPopper, Route, Plus, Trash2 } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import TourMap from '../components/TourMap';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { base44 } from '@/api/base44Client';
-import { getOfflineTour } from '@/lib/offlineTours';
-import { getOfflineAudio } from '@/lib/offlineAudio';
+import { getOfflineTour, removeTourOffline, isTourOffline } from '@/lib/offlineTours';
+import { getOfflineAudio, clearTourAudio } from '@/lib/offlineAudio';
 import { callJson } from '@/lib/llmJson';
 import BePatient from '@/components/BePatient';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
@@ -189,6 +189,14 @@ export default function TourDetail() {
   const [addingStop, setAddingStop] = useState(false);
   const [stopSearchName, setStopSearchName] = useState('');
   const [travelMode, setTravelMode] = useState('mixed');
+  const [isOfflineCached, setIsOfflineCached] = useState(false);
+
+  const handleRemoveOffline = async () => {
+    await clearTourAudio(tourId);
+    removeTourOffline(tourId);
+    setIsOfflineCached(false);
+    toast({ title: 'Offline tour removed', description: 'Saved data cleared from this device.' });
+  };
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
 
@@ -567,9 +575,18 @@ export default function TourDetail() {
       const cached = getOfflineTour(tourId);
       if (cached) {
         setTour(cached.tour);
-        setStops(cached.stops || []);
+        // Sort cached stops: parking first, then shuttle, then by stop_number.
+        // The saved array order may not match stop_number order — sorting
+        // ensures correct display order when loaded offline.
+        const sortedStops = (cached.stops || []).slice().sort((a, b) => {
+          const aOrder = a.stop_type === 'parking' ? -2 : a.stop_type === 'shuttle' ? -1 : (a.stop_number || 0);
+          const bOrder = b.stop_type === 'parking' ? -2 : b.stop_type === 'shuttle' ? -1 : (b.stop_number || 0);
+          return aOrder - bOrder;
+        });
+        setStops(sortedStops);
       }
     }
+    setIsOfflineCached(isTourOffline(tourId));
     setLoading(false);
   };
 
@@ -1230,11 +1247,20 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
 
         <TourAccessInfo tour={tour} stops={stops} />
 
+        {isOfflineCached && (
+          <button
+            onClick={handleRemoveOffline}
+            className="w-full flex items-center justify-center gap-2 p-2.5 rounded-lg border border-destructive/30 bg-destructive/5 text-destructive text-xs font-heading uppercase tracking-wider hover:bg-destructive/15 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Remove Offline Download
+          </button>
+        )}
+
         {tour.introduction && (
           <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-primary">Introduction</h3>
-              <button onClick={() => narrate(displayIntroduction)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+              <button onClick={() => narrate(displayIntroduction, { audioKey: 'intro' })} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
                 {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={displayIntroduction} /></>}
               </button>
             </div>
@@ -1383,7 +1409,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           <div id="conclusion" className="p-4 rounded-xl border border-dim-purple/20 bg-dim-purple/5 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-dim-purple">Conclusion</h3>
-              <button onClick={() => { narrate(displayConclusion); setConclusionRead(true); }} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
+              <button onClick={() => { narrate(displayConclusion, { audioKey: 'conclusion' }); setConclusionRead(true); }} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
                 {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={displayConclusion} /></>}
               </button>
             </div>
