@@ -272,6 +272,7 @@ export default function Nearby() {
                   placeholder="Enter zip code"
                   className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-foreground text-base placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                   maxLength={5}
+                  style={{ fontSize: '16px' }}
                 />
                 <button
                   onClick={() => generateTourForZip(zipCode)}
@@ -300,6 +301,7 @@ export default function Nearby() {
                 placeholder="Enter zip code"
                 className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-foreground text-base placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                 maxLength={5}
+                style={{ fontSize: '16px' }}
               />
               <button
                 onClick={() => generateTourForZip(zipCode)}

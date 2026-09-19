@@ -114,6 +114,18 @@
     user-select: text;
   }
 
+  /* Prevent iOS auto-zoom on input focus: Apple requires >= 16px computed
+     font-size or Safari zooms the viewport and never zooms back out.
+     This type+attribute selector (0,0,1,1) outranks Tailwind's .text-sm
+     (0,0,1,0), so even inputs explicitly styled text-sm stay 16px on mobile.
+     Desktop is unaffected — the shadcn Input default is already text-base. */
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="number"], input[type="tel"], input[type="search"],
+  input[type="url"], input[type="date"], input[type="time"],
+  textarea, select {
+    font-size: 16px;
+  }
+
   body {
     @apply bg-background text-foreground font-body;
     text-shadow: 0 0 6px hsl(199 89% 48% / 0.10);
