@@ -79,52 +79,52 @@ export default function SavedToursList() {
             transition={{ delay: i * 0.05 }}
           >
             <div className="rounded-xl border border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden">
-              <div className="p-4 space-y-2.5">
-                {/* Title + remove */}
-                <div className="flex items-start justify-between gap-2">
-                  <Link to={`/tour/${tour.id}`} className="flex-1 min-w-0">
-                    <h3 className="font-heading text-sm font-bold text-foreground hover:text-primary transition-colors truncate">{tour.title}</h3>
-                  </Link>
-                  <button
-                    onClick={() => handleRemove(tour.id)}
-                    disabled={removingId === tour.id}
-                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 disabled:opacity-50"
-                  >
-                    {removingId === tour.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                  </button>
-                </div>
+              <div className="flex">
+                <Link to={`/tour/${tour.id}`} className="flex-1 p-4 space-y-2.5 active:bg-primary/5 transition-colors">
+                  {/* Title */}
+                  <h3 className="font-heading text-sm font-bold text-foreground truncate">{tour.title}</h3>
 
-                {/* Location + category */}
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1 min-w-0">
-                    <MapPin className="w-3 h-3 shrink-0" />
-                    <span className="truncate">{tour.city}, {tour.state}</span>
-                  </span>
-                  <TourCategoryBadge category={tour.tour_category} />
-                </div>
-
-                {/* Description */}
-                {tour.description && (
-                  <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{tour.description}</p>
-                )}
-
-                {/* Badges: what's saved */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-primary/15 text-primary border border-primary/30">
-                    <Map className="w-3 h-3" /> Maps + Text
-                  </span>
-                  {hasAudio && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-accent/20 text-accent-foreground border border-accent/40">
-                      <Volume2 className="w-3 h-3" /> Narration
+                  {/* Location + category */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1 min-w-0">
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{tour.city}, {tour.state}</span>
                     </span>
+                    <TourCategoryBadge category={tour.tour_category} />
+                  </div>
+
+                  {/* Description */}
+                  {tour.description && (
+                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{tour.description}</p>
                   )}
-                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Clock className="w-3 h-3" /> {savedDate}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {stopCount} stop{stopCount !== 1 ? 's' : ''}
-                  </span>
-                </div>
+
+                  {/* Badges: what's saved */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-primary/15 text-primary border border-primary/30">
+                      <Map className="w-3 h-3" /> Maps + Text
+                    </span>
+                    {hasAudio && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-accent/20 text-accent-foreground border border-accent/40">
+                        <Volume2 className="w-3 h-3" /> Narration
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Clock className="w-3 h-3" /> {savedDate}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {stopCount} stop{stopCount !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </Link>
+
+                {/* Remove button — separate so it doesn't trigger navigation */}
+                <button
+                  onClick={() => handleRemove(tour.id)}
+                  disabled={removingId === tour.id}
+                  className="p-3 self-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 disabled:opacity-50"
+                >
+                  {removingId === tour.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                </button>
               </div>
             </div>
           </motion.div>
