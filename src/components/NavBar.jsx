@@ -14,6 +14,11 @@ export default function NavBar() {
   const { activeTab, switchTab } = useTabNav();
 
   return (
+    // Persistent footer chrome. Stacking contract tier: z-50 (see index.css) —
+    // app modals render at z-[60] above it. This bar's rendered height plus the
+    // bottom safe area it absorbs below are mirrored by --footer-height /
+    // --footer-space in index.css; pages reserve that space via .pb-footer so
+    // content is never covered. Keep this bar's height in sync with the token.
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/90 backdrop-blur-xl border-t border-border">
       <p className="text-center text-[11px] font-heading tracking-wider uppercase text-primary font-semibold whitespace-nowrap pt-1.5 drop-shadow-[0_0_10px_hsl(199,89%,65%,1)]">
         Explore Past Existence &amp; It's Connection to Today

@@ -58,6 +58,30 @@ const AuthenticatedApp = () => {
     initializeAdMob().catch(() => {});
   }, [isLoadingPublicSettings, isLoadingAuth]);
 
+  // App-shell viewport refresh: publish window.innerHeight as --app-height so
+  // fixed-height shells (e.g. Toolkit's .h-app) never rely on a dvh value that
+  // iOS WKWebView can serve stale after background/resume. Runs on mount and
+  // whenever the viewport can change: resize, rotation, bfcache restore, resume.
+  useEffect(() => {
+    const setAppHeight = () => {
+      document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') setAppHeight();
+    };
+    setAppHeight();
+    window.addEventListener('resize', setAppHeight);
+    window.addEventListener('orientationchange', setAppHeight);
+    window.addEventListener('pageshow', setAppHeight);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('resize', setAppHeight);
+      window.removeEventListener('orientationchange', setAppHeight);
+      window.removeEventListener('pageshow', setAppHeight);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
+
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
@@ -83,7 +107,10 @@ const AuthenticatedApp = () => {
     <TabNavigationProvider>
     {isAuthenticated && <HauntedMusic />}
     <AnimatePresence mode="wait">
-    <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+    {/* Fade-only route transition: no translate, so the wrapper never carries a
+        transform that would re-anchor the fixed NavBar during transitions or
+        leave stale fixed-chrome geometry after iOS background/resume. */}
+    <motion.div key={location.pathname} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
     <Suspense fallback={<PageLoader />}>
     <Routes location={location}>
       <Route path="/login" element={<Login />} />

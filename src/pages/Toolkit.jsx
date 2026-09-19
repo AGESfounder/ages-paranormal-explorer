@@ -1368,9 +1368,9 @@ Best Practices
   };
 
   return (
-    <PageContainer className="h-dvh flex flex-col overflow-hidden">
+    <PageContainer className="h-app flex flex-col overflow-hidden">
       <SectionHeader title="Investigation Toolkit" subtitle="Ghost Hunting Tools" showBack />
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-28 pt-3 toolkit-scroll">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-footer pt-3 toolkit-scroll">
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 mb-4">
           <p className="text-xs text-muted-foreground leading-relaxed">
             Your paranormal investigation toolkit. Tap any tool to open its interactive interface. Always bring physical equipment as backup.

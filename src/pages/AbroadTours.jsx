@@ -69,7 +69,7 @@ export default function AbroadTours() {
         }
       />
       <PullToRefresh onRefresh={() => fetchTours(false)}>
-      <div className="px-4 pb-24">
+      <div className="px-4 pb-footer">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
