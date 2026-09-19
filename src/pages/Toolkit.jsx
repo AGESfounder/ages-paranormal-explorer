@@ -53,6 +53,7 @@ const SWEEP_SPEEDS = {
 export default function Toolkit() {
   const [activeTool, setActiveTool] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userPlan, setUserPlan] = useState(null);
   const [tools, setTools] = useState(DEFAULT_TOOLS);
 
   // Reorder DEFAULT_TOOLS to match a saved list of tool names, appending any
@@ -68,12 +69,23 @@ export default function Toolkit() {
   useEffect(() => {
     base44.auth.me().then(u => {
       setIsAdmin(u?.role === 'admin');
-      const planId = getEffectivePlanId(u);
-      const allowed = TIER_TOOLS[planId];
-      const baseTools = allowed ? DEFAULT_TOOLS.filter(t => allowed.includes(t.name)) : DEFAULT_TOOLS;
-      setTools(applyOrder(baseTools, u?.toolkit_order));
+      setUserPlan(getEffectivePlanId(u));
+      setTools(applyOrder(DEFAULT_TOOLS, u?.toolkit_order));
     }).catch(() => {});
   }, []);
+
+  // Gate tool access by tier — all 12 tools are visible, but tapping a tool
+  // the user's plan doesn't include shows the upgrade prompt instead of opening it.
+  const handleSelectTool = (tool) => {
+    if (isAdmin) { setActiveTool(tool); return; }
+    const allowed = TIER_TOOLS[userPlan];
+    if (allowed && !allowed.includes(tool.name)) {
+      setGateReason('plan');
+      setShowUpgrade(true);
+      return;
+    }
+    setActiveTool(tool);
+  };
 
   const handleReorder = (next) => {
     setTools(next);
@@ -115,7 +127,7 @@ export default function Toolkit() {
   const dirRef = useRef(1);
   const scrollRef = useRef(null);
   const { isSpeaking: narrating, isGenerating, narrate: rawNarrate, stop: stopNarration } = useGhostVoice();
-  const { gateNarration, spendNarration, estimateNarrationCost, gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateNarration, spendNarration, estimateNarrationCost, gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason, setGateReason } = useEnergyGate();
 
   // Gated narration wrapper — checks energy before speaking, toggles off for free.
   const narrate = (text, opts = {}) => {
@@ -1407,7 +1419,7 @@ Best Practices
         <ToolkitGrid
           tools={tools}
           activeTool={activeTool}
-          onSelect={setActiveTool}
+          onSelect={handleSelectTool}
           isAdmin={isAdmin}
           onReorder={handleReorder}
         />
