@@ -425,14 +425,8 @@ export default function HauntedLocations() {
         seen.push(d);
         return true;
       });
-      // Merge local + discovered, sorting Area tours first (this is primarily
-      // a walking tour app), then by distance within each group.
-      const locs = [...local, ...discovered].sort((a, b) => {
-        const aArea = a.tourCategory === 'area' ? 0 : 1;
-        const bArea = b.tourCategory === 'area' ? 0 : 1;
-        if (aArea !== bArea) return aArea - bArea;
-        return a.dist - b.dist;
-      });
+      // Merge local + discovered into ONE distance-sorted list.
+      const locs = [...local, ...discovered].sort((a, b) => a.dist - b.dist);
       setOriginLabel(label);
       setResults(locs);
       if (locs.length === 0) setError('No haunted properties found within 30 miles. Try a different zip code, or use Nearby Tours to generate one.');
