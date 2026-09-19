@@ -30,6 +30,11 @@ export default function Nearby() {
 
   const [zipCode, setZipCode] = useState('');
   const [zipMode, setZipMode] = useState(false);
+  // When a zip search returns existing tours, we show those radius-filtered
+  // results directly — bypassing the GPS-based distance band filter, which
+  // would otherwise hide tours whose distance-from-zip doesn't overlap the
+  // user's physical distance band.
+  const [zipResults, setZipResults] = useState(null);
 
   const distanceRanges = [
     { label: '1-20 Miles', min: 0, max: 20, icon: Compass },
@@ -114,16 +119,10 @@ export default function Nearby() {
         if (result.existingTours.length > 0) {
           setDialogMode('no_new');
           setExistingTour(result.existingTours[0]);
-          // Surface all radius-eligible existing tours (deduped) in the list —
-          // not only the first/global-recent item.
-          setTours((prev) => {
-            const byId = new Map();
-            for (const t of prev || []) byId.set(t.id, t);
-            for (const t of result.existingTours) byId.set(t.id, t);
-            return Array.from(byId.values()).sort(
-              (a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity)
-            );
-          });
+          // Show only the radius-eligible tours from the zip search, bypassing
+          // the GPS distance-band filter which would hide most of them.
+          setZipResults(result.existingTours);
+          setTours(result.existingTours);
           setLoading(false);
         } else {
           setError('No new tours could be created within 30 miles of this zip code, and no existing tours were found in that radius.');
@@ -138,6 +137,7 @@ export default function Nearby() {
   const requestLocation = () => {
     setLocating(true);
     setError('');
+    setZipResults(null);
     getDevicePosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 })
       .then((result) => {
         if (result.ok) {
@@ -183,6 +183,7 @@ export default function Nearby() {
   };
 
   const refreshNearby = async () => {
+    setZipResults(null);
     if (coords) await loadNearby();
     else await loadAllTours();
   };
@@ -208,9 +209,11 @@ export default function Nearby() {
     return haversineMiles(lat1, lon1, lat2, lon2);
   };
 
-  const visibleTours = coords && selectedRange
-    ? tours.filter((t) => t.distance >= selectedRange.min && t.distance <= selectedRange.max)
-    : tours;
+  const visibleTours = zipResults
+    ? zipResults
+    : coords && selectedRange
+      ? tours.filter((t) => t.distance >= selectedRange.min && t.distance <= selectedRange.max)
+      : tours;
 
   return (
     <PageContainer>
@@ -228,7 +231,7 @@ export default function Nearby() {
                 return (
                   <button
                     key={range.label}
-                    onClick={() => { setZipMode(false); setSelectedRange(range); }}
+                    onClick={() => { setZipMode(false); setZipResults(null); setSelectedRange(range); }}
                     className={`flex flex-col items-center gap-1.5 p-3 min-h-[44px] rounded-xl border transition-all ${
                       isSelected
                         ? 'border-primary/50 bg-primary/10 text-primary'
