@@ -89,10 +89,37 @@ const AVG_STOPS_PER_TOUR = 7;
 const FULL_TOUR_NARRATION_CREDITS = NARRATION_INTRO_CONCLUSION + AVG_STOPS_PER_TOUR * NARRATION_PER_STOP; // 384
 const TOURS_PER_ENERGY = (narE) => Math.floor(narE / FULL_TOUR_NARRATION_CREDITS);
 
+// ===== TOOLKIT VISIBILITY CHANGE (Sept 2026) =====
+// Previously: tools were filtered by tier — Observer saw 2, Explorer saw 8,
+// Investigator+ saw all 12. Now: ALL 12 tools are visible to ALL users, but
+// tapping a tool outside the user's tier shows an upgrade prompt instead of
+// opening it. This is a conversion funnel improvement, not a cost increase —
+// gating still blocks credit consumption. But it exposes the more costly
+// tools (Term Sweeper, Alphabet Sweeper, Anomaly Camera, Vibration Communicator)
+// to lower-tier users, increasing upgrade motivation.
+const TOOLKIT_TIERS = [
+  { tier: 'Observer (Free)', visible: 12, accessible: 2, locked: 10, accessibleTools: 'Equipment Guide, Safety Protocol', lockedTools: 'Audio Recorder, Radio Sweeper, Term Sweeper, Alphabet Sweeper, Yes/No Sweeper, Vibration Communicator, Anomaly Camera, Weather Monitor, Moon Phase, Paranormal Research' },
+  { tier: 'Explorer ($7.99)', visible: 12, accessible: 8, locked: 4, accessibleTools: 'Audio Recorder, Radio Sweeper, Yes/No Sweeper, Equipment Guide, Weather Monitor, Moon Phase, Paranormal Research, Safety Protocol', lockedTools: 'Term Sweeper, Alphabet Sweeper, Vibration Communicator, Anomaly Camera' },
+  { tier: 'Investigator ($11.99)', visible: 12, accessible: 12, locked: 0, accessibleTools: 'All 12 tools', lockedTools: '—' },
+  { tier: 'Trailblazer ($239.99)', visible: 12, accessible: 12, locked: 0, accessibleTools: 'All 12 tools', lockedTools: '—' },
+];
+
+// The 4 tools newly visible to Observer/Explorer users that were previously hidden.
+// These are the "more costly generations in the one area" the user referenced.
+const NEWLY_VISIBLE_COSTLY_TOOLS = [
+  { name: 'Term Sweeper', tier: 'Investigator+', costType: 'Manifest. + Narration', credits: '3 (build terms) + 1/trigger voice', desc: 'Location-based spirit dictation with LLM term generation + GenerateSpeech trigger voices' },
+  { name: 'Alphabet Sweeper', tier: 'Investigator+', costType: 'Narration', credits: '1/trigger voice', desc: 'A→Z sweep with GenerateSpeech trigger voices' },
+  { name: 'Vibration Communicator', tier: 'Investigator+', costType: 'No credits', credits: '0 (sensor-only)', desc: 'Phone sensor detection — no LLM or speech credits needed' },
+  { name: 'Anomaly Camera', tier: 'Investigator+', costType: 'No credits', credits: '0 (camera-only)', desc: 'IR depth scan — no LLM or speech credits needed' },
+];
+
 // ===== CREDIT CONSUMPTION AUDIT =====
 // Every user action that consumes integration credits (InvokeLLM or GenerateSpeech).
 // "Gated" = restricted by the energy system. Energy gating is deployed —
 // free (Observer) users are blocked from all credit-consuming actions.
+// NOTE (Sept 2026): All 12 toolkit tools are now visible to all users. Tools
+// outside the user's tier show an upgrade prompt instead of opening. This
+// increases upgrade conversion potential without changing credit costs.
 const CREDIT_AUDIT = [
   // --- Manifestation Energy (InvokeLLM) ---
   { action: 'Custom Tour Creation', page: 'Home → Custom Tour', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–9', gated: 'Yes' },
@@ -374,7 +401,7 @@ function downloadPDF() {
   para(`Ghost-story-only narration (1 tab/stop) costs ~${NARRATION_PER_STOP} credits/stop vs ~${NARRATION_PER_STOP * 4} for all tabs — stretching energy ~4x further.`);
 
   heading('3c. Credit Consumption Audit');
-  para('Energy gating is now implemented. All 27 credit-consuming actions are gated — free (Observer) users are blocked from consuming credits, and paid users are limited by their energy allotment.');
+  para('Energy gating is now implemented. All 27 credit-consuming actions are gated — free (Observer) users are blocked from consuming credits, and paid users are limited by their energy allotment. Additionally, all 12 toolkit tools are now visible to all users (Sept 2026 change — see section 3e), with upgrade prompts on locked tools.');
   para(`Typical cost per active paid user (energy-limited): ${UNGATED_TYPICAL.totalCredits} credits = $${UNGATED_TYPICAL.monthlyCost.toFixed(2)}/mo`);
   para(`Heavy cost per active paid user: ${UNGATED_WORST_CASE.totalCredits} credits = $${UNGATED_WORST_CASE.monthlyCost.toFixed(2)}/mo`);
   para(`Free (Observer) users are gated — 0 credits consumed. Only paid users consume credits, limited by their energy allotment.`);
@@ -391,6 +418,18 @@ function downloadPDF() {
   para(`At 1,000 free users: $${(1000 * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo saved. At 5,000: $${(5000 * FREE_USER_BREAKDOWN_COST).toFixed(0)}/mo saved.`);
   const autoLeak = FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto'));
   para(`Two "Auto" actions (Stop Enrichment + People Extraction) previously fired without user action — ${autoLeak.reduce((s, r) => s + r.totalCredits, 0)} of ${FREE_USER_BREAKDOWN_TOTAL} credits (${Math.round(autoLeak.reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user. These are now gated — free users silently skip enrichment.`);
+
+  heading('3e. Toolkit Visibility Change (Sept 2026)');
+  para('All 12 toolkit tools are now visible to every user. Previously, Observer saw 2, Explorer saw 8, Investigator+ saw 12. Now all see 12, but tapping a locked tool shows an upgrade prompt. This is a conversion funnel improvement — gating still blocks credit consumption.');
+  table(['Tier', 'Visible', 'Accessible', 'Locked'],
+    TOOLKIT_TIERS.map(t => [t.tier, t.visible, t.accessible, t.locked]),
+    [120, 40, 40, 40]);
+  para('Newly visible costly tools (previously hidden from Observer/Explorer):');
+  table(['Tool', 'Required Tier', 'Cost Type', 'Credits'],
+    NEWLY_VISIBLE_COSTLY_TOOLS.map(t => [t.name, t.tier, t.costType, t.credits]),
+    [80, 60, 80, 80]);
+  para('Cost impact: Zero direct change. Gating blocks unauthorized users. Conversion impact: Observer/Explorer users now see Term Sweeper, Alphabet Sweeper, Anomaly Camera, and Vibration Communicator — stronger upgrade incentive. Term Sweeper is the most credit-intensive (3 + 1/trigger). Vibration Communicator and Anomaly Camera are sensor-only (0 credits).');
+  para('Community Map (Sept 2026): Author names resolve via backend function (no credit cost). Stacked markers grouped by coordinate. Sign-in simplified: Google/Apple OAuth removed — email/password only.');
 
   heading('4. Per-Plan Profit - Monthly, 100% Utilization');
   table(['Plan', 'Price', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
@@ -453,6 +492,8 @@ function downloadPDF() {
   para(`RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.`);
   para(`RISK: Apple fee jumps to 30% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M.`);
   para('Annual plans improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).');
+  para('TOOLKIT VISIBILITY (Sept 2026): All 12 tools now visible to all users. Observer/Explorer see locked tools with upgrade prompts. Zero direct cost change — gating blocks consumption. Conversion funnel improvement: lower-tier users now see Term Sweeper, Alphabet Sweeper, Anomaly Camera, Vibration Communicator. See section 3e.');
+  para('COMMUNITY MAP (Sept 2026): Author names resolve via backend function (no credit cost). Stacked markers grouped by coordinate. Sign-in simplified: Google/Apple OAuth removed — email/password only.');
 
   doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
   if (y > 760) { doc.addPage(); y = 50; }
@@ -684,7 +725,7 @@ export default function PlanAnalysis() {
         {/* 3c. Credit Consumption Audit */}
         <section className="mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3c. Credit Consumption Audit — Every User Action</h2>
-          <p className="text-xs print-muted mb-3">Complete inventory of every action that costs integration credits. "Gated = Yes" means the action is restricted by the energy system — free users are blocked, paid users are limited by their energy allotment.</p>
+          <p className="text-xs print-muted mb-3">Complete inventory of every action that costs integration credits. "Gated = Yes" means the action is restricted by the energy system — free users are blocked, paid users are limited by their energy allotment. <span className="font-semibold text-green-500 print-text">All 12 toolkit tools are now visible to all users (Sept 2026)</span> — locked tools show an upgrade prompt instead of opening. See section 3e.</p>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full min-w-[700px]">
               <thead>
@@ -785,6 +826,76 @@ export default function PlanAnalysis() {
             </div>
             <p className="text-xs print-muted mt-3 italic">The two "Auto" actions (Stop Enrichment + People Extraction) previously fired without the user doing anything — they were the most dangerous leaks. These are now gated: free users silently skip enrichment, saving {FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto')).reduce((s, r) => s + r.totalCredits, 0)} of the {FREE_USER_BREAKDOWN_TOTAL} credits ({Math.round(FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto')).reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user.</p>
           </div>
+        </section>
+
+        {/* 3e. Toolkit Visibility Change */}
+        <section className="mb-8">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3e. Toolkit Visibility — All 12 Tools Now Visible (Sept 2026 Change)</h2>
+          <p className="text-xs print-muted mb-3">Previously, the Toolkit filtered tools by subscription tier — Observer saw only 2 tools, Explorer saw 8, and Investigator+ saw all 12. <span className="font-semibold print-text">Now all 12 tools are visible to every user.</span> Tapping a tool outside the user's tier shows an upgrade prompt instead of opening the tool. This is a <span className="font-semibold text-green-500 print-text">conversion funnel improvement</span>, not a cost increase — energy gating still blocks credit consumption for unauthorized users. But it exposes the more costly tools to lower-tier users, increasing upgrade motivation.</p>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr>
+                  <th className={th}>Tier</th>
+                  <th className={`${th} ${num}`}>Visible</th>
+                  <th className={`${th} ${num}`}>Accessible</th>
+                  <th className={`${th} ${num}`}>Locked</th>
+                  <th className={th}>Accessible Tools</th>
+                  <th className={th}>Locked Tools (Upgrade Prompt)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {TOOLKIT_TIERS.map(t => (
+                  <tr key={t.tier}>
+                    <td className={`${td} font-semibold print-text`}>{t.tier}</td>
+                    <td className={`${td} ${num} print-text`}>{t.visible}</td>
+                    <td className={`${td} ${num} print-text`}>{t.accessible}</td>
+                    <td className={`${td} ${num} print-text`}>{t.locked}</td>
+                    <td className={`${td} text-xs print-muted`}>{t.accessibleTools}</td>
+                    <td className={`${td} text-xs print-muted`}>{t.lockedTools}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-4 print-text">Newly Visible Costly Tools (Previously Hidden from Observer/Explorer)</h3>
+          <p className="text-xs print-muted mb-3">These 4 tools were previously invisible to Observer and Explorer users. They are now visible but gated — tapping them shows an upgrade prompt. Two of the four consume credits when used; the other two are sensor/camera-only (no credit cost).</p>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr>
+                  <th className={th}>Tool</th>
+                  <th className={th}>Required Tier</th>
+                  <th className={th}>Cost Type</th>
+                  <th className={th}>Credits</th>
+                  <th className={th}>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {NEWLY_VISIBLE_COSTLY_TOOLS.map(t => (
+                  <tr key={t.name}>
+                    <td className={`${td} font-semibold print-text`}>{t.name}</td>
+                    <td className={`${td} text-xs print-text`}>{t.tier}</td>
+                    <td className={`${td} text-xs print-muted`}>{t.costType}</td>
+                    <td className={`${td} text-xs print-text`}>{t.credits}</td>
+                    <td className={`${td} text-xs print-muted`}>{t.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/30">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-green-500">Conversion Impact</p>
+              <p className="text-xs print-text mt-1">Observer users who previously saw only 2 tools now see all 12 — including Term Sweeper and Alphabet Sweeper with live trigger voices. This creates a stronger "see what you're missing" upgrade incentive. Expected to increase Observer→Explorer and Explorer→Investigator conversion rates.</p>
+            </div>
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/30">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Cost Impact</p>
+              <p className="text-xs print-text mt-1"><span className="font-semibold">Zero direct cost change.</span> Gating still blocks unauthorized users from consuming credits. The only cost increase comes indirectly: if more users upgrade to use these tools, paid-user credit consumption rises proportionally — but so does subscription revenue. The net effect is positive: each upgraded user generates $7.99–$11.99/mo in revenue against ~$2–$4/mo in credit costs.</p>
+            </div>
+          </div>
+          <p className="text-xs print-muted mt-2 italic">Term Sweeper is the most credit-intensive newly-visible tool: 3 credits (InvokeLLM) to build the location term bank + 1 credit per trigger voice (GenerateSpeech). A typical 15-minute session with 5 trigger events = 8 credits = $0.03. Alphabet Sweeper costs 1 credit per trigger voice only. Vibration Communicator and Anomaly Camera use phone sensors/camera with no LLM or speech credits.</p>
         </section>
 
         {/* 4. Per-Plan Profit (Monthly, 100% Utilization) */}
@@ -1114,6 +1225,9 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
             <p>• <span className="font-semibold">RISK:</span> Apple's fee jumps to 30% above ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M.</p>
             <p>• <span className="font-semibold">Annual plans</span> improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).</p>
+            <p>• <span className="font-semibold text-green-500">✓ Toolkit visibility change (Sept 2026):</span> All 12 tools are now visible to every user — Observer and Explorer users see the full toolkit including Term Sweeper, Alphabet Sweeper, Anomaly Camera, and Vibration Communicator. Tapping a locked tool shows an upgrade prompt. This is a conversion funnel improvement with zero direct cost increase — gating still blocks credit consumption. The 4 newly-visible tools include 2 that consume credits (Term Sweeper: 3 + 1/trigger, Alphabet Sweeper: 1/trigger) and 2 that are sensor-only (Vibration Communicator, Anomaly Camera: 0 credits). See section 3e.</p>
+            <p>• <span className="font-semibold text-green-500">✓ Community Map improvements (Sept 2026):</span> Author names now resolve via a service-role backend function (display_name → full_name → "Explorer" fallback), and stacked evidence markers at the same coordinates are grouped with a count badge. No credit cost impact — name resolution uses User.get() (no InvokeLLM), and marker grouping is client-side.</p>
+            <p>• <span className="font-semibold">Sign-in simplified (Sept 2026):</span> Google and Apple OAuth buttons removed from Login and Register pages — email/password only. Reduces auth complexity and potential confusion. No cost impact.</p>
           </div>
         </section>
 
