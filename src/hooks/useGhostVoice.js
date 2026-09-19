@@ -275,6 +275,10 @@ export default function useGhostVoice() {
     if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
     stopEerieBackground();
     releaseNarration();
+    // Clear any stuck state from a previous speak() attempt so the UI
+    // reflects the new playback and the toggle (press-to-stop) works.
+    setIsSpeaking(false);
+    setIsGenerating(false);
     try {
       const ctx = audioCtxRef.current;
       if (ctx) { try { await ctx.resume(); } catch {} }
@@ -283,10 +287,11 @@ export default function useGhostVoice() {
         audioRef.current = audio;
         audio.volume = Math.min(1, opts.volume || 1.0);
         if (opts.creepy) audio.playbackRate = 0.8;
+        setIsSpeaking(true);
         return new Promise(resolve => {
-          audio.onended = () => { audioRef.current = null; resolve(); };
-          audio.onerror = () => { audioRef.current = null; resolve(); };
-          audio.play().catch(() => resolve());
+          audio.onended = () => { setIsSpeaking(false); audioRef.current = null; resolve(); };
+          audio.onerror = () => { setIsSpeaking(false); audioRef.current = null; resolve(); };
+          audio.play().catch(() => { setIsSpeaking(false); resolve(); });
         });
       }
       const resp = await fetch(url);
@@ -301,21 +306,30 @@ export default function useGhostVoice() {
       gainNode.connect(ctx.destination);
       if (recordDestRef.current) gainNode.connect(recordDestRef.current);
       srcRef.current = sNode;
+      setIsSpeaking(true);
       acquireNarration();
       return new Promise(resolve => {
-        sNode.onended = () => { releaseNarration(); srcRef.current = null; resolve(); };
+        sNode.onended = () => { setIsSpeaking(false); releaseNarration(); srcRef.current = null; resolve(); };
       });
     } catch (err) {
+      setIsSpeaking(false);
       releaseNarration();
     }
   }, []);
 
   const narrate = useCallback((text, opts = {}) => {
-    if (isSpeaking || isGenerating) {
+    // Pre-generated (offline) audio takes priority — playPreGenerated
+    // handles stopping any current playback internally. The isSpeaking
+    // check still allows the toggle (press again to stop) once the
+    // playing state is tracked (set in playPreGenerated).
+    if (opts?.preGenerated) {
+      if (isSpeaking) {
+        stop();
+      } else {
+        playPreGenerated(text, opts);
+      }
+    } else if (isSpeaking || isGenerating) {
       stop();
-    } else if (opts?.preGenerated) {
-      // Play a pre-generated audio URL directly (no GenerateSpeech call)
-      playPreGenerated(text, opts);
     } else {
       speak(text, opts);
     }

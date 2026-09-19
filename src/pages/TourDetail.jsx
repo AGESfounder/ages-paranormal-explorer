@@ -587,6 +587,16 @@ export default function TourDetail() {
       }
     }
     setIsOfflineCached(isTourOffline(tourId));
+    // Lock narration length to the download level for saved tours so the
+    // display text matches the condensed text that was cached during
+    // download. Without this, the display uses the user's current setting
+    // (which may differ from the download level), making the text appear
+    // at the wrong size — e.g., a "Glimpse" (1/3) download shows "Uncover"
+    // (2/3) text if the current setting is "Uncover".
+    const offlineTourData = getOfflineTour(tourId);
+    if (offlineTourData?.tour?._offline_level && offlineTourData.tour._offline_level !== 'free') {
+      setNarrationLengthState(offlineTourData.tour._offline_level);
+    }
     setLoading(false);
   };
 

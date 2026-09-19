@@ -89,7 +89,7 @@ export default function StopDetail() {
     spendNarration(estimateNarrationCost(cleanText));
   };
 
-  const [narrationLength] = useState(getNarrationLength());
+  const [narrationLength, setNarrationLength] = useState(getNarrationLength());
   const condensed = useCondensedTexts({
     narration_text: stop?.narration_text,
     paranormal_info: stop?.paranormal_info,
@@ -151,7 +151,7 @@ Use real history and paranormal lore for this location. Output ONLY a valid JSON
         try { data = await callJson(prompt, { useWeb: true }); } catch (e) { console.error('Enrich (web) failed:', e); }
         if (!data) { try { data = await callJson(prompt, { useWeb: false }); } catch (e) { console.error('Enrich (no-web) failed:', e); } }
         if (data) {
-          if (data.historical_info) updates.historical_info = data.historical_info;
+          if (data.historical_info) updates.historical_info = stripConclusionOpeners(data.historical_info, isFinalStop);
           if (data.paranormal_info) updates.paranormal_info = stripConclusionOpeners(data.paranormal_info, isFinalStop);
           generatedPeople = (data.people || []).filter(p => p.name && p.story);
           if (generatedPeople.length) updates.people = generatedPeople;
@@ -228,6 +228,12 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         const currentStop = results[0];
         setStop(currentStop);
         setPeople(currentStop.people || []);
+        // Lock narration length to the download level for saved tours so
+        // the display text matches the condensed text cached during download.
+        const offlineTourData = getOfflineTour(currentStop.tour_id);
+        if (offlineTourData?.tour?._offline_level && offlineTourData.tour._offline_level !== 'free') {
+          setNarrationLength(offlineTourData.tour._offline_level);
+        }
         const siblings = await base44.entities.TourStop.filter({ tour_id: currentStop.tour_id });
         const sortedSiblings = siblings.sort((a, b) => a.stop_number - b.stop_number);
         setAllStops(sortedSiblings);
@@ -254,6 +260,10 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         setStop(cached.stop);
         setPeople(cached.stop.people || []);
         setAllStops((cached.allStops || []).sort((a, b) => a.stop_number - b.stop_number));
+        // Lock narration length to the download level for saved tours
+        if (cached.tour?._offline_level && cached.tour._offline_level !== 'free') {
+          setNarrationLength(cached.tour._offline_level);
+        }
       }
     }
     setLoading(false);

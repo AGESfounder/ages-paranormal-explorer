@@ -51,7 +51,7 @@ Use real history and paranormal lore for this location. Output ONLY a valid JSON
     try { data = await callJson(prompt, { useWeb: true }); } catch (e) { console.error('Enrich (web) failed:', e); }
     if (!data) { try { data = await callJson(prompt, { useWeb: false }); } catch (e) { console.error('Enrich (no-web) failed:', e); } }
     if (data) {
-      if (data.historical_info) updates.historical_info = data.historical_info;
+      if (data.historical_info) updates.historical_info = stripConclusionOpeners(data.historical_info, isFinalStop);
       if (data.paranormal_info) updates.paranormal_info = stripConclusionOpeners(data.paranormal_info, isFinalStop);
       generatedPeople = (data.people || []).filter((p) => p.name && p.story);
       if (generatedPeople.length) updates.people = generatedPeople;
