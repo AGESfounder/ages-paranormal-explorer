@@ -151,11 +151,29 @@ export default function DownloadTourDialog({ tour, stops, open, onClose, onDownl
           await spendNarration(narrationCredits);
         }
 
-        if (audioResult.errors > 0) {
+        if (audioResult.reason) {
+          // Cache API unavailable (common in some iOS WKWebView configs) —
+          // no audio was generated at all. Warn the user clearly.
           toast({
-            title: 'Some audio failed',
-            description: `${audioResult.errors} audio segment(s) could not be generated. Text and maps are still saved.`,
+            title: 'Narration unavailable',
+            description: 'Audio storage is not available on this device. Text and maps are saved, but narration could not be downloaded.',
+            variant: 'destructive',
           });
+        } else if (audioResult.errors > 0) {
+          const totalSegments = audioResult.audioMap ? Object.keys(audioResult.audioMap).length : 0;
+          if (totalSegments === 0) {
+            // Every segment failed — narration is completely missing
+            toast({
+              title: 'Narration failed',
+              description: `${audioResult.errors} audio segment(s) could not be generated. Text and maps are still saved. Try re-downloading later.`,
+              variant: 'destructive',
+            });
+          } else {
+            toast({
+              title: 'Some audio failed',
+              description: `${audioResult.errors} of ${audioResult.errors + totalSegments} audio segments could not be generated. Text and maps are still saved.`,
+            });
+          }
         }
       }
 

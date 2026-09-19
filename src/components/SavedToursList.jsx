@@ -195,69 +195,69 @@ export default function SavedToursList() {
             transition={{ delay: i * 0.05 }}
           >
             <div className="rounded-xl border border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden">
-              <div className="flex">
-                <Link to={`/tour/${record.tour_id}`} className="flex-1 p-4 space-y-2.5 active:bg-primary/5 transition-colors">
-                  {/* Title */}
+              {/* Title row with trash can — keeps the delete button always visible */}
+              <div className="flex items-center gap-2 px-3 pt-3">
+                <Link to={`/tour/${record.tour_id}`} className="flex-1 min-w-0 active:bg-primary/5 transition-colors">
                   <h3 className="font-heading text-sm font-bold text-foreground truncate">{record.tour_title}</h3>
-
-                  {/* Location + category */}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground flex items-center gap-1 min-w-0">
-                      <MapPin className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{record.city}, {record.state}</span>
-                    </span>
-                    <TourCategoryBadge category={record.tour_category} />
-                  </div>
-
-                  {/* Badges: what's saved + device status */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-primary/15 text-primary border border-primary/30">
-                      <Map className="w-3 h-3" /> {levelLabel}
-                    </span>
-                    {hasAudio && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-accent/20 text-accent-foreground border border-accent/40">
-                        <Volume2 className="w-3 h-3" /> Narration
-                      </span>
-                    )}
-                    {hasLocalCopy ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-green-500/15 text-green-400 border border-green-500/30">
-                        <WifiOff className="w-3 h-3" /> Offline Ready
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                        <Wifi className="w-3 h-3" /> Online Only
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <Clock className="w-3 h-3" /> {savedDate}
-                    </span>
-                  </div>
-
-                  {/* Device note for tours without local copy */}
-                  {!hasLocalCopy && (
-                    <p className="text-[10px] text-amber-400/80 flex items-start gap-1 leading-relaxed pt-1">
-                      <Cloud className="w-3 h-3 shrink-0 mt-0.5" />
-                      <span>Saved on another device. Offline audio &amp; maps only play on the device that downloaded this tour. Re-download here for offline use.</span>
-                    </p>
-                  )}
-
-                  {/* Stop count (only if local copy has stops) */}
-                  {hasLocalCopy && stopCount > 0 && (
-                    <span className="text-[10px] text-muted-foreground">
-                      {stopCount} stop{stopCount !== 1 ? 's' : ''}
-                    </span>
-                  )}
                 </Link>
-
-                {/* Remove button — separate so it doesn't trigger navigation */}
                 <button
                   onClick={() => handleRemove(record)}
                   disabled={removingId === record.tour_id}
-                  className="p-3 self-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 disabled:opacity-50"
+                  className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors shrink-0 disabled:opacity-50"
                 >
                   {removingId === record.tour_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 </button>
               </div>
+
+              <Link to={`/tour/${record.tour_id}`} className="block px-3 pb-3 pt-1.5 space-y-1.5 active:bg-primary/5 transition-colors">
+                {/* Location + category */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1 min-w-0">
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{record.city}, {record.state}</span>
+                  </span>
+                  <TourCategoryBadge category={record.tour_category} />
+                </div>
+
+                {/* Compact single-line summary: level · narration · status · date */}
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-0.5 text-primary">
+                    <Map className="w-2.5 h-2.5" /> {levelLabel}
+                  </span>
+                  {hasAudio && (
+                    <span className="inline-flex items-center gap-0.5 text-accent-foreground">
+                      <Volume2 className="w-2.5 h-2.5" /> Audio
+                    </span>
+                  )}
+                  {hasLocalCopy ? (
+                    <span className="inline-flex items-center gap-0.5 text-green-400">
+                      <WifiOff className="w-2.5 h-2.5" /> Ready
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 text-amber-400">
+                      <Wifi className="w-2.5 h-2.5" /> Online
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-0.5 ml-auto">
+                    <Clock className="w-2.5 h-2.5" /> {savedDate}
+                  </span>
+                </div>
+
+                {/* Device note for tours without local copy */}
+                {!hasLocalCopy && (
+                  <p className="text-[10px] text-amber-400/80 flex items-start gap-1 leading-relaxed">
+                    <Cloud className="w-2.5 h-2.5 shrink-0 mt-0.5" />
+                    <span>Saved on another device. Re-download here for offline use.</span>
+                  </p>
+                )}
+
+                {/* Stop count (only if local copy has stops) */}
+                {hasLocalCopy && stopCount > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {stopCount} stop{stopCount !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </Link>
             </div>
           </motion.div>
         );

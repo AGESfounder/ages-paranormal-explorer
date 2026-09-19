@@ -42,6 +42,7 @@ export function estimateTourNarrationCredits(tour, stops, narrationLength = 'man
 // Returns { audioMap, errors } where audioMap is { [key]: url }.
 export async function generateTourAudio(tour, stops, onProgress, narrationLength = 'manifestation') {
   if (!('caches' in window)) {
+    console.warn('[offlineAudio] Cache API unavailable — narration cannot be stored offline');
     return { audioMap: {}, errors: 0, reason: 'Cache API unavailable' };
   }
 
@@ -132,6 +133,11 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
       try { await spendManifestationEnergy(); } catch {}
     }
   }
+
+  if (items.length === 0) {
+    console.warn('[offlineAudio] No narratable content found for tour', tour?.id);
+  }
+  console.log(`[offlineAudio] Generating ${items.length} audio segments for tour ${tour?.id} (level: ${narrationLength})`);
 
   let completed = 0;
   let generatedChars = 0;
