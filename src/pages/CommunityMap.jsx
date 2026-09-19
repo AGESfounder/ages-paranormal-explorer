@@ -10,6 +10,7 @@ import { base44 } from '@/api/base44Client';
 import ReportContentDialog from '@/components/ReportContentDialog';
 import { getBlockedIds } from '@/lib/userBlocks';
 import EvidenceViewerDialog from '@/components/EvidenceViewerDialog';
+import StackedEvidencePopup from '@/components/StackedEvidencePopup';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'EVP', photo: 'Photograph', video: 'Video', note: 'Note' };
@@ -29,6 +30,22 @@ function createPin(type) {
     iconSize: [28, 28],
     iconAnchor: [14, 28],
     popupAnchor: [0, -30],
+  });
+}
+
+function createStackPin(group) {
+  const count = group.length;
+  const types = [...new Set(group.map(p => p.type))];
+  const color = types.length === 1 ? (typeColors[types[0]] || '#38bdf8') : '#38bdf8';
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative;width:28px;height:28px;">
+      <div style="width:28px;height:28px;border-radius:50% 50% 50% 0;background:${color};border:2px solid rgba(255,255,255,0.3);transform:rotate(-45deg);box-shadow:0 0 10px ${color}88;"></div>
+      <div style="position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;border-radius:9px;background:#0f172a;border:2px solid ${color};color:${color};font-size:10px;font-weight:bold;display:flex;align-items:center;justify-content:center;padding:0 4px;font-family:sans-serif;">${count}</div>
+    </div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 30],
+    popupAnchor: [0, -32],
   });
 }
 
@@ -52,19 +69,17 @@ export default function CommunityMap() {
     const all = await base44.entities.Evidence.filter({ is_private: false });
     const withCoords = all.filter(e => e.latitude && e.longitude);
     setPins(withCoords);
-    // Fetch author names for each pin
+    // Resolve author display names via backend function (service role bypasses
+    // User RLS so non-admins can see other users' display names). Falls back
+    // to "Explorer" — never exposes full_name or email for privacy.
     const uniqueIds = [...new Set(withCoords.map(e => e.created_by_id).filter(Boolean))];
-    const names = {};
-    await Promise.allSettled(
-      uniqueIds.map(async (id) => {
-        try {
-          const user = await base44.entities.User.get(id);
-          names[id] = user.display_name || user.full_name || 'Explorer';
-        } catch {
-          names[id] = 'Explorer';
-        }
-      })
-    );
+    let names = {};
+    try {
+      const res = await base44.functions.invoke('resolve-user-names', { ids: uniqueIds });
+      names = res.data?.names || {};
+    } catch {
+      uniqueIds.forEach(id => { names[id] = 'Explorer'; });
+    }
     setAuthorNames(names);
     setLoading(false);
   };
@@ -73,6 +88,16 @@ export default function CommunityMap() {
   const visiblePins = pins.filter(p => !blockedIds.includes(p.created_by_id));
 
   const filtered = filter === 'all' ? visiblePins : visiblePins.filter(p => p.type === filter);
+
+  // Group evidence by approximate coordinates so stacked markers show all items
+  const coordKey = (pin) => `${pin.latitude.toFixed(6)},${pin.longitude.toFixed(6)}`;
+  const groups = {};
+  filtered.forEach(pin => {
+    const key = coordKey(pin);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(pin);
+  });
+  const groupedPins = Object.values(groups);
 
   const center = filtered.length > 0
     ? [
@@ -158,41 +183,27 @@ export default function CommunityMap() {
                 <TileLayer
                   url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
                 />
-                {filtered.map(pin => (
-                  <Marker key={pin.id} position={[pin.latitude, pin.longitude]} icon={createPin(pin.type)}>
-                    <Popup>
-                      <div className="min-w-[200px]">
-                        <p className="font-semibold text-sm mb-1">{pin.title}</p>
-                        <p className="text-xs text-muted-foreground mb-1">{typeLabel[pin.type]}</p>
-                        {authorNames[pin.created_by_id] && (
-                          <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                            <Users className="w-3 h-3" /> {authorNames[pin.created_by_id]}
-                          </p>
-                        )}
-                        {pin.location_name && <p className="text-xs">📍 {pin.location_name}</p>}
-                        {pin.date && <p className="text-xs text-muted-foreground">{pin.date}{pin.time ? ` • ${pin.time}` : ''}</p>}
-                        {pin.description && <p className="text-xs mt-1 leading-relaxed">{pin.description.slice(0, 120)}{pin.description.length > 120 ? '…' : ''}</p>}
-                        {pin.activity_level > 0 && (
-                          <p className="text-xs mt-1">{'★'.repeat(pin.activity_level)}{'☆'.repeat(5 - pin.activity_level)}</p>
-                        )}
-                        <div className="flex items-center gap-3 mt-2">
-                          <button
-                            onClick={() => setViewingEvidence(pin)}
-                            className="flex items-center gap-1 text-[11px] text-primary hover:underline"
-                          >
-                            <Eye className="w-3 h-3" /> View Evidence
-                          </button>
-                          <button
-                            onClick={() => setReportingPin(pin)}
-                            className="flex items-center gap-1 text-[11px] text-destructive hover:underline"
-                          >
-                            <Flag className="w-3 h-3" /> Report
-                          </button>
-                        </div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                {groupedPins.map(group => {
+                  const isStack = group.length > 1;
+                  const first = group[0];
+                  const icon = isStack ? createStackPin(group) : createPin(first.type);
+                  return (
+                    <Marker
+                      key={isStack ? `stack-${coordKey(first)}` : first.id}
+                      position={[first.latitude, first.longitude]}
+                      icon={icon}
+                    >
+                      <Popup>
+                        <StackedEvidencePopup
+                          group={group}
+                          authorNames={authorNames}
+                          onView={setViewingEvidence}
+                          onReport={setReportingPin}
+                        />
+                      </Popup>
+                    </Marker>
+                  );
+                })}
               </MapContainer>
             </div>
           )}
