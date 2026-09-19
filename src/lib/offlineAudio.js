@@ -77,27 +77,59 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
   // Condense texts for whisper/echo modes. The condensed text is used for
   // audio generation AND cached in localStorage so the display layer
   // (useCondensedTexts) finds it offline without a live LLM call.
+  //
+  // IMPORTANT: Condense in SMALL batches (tour-level texts together, then
+  // each stop's 3 texts together) — NOT one giant batch with everything.
+  // The live tour condenses 3 texts per stop via useCondensedTexts, and
+  // a giant batch (20-30+ texts) overwhelms the LLM, causing it to fail
+  // or return incomplete JSON. That failure falls back to truncateText
+  // (chopped-off sentences), which is NOT cached — so the saved tour
+  // shows truncated text while the live tour shows polished LLM summaries.
+  // Small batches match the live tour's quality and get cached properly.
   if (narrationLength !== 'manifestation') {
-    const textMap = {};
+    // Group items into small batches: tour-level texts together, then
+    // each stop's texts together (narration_text, history, paranormal).
+    const tourLevelItems = items.filter(
+      (i) => i.key === 'description' || i.key === 'intro' || i.key === 'conclusion'
+    );
+    const stopGroups = new Map();
     for (const item of items) {
-      textMap[item.key] = item.text;
+      if (item.key.startsWith('stop:')) {
+        const stopId = item.key.split(':')[1];
+        if (!stopGroups.has(stopId)) stopGroups.set(stopId, []);
+        stopGroups.get(stopId).push(item);
+      }
     }
-    try {
-      const condensed = await condenseTextsBatch(textMap, narrationLength);
-      for (const item of items) {
-        if (condensed[item.key]) {
-          cacheCondensation(item.text, narrationLength, condensed[item.key]);
-          item.text = condensed[item.key];
-        } else {
+    const batches = [];
+    if (tourLevelItems.length > 0) batches.push(tourLevelItems);
+    for (const [, stopItems] of stopGroups) batches.push(stopItems);
+
+    let batchEnergySpent = 0;
+    for (const batch of batches) {
+      const textMap = {};
+      for (const item of batch) {
+        textMap[item.key] = item.text;
+      }
+      try {
+        const condensed = await condenseTextsBatch(textMap, narrationLength);
+        for (const item of batch) {
+          if (condensed[item.key]) {
+            cacheCondensation(item.text, narrationLength, condensed[item.key]);
+            item.text = condensed[item.key];
+          } else {
+            item.text = truncateText(item.text, narrationLength);
+          }
+        }
+        batchEnergySpent++;
+      } catch (e) {
+        console.error('Batch condensation failed, using truncated fallback:', e);
+        for (const item of batch) {
           item.text = truncateText(item.text, narrationLength);
         }
       }
-      await spendManifestationEnergy();
-    } catch (e) {
-      console.error('Condensation failed, using truncated fallback:', e);
-      for (const item of items) {
-        item.text = truncateText(item.text, narrationLength);
-      }
+    }
+    if (batchEnergySpent > 0) {
+      try { await spendManifestationEnergy(); } catch {}
     }
   }
 
