@@ -116,10 +116,11 @@
 
   /* Prevent iOS auto-zoom on input focus: Apple requires >= 16px computed
      font-size or Safari zooms the viewport and never zooms back out.
-     This type+attribute selector (0,0,1,1) outranks Tailwind's .text-sm
-     (0,0,1,0), so even inputs explicitly styled text-sm stay 16px on mobile.
-     Desktop is unaffected — the shadcn Input default is already text-base. */
-  input[type="text"], input[type="email"], input[type="password"],
+     Covers inputs with an explicit text-like type AND inputs with no type
+     attribute at all (which default to type="text" but don't match attribute
+     selectors). This selector (0,0,1,1) outranks Tailwind's .text-sm (0,0,1,0),
+     so even inputs explicitly styled text-sm stay 16px on mobile. */
+  input:not([type]), input[type="text"], input[type="email"], input[type="password"],
   input[type="number"], input[type="tel"], input[type="search"],
   input[type="url"], input[type="date"], input[type="time"],
   textarea, select {

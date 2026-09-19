@@ -299,41 +299,31 @@ export default function HauntedLocations() {
   // an empty "no locations" result.
   const discoverLocations = async (lat, lon, label) => {
     if (!gateManifestation()) return [];
-    try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Find real haunted locations and haunted areas within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return at least 10 results (up to 15 if the area is rich in haunted history). AREA TOURS ARE THE PRIMARY CATEGORY — you MUST include at least 3 area tours. An "area" is a city, town, or neighborhood known for MULTIPLE haunted locations within it (e.g. "Haunted Gettysburg", "Ghosts of Savannah", "Haunted New Orleans French Quarter") — these are walking/driving tours that visit several different haunted properties in one local area. Required minimum per category: at least 3 areas, at least 3 properties (single haunted properties with multiple stops/areas on the same site, like an asylum, hotel, or prison), at least 2 cold spots (single haunted locations with only 1-4 stops, like a single haunted house, bridge, or small cemetery), and at least 1 road trip (wider driving routes with stops 5+ miles apart). If you cannot find enough real locations in one category, fill the remaining slots with more area tours. For each result provide: name, type ("cold_spot", "property", "area", or "road_trip"), address (street address for properties/cold spots, or the city name for areas/road trips), city, state (full state name), latitude, longitude (real GPS coordinates — for areas/road trips use the center of the area), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
-        add_context_from_internet: true,
-        model: 'gemini_3_1_pro',
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            locations: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  type: { type: 'string' },
-                  address: { type: 'string' },
-                  city: { type: 'string' },
-                  state: { type: 'string' },
-                  latitude: { type: 'number' },
-                  longitude: { type: 'number' },
-                  overview: { type: 'string' },
-                  hours: { type: 'string' },
-                  fee: { type: 'string' },
-                },
-              },
+    const schema = {
+      type: 'object',
+      properties: {
+        locations: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              type: { type: 'string' },
+              address: { type: 'string' },
+              city: { type: 'string' },
+              state: { type: 'string' },
+              latitude: { type: 'number' },
+              longitude: { type: 'number' },
+              overview: { type: 'string' },
+              hours: { type: 'string' },
+              fee: { type: 'string' },
             },
           },
         },
-      });
-      spendManifestation();
-      // buildLocations already surfaces every existing tour within 30 mi (by
-      // stop coords or start coords) with a "Go to Existing Tour" button. This
-      // web-search fallback only runs when no nearby tour exists, so every
-      // discovered location is genuinely new and gets a "Create Tour" button.
-      return (result.locations || [])
+      },
+    };
+    const mapResults = (result) =>
+      (result.locations || [])
         .filter((l) => l.latitude && l.longitude)
         .map((l, i) => {
           const typeMap = { cold_spot: 'cold_spot', property: 'landmark', area: 'area', road_trip: 'road_trip' };
@@ -358,6 +348,35 @@ export default function HauntedLocations() {
         })
         .filter((l) => l.dist <= 30)
         .sort((a, b) => a.dist - b.dist);
+
+    try {
+      // First attempt: full prompt with category quotas.
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Find real haunted locations and haunted areas within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return at least 10 results (up to 15 if the area is rich in haunted history). AREA TOURS ARE THE PRIMARY CATEGORY — you MUST include at least 3 area tours. An "area" is a city, town, or neighborhood known for MULTIPLE haunted locations within it (e.g. "Haunted Gettysburg", "Ghosts of Savannah", "Haunted New Orleans French Quarter") — these are walking/driving tours that visit several different haunted properties in one local area. Required minimum per category: at least 3 areas, at least 3 properties (single haunted properties with multiple stops/areas on the same site, like an asylum, hotel, or prison), at least 2 cold spots (single haunted locations with only 1-4 stops, like a single haunted house, bridge, or small cemetery), and at least 1 road trip (wider driving routes with stops 5+ miles apart). If you cannot find enough real locations in one category, fill the remaining slots with more area tours. For each result provide: name, type ("cold_spot", "property", "area", or "road_trip"), address (street address for properties/cold spots, or the city name for areas/road trips), city, state (full state name), latitude, longitude (real GPS coordinates — for areas/road trips use the center of the area), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
+        add_context_from_internet: true,
+        model: 'gemini_3_1_pro',
+        response_json_schema: schema,
+      });
+      let mapped = mapResults(result);
+
+      // Retry with a simpler volume-focused prompt if the first attempt was
+      // too sparse — the LLM sometimes returns only 3-4 results when overloaded
+      // with category quotas. The retry strips all quotas and just asks for
+      // volume, which consistently produces more results. Only 1 credit total.
+      if (mapped.length < 8) {
+        const retry = await base44.integrations.Core.InvokeLLM({
+          prompt: `List as many real haunted locations as you can find within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return at least 12 haunted places — include haunted hotels, cemeteries, historic houses, bridges, battlefields, asylums, theaters, restaurants, bars, parks, and any other real places with documented ghost sightings or paranormal activity. For each: name, type ("cold_spot" for 1-4 stop single locations, "property" for multi-stop single properties, "area" for multi-location neighborhoods/cities, "road_trip" for wide driving routes), address, city, state (full name), latitude, longitude, overview (2-3 sentences of history + paranormal activity), hours (or empty string), fee (or empty string). Use web search to verify each location is real and the coordinates are accurate.`,
+          add_context_from_internet: true,
+          model: 'gemini_3_1_pro',
+          response_json_schema: schema,
+        });
+        const retryMapped = mapResults(retry);
+        // Use whichever attempt returned more results.
+        if (retryMapped.length > mapped.length) mapped = retryMapped;
+      }
+
+      spendManifestation();
+      return mapped;
     } catch (e) {
       return [];
     }
@@ -505,12 +524,14 @@ export default function HauntedLocations() {
             >
               <div className="px-3 pb-3 flex gap-2">
                 <input
+                  type="text"
                   value={zip}
                   onChange={e => setZip(e.target.value.replace(/\D/g, '').slice(0, 5))}
                   onKeyDown={e => { if (e.key === 'Enter') handleZip(); }}
                   placeholder="Enter 5-digit zip"
                   inputMode="numeric"
-                  className="flex-1 px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                  className="flex-1 px-3 py-2 rounded-lg bg-input border border-border text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                  style={{ fontSize: '16px' }}
                 />
                 <button
                   onClick={handleZip}
