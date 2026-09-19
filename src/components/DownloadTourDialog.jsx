@@ -87,7 +87,7 @@ export default function DownloadTourDialog({ tour, stops, open, onClose, onDownl
         _offline_level: selectedLevel,
         _offline_audio: selectedLevel !== 'free',
       };
-      const saveResult = saveTourOffline(tourWithMeta, stopsToSave);
+      const saveResult = saveTourOffline(tourWithMeta, stopsToSave, user?.id);
       if (!saveResult?.ok) {
         toast({ title: 'Download failed', description: saveResult?.message || 'Could not save tour data.', variant: 'destructive' });
         setStep('options');

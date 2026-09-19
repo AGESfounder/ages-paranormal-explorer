@@ -28,7 +28,7 @@ export function isTourOffline(tourId) {
  *
  * @returns {{ ok: true, savedAt: number } | { ok: false, error: string, message: string }}
  */
-export function saveTourOffline(tour, stops) {
+export function saveTourOffline(tour, stops, userId) {
   if (!tour?.id) {
     return {
       ok: false,
@@ -42,6 +42,7 @@ export function saveTourOffline(tour, stops) {
     stops: Array.isArray(stops) ? stops : [],
     savedAt: Date.now(),
     scope: 'tour_stop_snapshot',
+    saved_by_user_id: userId || null,
   };
   map[tour.id] = entry;
   if (!writeAll(map)) {

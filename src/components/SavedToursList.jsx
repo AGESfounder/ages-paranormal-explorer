@@ -5,6 +5,7 @@ import { Download, Trash2, Map, Volume2, Clock, MapPin, Loader2, Wifi, WifiOff, 
 import { listOfflineTours, removeTourOffline, isTourOffline } from '@/lib/offlineTours';
 import { clearTourAudio } from '@/lib/offlineAudio';
 import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
 import { toast } from '@/components/ui/use-toast';
 
@@ -19,6 +20,7 @@ export default function SavedToursList() {
   const [savedTours, setSavedTours] = useState([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState(null);
+  const { user } = useAuth();
 
   const load = useCallback(async () => {
     try {
@@ -33,10 +35,13 @@ export default function SavedToursList() {
       }
 
       // 3. Merge: server records are the source of truth, but we also check
-      // for local-only tours (legacy downloads before server-sync was added)
+      // for local-only tours (legacy downloads before server-sync was added).
+      // Only count local tours belonging to the CURRENT user — localStorage is
+      // shared across all users on the same browser, so without this filter a
+      // tour downloaded by user A would be claimed by user B on the same device.
       const serverIds = new Set(serverRecords.map((r) => r.tour_id));
       const localOnly = localTours
-        .filter((e) => e.tour?.id && !serverIds.has(e.tour.id))
+        .filter((e) => e.tour?.id && !serverIds.has(e.tour.id) && (!e.saved_by_user_id || e.saved_by_user_id === user?.id))
         .map((e) => ({
           id: null, // no server record
           tour_id: e.tour.id,
@@ -104,8 +109,8 @@ export default function SavedToursList() {
       }
     } catch (e) {
       console.error('Failed to load saved tours:', e);
-      // Fall back to local-only if server is unreachable
-      const localTours = listOfflineTours();
+      // Fall back to local-only if server is unreachable (still user-scoped)
+      const localTours = listOfflineTours().filter((e) => !e.saved_by_user_id || e.saved_by_user_id === user?.id);
       setSavedTours(
         localTours.map((e) => ({
           id: null,
