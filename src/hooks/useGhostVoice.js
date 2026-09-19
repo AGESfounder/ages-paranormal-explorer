@@ -268,37 +268,8 @@ export default function useGhostVoice() {
     setIsGenerating(false);
   }, []);
 
-  const narrate = useCallback((text, opts = {}) => {
-    if (isSpeaking || isGenerating) {
-      stop();
-    } else if (opts?.preGenerated) {
-      // Play a pre-generated audio URL directly (no GenerateSpeech call)
-      playPreGenerated(text, opts);
-    } else {
-      speak(text, opts);
-    }
-  }, [isSpeaking, isGenerating, speak, stop, playPreGenerated]);
-
-  // Connect the mic into the same Web Audio destination that captures the
-  // dictated speech, returning one audio track containing both — so the
-  // recorded video includes the voiced terms, not just ambient sound.
-  const attachMicToRecording = useCallback((micStream) => {
-    try {
-      const ctx = audioCtxRef.current;
-      if (!ctx) return null;
-      if (!recordDestRef.current) recordDestRef.current = ctx.createMediaStreamDestination();
-      if (micStream) {
-        const micSrc = ctx.createMediaStreamSource(micStream);
-        micSrc.connect(recordDestRef.current);
-      }
-      return recordDestRef.current.stream.getAudioTracks()[0] || null;
-    } catch { return null; }
-  }, []);
-
-  // Play a pre-generated TTS audio URL via Web Audio (so it's captured in the
-  // recording and plays reliably on iOS). Returns a promise that resolves when
-  // the audio ends. Does NOT set isSpeaking/isGenerating — callers manage their
-  // own completion callbacks.
+  // Play a pre-generated TTS audio URL via Web Audio. Defined before narrate
+  // to avoid a temporal-dead-zone reference in narrate's dependency array.
   const playPreGenerated = useCallback(async (url, opts = {}) => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
@@ -337,6 +308,33 @@ export default function useGhostVoice() {
     } catch (err) {
       releaseNarration();
     }
+  }, []);
+
+  const narrate = useCallback((text, opts = {}) => {
+    if (isSpeaking || isGenerating) {
+      stop();
+    } else if (opts?.preGenerated) {
+      // Play a pre-generated audio URL directly (no GenerateSpeech call)
+      playPreGenerated(text, opts);
+    } else {
+      speak(text, opts);
+    }
+  }, [isSpeaking, isGenerating, speak, stop, playPreGenerated]);
+
+  // Connect the mic into the same Web Audio destination that captures the
+  // dictated speech, returning one audio track containing both — so the
+  // recorded video includes the voiced terms, not just ambient sound.
+  const attachMicToRecording = useCallback((micStream) => {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx) return null;
+      if (!recordDestRef.current) recordDestRef.current = ctx.createMediaStreamDestination();
+      if (micStream) {
+        const micSrc = ctx.createMediaStreamSource(micStream);
+        micSrc.connect(recordDestRef.current);
+      }
+      return recordDestRef.current.stream.getAudioTracks()[0] || null;
+    } catch { return null; }
   }, []);
 
   // Fetch + decode an audio URL into an AudioBuffer for instant playback later.
