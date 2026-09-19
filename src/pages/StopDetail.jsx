@@ -13,7 +13,7 @@ import PersonStoryDialog from '../components/PersonStoryDialog';
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { getOfflineStop, getOfflineTour } from '@/lib/offlineTours';
-import { getOfflineStopAudio } from '@/lib/offlineAudio';
+import { getOfflineAudio } from '@/lib/offlineAudio';
 import BePatient from '@/components/BePatient';
 import AdGate from '@/components/AdGate';
 import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
@@ -67,11 +67,11 @@ export default function StopDetail() {
   // then falls back to live TTS generation (which costs narration credits).
   const narrate = async (text, opts = {}) => {
     const cleanText = stripUrlsForNarration(text);
-    // Check for pre-generated offline audio FIRST — only for the stop's
-    // narration text (flagged by opts.offlineAudio). Other texts (paranormal
-    // info, historical info) don't have cached audio and use live TTS.
-    if (opts?.offlineAudio && stop?.tour_id && stop?.id) {
-      const offlineUrl = await getOfflineStopAudio(stop.tour_id, stop.id);
+    // Check for pre-generated offline audio FIRST — looks up the cache key
+    // passed via opts.audioKey (e.g. "stop:${id}", "stop:${id}:history",
+    // "stop:${id}:paranormal"). Falls through to live TTS if not cached.
+    if (opts?.audioKey && stop?.tour_id) {
+      const offlineUrl = await getOfflineAudio(stop.tour_id, opts.audioKey);
       if (offlineUrl) {
         rawNarrate(offlineUrl, { ...opts, preGenerated: true });
         return;
@@ -595,7 +595,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         showBack
         onBack={() => navigate(`/tour/${stop.tour_id}`)}
         rightAction={
-          <button onClick={() => narrate(displayNarrationText || displayParanormalInfo, { offlineAudio: !!displayNarrationText })} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
+          <button onClick={() => narrate(displayNarrationText || displayParanormalInfo, { audioKey: displayNarrationText ? `stop:${stop.id}` : `stop:${stop.id}:paranormal` })} className="p-2 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors">
             {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
         }
@@ -726,7 +726,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 <Ghost className="w-4 h-4 text-primary" />
                 <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Ghost Story</span>
               </div>
-              <button onClick={() => narrate(displayNarrationText, { offlineAudio: true })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+              <button onClick={() => narrate(displayNarrationText, { audioKey: `stop:${stop.id}` })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
                 {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={displayNarrationText} /></>}
               </button>
             </div>
@@ -745,7 +745,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
               <div className="p-4 rounded-xl border border-border/40 bg-card/30">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Paranormal Findings</span>
-                  <button onClick={() => narrate(displayParanormalInfo)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                  <button onClick={() => narrate(displayParanormalInfo, { audioKey: `stop:${stop.id}:paranormal` })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
                     {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={displayParanormalInfo} /></>}
                   </button>
                 </div>
@@ -769,7 +769,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             <div className="p-4 rounded-xl border border-border/40 bg-card/30">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Historical Background</span>
-                <button onClick={() => narrate(displayHistoricalInfo)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                <button onClick={() => narrate(displayHistoricalInfo, { audioKey: `stop:${stop.id}:history` })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
                   {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={displayHistoricalInfo} /></>}
                 </button>
               </div>

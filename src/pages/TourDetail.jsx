@@ -208,7 +208,7 @@ export default function TourDetail() {
     // check, so offline audio plays even if a previous live TTS attempt
     // left isSpeaking/isGenerating stuck.
     if (tour?.id) {
-      const audioKey = opts?.audioKey || (text === tour.introduction ? 'intro' : text === tour.conclusion ? 'conclusion' : null);
+      const audioKey = opts?.audioKey || (text === tour.introduction ? 'intro' : text === tour.conclusion ? 'conclusion' : text === tour.description ? 'description' : null);
       if (audioKey) {
         const offlineUrl = await getOfflineAudio(tour.id, audioKey);
         if (offlineUrl) {
@@ -1233,7 +1233,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           </div>
           <div className="flex items-start justify-between gap-3">
             <p className="text-log text-sm text-foreground/80 leading-relaxed">{displayDescription}</p>
-            <button onClick={() => narrate(displayDescription)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+            <button onClick={() => narrate(displayDescription, { audioKey: 'description' })} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
               {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={displayDescription} /></>}
             </button>
           </div>

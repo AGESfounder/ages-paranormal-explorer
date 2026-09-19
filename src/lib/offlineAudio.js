@@ -24,13 +24,16 @@ export function estimateNarrationCredits(text) {
 export function estimateTourNarrationCredits(tour, stops, narrationLength = 'manifestation') {
   const fraction = narrationLength === 'whisper' ? 1 / 3 : narrationLength === 'echo' ? 2 / 3 : 1;
   let totalChars = 0;
-  if (tour?.introduction) totalChars += tour.introduction.length * fraction;
-  if (tour?.conclusion) totalChars += tour.conclusion.length * fraction;
+  let segmentCount = 0;
+  if (tour?.description) { totalChars += tour.description.length * fraction; segmentCount++; }
+  if (tour?.introduction) { totalChars += tour.introduction.length * fraction; segmentCount++; }
+  if (tour?.conclusion) { totalChars += tour.conclusion.length * fraction; segmentCount++; }
   for (const s of stops || []) {
-    if (s.narration_text) totalChars += s.narration_text.length * fraction;
+    if (s.stop_type === 'parking' || s.stop_type === 'shuttle') continue;
+    if (s.narration_text) { totalChars += s.narration_text.length * fraction; segmentCount++; }
+    if (s.historical_info) { totalChars += s.historical_info.length * fraction; segmentCount++; }
+    if (s.paranormal_info) { totalChars += s.paranormal_info.length * fraction; segmentCount++; }
   }
-  const segmentCount = (tour?.introduction ? 1 : 0) + (tour?.conclusion ? 1 : 0) +
-    (stops?.filter(s => s.narration_text && s.stop_type !== 'parking' && s.stop_type !== 'shuttle').length || 0);
   return Math.min(100 * segmentCount, Math.max(1, Math.ceil(totalChars / 50)));
 }
 
@@ -48,6 +51,9 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
 
   // Build the list of items to generate
   const items = [];
+  if (tour?.description) {
+    items.push({ key: `description`, text: tour.description, label: 'Tour Overview' });
+  }
   if (tour?.introduction) {
     items.push({ key: `intro`, text: tour.introduction, label: 'Introduction' });
   }
@@ -55,8 +61,16 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
     items.push({ key: `conclusion`, text: tour.conclusion, label: 'Conclusion' });
   }
   for (const s of stops || []) {
-    if (s.narration_text && s.stop_type !== 'parking' && s.stop_type !== 'shuttle') {
-      items.push({ key: `stop:${s.id}`, text: s.narration_text, label: s.name || `Stop ${s.stop_number}` });
+    if (s.stop_type !== 'parking' && s.stop_type !== 'shuttle') {
+      if (s.narration_text) {
+        items.push({ key: `stop:${s.id}`, text: s.narration_text, label: s.name || `Stop ${s.stop_number}` });
+      }
+      if (s.historical_info) {
+        items.push({ key: `stop:${s.id}:history`, text: s.historical_info, label: `${s.name || `Stop ${s.stop_number}`} History` });
+      }
+      if (s.paranormal_info) {
+        items.push({ key: `stop:${s.id}:paranormal`, text: s.paranormal_info, label: `${s.name || `Stop ${s.stop_number}`} Paranormal` });
+      }
     }
   }
 
