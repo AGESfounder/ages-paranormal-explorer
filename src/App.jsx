@@ -23,8 +23,11 @@ const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
 const Home = lazy(() => import('@/pages/Home'));
 const States = lazy(() => import('@/pages/States'));
 const StateTours = lazy(() => import('@/pages/StateTours'));
-const TourDetail = lazy(() => import('@/pages/TourDetail'));
-const StopDetail = lazy(() => import('@/pages/StopDetail'));
+// TourDetail and StopDetail are direct imports (not lazy) so their JS is
+// in the main bundle and available offline — lazy chunks can't be fetched
+// in airplane mode, causing "Importing a module script failed" crashes.
+import TourDetail from '@/pages/TourDetail';
+import StopDetail from '@/pages/StopDetail';
 const Evidence = lazy(() => import('@/pages/Evidence'));
 const Favorites = lazy(() => import('@/pages/Favorites'));
 const Profile = lazy(() => import('@/pages/Profile'));

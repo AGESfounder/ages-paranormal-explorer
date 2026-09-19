@@ -8,6 +8,12 @@ import { spendManifestationEnergy } from '@/hooks/useEnergyGate';
 
 const AUDIO_CACHE = 'ages-audio-v1';
 
+// Build a valid URL for Cache API keys. The Cache API requires real URLs
+// (it constructs a Request from the key); non-URL strings like
+// "ages-offline-audio:abc:intro" are rejected silently, so audio is never
+// stored and playback falls back to "no narration cached".
+const audioKey = (tourId, key) => `/__ages_audio__/${tourId}/${key}`;
+
 // Estimate narration credits for a text (matches useEnergyGate logic).
 export function estimateNarrationCredits(text) {
   return Math.min(100, Math.max(1, Math.ceil((text || '').length / 50)));
@@ -85,7 +91,7 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
   for (const item of items) {
     try {
       // Check if already cached (re-download of same tour)
-      const cacheKey = `ages-offline-audio:${tour.id}:${item.key}`;
+      const cacheKey = audioKey(tour.id, item.key);
       const existing = await cache.match(cacheKey);
       if (existing) {
         const blobUrl = URL.createObjectURL(await existing.blob());
@@ -129,7 +135,7 @@ export async function getOfflineAudio(tourId, key) {
   if (!('caches' in window)) return null;
   try {
     const cache = await caches.open(AUDIO_CACHE);
-    const cacheKey = `ages-offline-audio:${tourId}:${key}`;
+    const cacheKey = audioKey(tourId, key);
     const resp = await cache.match(cacheKey);
     if (!resp) return null;
     const blob = await resp.blob();
@@ -150,7 +156,7 @@ export async function clearTourAudio(tourId) {
   try {
     const cache = await caches.open(AUDIO_CACHE);
     const keys = await cache.keys();
-    const prefix = `ages-offline-audio:${tourId}:`;
+    const prefix = `/__ages_audio__/${tourId}/`;
     await Promise.all(
       keys
         .filter((req) => req.url.includes(prefix))
