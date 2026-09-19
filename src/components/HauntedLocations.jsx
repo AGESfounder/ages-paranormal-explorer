@@ -375,6 +375,28 @@ export default function HauntedLocations() {
         if (retryMapped.length > mapped.length) mapped = retryMapped;
       }
 
+      // Area tour booster: this is primarily a walking tour app, so if the
+      // LLM under-delivered on Area tours, make a targeted call for more.
+      // Still only 1 manifestation credit total for the whole discovery.
+      const areaCount = mapped.filter(l => l.tourCategory === 'area').length;
+      if (areaCount < 4) {
+        try {
+          const areaResult = await base44.integrations.Core.InvokeLLM({
+            prompt: `Find real haunted AREA TOURS within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). An "area" tour is a walking or driving tour that visits SEVERAL DIFFERENT haunted properties in one city, town, or neighborhood — e.g. "Haunted Gettysburg", "Ghosts of Savannah", "Haunted French Quarter", "Spooks of Sleepy Hollow". Each area tour should be in a DIFFERENT city or town within the 30-mile radius. Return at least 5 different area tours. For each: name (a creative haunted tour name for that area), type ("area"), address (the city/town name), city, state (full name), latitude, longitude (center of the city/town), overview (2-3 sentences about the area's haunted history and which properties are included), hours (or empty string), fee (or empty string). Use web search to verify each area is real and has documented paranormal history.`,
+            add_context_from_internet: true,
+            model: 'gemini_3_1_pro',
+            response_json_schema: schema,
+          });
+          const areaMapped = mapResults(areaResult).filter(l => l.tourCategory === 'area');
+          for (const a of areaMapped) {
+            if (!mapped.some(m => sameName(a.name, m.name) || sameSpot(a, m))) {
+              mapped.push(a);
+            }
+          }
+          mapped.sort((a, b) => a.dist - b.dist);
+        } catch (e) {}
+      }
+
       spendManifestation();
       return mapped;
     } catch (e) {
@@ -403,9 +425,14 @@ export default function HauntedLocations() {
         seen.push(d);
         return true;
       });
-      // Merge local + discovered into ONE distance-sorted list (not two
-      // separate ordered lists concatenated).
-      const locs = [...local, ...discovered].sort((a, b) => a.dist - b.dist);
+      // Merge local + discovered, sorting Area tours first (this is primarily
+      // a walking tour app), then by distance within each group.
+      const locs = [...local, ...discovered].sort((a, b) => {
+        const aArea = a.tourCategory === 'area' ? 0 : 1;
+        const bArea = b.tourCategory === 'area' ? 0 : 1;
+        if (aArea !== bArea) return aArea - bArea;
+        return a.dist - b.dist;
+      });
       setOriginLabel(label);
       setResults(locs);
       if (locs.length === 0) setError('No haunted properties found within 30 miles. Try a different zip code, or use Nearby Tours to generate one.');
