@@ -19,7 +19,10 @@ export default async function(req) {
     const results = await Promise.allSettled(
       uniqueIds.map(async (id) => {
         const u = await base44.asServiceRole.entities.User.get(id);
-        return [id, u?.display_name || 'Explorer'];
+        // display_name takes precedence (user-editable via Profile page).
+        // full_name is the username chosen at sign-up (Register page labels it
+        // "Username"), so it's safe to use as a fallback — not a real name.
+        return [id, u?.display_name || u?.full_name || 'Explorer'];
       })
     );
 
