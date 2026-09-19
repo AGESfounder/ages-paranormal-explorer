@@ -270,7 +270,7 @@ export default function Nearby() {
                   value={zipCode}
                   onChange={(e) => setZipCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
                   placeholder="Enter zip code"
-                  className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                  className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-foreground text-base placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                   maxLength={5}
                 />
                 <button
@@ -298,7 +298,7 @@ export default function Nearby() {
                 value={zipCode}
                 onChange={(e) => setZipCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
                 placeholder="Enter zip code"
-                className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-foreground text-base placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                 maxLength={5}
               />
               <button
