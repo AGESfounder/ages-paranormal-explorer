@@ -70,6 +70,38 @@ export default function SavedToursList() {
       });
 
       setSavedTours(merged);
+
+      // === ONE-TIME MIGRATION ===
+      // Backfill server-synced SavedTour records for tours saved BEFORE the
+      // cross-device sync feature existed. These are local-only tours (no
+      // server record). We create the server bookmark silently — NO content
+      // re-generation, NO credit spend. The local offline content stays as-is.
+      const localOnlyTours = merged.filter((r) => r._localOnly && r.tour_id);
+      if (localOnlyTours.length > 0) {
+        for (const record of localOnlyTours) {
+          try {
+            await base44.entities.SavedTour.create({
+              tour_id: record.tour_id,
+              tour_title: record.tour_title,
+              state: record.state,
+              city: record.city,
+              download_level: record.download_level || 'free',
+              tour_category: record.tour_category,
+            });
+          } catch (e) {
+            console.error('Migration failed for tour', record.tour_id, e);
+          }
+        }
+        // Reload to show the migrated records with their new server IDs
+        const refreshed = await base44.entities.SavedTour.list('-created_date');
+        setSavedTours((prev) =>
+          prev.map((r) => {
+            if (!r._localOnly) return r;
+            const serverRec = refreshed.find((s) => s.tour_id === r.tour_id);
+            return serverRec ? { ...serverRec, _localCopy: r._localCopy, _localOnly: false } : r;
+          })
+        );
+      }
     } catch (e) {
       console.error('Failed to load saved tours:', e);
       // Fall back to local-only if server is unreachable
