@@ -28,7 +28,12 @@ async function fetchRouteDistanceMatrix(stops) {
   try {
     const coords = valid.map(s => `${s.longitude},${s.latitude}`).join(';');
     const url = `https://router.project-osrm.org/table/v1/driving/${coords}?annotations=distance`;
-    const res = await fetch(url);
+    // Timeout after 5 seconds — OSRM is often slow or unreachable. Without
+    // this, airplane mode / no-network hangs for 30+ seconds on the fetch.
+    const res = await Promise.race([
+      fetch(url),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+    ]);
     if (!res.ok) return null;
     const data = await res.json();
     if (data.code !== 'Ok' || !data.distances) return null;

@@ -37,6 +37,7 @@ import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
 import { verifyStopLocation } from '@/lib/verifyStop';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/use-toast';
 import { addStopByName } from '@/lib/addTourStops';
 
 // Bump this when validation rules change — all tours with an older version
@@ -209,6 +210,12 @@ export default function TourDetail() {
       }
     }
     if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
+    // No cached audio — can't generate new TTS without network. Show a
+    // clear message instead of the misleading "upgrade" prompt.
+    if (!navigator.onLine) {
+      toast({ title: 'Offline — no narration cached', description: 'Narration for this section wasn\'t downloaded. Reconnect to generate it, or download the tour with narration for offline use.', variant: 'destructive' });
+      return;
+    }
     if (!gateNarration(cleanText)) return;
     rawNarrate(cleanText, opts);
     spendNarration(estimateNarrationCost(cleanText));
@@ -551,10 +558,16 @@ export default function TourDetail() {
       }
     }
     } catch (err) {
+      // Network failure (airplane mode / offline) — load from the offline
+      // cache. Stops were already ordered correctly when saved, so we set
+      // them directly WITHOUT calling enforceWalkingDistance (which would
+      // try to reach OSRM and the detect-water-barriers backend, hanging
+      // for 30+ seconds without a network and trapping the page on the
+      // loading spinner).
       const cached = getOfflineTour(tourId);
       if (cached) {
         setTour(cached.tour);
-        setStops(await enforceWalkingDistance(cached.stops || [], cached.tour.tour_type, { lat: cached.tour.start_latitude, lon: cached.tour.start_longitude }));
+        setStops(cached.stops || []);
       }
     }
     setLoading(false);

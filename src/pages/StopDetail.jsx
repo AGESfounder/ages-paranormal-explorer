@@ -78,6 +78,12 @@ export default function StopDetail() {
       }
     }
     if (isSpeaking || isGenerating) { rawNarrate(cleanText, opts); return; }
+    // No cached audio — can't generate new TTS without network. Show a
+    // clear message instead of the misleading "upgrade" prompt.
+    if (!navigator.onLine) {
+      toast({ title: 'Offline — no narration cached', description: 'Narration for this stop wasn\'t downloaded. Reconnect to generate it, or download the tour with narration for offline use.', variant: 'destructive' });
+      return;
+    }
     if (!gateNarration(cleanText)) return;
     rawNarrate(cleanText, opts);
     spendNarration(estimateNarrationCost(cleanText));
