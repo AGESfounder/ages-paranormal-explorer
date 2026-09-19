@@ -9,6 +9,7 @@ import { useEnergyGate } from '@/hooks/useEnergyGate';
 import { toast } from '@/components/ui/use-toast';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import BePatient from '@/components/BePatient';
+import { base44 } from '@/api/base44Client';
 
 const PAID_LEVELS = [
   { value: 'whisper', label: 'Glimpse into the Past', desc: '⅓ the full story', storage: '~3-8 MB' },
@@ -91,6 +92,37 @@ export default function DownloadTourDialog({ tour, stops, open, onClose, onDownl
         toast({ title: 'Download failed', description: saveResult?.message || 'Could not save tour data.', variant: 'destructive' });
         setStep('options');
         return;
+      }
+
+      // 2b. Create a server-synced SavedTour record so this tour appears in
+      // the user's Saved tab on ALL their devices. The offline content
+      // (text, audio, maps) stays device-specific; this record is just the
+      // cross-device bookmark. Best-effort — if it fails, the local save
+      // still works on this device.
+      try {
+        // Check if a SavedTour record already exists for this tour
+        const existing = await base44.entities.SavedTour.filter({ tour_id: tour.id });
+        if (!existing || existing.length === 0) {
+          await base44.entities.SavedTour.create({
+            tour_id: tour.id,
+            tour_title: tour.title,
+            state: tour.state,
+            city: tour.city,
+            download_level: selectedLevel,
+            tour_category: tour.tour_category,
+          });
+        } else {
+          // Update the existing record's download level
+          await base44.entities.SavedTour.update(existing[0].id, {
+            download_level: selectedLevel,
+            tour_title: tour.title,
+            state: tour.state,
+            city: tour.city,
+            tour_category: tour.tour_category,
+          });
+        }
+      } catch (e) {
+        console.error('SavedTour record creation failed (non-fatal):', e);
       }
 
       // 3. Prefetch map tiles (free, no credits)

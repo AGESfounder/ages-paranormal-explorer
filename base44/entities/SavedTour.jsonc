@@ -1,0 +1,54 @@
+{
+  "name": "SavedTour",
+  "type": "object",
+  "description": "Server-synced record of a tour a user has downloaded for offline use. The actual offline content (text, audio, map tiles) lives in device-local storage and is device-specific \u2014 this entity only tracks that the user saved it, so it appears in their Saved tab across all their devices.",
+  "properties": {
+    "tour_id": {
+      "type": "string",
+      "description": "ID of the Tour that was saved for offline use."
+    },
+    "tour_title": {
+      "type": "string",
+      "description": "Title of the tour at the time it was saved (denormalized for display without a join)."
+    },
+    "state": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "download_level": {
+      "type": "string",
+      "enum": [
+        "free",
+        "whisper",
+        "echo",
+        "manifestation"
+      ],
+      "description": "The story-length tier the user downloaded: free = text+maps only, whisper = \u2153 story, echo = \u2154 story, manifestation = full story."
+    },
+    "tour_category": {
+      "type": "string",
+      "description": "Tour category at time of save (landmark, area, road_trip, ship, cold_spot). Denormalized for display."
+    }
+  },
+  "required": [
+    "tour_id",
+    "tour_title",
+    "download_level"
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

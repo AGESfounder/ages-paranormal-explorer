@@ -1,43 +1,118 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Download, Trash2, Map, Volume2, Clock, MapPin, Loader2 } from 'lucide-react';
-import { listOfflineTours, removeTourOffline } from '@/lib/offlineTours';
-import { clearAllTiles } from '@/lib/offlineTiles';
+import { Download, Trash2, Map, Volume2, Clock, MapPin, Loader2, Wifi, WifiOff, Cloud } from 'lucide-react';
+import { listOfflineTours, removeTourOffline, isTourOffline } from '@/lib/offlineTours';
 import { clearTourAudio } from '@/lib/offlineAudio';
+import { base44 } from '@/api/base44Client';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
 import { toast } from '@/components/ui/use-toast';
 
+const LEVEL_LABELS = {
+  free: 'Text + Maps',
+  whisper: 'Glimpse',
+  echo: 'Uncover',
+  manifestation: 'Relive',
+};
+
 export default function SavedToursList() {
-  const [tours, setTours] = useState([]);
+  const [savedTours, setSavedTours] = useState([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState(null);
 
-  const load = () => {
-    const entries = listOfflineTours();
-    setTours(entries);
+  const load = useCallback(async () => {
+    try {
+      // 1. Load server-synced SavedTour records (visible on all devices)
+      const serverRecords = await base44.entities.SavedTour.list('-created_date');
+
+      // 2. Load local offline tours (device-specific)
+      const localTours = listOfflineTours();
+      const localMap = {};
+      for (const entry of localTours) {
+        if (entry.tour?.id) localMap[entry.tour.id] = entry;
+      }
+
+      // 3. Merge: server records are the source of truth, but we also check
+      // for local-only tours (legacy downloads before server-sync was added)
+      const serverIds = new Set(serverRecords.map((r) => r.tour_id));
+      const localOnly = localTours
+        .filter((e) => e.tour?.id && !serverIds.has(e.tour.id))
+        .map((e) => ({
+          id: null, // no server record
+          tour_id: e.tour.id,
+          tour_title: e.tour.title,
+          state: e.tour.state,
+          city: e.tour.city,
+          download_level: e.tour._offline_level || 'free',
+          tour_category: e.tour.tour_category,
+          created_date: new Date(e.savedAt).toISOString(),
+          _localOnly: true,
+        }));
+
+      // 4. Build merged list: server records + local-only legacy tours
+      const merged = [
+        ...serverRecords.map((r) => ({
+          ...r,
+          _localCopy: localMap[r.tour_id] || null,
+          _localOnly: false,
+        })),
+        ...localOnly.map((r) => ({
+          ...r,
+          _localCopy: localMap[r.tour_id] || null,
+        })),
+      ];
+
+      // Sort by created_date descending
+      merged.sort((a, b) => {
+        const da = new Date(a.created_date || 0).getTime();
+        const db = new Date(b.created_date || 0).getTime();
+        return db - da;
+      });
+
+      setSavedTours(merged);
+    } catch (e) {
+      console.error('Failed to load saved tours:', e);
+      // Fall back to local-only if server is unreachable
+      const localTours = listOfflineTours();
+      setSavedTours(
+        localTours.map((e) => ({
+          id: null,
+          tour_id: e.tour.id,
+          tour_title: e.tour.title,
+          state: e.tour.state,
+          city: e.tour.city,
+          download_level: e.tour._offline_level || 'free',
+          tour_category: e.tour.tour_category,
+          created_date: new Date(e.savedAt).toISOString(),
+          _localCopy: e,
+          _localOnly: true,
+        }))
+      );
+    }
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const handleRemove = async (tourId) => {
+  const handleRemove = async (record) => {
+    const tourId = record.tour_id;
     setRemovingId(tourId);
     try {
-      // Clear audio cache for this tour
-      await clearTourAudio(tourId);
-      // Note: tiles may be shared between tours, so we don't clear the
-      // entire tile cache here. Tiles are cleaned up when ALL offline tours
-      // are removed (or the user clears browser data).
-      const result = removeTourOffline(tourId);
-      if (result?.ok === false) {
-        toast({ title: 'Could not remove', description: result.message, variant: 'destructive' });
-        setRemovingId(null);
-        return;
+      // 1. Clear local audio cache for this tour (if present on this device)
+      if (record._localCopy || isTourOffline(tourId)) {
+        await clearTourAudio(tourId);
+        removeTourOffline(tourId);
       }
-      toast({ title: 'Offline tour removed', description: 'Saved data cleared from this device.' });
+
+      // 2. Delete the server-synced SavedTour record (if it exists)
+      if (record.id) {
+        await base44.entities.SavedTour.delete(record.id);
+      }
+
+      toast({ title: 'Saved tour removed', description: 'Removed from your Saved list.' });
       load();
     } catch (e) {
+      console.error('Remove failed:', e);
       toast({ title: 'Could not remove', description: 'Please try again.', variant: 'destructive' });
     }
     setRemovingId(null);
@@ -51,7 +126,7 @@ export default function SavedToursList() {
     );
   }
 
-  if (tours.length === 0) {
+  if (savedTours.length === 0) {
     return (
       <div className="text-center py-16">
         <Download className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
@@ -63,67 +138,87 @@ export default function SavedToursList() {
 
   return (
     <div className="space-y-3">
-      {tours.map((entry, i) => {
-        const tour = entry.tour || {};
-        const stops = entry.stops || [];
-        const hasAudio = tour._offline_audio || entry.hasAudio;
-        const level = tour._offline_level || entry.level || 'text';
-        const savedDate = entry.savedAt ? new Date(entry.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      {savedTours.map((record, i) => {
+        const hasLocalCopy = !!record._localCopy;
+        const level = record.download_level || 'free';
+        const levelLabel = LEVEL_LABELS[level] || 'Text + Maps';
+        const hasAudio = level !== 'free';
+        const savedDate = record.created_date
+          ? new Date(record.created_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '';
+        const localEntry = record._localCopy;
+        const stops = localEntry?.stops || [];
         const stopCount = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle').length;
 
         return (
           <motion.div
-            key={tour.id || i}
+            key={record.tour_id || i}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05 }}
           >
             <div className="rounded-xl border border-border/40 bg-card/40 backdrop-blur-sm overflow-hidden">
               <div className="flex">
-                <Link to={`/tour/${tour.id}`} className="flex-1 p-4 space-y-2.5 active:bg-primary/5 transition-colors">
+                <Link to={`/tour/${record.tour_id}`} className="flex-1 p-4 space-y-2.5 active:bg-primary/5 transition-colors">
                   {/* Title */}
-                  <h3 className="font-heading text-sm font-bold text-foreground truncate">{tour.title}</h3>
+                  <h3 className="font-heading text-sm font-bold text-foreground truncate">{record.tour_title}</h3>
 
                   {/* Location + category */}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-muted-foreground flex items-center gap-1 min-w-0">
                       <MapPin className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{tour.city}, {tour.state}</span>
+                      <span className="truncate">{record.city}, {record.state}</span>
                     </span>
-                    <TourCategoryBadge category={tour.tour_category} />
+                    <TourCategoryBadge category={record.tour_category} />
                   </div>
 
-                  {/* Description */}
-                  {tour.description && (
-                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{tour.description}</p>
-                  )}
-
-                  {/* Badges: what's saved */}
+                  {/* Badges: what's saved + device status */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-primary/15 text-primary border border-primary/30">
-                      <Map className="w-3 h-3" /> Maps + Text
+                      <Map className="w-3 h-3" /> {levelLabel}
                     </span>
                     {hasAudio && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-accent/20 text-accent-foreground border border-accent/40">
                         <Volume2 className="w-3 h-3" /> Narration
                       </span>
                     )}
+                    {hasLocalCopy ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-green-500/15 text-green-400 border border-green-500/30">
+                        <WifiOff className="w-3 h-3" /> Offline Ready
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        <Wifi className="w-3 h-3" /> Online Only
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                       <Clock className="w-3 h-3" /> {savedDate}
                     </span>
+                  </div>
+
+                  {/* Device note for tours without local copy */}
+                  {!hasLocalCopy && (
+                    <p className="text-[10px] text-amber-400/80 flex items-start gap-1 leading-relaxed pt-1">
+                      <Cloud className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>Saved on another device. Offline audio &amp; maps only play on the device that downloaded this tour. Re-download here for offline use.</span>
+                    </p>
+                  )}
+
+                  {/* Stop count (only if local copy has stops) */}
+                  {hasLocalCopy && stopCount > 0 && (
                     <span className="text-[10px] text-muted-foreground">
                       {stopCount} stop{stopCount !== 1 ? 's' : ''}
                     </span>
-                  </div>
+                  )}
                 </Link>
 
                 {/* Remove button — separate so it doesn't trigger navigation */}
                 <button
-                  onClick={() => handleRemove(tour.id)}
-                  disabled={removingId === tour.id}
+                  onClick={() => handleRemove(record)}
+                  disabled={removingId === record.tour_id}
                   className="p-3 self-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 disabled:opacity-50"
                 >
-                  {removingId === tour.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {removingId === record.tour_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 </button>
               </div>
             </div>

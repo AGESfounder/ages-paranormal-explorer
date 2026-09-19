@@ -195,6 +195,16 @@ export default function TourDetail() {
     await clearTourAudio(tourId);
     removeTourOffline(tourId);
     setIsOfflineCached(false);
+    // Also delete the server-synced SavedTour record so this tour is removed
+    // from the user's Saved tab on ALL their devices, not just this one.
+    try {
+      const savedRecords = await base44.entities.SavedTour.filter({ tour_id: tourId });
+      for (const r of savedRecords) {
+        await base44.entities.SavedTour.delete(r.id);
+      }
+    } catch (e) {
+      console.error('Failed to delete SavedTour record:', e);
+    }
     toast({ title: 'Offline tour removed', description: 'Saved data cleared from this device.' });
   };
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
