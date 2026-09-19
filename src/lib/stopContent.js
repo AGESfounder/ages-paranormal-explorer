@@ -27,12 +27,18 @@ const CONCLUSION_OPENERS = [
 // opening ones — the LLM sometimes buries "where our tour ends" or "as we
 // conclude" mid-narration.
 const CONCLUSION_ANYWHERE = [
-  /\b(where|as|before|when|after|until|while)\s+(our|the|this)\s+(tour|journey|investigation)\s+(ends|concludes|finishes|wraps up|comes to (an end|a close)|draws to (a close|an end))\b/i,
+  // Allow an optional adjective (e.g. "paranormal") between the possessive
+  // and the noun — the LLM writes "our paranormal investigation reaches its
+  // conclusion" which the old strict pattern missed.
+  /\b(where|as|before|when|after|until|while)\s+(our|the|this)\s+(?:\w+\s+)?(tour|journey|investigation)\s+(ends|concludes|finishes|wraps up|comes to (an end|a close)|draws to (a close|an end)|reaches (its|a) conclusion)\b/i,
   /\b(our|this|the)\s+(final|last)\s+stop\b/i,
   /\b(wrapping up|to conclude|in conclusion)\b/i,
   /\b(as|when)\s+we\s+(conclude|wrap up|finish|end|leave|depart)\s+(our|the|this)\s+(tour|journey|investigation)\b/i,
   /\b(bringing|bring)\s+(our|the)\s+(tour|journey|investigation)\s+(to an end|to a close)\b/i,
   /\b(our|the)\s+(tour|journey|investigation)\s+(comes to an end|draws to a close|winds down)\b/i,
+  // Standalone catch — "reaches its conclusion", "nearing a conclusion", etc.
+  // regardless of what precedes it.
+  /\b(reaches|reaching|nears|nearing|approaches|approaching)\s+(its|a|their)\s+conclusion\b/i,
 ];
 
 // Strip conclusion-like references from a stop's text. Only the final stop
