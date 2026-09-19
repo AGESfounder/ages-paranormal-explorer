@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Map, Volume2, X, Loader2, Check, AlertTriangle, Zap, ScrollText } from 'lucide-react';
-import { saveTourOffline } from '@/lib/offlineTours';
+import { saveTourOffline, getOfflineTour } from '@/lib/offlineTours';
 import { prefetchTourTiles } from '@/lib/offlineTiles';
 import { generateTourAudio, estimateTourNarrationCredits, clearTourAudio } from '@/lib/offlineAudio';
 import { enrichTourStops, countThinStops } from '@/lib/enrichStops';
@@ -101,16 +101,23 @@ export default function DownloadTourDialog({ tour, stops, open, onClose, onDownl
 
       // 4. Generate audio (for paid levels — condense text + TTS)
       if (selectedLevel !== 'free') {
-        // Clear any previously cached audio so the new level's audio is fresh
-        await clearTourAudio(tour.id);
+        // Only clear existing audio if the narration level changed.
+        // Re-downloading at the same level keeps cached audio and only
+        // generates missing segments (saves credits on re-download).
+        const existingTour = getOfflineTour(tour.id);
+        if (existingTour?._offline_level !== selectedLevel) {
+          await clearTourAudio(tour.id);
+        }
         setProgress({ completed: 0, total: 0, label: 'Generating narration audio…' });
         const audioResult = await generateTourAudio(tour, stopsToSave, (completed, total, label) => {
           setProgress({ completed, total, label: `Generating: ${label}` });
         }, selectedLevel);
 
-        // Spend narration credits
-        const narrationCredits = creditEstimates[selectedLevel].narration;
-        await spendNarration(narrationCredits);
+        // Spend narration credits (only for newly generated segments)
+        const narrationCredits = audioResult.generatedCredits ?? creditEstimates[selectedLevel].narration;
+        if (narrationCredits > 0) {
+          await spendNarration(narrationCredits);
+        }
 
         if (audioResult.errors > 0) {
           toast({

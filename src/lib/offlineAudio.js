@@ -102,6 +102,8 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
   }
 
   let completed = 0;
+  let generatedChars = 0;
+  let generatedSegments = 0;
   for (const item of items) {
     try {
       // Check if already cached (re-download of same tour)
@@ -114,6 +116,10 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
         if (onProgress) onProgress(completed, items.length, item.label);
         continue;
       }
+
+      // New segment — track for credit calculation
+      generatedChars += item.text.length;
+      generatedSegments++;
 
       // Generate TTS
       const result = await base44.integrations.Core.GenerateSpeech({
@@ -140,7 +146,8 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
     if (onProgress) onProgress(completed, items.length, item.label);
   }
 
-  return { audioMap, errors };
+  const generatedCredits = Math.min(100 * generatedSegments, Math.max(0, Math.ceil(generatedChars / 50)));
+  return { audioMap, errors, generatedCredits };
 }
 
 // Retrieve a cached audio blob URL for offline playback.
