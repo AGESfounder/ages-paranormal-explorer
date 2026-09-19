@@ -9,6 +9,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import TabNavigationProvider from '@/components/TabNavigationProvider';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import HauntedMusic from '@/components/HauntedMusic';
 import PageLoader from '@/components/PageLoader';
 import { Navigate } from 'react-router-dom';
@@ -130,7 +131,9 @@ function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <ScrollToTop />
-          <AuthenticatedApp />
+          <ErrorBoundary>
+            <AuthenticatedApp />
+          </ErrorBoundary>
         </Router>
         <Toaster />
       </QueryClientProvider>
