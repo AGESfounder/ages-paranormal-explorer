@@ -47,8 +47,7 @@ const REVENUECAT_THRESHOLD = 2500;
 // Fixed annual costs
 const APPLE_DEV_ANNUAL = 99;
 const GOOGLE_DEV_ONE_TIME = 25;
-const DEV_UPFRONT_ONE_TIME = 600;        // CatDoes — one-time upfront
-const DEV_PROFIT_SHARE_PCT = 0.025;      // CatDoes — 2.5% of annual profit
+const DEV_UPFRONT_ONE_TIME = 600;        // CatDoes — one-time upfront (no profit share)
 
 // AdMob (interstitial ads for free users — stop 2+ paranormal history on each tour)
 const ADMOB_ECPM = 15;                 // $15 per 1,000 interstitial impressions
@@ -262,7 +261,6 @@ const fixedCostsFirstYear = [
 ];
 const fixedCostsOngoing = [
   { item: 'Apple Developer Program', cost: APPLE_DEV_ANNUAL, period: 'Annual' },
-  { item: 'CatDoes (2.5% of profit)', cost: 'Variable', period: 'Annual — variable' },
 ];
 const fixedFirstYearTotal = APPLE_DEV_ANNUAL + GOOGLE_DEV_ONE_TIME + DEV_UPFRONT_ONE_TIME;
 const fixedOngoingAnnual = APPLE_DEV_ANNUAL;
@@ -324,12 +322,9 @@ const scenarios = [
   // RevenueCat (1% above $2,500/month in subscription sales)
   const revcatCost = revenuecatFee(subRev);
   const fixedCost = fixedOngoingMonthly;
-  const preDevCost = platformCosts + storeCosts + revcatCost + fixedCost;
-  const preDevProfit = totalRev - preDevCost;
-  const developerFee = Math.max(0, preDevProfit) * DEV_PROFIT_SHARE_PCT;
-  const totalCost = preDevCost + developerFee;
+  const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
   const profit = totalRev - totalCost;
-  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, rewardedAdRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, developerFee, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, base44Plan };
+  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, rewardedAdRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, base44Plan };
 });
 
 const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -380,7 +375,7 @@ function downloadPDF() {
   para(`Platform cost: $${COST_PER_CREDIT.toFixed(4)}/credit (Builder/Pro: $40-80/mo / 10k-20k credits)`);
   para(`App Store / Google Play IAP fee: ${(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (Apple & Google, small devs < $1M/yr). Apple jumps to ${(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr; Google stays 15%. The app publishes natively via iOS/Android IAP.`);
   para(`RevenueCat: ${(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above $${REVENUECAT_THRESHOLD.toLocaleString()}/mo (IAP subscription management layer)`);
-  para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | CatDoes: $${DEV_UPFRONT_ONE_TIME} upfront + ${(DEV_PROFIT_SHARE_PCT * 100).toFixed(1)}% of annual profit`);
+  para(`Apple Developer: $${APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${GOOGLE_DEV_ONE_TIME} one-time | CatDoes: $${DEV_UPFRONT_ONE_TIME} upfront (one-time, no profit share)`);
   para(`Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by total credits consumed. The per-credit rate ($${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4-6.`);
   para(`AdMob Interstitial: $${ADMOB_ECPM}/1k impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para(`AdMob Rewarded: $${ADMOB_REWARDED_ECPM}/1k impressions. Paid users watch ~${ADS_PER_PAID_USER_MO} ads/mo for +${AD_REWARD_ENERGY} energy each. Ad rev: $${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Energy cost: ${AD_REWARD_CREDITS_PER_AD} credits/ad × ${Math.round(AD_REWARD_UTILIZATION * 100)}% utilization × $${COST_PER_CREDIT.toFixed(4)} = $${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Net: $${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(3)}/paid user/mo (retention investment, not profit).`);
@@ -469,9 +464,9 @@ function downloadPDF() {
   para(`Model: ${ADS_PER_PAID_USER_MO} ads/paid user/mo x $${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)}/impression = $${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(3)} ad rev. Energy cost: ${ADS_PER_PAID_USER_MO} x ${AD_REWARD_CREDITS_PER_AD} credits x ${Math.round(AD_REWARD_UTILIZATION * 100)}% utilization x $${COST_PER_CREDIT.toFixed(4)}/credit = $${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Net is a retention investment — ad-reward credits are included in the Base44 plan-tier calculation in section 9a.`);
 
   heading('9. Revenue Scenarios (Monthly, 70% Utilization)');
-  table(['Scenario', 'Sub Rev', 'Interstitial', 'Rewarded', 'Total Rev', 'B44 Plan', 'Store', 'RevCat', 'Dev 2.5%', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
-    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.interstitialAdRev.toFixed(0), '$' + s.rewardedAdRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.developerFee.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
-    [70, 30, 30, 30, 35, 30, 25, 25, 30, 25, 30, 30, 25]);
+  table(['Scenario', 'Sub Rev', 'Interstitial', 'Rewarded', 'Total Rev', 'B44 Plan', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
+    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.interstitialAdRev.toFixed(0), '$' + s.rewardedAdRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
+    [70, 30, 30, 30, 35, 30, 25, 25, 25, 30, 30, 25]);
 
   heading('9a. Base44 Plan Required Per Scenario');
   para('Total monthly integration credits consumed by paid users (70% utilization) plus credits from consumed ad-reward energy, and the minimum Base44 plan needed to support them. Free (Observer) users are gated and consume 0 credits.');
@@ -488,7 +483,7 @@ function downloadPDF() {
   para(`Trailblazer is profitable at 100% utilization (~${trailblazerAnalysis.margin.toFixed(0)}% margin = $${trailblazerAnalysis.profit.toFixed(0)} profit over 30 months). At 50% realistic usage, margin improves to ~${trailblazer50.margin.toFixed(0)}%. The 300-slot cap protects against credit cost exposure.`);
   para('AdMob interstitial revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
   para(`Rewarded ads (paid users) generate ~$${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but granted energy costs ~$${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~$${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a retention investment, not a profit center — it keeps paid users engaged at energy gates. Ad-reward credits are included in the Base44 plan-tier calculation (section 9a).`);
-  para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing + 2.5% of profit to CatDoes) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + ' (includes $' + DEV_UPFRONT_ONE_TIME + ' CatDoes upfront). Base44 plan costs are now shown as actual tier costs in section 9, not per-credit estimates.');
+  para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + ' (includes $' + DEV_UPFRONT_ONE_TIME + ' CatDoes upfront). Base44 plan costs are now shown as actual tier costs in section 9, not per-credit estimates.');
   para(`RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.`);
   para(`RISK: Apple fee jumps to 30% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M.`);
   para('Annual plans improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).');
@@ -618,7 +613,7 @@ export default function PlanAnalysis() {
             <p className="print-text"><span className="font-semibold">Platform cost:</span> ${COST_PER_CREDIT.toFixed(4)}/credit (Builder plan: $40/mo, 10,000 included credits). Pro: $80/mo, 20,000 credits. Elite: custom. Credits are hard-capped — actions FAIL when exhausted, not pay-per-use.</p>
             <p className="print-text"><span className="font-semibold">App Store / Google Play IAP fee:</span> {(STORE_FEE_PCT * 100).toFixed(0)}% of IAP revenue (both stores, small devs &lt; ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr). Apple jumps to {(STORE_FEE_PCT_HIGH * 100).toFixed(0)}% above that; Google stays 15%. The app publishes natively via iOS/Android IAP.</p>
             <p className="print-text"><span className="font-semibold">RevenueCat:</span> {(REVENUECAT_FEE_PCT * 100).toFixed(0)}% of monthly subscription sales above ${REVENUECAT_THRESHOLD.toLocaleString()}/mo (IAP subscription management layer for iOS/Android)</p>
-            <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · CatDoes ${DEV_UPFRONT_ONE_TIME} upfront + {(DEV_PROFIT_SHARE_PCT * 100).toFixed(1)}% of annual profit</p>
+            <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · CatDoes ${DEV_UPFRONT_ONE_TIME} upfront (one-time, no profit share)</p>
             <p className="print-text text-xs italic"><span className="font-semibold">Note:</span> Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (e.g. Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by the total credits consumed. The per-credit rate (${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4–6.</p>
             <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
             <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis shows 100% utilization (worst case) and 50–70% (realistic average).</p>
@@ -1049,7 +1044,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Google Play's $25 is a one-time fee (not recurring). CatDoes charges ${DEV_UPFRONT_ONE_TIME} upfront + 2.5% of annual profit (variable, shown in section 9 as "Dev 2.5%"). Base44 plan costs are shown as actual tier costs in section 9, not listed here as fixed costs.</p>
+          <p className="text-xs print-muted mt-2 italic">Google Play's $25 is a one-time fee (not recurring). CatDoes charges ${DEV_UPFRONT_ONE_TIME} upfront (one-time, no profit share). Base44 plan costs are shown as actual tier costs in section 9, not listed here as fixed costs.</p>
         </section>
 
         {/* 8. AdMob Ad Revenue */}
@@ -1123,7 +1118,6 @@ export default function PlanAnalysis() {
                   <th className={`${th} ${num}`}>Base44 Plan</th>
                   <th className={`${th} ${num}`}>Store 15%</th>
                   <th className={`${th} ${num}`}>RevCat</th>
-                  <th className={`${th} ${num}`}>Dev 2.5%</th>
                   <th className={`${th} ${num}`}>Fixed</th>
                   <th className={`${th} ${num}`}>Total Cost</th>
                   <th className={`${th} ${num}`}>Profit</th>
@@ -1141,7 +1135,6 @@ export default function PlanAnalysis() {
                     <td className={`${td} ${num} print-text`}>${s.platformCosts}</td>
                     <td className={`${td} ${num} print-text`}>${s.storeCosts.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.revcatCost.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>${s.developerFee.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.fixedCost.toFixed(0)}</td>
                     <td className={`${td} ${num} print-text`}>${s.totalCost.toFixed(0)}</td>
                     <td className={`${td} ${num} font-semibold print-text`}>${s.profit.toFixed(0)}</td>
@@ -1151,7 +1144,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). Ad revenue = interstitial (free users) + rewarded (paid users). Rewarded ad credits from consumed ad-reward energy are included in the Base44 plan-tier calculation. Free (Observer) users are gated and consume 0 credits. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales. CatDoes fee is 2.5% of monthly profit (shown as "Dev 2.5%").</p>
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). Ad revenue = interstitial (free users) + rewarded (paid users). Rewarded ad credits from consumed ad-reward energy are included in the Base44 plan-tier calculation. Free (Observer) users are gated and consume 0 credits. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales. CatDoes is a one-time upfront fee (no profit share).</p>
 
           {/* 9a. Base44 Plan Required Per Scenario */}
           <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
@@ -1221,7 +1214,7 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold text-green-500">✓ Trailblazer is profitable at all utilization levels</span> (~{trailblazerAnalysis.margin.toFixed(0)}% margin at 100% = ${trailblazerAnalysis.profit.toFixed(0)} profit over 30 months; ~{trailblazer50.margin.toFixed(0)}% at 50% realistic usage). The 300-slot cap protects against credit cost exposure. Trailblazer matches Investigator energy at a locked-in discount.</p>
             <p>• <span className="font-semibold">AdMob revenue</span> from free users (interstitial) meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
             <p>• <span className="font-semibold">Rewarded ads</span> (paid users) generate ~${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but the granted energy costs ~${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a <span className="font-semibold">retention investment</span>, not a profit center — it keeps paid users engaged at energy gates instead of churning. Ad-reward credits are included in the Base44 plan-tier calculation (section 9a), so high ad-reward usage can push the required plan tier higher.</p>
-            <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing + 2.5% of profit to CatDoes) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal} (includes ${DEV_UPFRONT_ONE_TIME} CatDoes upfront). Base44 plan costs are shown as actual tier costs in section 9, not per-credit estimates.</p>
+            <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal} (includes ${DEV_UPFRONT_ONE_TIME} CatDoes upfront — one-time, no profit share). Base44 plan costs are shown as actual tier costs in section 9, not per-credit estimates.</p>
             <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
             <p>• <span className="font-semibold">RISK:</span> Apple's fee jumps to 30% above ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M.</p>
             <p>• <span className="font-semibold">Annual plans</span> improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).</p>
