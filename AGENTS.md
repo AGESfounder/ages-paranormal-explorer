@@ -23,10 +23,13 @@
 - Native App IDs live in Android `strings.xml` / manifest meta-data and iOS `GADApplicationIdentifier` (never put ad-unit IDs in App ID slots).
 
 ## Billing
-- **Web / iOS checkout:** Wix via `create-subscription` + `payments-webhook` (unchanged). Explorer, Investigator, Aura bundles, and web/iOS Trailblazer still use this path.
+- **Web checkout:** Wix via `create-subscription` + `payments-webhook` (unchanged) — all products on web: Explorer/Investigator subscriptions, Aura bundles, and Trailblazer.
+- **iOS Explorer/Investigator:** RevenueCat (`@revenuecat/purchases-capacitor`) StoreKit subscriptions. `revenuecat-webhook` grants the generic Base44 entitlement fields (`plan`, `plan_expiration_date`, `subscription_status`, `subscription_id`, energy) — the same fields the Wix webhook writes. iOS Trailblazer stays on the Wix path.
+- **iOS Aura bundles:** RevenueCat/StoreKit **consumables** — `com.ages.explorer.aura.{flicker,apparition,haunting,spectral}`. `revenuecat-webhook` adds to the existing `aura_narration_energy` / `aura_manifestation_energy` rollover fields at the existing `AURA_BUNDLES` reward amounts (80/20 split via `getGrantForProduct`), idempotent by `transaction_id` in `RevenueCatPurchase`; refunds claw back only the granted amounts. Consumables never touch plan/subscription fields. Web and Android Aura bundles stay on the Wix path.
 - **Android Trailblazer:** RevenueCat (`@revenuecat/purchases-capacitor`) purchases Google Play product `trailblazer.30month` ($239.99 one-time). Public keys: `VITE_REVENUECAT_IOS_API_KEY`, `VITE_REVENUECAT_ANDROID_API_KEY`.
 - Google product is **not** mapped to RevenueCat entitlement `trailblazer` (Apple-owned). Access is **not** granted from SDK entitlements.
 - `revenuecat-webhook` reconciles Play purchases into isolated User fields (`google_trailblazer_*`) and `RevenueCatPurchase` ledger rows. Grant = purchase timestamp + 30 calendar months (UTC). Refunds clear only Google fields.
+- Client seam `src/lib/revenuecat.js`; Dashboard `handlePurchase` routes by platform. RevenueCat grants land server-side via webhook — the client polls `auth.me()` and never trusts SDK entitlements.
 - Client paid checks use `src/lib/access.js` (mirrors `base44/shared/access.js`): effective plan honors generic `plan`/`plan_expiration_date` **and** active Google expiry. Expired Google access does not unlock paid features; Apple/Wix access stays independent.
 
 ## Commands

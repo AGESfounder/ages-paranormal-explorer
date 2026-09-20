@@ -18,8 +18,17 @@ import {
   isPaidAccess,
 } from '@/lib/access';
 import {
+  getAppleSubscriptionPlanId,
   isAndroidNative,
+  isAppleAuraCheckout,
+  isAppleSubscriptionCheckout,
+  isIosNative,
+  purchaseAppleAuraBundle,
+  purchaseAppleSubscription,
   purchaseGoogleTrailblazer,
+  restoreApplePurchases,
+  waitForAppleAuraGrant,
+  waitForApplePlanGrant,
   waitForGoogleTrailblazerGrant,
 } from '@/lib/revenuecat';
 
@@ -76,7 +85,7 @@ export default function Dashboard() {
     setRedirecting(productId);
     try {
       // Android Trailblazer → RevenueCat / Google Play one-time product.
-      // iOS and web keep the existing Wix create-subscription path.
+      // iOS/web Trailblazer keeps the existing Wix create-subscription path.
       if (productId === 'trailblazer' && isAndroidNative()) {
         const result = await purchaseGoogleTrailblazer(user?.id);
         if (result.cancelled) {
@@ -112,6 +121,85 @@ export default function Dashboard() {
         return;
       }
 
+      // Native iOS Explorer/Investigator → RevenueCat / App Store subscription.
+      // Web, Android, and Trailblazer keep the Wix path below.
+      if (isIosNative() && isAppleSubscriptionCheckout(productId)) {
+        const result = await purchaseAppleSubscription(productId, user?.id);
+        if (result.cancelled) {
+          setRedirecting(null);
+          return;
+        }
+        if (!result.ok) {
+          if (result.reason === 'product_unavailable') {
+            alert('This subscription is not available on the App Store yet. Please try again later or contact support.');
+          } else {
+            alert(result.error?.message || result.reason || 'Purchase failed');
+          }
+          setRedirecting(null);
+          return;
+        }
+
+        // Wait for the Base44 webhook to write the plan grant.
+        // Never grant access from the SDK result alone.
+        const grant = await waitForApplePlanGrant(() => base44.auth.me(), {
+          expectedPlanId: getAppleSubscriptionPlanId(productId),
+          timeoutMs: 45000,
+          intervalMs: 1500,
+        });
+        if (grant.ok && grant.user) {
+          setUser(grant.user);
+          await loadData();
+        } else {
+          // Purchase succeeded at the store; webhook may still be in flight.
+          alert('Purchase complete. Your plan will activate in a moment — pull to refresh if needed.');
+          await loadData();
+        }
+        setRedirecting(null);
+        return;
+      }
+
+      // Native iOS Aura Bundles → RevenueCat / App Store consumables.
+      // Web, Android, and all other platforms keep the Wix path below.
+      if (isIosNative() && isAppleAuraCheckout(productId)) {
+        // Pre-purchase baseline — the webhook adds to these rollover pools.
+        const baselineNarration = user?.aura_narration_energy || 0;
+        const baselineManifestation = user?.aura_manifestation_energy || 0;
+
+        const result = await purchaseAppleAuraBundle(productId, user?.id);
+        if (result.cancelled) {
+          setRedirecting(null);
+          return;
+        }
+        if (!result.ok) {
+          if (result.reason === 'product_unavailable') {
+            alert('This Aura Bundle is not available on the App Store yet. Please try again later or contact support.');
+          } else {
+            alert(result.error?.message || result.reason || 'Purchase failed');
+          }
+          setRedirecting(null);
+          return;
+        }
+
+        // Wait for the Base44 webhook to add the Aura energy. AURA is a
+        // consumable top-up — never wait on subscription plan fields here.
+        const grant = await waitForAppleAuraGrant(() => base44.auth.me(), {
+          baselineNarration,
+          baselineManifestation,
+          timeoutMs: 45000,
+          intervalMs: 1500,
+        });
+        if (grant.ok && grant.user) {
+          setUser(grant.user);
+          await loadData();
+        } else {
+          // Purchase succeeded at the store; webhook may still be in flight.
+          alert('Purchase complete. Your Aura energy will appear in a moment — pull to refresh if needed.');
+          await loadData();
+        }
+        setRedirecting(null);
+        return;
+      }
+
       const response = await base44.functions.invoke('create-subscription', { product_id: productId });
       if (response.data?.redirectUrl) {
         window.location.href = response.data.redirectUrl;
@@ -123,6 +211,35 @@ export default function Dashboard() {
       console.error('Checkout error:', e);
       const msg = e.response?.data?.error || e.message || 'Checkout failed';
       alert(msg);
+      setRedirecting(null);
+    }
+  };
+
+  // App Store-required "Restore Purchases" for iOS subscriptions.
+  const handleRestorePurchases = async () => {
+    setRedirecting('restore');
+    try {
+      const result = await restoreApplePurchases(user?.id);
+      if (!result.ok) {
+        alert(result.error?.message || 'Could not restore purchases. Please try again.');
+        return;
+      }
+      // New-to-RevenueCat transactions fire webhook events; wait briefly, then reload.
+      const grant = await waitForApplePlanGrant(() => base44.auth.me(), {
+        timeoutMs: 15000,
+        intervalMs: 1500,
+      });
+      if (grant.ok && grant.user) {
+        setUser(grant.user);
+      }
+      await loadData();
+      alert(grant.ok
+        ? 'Purchases restored. Your plan is active.'
+        : 'Restore complete. If you have an active subscription it will appear here shortly.');
+    } catch (e) {
+      console.error('Restore error:', e);
+      alert(e.message || 'Could not restore purchases. Please try again.');
+    } finally {
       setRedirecting(null);
     }
   };
@@ -216,7 +333,7 @@ export default function Dashboard() {
             <div className="mt-3 pt-3 border-t border-border/30 flex items-center gap-2">
               <Calendar className="w-3.5 h-3.5 text-amber-400" />
               <p className="text-xs text-muted-foreground">
-                <span className="text-amber-400 font-heading">{daysUntilExpiration} days</span> remaining in your Trailblazer access
+                <span className="text-amber-400 font-heading">{daysUntilExpiration} days</span> remaining in your {currentPlan.name} access
               </p>
             </div>
           )}
@@ -383,6 +500,15 @@ export default function Dashboard() {
               );
             })}
           </div>
+          {isIosNative() && (
+            <button
+              onClick={handleRestorePurchases}
+              disabled={redirecting === 'restore'}
+              className="w-full mt-3 py-2.5 rounded-lg border border-border/40 bg-card/20 text-muted-foreground text-xs font-heading uppercase tracking-wider hover:bg-card/40 hover:text-foreground transition-colors disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-2"
+            >
+              {redirecting === 'restore' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Restore Purchases'}
+            </button>
+          )}
         </div>
 
         {/* ── Aura Bundles ── */}

@@ -1,14 +1,25 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
-import { PLANS, getNextResetDate } from '../../shared/plans.js';
+import { PLANS, getGrantForProduct, getNextResetDate } from '../../shared/plans.js';
 import {
+  APPLE_AURA_GRANT_EVENT_TYPES,
+  APPLE_STORE,
   GOOGLE_TRAILBLAZER_PRODUCT_ID,
   GRANT_EVENT_TYPES,
   REVOKE_EVENT_TYPES,
   buildGoogleTrailblazerGrantFields,
+  classifyAppleSubscriptionEvent,
   computeGoogleTrailblazerExpiration,
+  getAppleAuraProduct,
+  getAppleSubscriptionProduct,
+  isAppleAuraRefundEvent,
+  latestActiveAppleSubscription,
   maxActiveGoogleExpiration,
+  normalizeAppleAuraLedgerFields,
+  normalizeAppleLedgerFields,
   normalizeLedgerFields,
   resolveAppUserId,
+  shouldProcessAppleAuraEvent,
+  shouldProcessAppleSubscriptionEvent,
   shouldProcessGoogleTrailblazerEvent,
 } from '../../shared/revenuecat.js';
 
@@ -253,6 +264,19 @@ export default async function (req: Request) {
       return jsonResponse({ received: true, test: true });
     }
 
+    // Apple App Store Explorer/Investigator subscriptions via StoreKit.
+    if (shouldProcessAppleSubscriptionEvent(event)) {
+      return await handleAppleSubscriptionEvent(req, event);
+    }
+
+    // Apple App Store Aura Bundle consumables (one-time energy top-ups).
+    // Consumables fire NON_RENEWING_PURCHASE, not subscription lifecycle
+    // events, so they need their own route — and they never touch the
+    // generic plan fields.
+    if (shouldProcessAppleAuraEvent(event)) {
+      return await handleAppleAuraEvent(req, event);
+    }
+
     if (!shouldProcessGoogleTrailblazerEvent(event)) {
       console.log(
         'RevenueCat event ignored (store/product/type filter):',
@@ -406,4 +430,640 @@ export default async function (req: Request) {
     console.error('revenuecat-webhook error:', (error as Error).message);
     return jsonResponse({ error: (error as Error).message }, 500);
   }
+}
+
+// ── Apple App Store Explorer/Investigator subscriptions ─────────────────────
+// Grants reuse the generic Base44 entitlement fields (plan,
+// plan_expiration_date, subscription_status, subscription_id, energy) — the
+// same fields the Wix payments-webhook writes. Google Trailblazer stays
+// isolated in google_trailblazer_* and is untouched by this flow.
+
+/**
+ * Locate the ledger row for an Apple subscription. Renewals, cancellations,
+ * and refunds each carry their own transaction_id but share the subscription
+ * lineage's original_transaction_id, so both are tried.
+ */
+async function findAppleLedger(base44: any, event: any) {
+  const txn = event.transaction_id || '';
+  const origTxn = event.original_transaction_id || '';
+  if (txn) {
+    const rows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+      transaction_id: txn,
+    });
+    if (rows?.length) return rows[0];
+  }
+  if (origTxn && origTxn !== txn) {
+    const rows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+      original_transaction_id: origTxn,
+    });
+    if (rows?.length) return rows[0];
+  }
+  return null;
+}
+
+/** Transaction ids identifying an Apple subscription lineage. */
+function appleLineageKeys(event: any, row: any): string[] {
+  return [
+    row?.original_transaction_id,
+    row?.transaction_id,
+    event?.original_transaction_id,
+    event?.transaction_id,
+  ].filter((k): k is string => typeof k === 'string' && k.length > 0);
+}
+
+/**
+ * The generic plan fields can only represent one subscription at a time.
+ * Apple lifecycle events may rewrite them only when the user's current
+ * subscription_id belongs to this Apple lineage (or is unset), so an Apple
+ * refund/expiry cannot wipe a Wix or newer subscription's fields.
+ */
+function appleEventOwnsGenericPlan(user: any, event: any, row: any): boolean {
+  if (!user.subscription_id) return true;
+  return appleLineageKeys(event, row).includes(user.subscription_id);
+}
+
+/**
+ * Apply an Apple Explorer/Investigator grant to the generic plan fields.
+ * Out-of-order deliveries for the same plan can only extend
+ * plan_expiration_date (max), never shorten it, and stale events do not
+ * refill energy that was already granted for a newer period.
+ */
+async function applyAppleGrant(
+  base44: any,
+  user: any,
+  plan: any,
+  expirationIso: string,
+  opts: { refillEnergy: boolean; subscriptionId?: string | null },
+) {
+  const newExp = Date.parse(expirationIso);
+  const existingExp = user.plan_expiration_date ? Date.parse(user.plan_expiration_date) : null;
+  const hasExisting = existingExp !== null && !Number.isNaN(existingExp);
+  const samePlan = (user.plan || 'observer') === plan.id;
+
+  let finalExpiration = expirationIso;
+  if (samePlan && hasExisting && existingExp > newExp) {
+    finalExpiration = user.plan_expiration_date;
+  }
+  // Event for an older period than the one already granted — keep energy as-is.
+  const stale = samePlan && hasExisting && newExp < (existingExp as number);
+
+  const fields: Record<string, unknown> = {
+    plan: plan.id,
+    plan_expiration_date: finalExpiration,
+    subscription_status: 'active',
+    subscription_id: opts.subscriptionId || user.subscription_id || null,
+  };
+
+  if (opts.refillEnergy && !stale) {
+    fields.manifestation_energy = plan.manifestation_energy;
+    fields.narration_energy = plan.narration_energy;
+    fields.energy_reset_date = getNextResetDate();
+  }
+
+  await base44.asServiceRole.entities.User.update(user.id, fields);
+}
+
+/**
+ * After an Apple refund or expiration, downgrade to observer unless another
+ * active Apple subscription remains on the ledger. Energy is zeroed only when
+ * no Apple subscription remains (mirrors the Wix cancel/expire downgrade).
+ */
+async function recomputeAppleAccessAfterRevoke(
+  base44: any,
+  user: any,
+  revokeKeys: string[],
+  statusWhenNone: 'canceled' | 'expired',
+) {
+  const ownsGenericPlan = !user.subscription_id || revokeKeys.includes(user.subscription_id);
+
+  const rows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+    user_id: user.id,
+    store: APPLE_STORE,
+  });
+  const remaining = latestActiveAppleSubscription(rows || [], new Date());
+
+  if (remaining) {
+    const plan = (PLANS as any)[remaining.product.plan_id];
+    if (plan && ownsGenericPlan) {
+      await base44.asServiceRole.entities.User.update(user.id, {
+        plan: plan.id,
+        plan_expiration_date: remaining.row.plan_expiration_date,
+        subscription_status: 'active',
+        subscription_id: remaining.row.original_transaction_id || remaining.row.transaction_id,
+      });
+      console.log('Apple revoke: kept remaining subscription', remaining.row.product_id, 'for', user.id);
+    }
+    return;
+  }
+
+  if (!ownsGenericPlan) {
+    console.log('Apple revoke: generic plan belongs to another subscription, untouched:', user.id);
+    return;
+  }
+
+  await base44.asServiceRole.entities.User.update(user.id, {
+    plan: 'observer',
+    manifestation_energy: 0,
+    narration_energy: 0,
+    subscription_status: statusWhenNone,
+  });
+  console.log('Apple subscription access revoked:', user.id, statusWhenNone);
+}
+
+/** Record a non-grant lifecycle event on the ledger row (idempotent bookkeeping). */
+async function recordAppleLedgerEvent(base44: any, row: any, event: any, eventId: string) {
+  if (!row) return;
+  await base44.asServiceRole.entities.RevenueCatPurchase.update(row.id, {
+    event_id: eventId || row.event_id,
+    event_ids: mergeEventIds(row, eventId),
+    event_type: event.type,
+  });
+}
+
+/**
+ * REFUND — store-support refund (CANCELLATION/EXPIRATION with CUSTOMER_SUPPORT,
+ * or a defensive REFUND type). Revokes access immediately and marks the row
+ * refunded. Prorated refunds from a same-group upgrade reference the OLD
+ * product while the row already tracks the NEW one — never revoke those.
+ */
+async function handleAppleRefund(
+  base44: any,
+  user: any,
+  event: any,
+  existing: any,
+  eventId: string,
+  transactionId: string,
+) {
+  if (!existing) {
+    console.log('Apple refund event with no ledger row:', transactionId);
+    return jsonResponse({ received: true, skipped: 'no_ledger' });
+  }
+  if (existing.product_id !== event.product_id) {
+    console.log('Apple refund for superseded product, ignoring:', event.product_id, 'row:', existing.product_id);
+    return jsonResponse({ received: true, skipped: 'superseded_product' });
+  }
+  try {
+    await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, {
+      status: 'refunded',
+      event_id: eventId || existing.event_id,
+      event_ids: mergeEventIds(existing, eventId),
+      event_type: event.type,
+    });
+    await recomputeAppleAccessAfterRevoke(base44, user, appleLineageKeys(event, existing), 'canceled');
+  } catch (e) {
+    console.error('Apple refund persistence failed:', (e as Error).message);
+    return jsonResponse({ error: 'persistence_failed' }, 500);
+  }
+  return jsonResponse({ received: true, refunded: true });
+}
+
+/** EXPIRATION — the paid period ended and access should be removed. */
+async function handleAppleExpiration(
+  base44: any,
+  user: any,
+  event: any,
+  existing: any,
+  eventId: string,
+  transactionId: string,
+) {
+  if (!existing) {
+    console.log('Apple expiration event with no ledger row:', transactionId);
+    return jsonResponse({ received: true, skipped: 'no_ledger' });
+  }
+  if (existing.product_id !== event.product_id) {
+    return jsonResponse({ received: true, skipped: 'superseded_product' });
+  }
+  try {
+    await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, {
+      status: 'expired',
+      event_id: eventId || existing.event_id,
+      event_ids: mergeEventIds(existing, eventId),
+      event_type: event.type,
+    });
+    await recomputeAppleAccessAfterRevoke(base44, user, appleLineageKeys(event, existing), 'expired');
+  } catch (e) {
+    console.error('Apple expiration persistence failed:', (e as Error).message);
+    return jsonResponse({ error: 'persistence_failed' }, 500);
+  }
+  return jsonResponse({ received: true, expired: true });
+}
+
+/**
+ * CANCELLATION — auto-renew turned off. Access continues until
+ * plan_expiration_date (isGenericPlanActive honors the date first); the later
+ * EXPIRATION event performs the actual downgrade.
+ */
+async function handleAppleCancel(
+  base44: any,
+  user: any,
+  event: any,
+  existing: any,
+  eventId: string,
+) {
+  try {
+    if (appleEventOwnsGenericPlan(user, event, existing)) {
+      const updates: Record<string, unknown> = { subscription_status: 'canceled' };
+      if (event.expiration_at_ms) {
+        // Keep the furthest known expiry — never shorten access on reorder.
+        const newExp = Number(event.expiration_at_ms);
+        const existingExp = user.plan_expiration_date ? Date.parse(user.plan_expiration_date) : null;
+        updates.plan_expiration_date =
+          existingExp !== null && !Number.isNaN(existingExp) && existingExp > newExp
+            ? user.plan_expiration_date
+            : new Date(newExp).toISOString();
+      }
+      await base44.asServiceRole.entities.User.update(user.id, updates);
+    }
+    await recordAppleLedgerEvent(base44, existing, event, eventId);
+  } catch (e) {
+    console.error('Apple cancellation persistence failed:', (e as Error).message);
+    return jsonResponse({ error: 'persistence_failed' }, 500);
+  }
+  return jsonResponse({ received: true, cancelled: true });
+}
+
+/** UNCANCELLATION — auto-renew re-enabled before expiry; restore active status. */
+async function handleAppleUncancel(
+  base44: any,
+  user: any,
+  event: any,
+  existing: any,
+  eventId: string,
+  transactionId: string,
+  product: any,
+) {
+  try {
+    if (appleEventOwnsGenericPlan(user, event, existing)) {
+      const plan = (PLANS as any)[product.plan_id];
+      if (plan && event.expiration_at_ms) {
+        await applyAppleGrant(base44, user, plan, new Date(Number(event.expiration_at_ms)).toISOString(), {
+          refillEnergy: false,
+          subscriptionId: event.original_transaction_id || transactionId,
+        });
+      } else {
+        await base44.asServiceRole.entities.User.update(user.id, { subscription_status: 'active' });
+      }
+    }
+    await recordAppleLedgerEvent(base44, existing, event, eventId);
+  } catch (e) {
+    console.error('Apple uncancellation persistence failed:', (e as Error).message);
+    return jsonResponse({ error: 'persistence_failed' }, 500);
+  }
+  return jsonResponse({ received: true, uncancelled: true });
+}
+
+/**
+ * PRODUCT_CHANGE — bookkeeping only. The paired RENEWAL carries the new
+ * product + expiration (immediately for upgrades, at period end for
+ * downgrades) and performs the actual plan change.
+ */
+async function handleAppleProductChange(base44: any, existing: any, event: any, eventId: string) {
+  try {
+    await recordAppleLedgerEvent(base44, existing, event, eventId);
+  } catch (e) {
+    console.error('Apple product_change ledger update failed:', (e as Error).message);
+  }
+  return jsonResponse({ received: true, product_change: true });
+}
+
+/**
+ * GRANT — INITIAL_PURCHASE / RENEWAL. Grants the mapped plan on the generic
+ * fields and upserts the ledger row. RENEWAL also covers resubscribe-after-
+ * lapse and the new product of a same-group upgrade/downgrade.
+ */
+async function handleAppleGrant(
+  base44: any,
+  user: any,
+  event: any,
+  existing: any,
+  eventId: string,
+  transactionId: string,
+  productId: string,
+  product: any,
+) {
+  const expirationMs = event.expiration_at_ms;
+  if (!expirationMs) {
+    console.error('Apple grant event missing expiration_at_ms', eventId);
+    return jsonResponse({ error: 'missing expiration_at_ms' }, 400);
+  }
+  const plan = (PLANS as any)[product.plan_id];
+  if (!plan) {
+    console.error('No plan mapped for Apple product', productId);
+    return jsonResponse({ error: 'unmapped product' }, 400);
+  }
+  const expirationIso = new Date(Number(expirationMs)).toISOString();
+  const purchasedAtMs = event.purchased_at_ms || event.event_timestamp_ms || Date.now();
+  const purchaseDateIso = new Date(Number(purchasedAtMs)).toISOString();
+
+  try {
+    await applyAppleGrant(base44, user, plan, expirationIso, {
+      refillEnergy: true,
+      subscriptionId: event.original_transaction_id || transactionId,
+    });
+
+    // A stale (out-of-order) grant must not regress the ledger row's tracked
+    // period — merge the event id only, keep the newer row data.
+    const existingExp = existing?.plan_expiration_date ? Date.parse(existing.plan_expiration_date) : null;
+    const staleForLedger =
+      existingExp !== null && !Number.isNaN(existingExp) && existingExp > Number(expirationMs);
+
+    if (existing && staleForLedger) {
+      await recordAppleLedgerEvent(base44, existing, event, eventId);
+    } else {
+      const ledgerFields = normalizeAppleLedgerFields(event, {
+        userId: user.id,
+        productId,
+        purchaseDateIso,
+        expirationIso,
+        status: 'active',
+        eventIds: mergeEventIds(existing, eventId),
+      });
+      if (existing) {
+        // Renewals / resubscribes update the subscription's existing row.
+        await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, ledgerFields);
+      } else {
+        await base44.asServiceRole.entities.RevenueCatPurchase.create(ledgerFields);
+      }
+    }
+  } catch (e) {
+    console.error('Apple grant persistence failed:', (e as Error).message);
+    // 5xx so RevenueCat retries
+    return jsonResponse({ error: 'persistence_failed' }, 500);
+  }
+
+  console.log('Apple subscription grant applied:', user.id, plan.id, event.type, 'expires', expirationIso);
+  return jsonResponse({ received: true, granted: true, plan: plan.id, expires: expirationIso });
+}
+
+/**
+ * Route an Apple App Store subscription lifecycle event.
+ * Mirrors the Google flow: auth is verified by the caller, the Base44 user is
+ * resolved from app_user_id, and event-level idempotency uses the ledger row's
+ * event_ids.
+ */
+async function handleAppleSubscriptionEvent(req: Request, event: any) {
+  const base44 = createClientFromRequest(req);
+  const eventId = event.id || event.event_id || '';
+  const transactionId = event.transaction_id || event.original_transaction_id || '';
+
+  if (!transactionId) {
+    console.error('Apple event missing transaction_id', eventId);
+    return jsonResponse({ received: true, skipped: 'no_transaction' });
+  }
+
+  const appUserId = resolveAppUserId(event);
+  if (!appUserId) {
+    console.error('Apple event has no mappable app_user_id', eventId);
+    return jsonResponse({ received: true, skipped: 'anonymous_user' });
+  }
+
+  // Resolve Base44 user — app_user_id is the Base44 user.id set by the client.
+  let user: any = null;
+  try {
+    user = await base44.asServiceRole.entities.User.get(appUserId);
+  } catch (e) {
+    console.error('User lookup failed for', appUserId, (e as Error).message);
+  }
+
+  if (!user) {
+    console.error('No Base44 user for RevenueCat app_user_id', appUserId);
+    // 200 so RC does not retry forever for permanently unmapped ids
+    return jsonResponse({ received: true, skipped: 'user_not_found' });
+  }
+
+  const action = classifyAppleSubscriptionEvent(event);
+  const productId = event.type === 'PRODUCT_CHANGE' ? event.new_product_id : event.product_id;
+  const product = getAppleSubscriptionProduct(productId);
+  if (!action || !product) {
+    return jsonResponse({ received: true, skipped: 'unhandled_type' });
+  }
+
+  const existing = await findAppleLedger(base44, event);
+
+  if (existing && eventAlreadyApplied(existing, eventId)) {
+    console.log('Duplicate Apple event, skipping:', eventId);
+    return jsonResponse({ received: true, duplicate: true });
+  }
+
+  switch (action) {
+    case 'refund':
+      return await handleAppleRefund(base44, user, event, existing, eventId, transactionId);
+    case 'expire':
+      return await handleAppleExpiration(base44, user, event, existing, eventId, transactionId);
+    case 'cancel':
+      return await handleAppleCancel(base44, user, event, existing, eventId);
+    case 'uncancel':
+      return await handleAppleUncancel(base44, user, event, existing, eventId, transactionId, product);
+    case 'product_change':
+      return await handleAppleProductChange(base44, existing, event, eventId);
+    default:
+      return await handleAppleGrant(
+        base44,
+        user,
+        event,
+        existing,
+        eventId,
+        transactionId,
+        productId,
+        product,
+      );
+  }
+}
+
+// ── Apple App Store Aura Bundle consumables ───────────────────────────────
+// One-time consumable top-ups. The grant mirrors the Wix payments-webhook
+// Aura path exactly: additive aura_narration_energy / aura_manifestation_energy
+// computed by getGrantForProduct (shared/plans.js). These events never read
+// or write plan, plan_expiration_date, subscription_*, or the monthly energy
+// fields — AURA is a consumable, not a subscription.
+
+/**
+ * Apply an Aura Bundle grant to the rollover aura pools only (additive).
+ * Reuses the exact Wix reward mapping (80% narration / 20% manifestation).
+ */
+async function applyAppleAuraGrant(base44: any, user: any, bundleId: string) {
+  const grant = getGrantForProduct(bundleId);
+  if (!grant || (!grant.aura_narration_add && !grant.aura_manifestation_add)) {
+    throw new Error(`No Aura grant mapped for bundle ${bundleId}`);
+  }
+
+  const auraNarration = (user.aura_narration_energy || 0) + (grant.aura_narration_add || 0);
+  const auraManifestation = (user.aura_manifestation_energy || 0) + (grant.aura_manifestation_add || 0);
+
+  await base44.asServiceRole.entities.User.update(user.id, {
+    aura_narration_energy: auraNarration,
+    aura_manifestation_energy: auraManifestation,
+  });
+
+  return { auraNarration, auraManifestation };
+}
+
+/**
+ * Refund of an Aura consumable (CANCELLATION from store support, or a
+ * defensive REFUND type). Marks the ledger row refunded and removes exactly
+ * the granted bundle energy, floored at 0 so partially-spent pools never go
+ * negative. Never touches plan fields.
+ */
+async function handleAppleAuraRefund(
+  base44: any,
+  user: any,
+  event: any,
+  existing: any,
+  eventId: string,
+  transactionId: string,
+) {
+  if (!existing) {
+    // No matching paid row — acknowledge (mirrors the Google refund path).
+    console.log('Apple Aura refund event with no ledger row:', transactionId);
+    return jsonResponse({ received: true, skipped: 'no_ledger' });
+  }
+
+  if (eventAlreadyApplied(existing, eventId) && existing.status === 'refunded') {
+    return jsonResponse({ received: true, duplicate: true });
+  }
+
+  const auraProduct = getAppleAuraProduct(event.product_id);
+  const grant = auraProduct ? getGrantForProduct(auraProduct.bundle_id) : null;
+
+  try {
+    await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, {
+      status: 'refunded',
+      event_id: eventId || existing.event_id,
+      event_ids: mergeEventIds(existing, eventId),
+      event_type: event.type,
+    });
+
+    // Only claw back energy this ledger row actually granted (status 'paid').
+    // Re-fetch the user so concurrent grants are not overwritten.
+    if (grant && existing.status === 'paid') {
+      const freshUser = await base44.asServiceRole.entities.User.get(user.id);
+      const auraNarration = Math.max(
+        0,
+        (freshUser?.aura_narration_energy || 0) - (grant.aura_narration_add || 0),
+      );
+      const auraManifestation = Math.max(
+        0,
+        (freshUser?.aura_manifestation_energy || 0) - (grant.aura_manifestation_add || 0),
+      );
+      await base44.asServiceRole.entities.User.update(user.id, {
+        aura_narration_energy: auraNarration,
+        aura_manifestation_energy: auraManifestation,
+      });
+      console.log('Apple Aura refund clawed back energy:', user.id, event.product_id);
+    }
+  } catch (e) {
+    console.error('Apple Aura refund persistence failed:', (e as Error).message);
+    return jsonResponse({ error: 'persistence_failed' }, 500);
+  }
+
+  return jsonResponse({ received: true, refunded: true });
+}
+
+/**
+ * Route an Apple App Store Aura Bundle consumable event.
+ * Mirrors the Google flow: the Base44 user is resolved from app_user_id, the
+ * ledger row is keyed by transaction_id, and event-level idempotency uses the
+ * ledger row's event_ids. Grants are additive aura energy only — never plan
+ * or subscription fields.
+ */
+async function handleAppleAuraEvent(req: Request, event: any) {
+  const base44 = createClientFromRequest(req);
+  const eventId = event.id || event.event_id || '';
+  const transactionId = event.transaction_id || event.original_transaction_id || '';
+
+  if (!transactionId) {
+    console.error('Apple Aura event missing transaction_id', eventId);
+    return jsonResponse({ received: true, skipped: 'no_transaction' });
+  }
+
+  const appUserId = resolveAppUserId(event);
+  if (!appUserId) {
+    console.error('Apple Aura event has no mappable app_user_id', eventId);
+    return jsonResponse({ received: true, skipped: 'anonymous_user' });
+  }
+
+  // Resolve Base44 user — app_user_id is the Base44 user.id set by the client.
+  let user: any = null;
+  try {
+    user = await base44.asServiceRole.entities.User.get(appUserId);
+  } catch (e) {
+    console.error('User lookup failed for', appUserId, (e as Error).message);
+  }
+
+  if (!user) {
+    console.error('No Base44 user for RevenueCat app_user_id', appUserId);
+    // 200 so RC does not retry forever for permanently unmapped ids
+    return jsonResponse({ received: true, skipped: 'user_not_found' });
+  }
+
+  const auraProduct = getAppleAuraProduct(event.product_id);
+  if (!auraProduct) {
+    return jsonResponse({ received: true, skipped: 'unmapped_product' });
+  }
+
+  const existing = await findLedgerByTransaction(base44, transactionId);
+
+  // ── REFUND / REVOKE ──
+  if (isAppleAuraRefundEvent(event)) {
+    return await handleAppleAuraRefund(base44, user, event, existing, eventId, transactionId);
+  }
+
+  // ── GRANT (NON_RENEWING_PURCHASE / INITIAL_PURCHASE) ──
+  if (!APPLE_AURA_GRANT_EVENT_TYPES.has(event.type)) {
+    return jsonResponse({ received: true, skipped: 'unhandled_type' });
+  }
+
+  if (existing && eventAlreadyApplied(existing, eventId)) {
+    console.log('Duplicate Apple Aura event, skipping:', eventId);
+    return jsonResponse({ received: true, duplicate: true });
+  }
+
+  // One transaction = one grant. A new event id for an already-paid
+  // transaction is bookkeeping only — never re-grant energy.
+  if (existing && existing.status === 'paid') {
+    try {
+      await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, {
+        event_id: eventId || existing.event_id,
+        event_ids: mergeEventIds(existing, eventId),
+        event_type: event.type,
+      });
+    } catch (e) {
+      console.error('Apple Aura idempotent ledger update failed:', (e as Error).message);
+    }
+    return jsonResponse({ received: true, idempotent: true });
+  }
+
+  const purchasedAtMs = event.purchased_at_ms || event.event_timestamp_ms || Date.now();
+  const purchaseDateIso = new Date(Number(purchasedAtMs)).toISOString();
+  const ledgerFields = normalizeAppleAuraLedgerFields(event, {
+    userId: user.id,
+    purchaseDateIso,
+    status: 'paid',
+    eventIds: mergeEventIds(existing, eventId),
+  });
+
+  try {
+    if (existing) {
+      // Previously refunded transaction being re-granted, or a pending row.
+      await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, ledgerFields);
+    } else {
+      await base44.asServiceRole.entities.RevenueCatPurchase.create(ledgerFields);
+    }
+
+    const { auraNarration, auraManifestation } = await applyAppleAuraGrant(
+      base44,
+      user,
+      auraProduct.bundle_id,
+    );
+    console.log(
+      'Apple Aura grant applied:', user.id, event.product_id,
+      'aura_narration:', auraNarration, 'aura_manifestation:', auraManifestation,
+    );
+  } catch (e) {
+    console.error('Apple Aura grant persistence failed:', (e as Error).message);
+    // 5xx so RevenueCat retries
+    return jsonResponse({ error: 'persistence_failed' }, 500);
+  }
+
+  return jsonResponse({ received: true, granted: true, bundle: auraProduct.bundle_id });
 }

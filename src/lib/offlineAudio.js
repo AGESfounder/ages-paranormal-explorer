@@ -1,18 +1,119 @@
 // Pre-generate TTS narration audio for offline playback. Generates audio for
 // the tour introduction, conclusion, and each stop's narration text, then
-// stores the audio blobs in the Cache API so they play offline.
+// stores the audio blobs so they play offline.
+//
+// Storage backend is platform-aware:
+// - Web (incl. Base44): browser Cache API (unchanged original behavior).
+// - Native iOS/Android: @capacitor/filesystem (Directory.Data). WKWebView can
+//   evict Cache API website data under storage pressure, which silently
+//   deleted downloaded narration on device; files in app storage persist.
 
 import { base44 } from '@/api/base44Client';
 import { condenseTextsBatch, cacheCondensation, truncateText } from '@/lib/narrationLength';
 import { spendManifestationEnergy } from '@/hooks/useEnergyGate';
+import { isNativeApp } from '@/lib/deviceCapabilities';
 
 const AUDIO_CACHE = 'ages-audio-v1';
+const AUDIO_DIR = 'narration-audio';
 
 // Build a valid URL for Cache API keys. The Cache API requires real URLs
 // (it constructs a Request from the key); non-URL strings like
 // "ages-offline-audio:abc:intro" are rejected silently, so audio is never
 // stored and playback falls back to "no narration cached".
 const audioKey = (tourId, key) => `/__ages_audio__/${tourId}/${key}`;
+
+// --- Native filesystem backend (iOS/Android) -------------------------------
+
+// Keys like "stop:<id>:history" contain ':' — sanitize for file paths.
+const safeSegment = (value) => String(value).replace(/[^A-Za-z0-9._-]/g, '_');
+const audioTourDir = (tourId) => `${AUDIO_DIR}/${safeSegment(tourId)}`;
+const audioFilePath = (tourId, key) => `${audioTourDir(tourId)}/${safeSegment(key)}.mp3`;
+
+// Lazy-load the plugin so the web bundle and web behavior stay untouched.
+// Matches the dynamic-import convention in deviceCapabilities.js.
+async function getNativeFs() {
+  const mod = await import('@capacitor/filesystem');
+  return { Filesystem: mod.Filesystem, Directory: mod.Directory };
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const comma = dataUrl.indexOf(',');
+      resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function base64ToBlob(data, type = 'audio/mpeg') {
+  let base64 = String(data || '');
+  // Tolerate a data-URL prefix (some plugin versions prepend one on Android).
+  if (base64.startsWith('data:')) {
+    const comma = base64.indexOf(',');
+    base64 = comma >= 0 ? base64.slice(comma + 1) : '';
+  }
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type });
+}
+
+// Read a stored narration file. Missing or corrupt files return null — the
+// same cache-miss behavior callers already handle on the web path.
+async function nativeReadAudio(tourId, key) {
+  try {
+    const { Filesystem, Directory } = await getNativeFs();
+    const result = await Filesystem.readFile({
+      path: audioFilePath(tourId, key),
+      directory: Directory.Data,
+    });
+    const blob = result?.data instanceof Blob
+      ? result.data
+      : base64ToBlob(result?.data);
+    return blob.size > 0 ? blob : null;
+  } catch {
+    return null;
+  }
+}
+
+// Write a narration file. No `encoding` option is passed, so the plugin
+// decodes the base64 string and writes raw binary (its documented binary
+// format). Throws on failure, like cache.put does on the web path.
+async function nativeWriteAudio(tourId, key, blob) {
+  const { Filesystem, Directory } = await getNativeFs();
+  const base64 = await blobToBase64(blob);
+  await Filesystem.writeFile({
+    path: audioFilePath(tourId, key),
+    data: base64,
+    directory: Directory.Data,
+    recursive: true,
+  });
+}
+
+// Remove every stored narration file for a tour. Never throws.
+async function nativeClearTourAudio(tourId) {
+  try {
+    const { Filesystem, Directory } = await getNativeFs();
+    await Filesystem.rmdir({
+      path: audioTourDir(tourId),
+      directory: Directory.Data,
+      recursive: true,
+    });
+  } catch {
+    // Directory missing or FS error — nothing to clear.
+  }
+}
+
+// Web backend read used by generateTourAudio (unchanged Cache API semantics:
+// a corrupt entry's blob() error propagates to the caller's try/catch).
+async function readWebCacheBlob(cache, cacheKey) {
+  const match = await cache.match(cacheKey);
+  return match ? match.blob() : null;
+}
 
 // Estimate narration credits for a text (matches useEnergyGate logic).
 export function estimateNarrationCredits(text) {
@@ -41,12 +142,13 @@ export function estimateTourNarrationCredits(tour, stops, narrationLength = 'man
 // Calls onProgress(completed, total, currentLabel) as each piece generates.
 // Returns { audioMap, errors } where audioMap is { [key]: url }.
 export async function generateTourAudio(tour, stops, onProgress, narrationLength = 'manifestation') {
-  if (!('caches' in window)) {
+  const nativeAudio = isNativeApp();
+  if (!nativeAudio && !('caches' in window)) {
     console.warn('[offlineAudio] Cache API unavailable — narration cannot be stored offline');
     return { audioMap: {}, errors: 0, reason: 'Cache API unavailable' };
   }
 
-  const cache = await caches.open(AUDIO_CACHE);
+  const cache = nativeAudio ? null : await caches.open(AUDIO_CACHE);
   const audioMap = {};
   let errors = 0;
 
@@ -144,11 +246,13 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
   let generatedSegments = 0;
   for (const item of items) {
     try {
-      // Check if already cached (re-download of same tour)
+      // Check if already stored (re-download of same tour)
       const cacheKey = audioKey(tour.id, item.key);
-      const existing = await cache.match(cacheKey);
-      if (existing) {
-        const blobUrl = URL.createObjectURL(await existing.blob());
+      const existingBlob = nativeAudio
+        ? await nativeReadAudio(tour.id, item.key)
+        : await readWebCacheBlob(cache, cacheKey);
+      if (existingBlob) {
+        const blobUrl = URL.createObjectURL(existingBlob);
         audioMap[item.key] = { url: blobUrl, cacheKey, text: item.text };
         completed++;
         if (onProgress) onProgress(completed, items.length, item.label);
@@ -165,13 +269,17 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
         voice: 'storm',
       });
 
-      // Fetch the audio blob and cache it
+      // Fetch the audio blob and store it
       const resp = await fetch(result.url);
       const blob = await resp.blob();
-      const storeResp = new Response(blob, {
-        headers: { 'Content-Type': blob.type || 'audio/mpeg' },
-      });
-      await cache.put(cacheKey, storeResp);
+      if (nativeAudio) {
+        await nativeWriteAudio(tour.id, item.key, blob);
+      } else {
+        const storeResp = new Response(blob, {
+          headers: { 'Content-Type': blob.type || 'audio/mpeg' },
+        });
+        await cache.put(cacheKey, storeResp);
+      }
 
       // Store a blob URL for immediate use (will be recreated on offline load)
       const blobUrl = URL.createObjectURL(blob);
@@ -191,6 +299,10 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
 // Retrieve a cached audio blob URL for offline playback.
 // Returns a blob URL or null if not cached.
 export async function getOfflineAudio(tourId, key) {
+  if (isNativeApp()) {
+    const blob = await nativeReadAudio(tourId, key);
+    return blob ? URL.createObjectURL(blob) : null;
+  }
   if (!('caches' in window)) return null;
   try {
     const cache = await caches.open(AUDIO_CACHE);
@@ -211,6 +323,10 @@ export async function getOfflineStopAudio(tourId, stopId) {
 
 // Remove all cached audio for a tour.
 export async function clearTourAudio(tourId) {
+  if (isNativeApp()) {
+    await nativeClearTourAudio(tourId);
+    return;
+  }
   if (!('caches' in window)) return;
   try {
     const cache = await caches.open(AUDIO_CACHE);
