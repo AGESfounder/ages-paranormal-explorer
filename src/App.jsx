@@ -47,6 +47,13 @@ const PlanAnalysis = lazy(() => import('@/pages/PlanAnalysis'));
 const DeveloperDocs = lazy(() => import('@/pages/DeveloperDocs'));
 const Support = lazy(() => import('@/pages/Support'));
 
+// Routes that must stay publicly reachable without an authenticated session,
+// even when the global auth flow (authError 'auth_required') would otherwise
+// redirect every route to login. The Privacy Policy must be open to anonymous
+// visitors (App Store / Google Play policy-link requirement); every other
+// route keeps the existing authentication behavior.
+const PUBLIC_ROUTES = new Set(['/privacy']);
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
   const location = useLocation();
@@ -96,9 +103,13 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
-      navigateToLogin();
-      return null;
+      // Redirect to login automatically — except on public routes, which
+      // render anonymously below. Trailing slashes are normalized so
+      // "/privacy/" stays public too.
+      if (!PUBLIC_ROUTES.has(location.pathname.replace(/\/+$/, '') || '/')) {
+        navigateToLogin();
+        return null;
+      }
     }
   }
 
