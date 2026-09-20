@@ -1,8 +1,8 @@
 // RevenueCat Capacitor client for AGES Explorer.
 // - Web: no-op (Wix checkout remains the web path)
 // - iOS: purchase Explorer/Investigator subscriptions and Aura Bundle
-//   consumables via StoreKit (Apple product IDs below). Wix remains the iOS
-//   path for Trailblazer.
+//   consumables via StoreKit (Apple product IDs below), plus the one-time
+//   Trailblazer product (non-subscription). Wix remains the web Trailblazer path.
 // - Android: configure + purchase Google Play one-time product trailblazer.30month
 //
 // Access is NEVER granted from CustomerInfo entitlements here. Base44 webhook
@@ -16,7 +16,7 @@ import { Purchases, PRODUCT_CATEGORY, LOG_LEVEL, PURCHASES_ERROR_CODE } from '@r
 /** Google Play product ID — must match Play Console + RevenueCat catalog. */
 export const GOOGLE_TRAILBLAZER_PRODUCT_ID = 'trailblazer.30month';
 
-/** Apple product ID (reference only — not purchased by this module). */
+/** Apple App Store one-time Trailblazer product ID, purchased only on native iOS. */
 export const APPLE_TRAILBLAZER_PRODUCT_ID = 'com.ages.explorer.trailblazer.30month';
 
 /** Existing Apple entitlement ID — do not use to grant Google access. */
@@ -521,6 +521,101 @@ export async function waitForAppleAuraGrant(fetchUser, {
       }
     } catch (e) {
       console.warn('[revenuecat] Aura grant poll error:', e);
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  return { ok: false, reason: 'timeout', user: lastUser };
+}
+
+/**
+ * Purchase the iOS Trailblazer one-time product via RevenueCat/StoreKit.
+ * Native iOS only. This is a non-renewing one-time product, so it uses the
+ * NON_SUBSCRIPTION product category — never the subscription path. Does NOT
+ * grant access locally: the Base44 webhook writes the generic Trailblazer
+ * entitlement fields (plan, plan_expiration_date, energy); the caller must
+ * poll base44.auth.me() afterwards. Android keeps the Google Play product.
+ *
+ * @param {string} [userId] Base44 user id used as the RevenueCat appUserID
+ * @returns {Promise<{ ok: boolean, cancelled?: boolean, error?: any, reason?: string, purchase?: any, product?: any }>}
+ */
+export async function purchaseAppleTrailblazer(userId) {
+  if (!isIosNative()) {
+    return { ok: false, reason: 'not_ios' };
+  }
+
+  if (userId) {
+    await identifyRevenueCatUser(userId);
+  } else {
+    const ready = await configureRevenueCat();
+    if (!ready.ok) return { ok: false, reason: ready.reason || 'not_configured' };
+  }
+
+  if (!configured) {
+    return { ok: false, reason: 'not_configured' };
+  }
+
+  try {
+    // One-time non-renewing product → NON_SUBSCRIPTION category.
+    const { products } = await Purchases.getProducts({
+      productIdentifiers: [APPLE_TRAILBLAZER_PRODUCT_ID],
+      type: PRODUCT_CATEGORY.NON_SUBSCRIPTION,
+    });
+
+    const product = (products || []).find((p) => p.identifier === APPLE_TRAILBLAZER_PRODUCT_ID)
+      || (products || [])[0];
+
+    if (!product) {
+      return {
+        ok: false,
+        reason: 'product_unavailable',
+        error: new Error(
+          `Product ${APPLE_TRAILBLAZER_PRODUCT_ID} is not available. Check App Store Connect and RevenueCat configuration.`,
+        ),
+      };
+    }
+
+    const result = await Purchases.purchaseStoreProduct({ product });
+    // Intentionally ignore result.customerInfo.entitlements — the Base44
+    // webhook is authoritative for the generic Trailblazer grant.
+    return { ok: true, purchase: result, product };
+  } catch (e) {
+    if (isUserCancelled(e)) {
+      return { ok: false, cancelled: true };
+    }
+    console.error('[revenuecat] Apple Trailblazer purchase failed:', e);
+    return { ok: false, reason: 'purchase_failed', error: e };
+  }
+}
+
+/**
+ * Poll base44.auth.me until the Apple Trailblazer grant appears (or timeout).
+ * The webhook writes plan 'trailblazer' plus a future plan_expiration_date on
+ * the generic fields; requiring both avoids matching a pre-existing Wix grant.
+ *
+ * @param {() => Promise<any>} fetchUser
+ * @param {{ timeoutMs?: number, intervalMs?: number }} [options]
+ * @returns {Promise<{ ok: boolean, reason?: string, user?: any }>}
+ */
+export async function waitForAppleTrailblazerGrant(fetchUser, {
+  timeoutMs = 30000,
+  intervalMs = 1500,
+} = {}) {
+  const started = Date.now();
+  let lastUser = null;
+
+  while (Date.now() - started < timeoutMs) {
+    try {
+      lastUser = await fetchUser();
+      const plan = lastUser?.plan;
+      const expMs = lastUser?.plan_expiration_date
+        ? new Date(lastUser.plan_expiration_date).getTime()
+        : NaN;
+      if (plan === 'trailblazer' && !Number.isNaN(expMs) && expMs > Date.now()) {
+        return { ok: true, user: lastUser };
+      }
+    } catch (e) {
+      console.warn('[revenuecat] Apple Trailblazer grant poll error:', e);
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }

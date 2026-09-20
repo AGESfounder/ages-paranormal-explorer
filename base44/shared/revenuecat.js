@@ -5,6 +5,9 @@
 //   reuse the generic Base44 entitlement fields (plan, plan_expiration_date,
 //   subscription_status, subscription_id, energy) — the same fields the Wix
 //   payments-webhook writes.
+// - Apple App Store Trailblazer: one-time non-renewing product that grants the
+//   existing generic Trailblazer entitlement fields with the Wix grant
+//   semantics (plan 'trailblazer', purchase + 30 calendar months expiry).
 
 export const GOOGLE_TRAILBLAZER_PRODUCT_ID = 'trailblazer.30month';
 export const APPLE_TRAILBLAZER_PRODUCT_ID = 'com.ages.explorer.trailblazer.30month';
@@ -240,6 +243,108 @@ export function shouldProcessAppleAuraEvent(event) {
   return APPLE_AURA_GRANT_EVENT_TYPES.has(event.type) || isAppleAuraRefundEvent(event);
 }
 
+// ── Apple App Store Trailblazer one-time purchase via RevenueCat / StoreKit ─
+// Non-renewing one-time product com.ages.explorer.trailblazer.30month, bought
+// only on native iOS. The grant reuses the EXISTING generic Base44 Trailblazer
+// entitlement fields (plan 'trailblazer', plan_expiration_date = purchase +
+// 30 calendar months UTC, energy pools, subscription_status 'none') with the
+// same semantics as the Wix payments-webhook one-time grant — no parallel
+// entitlement model is introduced. Android stays on the Google Play product
+// trailblazer.30month with its isolated google_trailblazer_* fields.
+
+export const APPLE_TRAILBLAZER_PLAN_ID = 'trailblazer';
+export const APPLE_TRAILBLAZER_PRODUCT_NAME =
+  'AGES Trailblazer — 30-Month Elite (App Store)';
+
+export function isAppleTrailblazerProduct(productId) {
+  return productId === APPLE_TRAILBLAZER_PRODUCT_ID;
+}
+
+/**
+ * The one-time product arrives as NON_RENEWING_PURCHASE. INITIAL_PURCHASE is
+ * accepted defensively; transaction-level idempotency prevents double grants.
+ */
+export const APPLE_TRAILBLAZER_GRANT_EVENT_TYPES = new Set([
+  'NON_RENEWING_PURCHASE',
+  'INITIAL_PURCHASE',
+]);
+
+/**
+ * A one-time product has no auto-renew to cancel, so a CANCELLATION event for
+ * it can only be a store-support refund/revoke. REFUND is kept defensively
+ * (not a current RevenueCat event type).
+ */
+export function isAppleTrailblazerRefundEvent(event) {
+  if (!event || typeof event !== 'object') return false;
+  return event.type === 'CANCELLATION' || event.type === 'REFUND';
+}
+
+/**
+ * Whether this RevenueCat event should be processed as the Apple Trailblazer
+ * one-time purchase. Other stores / products / event types are ignored by the
+ * caller (200, no grant).
+ */
+export function shouldProcessAppleTrailblazerEvent(event) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.type === 'TEST') return false;
+  if (!isAppStore(event.store)) return false;
+  if (!isAppleTrailblazerProduct(event.product_id)) return false;
+  return (
+    APPLE_TRAILBLAZER_GRANT_EVENT_TYPES.has(event.type) ||
+    isAppleTrailblazerRefundEvent(event)
+  );
+}
+
+/** Latest still-active paid Apple Trailblazer ledger row for a user, if any. */
+export function latestActiveAppleTrailblazerRow(ledgerRows, now = new Date()) {
+  let best = null;
+  for (const row of ledgerRows || []) {
+    if (row.status !== 'paid') continue;
+    if (!isAppleTrailblazerProduct(row.product_id)) continue;
+    if (!row.plan_expiration_date) continue;
+    const expMs = new Date(row.plan_expiration_date).getTime();
+    if (Number.isNaN(expMs)) continue;
+    if (expMs <= now.getTime()) continue;
+    if (!best || expMs > best.expMs) best = { row, expMs };
+  }
+  return best;
+}
+
+/**
+ * Normalize a RevenueCat Apple Trailblazer event into ledger fields for
+ * RevenueCatPurchase. Rows use status 'paid' while granted ('refunded' once
+ * revoked) and carry the generic plan_expiration_date the grant wrote.
+ */
+export function normalizeAppleTrailblazerLedgerFields(event, {
+  userId,
+  purchaseDateIso,
+  expirationIso,
+  status,
+  eventIds = [],
+}) {
+  const price = typeof event.price === 'number' ? event.price : 0;
+
+  return {
+    event_id: event.id || event.event_id || '',
+    event_ids: eventIds,
+    user_id: userId,
+    app_user_id: event.app_user_id || '',
+    original_app_user_id: event.original_app_user_id || '',
+    product_id: event.product_id || APPLE_TRAILBLAZER_PRODUCT_ID,
+    store: event.store || APPLE_STORE,
+    environment: event.environment || 'PRODUCTION',
+    transaction_id: event.transaction_id || '',
+    original_transaction_id: event.original_transaction_id || event.transaction_id || '',
+    event_type: event.type || '',
+    purchase_date: purchaseDateIso,
+    plan_expiration_date: expirationIso,
+    status,
+    product_name: APPLE_TRAILBLAZER_PRODUCT_NAME,
+    amount: Math.abs(price),
+    currency: event.currency || 'USD',
+  };
+}
+
 /**
  * Normalize a RevenueCat Apple Aura consumable event into ledger fields for
  * RevenueCatPurchase. Consumable rows use status 'paid' (like the Google
@@ -407,6 +512,9 @@ export function maxActiveGoogleExpiration(ledgerRows, now = new Date()) {
 
 /**
  * Normalize a RevenueCat event into ledger fields for RevenueCatPurchase.
+ * Used for the Google Play Trailblazer one-time product; the product-name
+ * fallback picks the per-store label defensively (Google rows only ever take
+ * the Google label).
  */
 export function normalizeLedgerFields(event, {
   userId,
@@ -433,7 +541,9 @@ export function normalizeLedgerFields(event, {
     purchase_date: purchaseDateIso,
     plan_expiration_date: expirationIso,
     status,
-    product_name: GOOGLE_TRAILBLAZER_PRODUCT_NAME,
+    product_name: isAppStore(event.store)
+      ? APPLE_TRAILBLAZER_PRODUCT_NAME
+      : GOOGLE_TRAILBLAZER_PRODUCT_NAME,
     amount: Math.abs(price),
     currency,
   };

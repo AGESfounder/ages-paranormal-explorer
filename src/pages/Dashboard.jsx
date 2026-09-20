@@ -25,10 +25,12 @@ import {
   isIosNative,
   purchaseAppleAuraBundle,
   purchaseAppleSubscription,
+  purchaseAppleTrailblazer,
   purchaseGoogleTrailblazer,
   restoreApplePurchases,
   waitForAppleAuraGrant,
   waitForApplePlanGrant,
+  waitForAppleTrailblazerGrant,
   waitForGoogleTrailblazerGrant,
 } from '@/lib/revenuecat';
 
@@ -85,7 +87,7 @@ export default function Dashboard() {
     setRedirecting(productId);
     try {
       // Android Trailblazer → RevenueCat / Google Play one-time product.
-      // iOS/web Trailblazer keeps the existing Wix create-subscription path.
+      // Native iOS Trailblazer uses the Apple path below; web keeps Wix.
       if (productId === 'trailblazer' && isAndroidNative()) {
         const result = await purchaseGoogleTrailblazer(user?.id);
         if (result.cancelled) {
@@ -106,6 +108,43 @@ export default function Dashboard() {
         // Wait for the Base44 webhook to write the isolated Google grant.
         // Never grant access from the SDK result alone.
         const grant = await waitForGoogleTrailblazerGrant(() => base44.auth.me(), {
+          timeoutMs: 45000,
+          intervalMs: 1500,
+        });
+        if (grant.ok && grant.user) {
+          setUser(grant.user);
+          await loadData();
+        } else {
+          // Purchase succeeded at the store; webhook may still be in flight.
+          alert('Purchase complete. Access will activate in a moment — pull to refresh if needed.');
+          await loadData();
+        }
+        setRedirecting(null);
+        return;
+      }
+
+      // Native iOS Trailblazer → RevenueCat / App Store one-time product.
+      // Web and Android Trailblazer keep their existing paths (Wix / Google).
+      if (productId === 'trailblazer' && isIosNative()) {
+        const result = await purchaseAppleTrailblazer(user?.id);
+        if (result.cancelled) {
+          setRedirecting(null);
+          return;
+        }
+        if (!result.ok) {
+          const msg = result.error?.message || result.reason || 'Purchase failed';
+          if (result.reason === 'product_unavailable') {
+            alert('Trailblazer is not available on the App Store yet. Please try again later or contact support.');
+          } else {
+            alert(msg);
+          }
+          setRedirecting(null);
+          return;
+        }
+
+        // Wait for the Base44 webhook to write the generic Trailblazer grant.
+        // Never grant access from the SDK result alone.
+        const grant = await waitForAppleTrailblazerGrant(() => base44.auth.me(), {
           timeoutMs: 45000,
           intervalMs: 1500,
         });

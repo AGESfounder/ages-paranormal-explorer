@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
+// TEMP DIAG (iOS Build 11 TestFlight) — remove with src/components/AdDiagnosticsPanel.jsx
+import AdDiagnosticsPanel from '../components/AdDiagnosticsPanel';
 import { base44 } from '@/api/base44Client';
 import { getBlockedUsers, unblockUser } from '@/lib/userBlocks';
 import { setMusicSettings } from '@/lib/hauntedAudio';
@@ -265,6 +267,10 @@ export default function Settings() {
             <p className="text-[10px] text-muted-foreground/40 mt-1">Explore Past Existence and its Connection to Today's Enigmas.</p>
           </div>
         </div>
+
+        {/* TEMP DIAG — temporary AdMob TestFlight diagnostics (native iOS only).
+            Renders nothing on web/Android. Remove before release. */}
+        <AdDiagnosticsPanel />
 
         {/* Danger Zone */}
         <div className="rounded-xl border border-destructive/40 bg-destructive/5 overflow-hidden">

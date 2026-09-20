@@ -18,6 +18,15 @@ import {
 } from '@capacitor-community/admob';
 import { isPaidAccess } from '@/lib/access';
 import { base44 } from '@/api/base44Client';
+// TEMP DIAG (iOS Build 11 TestFlight) — instrumentation only; remove with src/lib/adDiagnostics.js
+import {
+  consentStatusPatch,
+  describeAdError,
+  extractConsentInfo,
+  probeAdMobPlugin,
+  recordAdDiag,
+  setAdDiagStatus,
+} from '@/lib/adDiagnostics';
 
 // Production AdMob interstitial ad-unit IDs.
 export const INTERSTITIAL_AD_ID_IOS = 'ca-app-pub-7999682122277742/8903951557';
@@ -80,55 +89,154 @@ function canRequestAdsFromConsent(consentInfo) {
 export async function initializeAdMob() {
   if (!isNativePlatform()) {
     adsAllowed = false;
+    // TEMP DIAG
+    recordAdDiag('init', 'web-noop', {
+      message: 'Not a native platform — AdMob init skipped (web simulation paths unaffected).',
+    });
     return false;
   }
 
   if (initPromise) return initPromise;
 
+  // TEMP DIAG — init start + selected unit IDs for this platform
+  setAdDiagStatus({
+    platform: getPlatform(),
+    initState: 'running',
+    interstitialAdId: getInterstitialAdId(),
+    rewardedAdId: getRewardedAdId(),
+  });
+  recordAdDiag('init', 'start', {
+    message: `AdMob initialization started (platform: ${getPlatform()}).`,
+  });
+
   initPromise = (async () => {
     try {
+      // TEMP DIAG — Capacitor plugin registration/availability probe (read-only)
+      const probe = probeAdMobPlugin(AdMob);
+      setAdDiagStatus({
+        pluginAvailable: probe.available,
+        pluginMissingMethods: probe.missingMethods,
+      });
+      recordAdDiag('plugin', 'availability', {
+        ok: probe.available !== false && probe.missingMethods.length === 0,
+        message:
+          probe.available === false
+            ? 'AdMob plugin NOT registered/available in the native shell.'
+            : probe.missingMethods.length
+              ? `AdMob plugin present but missing methods: ${probe.missingMethods.join(', ')}`
+              : 'AdMob plugin registered and all probed methods present.',
+        data: { available: probe.available, missingMethods: probe.missingMethods },
+      });
+
       await AdMob.initialize({
         initializeForTesting: false,
         maxAdContentRating: MaxAdContentRating.General,
       });
+      // TEMP DIAG
+      recordAdDiag('init', 'sdk-initialized', {
+        ok: true,
+        message: 'AdMob.initialize() resolved.',
+      });
 
       let consentInfo = await AdMob.requestConsentInfo();
+      // TEMP DIAG — UMP consent status + canRequestAds/form availability
+      setAdDiagStatus(consentStatusPatch(consentInfo));
+      recordAdDiag('consent', 'info', {
+        message: `UMP consent status: ${consentInfo?.status ?? 'unknown'}.`,
+        data: extractConsentInfo(consentInfo),
+      });
       if (
         consentInfo?.isConsentFormAvailable &&
         consentInfo?.status === AdmobConsentStatus.REQUIRED
       ) {
+        // TEMP DIAG
+        recordAdDiag('consent', 'form-show', {
+          message: 'Consent required and form available — presenting UMP consent form.',
+        });
         consentInfo = await AdMob.showConsentForm();
+        // TEMP DIAG
+        setAdDiagStatus(consentStatusPatch(consentInfo));
+        recordAdDiag('consent', 'form-result', {
+          message: `UMP form dismissed. Consent status: ${consentInfo?.status ?? 'unknown'}.`,
+          data: extractConsentInfo(consentInfo),
+        });
       }
 
       if (!canRequestAdsFromConsent(consentInfo)) {
         console.warn('[admob] Consent gate closed; native ads disabled.', consentInfo?.status);
         adsAllowed = false;
+        // TEMP DIAG — existing fail-closed gate, unchanged
+        setAdDiagStatus({ initState: 'blocked', adsAllowed: false });
+        recordAdDiag('consent', 'gate-closed', {
+          ok: false,
+          message: `Consent gate closed (status: ${consentInfo?.status ?? 'unknown'}) — native ads disabled (existing fail-closed behavior).`,
+          data: extractConsentInfo(consentInfo),
+        });
         return false;
       }
+      // TEMP DIAG
+      recordAdDiag('consent', 'gate-open', {
+        ok: true,
+        message: 'Consent gate passed (OBTAINED or NOT_REQUIRED).',
+      });
 
       // iOS ATT: request once when undetermined; denied/restricted → NPA.
       requestNonPersonalized = false;
       if (getPlatform() === 'ios') {
         try {
           let tracking = await AdMob.trackingAuthorizationStatus();
+          // TEMP DIAG
+          recordAdDiag('att', 'status', {
+            message: `ATT status: ${tracking?.status ?? 'unknown'}.`,
+            data: { status: tracking?.status ?? null },
+          });
           if (tracking?.status === 'notDetermined') {
             await AdMob.requestTrackingAuthorization();
             tracking = await AdMob.trackingAuthorizationStatus();
+            // TEMP DIAG
+            recordAdDiag('att', 'request-result', {
+              message: `ATT status after request: ${tracking?.status ?? 'unknown'}.`,
+              data: { status: tracking?.status ?? null },
+            });
           }
           if (tracking?.status !== 'authorized') {
             requestNonPersonalized = true;
           }
+          // TEMP DIAG
+          setAdDiagStatus({ attStatus: tracking?.status ?? null });
         } catch (attError) {
           console.warn('[admob] ATT status failed; using non-personalized ads.', attError);
           requestNonPersonalized = true;
+          // TEMP DIAG
+          const attDesc = describeAdError(attError);
+          setAdDiagStatus({ attStatus: 'error', requestNonPersonalized: true });
+          recordAdDiag('att', 'error', {
+            ok: false,
+            message: `ATT status failed — using non-personalized ads. ${attDesc.code ? `[${attDesc.code}] ` : ''}${attDesc.message}`,
+            data: attDesc,
+          });
         }
       }
 
       adsAllowed = true;
+      // TEMP DIAG
+      setAdDiagStatus({ initState: 'ready', adsAllowed: true, requestNonPersonalized });
+      recordAdDiag('init', 'ready', {
+        ok: true,
+        message: `AdMob ready — ads allowed. Non-personalized: ${requestNonPersonalized ? 'yes' : 'no'}.`,
+      });
       return true;
     } catch (error) {
       console.warn('[admob] Initialization failed; native ads disabled.', error);
       adsAllowed = false;
+      // TEMP DIAG
+      const initDesc = describeAdError(error);
+      setAdDiagStatus({ initState: 'failed', adsAllowed: false, lastError: initDesc });
+      recordAdDiag('init', 'failed', {
+        ok: false,
+        message: `AdMob initialization failed — native ads disabled. ${initDesc.code ? `[${initDesc.code}] ` : ''}${initDesc.message}${initDesc.missingMethod ? ' (plugin/method missing?)' : ''}`,
+        data: initDesc,
+      });
       return false;
     }
   })();
@@ -172,22 +280,67 @@ export async function showInterstitial() {
     if (interstitialInFlight) return interstitialInFlight;
 
     interstitialInFlight = (async () => {
+      // TEMP DIAG — capture the exact selected unit at request time
+      const interstitialAdId = getInterstitialAdId();
+      recordAdDiag('interstitial', 'request', {
+        message: `Interstitial requested. Unit: ${interstitialAdId}`,
+        data: { adId: interstitialAdId, npa: requestNonPersonalized },
+      });
       try {
         const ready = await ensureAdsReady();
         if (!ready || !adsAllowed) {
           console.warn('[admob] Interstitial skipped — consent/init not ready.');
+          // TEMP DIAG
+          recordAdDiag('interstitial', 'skipped', {
+            ok: false,
+            message: 'Interstitial skipped — consent/init not ready (existing fail-open: no ad shown).',
+            data: { adId: interstitialAdId },
+          });
           return;
         }
 
         const options = {
-          adId: getInterstitialAdId(),
+          adId: interstitialAdId,
         };
         if (requestNonPersonalized) {
           options.npa = true;
         }
 
-        await AdMob.prepareInterstitial(options);
-        await AdMob.showInterstitial();
+        // TEMP DIAG — inner try/catch rethrows into the existing outer catch,
+        // so load vs presentation failures are attributed without changing flow.
+        try {
+          await AdMob.prepareInterstitial(options);
+          recordAdDiag('interstitial', 'loaded', {
+            ok: true,
+            message: `Interstitial loaded. Unit: ${interstitialAdId}`,
+            data: { adId: interstitialAdId },
+          });
+        } catch (loadError) {
+          const loadDesc = describeAdError(loadError);
+          recordAdDiag('interstitial', 'load-failed', {
+            ok: false,
+            message: `Interstitial load failed. ${loadDesc.code ? `[${loadDesc.code}] ` : ''}${loadDesc.message}`,
+            data: { ...loadDesc, adId: interstitialAdId },
+          });
+          throw loadError;
+        }
+
+        try {
+          await AdMob.showInterstitial();
+          recordAdDiag('interstitial', 'shown', {
+            ok: true,
+            message: `Interstitial presented. Unit: ${interstitialAdId}`,
+            data: { adId: interstitialAdId },
+          });
+        } catch (showError) {
+          const showDesc = describeAdError(showError);
+          recordAdDiag('interstitial', 'show-failed', {
+            ok: false,
+            message: `Interstitial presentation failed. ${showDesc.code ? `[${showDesc.code}] ` : ''}${showDesc.message}`,
+            data: { ...showDesc, adId: interstitialAdId },
+          });
+          throw showError;
+        }
       } catch (e) {
         console.warn('AdMob interstitial failed:', e);
       }
@@ -243,17 +396,29 @@ export async function showRewardedAd(options) {
     if (rewardedInFlight) return rewardedInFlight;
 
     rewardedInFlight = (async () => {
+      // TEMP DIAG — capture the exact selected unit at request time
+      const rewardedAdId = getRewardedAdId();
+      recordAdDiag('rewarded', 'request', {
+        message: `Rewarded ad requested. Unit: ${rewardedAdId}`,
+        data: { adId: rewardedAdId, npa: requestNonPersonalized },
+      });
       try {
         const ready = await ensureAdsReady();
         if (!ready || !adsAllowed) {
           console.warn('[admob] Rewarded ad skipped — consent/init not ready.');
+          // TEMP DIAG
+          recordAdDiag('rewarded', 'skipped', {
+            ok: false,
+            message: 'Rewarded ad skipped — consent/init not ready (existing behavior: no reward granted).',
+            data: { adId: rewardedAdId },
+          });
           return { rewarded: false };
         }
 
         const userId = await resolveSsvUserId(options);
         /** @type {import('@capacitor-community/admob').RewardAdOptions} */
         const adOptions = /** @type {import('@capacitor-community/admob').RewardAdOptions} */ ({
-          adId: getRewardedAdId(),
+          adId: rewardedAdId,
         });
         if (requestNonPersonalized) {
           adOptions.npa = true;
@@ -268,10 +433,43 @@ export async function showRewardedAd(options) {
           console.warn('[admob] Rewarded ad without userId — SSV audit correlation unavailable.');
         }
 
-        await AdMob.prepareRewardVideoAd(adOptions);
-        const result = await AdMob.showRewardVideoAd();
-        // Only treat a resolved reward callback/promise as rewarded — not dismiss alone.
-        return { rewarded: true, amount: result?.amount || 0 };
+        // TEMP DIAG — inner try/catch rethrows into the existing outer catch,
+        // so load vs presentation failures are attributed without changing flow.
+        try {
+          await AdMob.prepareRewardVideoAd(adOptions);
+          recordAdDiag('rewarded', 'loaded', {
+            ok: true,
+            message: `Rewarded ad loaded. Unit: ${rewardedAdId}`,
+            data: { adId: rewardedAdId, ssvUserId: Boolean(userId) },
+          });
+        } catch (loadError) {
+          const loadDesc = describeAdError(loadError);
+          recordAdDiag('rewarded', 'load-failed', {
+            ok: false,
+            message: `Rewarded ad load failed. ${loadDesc.code ? `[${loadDesc.code}] ` : ''}${loadDesc.message}`,
+            data: { ...loadDesc, adId: rewardedAdId },
+          });
+          throw loadError;
+        }
+
+        try {
+          const result = await AdMob.showRewardVideoAd();
+          recordAdDiag('rewarded', 'shown', {
+            ok: true,
+            message: `Rewarded ad presented; reward earned (amount: ${result?.amount || 0}). Unit: ${rewardedAdId}`,
+            data: { adId: rewardedAdId, amount: result?.amount || 0 },
+          });
+          // Only treat a resolved reward callback/promise as rewarded — not dismiss alone.
+          return { rewarded: true, amount: result?.amount || 0 };
+        } catch (showError) {
+          const showDesc = describeAdError(showError);
+          recordAdDiag('rewarded', 'show-failed', {
+            ok: false,
+            message: `Rewarded ad presentation failed. ${showDesc.code ? `[${showDesc.code}] ` : ''}${showDesc.message}`,
+            data: { ...showDesc, adId: rewardedAdId },
+          });
+          throw showError;
+        }
       } catch (e) {
         console.warn('AdMob rewarded ad failed:', e);
         return { rewarded: false };
