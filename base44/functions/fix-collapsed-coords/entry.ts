@@ -834,28 +834,6 @@ Return a JSON object with:
           for (const stop of needsFix) {
             let fixed = false;
             const sharedAddress = !!(stop.address && addressCounts[normalizeAddr(stop.address)] > 1);
-            // Trust-the-address path: if the stop has a clear street address with
-            // a house number (a specific building, not an intersection or vague
-            // area) and existing coordinates within a reasonable distance of
-            // the tour start, trust the existing coordinates and mark as
-            // geocoded. The address is specific enough that the LLM's generation
-            // coordinates are almost certainly correct. Running Nominatim/OSM/
-            // LLM geocoding risks OVERWRITING correct coordinates with wrong
-            // ones — Nominatim can fail or rate-limit, and LLM web search can
-            // return wrong locations and overwrites existing coords. This is
-            // the safest path: just upgrade the flag without touching coords.
-            // Skip shared-address stops (multiple stops at the same address
-            // need individual verification via name search to avoid collapse).
-            const hasHouseNumber = /^\d+\s+\w/.test(stop.address || '');
-            if (hasHouseNumber && !sharedAddress && stop.latitude != null && stop.longitude != null) {
-              const dist = haversine(tour.start_latitude, tour.start_longitude, stop.latitude, stop.longitude);
-              const maxTrustDist = stop.travel_method === 'driving' ? 5 : 0.5;
-              if (dist <= maxTrustDist) {
-                updates.push({ id: stop.id, geocoded: true, needs_placement: false });
-                matched.add(stop.id);
-                fixed = true;
-              }
-            }
             // NO GUESSING for shared-address stops: do NOT trust existing
             // geocoded coordinates — they were LLM-generated during tour
             // creation and may be inaccurate (e.g. stop 4 of the Sachs Bridge
@@ -865,8 +843,11 @@ Return a JSON object with:
             // LLM web search is skipped for shared-address stops because
             // calling it for 9+ stops causes execution timeouts.
             // Step 1: Geocode the stop's physical address — the address is the
-            // source of truth, not the LLM's guessed coordinates. Use the
-            // geocoded address directly if within 5 miles of tour start.
+            // source of truth, not the LLM's guessed coordinates. A real street
+            // address geocodes to the EXACT building location, so this runs
+            // FIRST. If geocoding succeeds, the geocoded coordinates are used
+            // via the fast path / name check below — placing the marker at its
+            // exact physical address (never in the water).
             // SKIP for shared addresses — multiple stops at the same address
             // would all collapse to the same geocoded point, destroying their
             // distinct locations (e.g. stops on both sides of a creek sharing
@@ -888,6 +869,30 @@ Return a JSON object with:
                   // check reverse-geocodes the candidate and confirms the
                   // stop's name tokens appear in the result before trusting it.
                   addrGeocodeCandidate = { lat: geo.lat, lon: geo.lon, fromFullAddress: true };
+                }
+              }
+            }
+            // Trust-the-address FALLBACK: only when Step 1 (address geocoding)
+            // FAILED to produce a candidate (Nominatim rate-limited or down).
+            // If the stop has a house number and existing coordinates within a
+            // reasonable distance of the tour start, trust the existing
+            // coordinates as a safety net — preserves coordinates that were
+            // already correct without risking overwrites from street-name/OSM/
+            // LLM fallbacks. When Step 1 SUCCEEDS, the geocoded address
+            // coordinates (the exact physical location) are used via the fast
+            // path / name check below — this fallback never runs, so stops with
+            // real addresses are always placed at their exact geocoded location.
+            // Skip shared-address stops (multiple stops at the same address
+            // need individual verification via name search to avoid collapse).
+            if (!addrGeocodeCandidate && !fixed) {
+              const hasHouseNumber = /^\d+\s+\w/.test(stop.address || '');
+              if (hasHouseNumber && !sharedAddress && stop.latitude != null && stop.longitude != null) {
+                const dist = haversine(tour.start_latitude, tour.start_longitude, stop.latitude, stop.longitude);
+                const maxTrustDist = stop.travel_method === 'driving' ? 5 : 0.5;
+                if (dist <= maxTrustDist) {
+                  updates.push({ id: stop.id, geocoded: true, needs_placement: false });
+                  matched.add(stop.id);
+                  fixed = true;
                 }
               }
             }
