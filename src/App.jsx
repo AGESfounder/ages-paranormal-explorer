@@ -43,8 +43,6 @@ const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const ThankYou = lazy(() => import('@/pages/ThankYou'));
-const PlanAnalysis = lazy(() => import('@/pages/PlanAnalysis'));
-const DeveloperDocs = lazy(() => import('@/pages/DeveloperDocs'));
 const Support = lazy(() => import('@/pages/Support'));
 
 // Routes that must stay publicly reachable without an authenticated session,
@@ -131,8 +129,6 @@ const AuthenticatedApp = () => {
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/ThankYou" element={<ThankYou />} />
-      <Route path="/plan-analysis" element={<PlanAnalysis />} />
-      <Route path="/dev-docs" element={<DeveloperDocs />} />
       <Route path="/support" element={<Support />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         {/* Add your page Route elements here */}
