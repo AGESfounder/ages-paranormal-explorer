@@ -17,3 +17,7 @@ export const US_STATES = [
   { name: "Virginia", abbr: "VA" }, { name: "Washington", abbr: "WA" }, { name: "West Virginia", abbr: "WV" },
   { name: "Wisconsin", abbr: "WI" }, { name: "Wyoming", abbr: "WY" }
 ];
+
+const US_STATE_NAMES = new Set(US_STATES.map(s => s.name.toLowerCase()));
+const US_STATE_ABBRS = new Set(US_STATES.map(s => s.abbr.toLowerCase()));
+export const isUsState = (s) => !!s && (US_STATE_NAMES.has(s.toLowerCase()) || US_STATE_ABBRS.has(s.toLowerCase()));

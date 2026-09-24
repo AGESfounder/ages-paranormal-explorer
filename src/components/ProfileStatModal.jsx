@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, MapPin, Calendar, Star } from 'lucide-react';
+import { X, MapPin, Calendar, Star, Globe } from 'lucide-react';
+import { isUsState } from '@/lib/statesData';
 
-const TITLES = { investigations: 'Investigations', favorites: 'Favorites', states: 'States Explored' };
+const TITLES = { investigations: 'Investigations', favorites: 'Favorites', states: 'States Explored', other: 'Other Destinations' };
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
@@ -44,24 +45,25 @@ function FavoritesList({ items }) {
   );
 }
 
-function StatesList({ items }) {
+function DestinationList({ items, filterFn, emptyMsg, icon: Icon = MapPin }) {
   const counts = {};
   for (const inv of items) {
-    if (!inv.state) continue;
-    counts[inv.state] = (counts[inv.state] || 0) + 1;
+    const dest = filterFn(inv);
+    if (!dest) continue;
+    counts[dest] = (counts[dest] || 0) + 1;
   }
   const sorted = Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
-  if (!sorted.length) return <p className="text-sm text-muted-foreground text-center py-8">No states explored yet.</p>;
+  if (!sorted.length) return <p className="text-sm text-muted-foreground text-center py-8">{emptyMsg}</p>;
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between px-3 pb-1 text-[10px] font-heading uppercase tracking-wider text-muted-foreground">
-        <span>State</span><span>Tours Completed</span>
+        <span>Destination</span><span>Tours Completed</span>
       </div>
-      {sorted.map(([state, count]) => (
-        <div key={state} className="flex items-center justify-between p-3 rounded-lg border border-border/30 bg-card/30">
+      {sorted.map(([dest, count]) => (
+        <div key={dest} className="flex items-center justify-between p-3 rounded-lg border border-border/30 bg-card/30">
           <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-primary" />
-            <p className="text-sm text-foreground">{state}</p>
+            <Icon className="w-4 h-4 text-primary" />
+            <p className="text-sm text-foreground">{dest}</p>
           </div>
           <p className="font-display text-lg text-primary">{count}</p>
         </div>
@@ -69,6 +71,9 @@ function StatesList({ items }) {
     </div>
   );
 }
+
+const StatesList = ({ items }) => <DestinationList items={items} filterFn={(inv) => isUsState(inv.state) ? inv.state : null} emptyMsg="No states explored yet." />;
+const OtherDestinationsList = ({ items }) => <DestinationList items={items} filterFn={(inv) => !isUsState(inv.state) ? (inv.state || inv.city || inv.location_name) : null} emptyMsg="No other destinations yet." icon={Globe} />;
 
 export default function ProfileStatModal({ type, onClose, investigations, favorites }) {
   return (
@@ -82,6 +87,7 @@ export default function ProfileStatModal({ type, onClose, investigations, favori
             {type === 'investigations' && <InvestigationsList items={investigations} />}
             {type === 'favorites' && <FavoritesList items={favorites} />}
             {type === 'states' && <StatesList items={investigations} />}
+            {type === 'other' && <OtherDestinationsList items={investigations} />}
           </motion.div>
         </motion.div>
       )}

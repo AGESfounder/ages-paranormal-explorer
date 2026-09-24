@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X, Medal, Globe, CalendarDays, Flame, ChevronRight } from 'lucide-react';
 import ProfileStatModal from '@/components/ProfileStatModal';
+import { isUsState } from '@/lib/statesData';
 import USMap from '../components/icons/USMap';
 import { Link } from 'react-router-dom';
 import PageContainer from '../components/PageContainer';
@@ -79,7 +80,11 @@ export default function Profile() {
     setUploadingPhoto(false);
   };
 
-  const uniqueStates = [...new Set(investigations.map(i => i.state).filter(Boolean))];
+  const uniqueStates = [...new Set(investigations.map(i => i.state).filter(s => isUsState(s)))];
+  const uniqueOtherDestinations = [...new Set(investigations
+    .filter(i => !isUsState(i.state) && (i.state || i.city || i.location_name))
+    .map(i => i.state || i.city || i.location_name)
+  )];
   const unlockedCount = investigations.length;
 
   // 12 for 12: at least 1 investigation in each of 12 consecutive calendar months
@@ -178,7 +183,7 @@ export default function Profile() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <button onClick={() => setActiveModal('investigations')} className="p-3 rounded-lg border border-border/40 bg-card/30 text-center hover:bg-card/50 hover:border-primary/30 transition-colors group">
             <p className="font-display text-2xl text-primary">{investigations.length}</p>
             <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mt-1 flex items-center justify-center gap-0.5">Investigations <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
@@ -190,6 +195,10 @@ export default function Profile() {
           <button onClick={() => setActiveModal('states')} className="p-3 rounded-lg border border-border/40 bg-card/30 text-center hover:bg-card/50 hover:border-primary/30 transition-colors group">
             <p className="font-display text-2xl text-primary">{uniqueStates.length}</p>
             <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mt-1 flex items-center justify-center gap-0.5">States <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
+          </button>
+          <button onClick={() => setActiveModal('other')} className="p-3 rounded-lg border border-border/40 bg-card/30 text-center hover:bg-card/50 hover:border-primary/30 transition-colors group">
+            <p className="font-display text-2xl text-primary">{uniqueOtherDestinations.length}</p>
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mt-1 flex items-center justify-center gap-0.5">Other Destinations <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
           </button>
         </div>
 
