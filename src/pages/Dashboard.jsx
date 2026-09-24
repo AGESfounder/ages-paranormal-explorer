@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Volume2, Zap, Gift, Crown, Check, Loader2, Calendar, TrendingUp, Ghost } from 'lucide-react';
+import { Sparkles, Volume2, Zap, Gift, Crown, Check, Loader2, Calendar, TrendingUp, Ghost, FileBarChart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import NavBar from '@/components/NavBar';
@@ -297,6 +297,7 @@ export default function Dashboard() {
   const effectivePlanId = getEffectivePlanId(user);
   const isPaid = isPaidAccess(user);
   const displayEnergy = getDisplayEnergy(user);
+  const isAdmin = user?.role === 'admin';
 
   // Calculate days until reset
   const resetDate = displayEnergy.resetDate ? new Date(displayEnergy.resetDate) : null;
@@ -567,6 +568,22 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* ── Admin: Cost Analysis ── */}
+        {isAdmin && (
+          <Link
+            to="/plan-analysis"
+            className="flex items-center gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors"
+          >
+            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
+              <FileBarChart className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs font-heading font-semibold text-foreground uppercase tracking-wider">Cost &amp; Profit Analysis</p>
+              <p className="text-[10px] text-muted-foreground">Subscription plan, credit costs &amp; revenue projections</p>
+            </div>
+          </Link>
         )}
 
         {/* ── Purchase History ── */}

@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Printer, Download } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { Navigate } from 'react-router-dom';
+import { base44 } from '@/api/base44Client';
 
 // ===== DATA (mirrors src/lib/plans.js + base44/shared/plans.js) =====
 const PLANS = [
@@ -534,6 +536,25 @@ const td = 'py-2 px-3 text-sm border-b border-border/50';
 const num = 'text-right tabular-nums';
 
 export default function PlanAnalysis() {
+  const [authState, setAuthState] = useState({ loading: true, isAdmin: false });
+
+  useEffect(() => {
+    base44.auth.me()
+      .then((u) => setAuthState({ loading: false, isAdmin: u?.role === 'admin' }))
+      .catch(() => setAuthState({ loading: false, isAdmin: false }));
+  }, []);
+
+  if (authState.loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (!authState.isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground p-6 md:p-10 print:p-0">
       <style>{`

@@ -44,6 +44,7 @@ const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const ThankYou = lazy(() => import('@/pages/ThankYou'));
 const Support = lazy(() => import('@/pages/Support'));
+const PlanAnalysis = lazy(() => import('@/pages/PlanAnalysis'));
 
 // Routes that must stay publicly reachable without an authenticated session,
 // even when the global auth flow (authError 'auth_required') would otherwise
@@ -150,6 +151,7 @@ const AuthenticatedApp = () => {
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/community-map" element={<CommunityMap />} />
         <Route path="/evidence-dashboard" element={<EvidenceDashboard />} />
+        <Route path="/plan-analysis" element={<PlanAnalysis />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
