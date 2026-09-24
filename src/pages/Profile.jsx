@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X, Medal, Globe, CalendarDays, Flame } from 'lucide-react';
+import { User, Award, Ghost, Loader2, Trophy, Star, Shield, Camera, Check, X, Medal, Globe, CalendarDays, Flame, ChevronRight } from 'lucide-react';
+import ProfileStatModal from '@/components/ProfileStatModal';
 import USMap from '../components/icons/USMap';
 import { Link } from 'react-router-dom';
 import PageContainer from '../components/PageContainer';
@@ -30,6 +31,7 @@ export default function Profile() {
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [activeModal, setActiveModal] = useState(null);
 
   useEffect(() => {
     loadProfile();
@@ -177,18 +179,18 @@ export default function Profile() {
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="p-3 rounded-lg border border-border/40 bg-card/30 text-center">
+          <button onClick={() => setActiveModal('investigations')} className="p-3 rounded-lg border border-border/40 bg-card/30 text-center hover:bg-card/50 hover:border-primary/30 transition-colors group">
             <p className="font-display text-2xl text-primary">{investigations.length}</p>
-            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mt-1">Investigations</p>
-          </div>
-          <div className="p-3 rounded-lg border border-border/40 bg-card/30 text-center">
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mt-1 flex items-center justify-center gap-0.5">Investigations <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
+          </button>
+          <button onClick={() => setActiveModal('favorites')} className="p-3 rounded-lg border border-border/40 bg-card/30 text-center hover:bg-card/50 hover:border-primary/30 transition-colors group">
             <p className="font-display text-2xl text-primary">{favorites.length}</p>
-            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mt-1">Favorites</p>
-          </div>
-          <div className="p-3 rounded-lg border border-border/40 bg-card/30 text-center">
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mt-1 flex items-center justify-center gap-0.5">Favorites <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
+          </button>
+          <button onClick={() => setActiveModal('states')} className="p-3 rounded-lg border border-border/40 bg-card/30 text-center hover:bg-card/50 hover:border-primary/30 transition-colors group">
             <p className="font-display text-2xl text-primary">{uniqueStates.length}</p>
-            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mt-1">States</p>
-          </div>
+            <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mt-1 flex items-center justify-center gap-0.5">States <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" /></p>
+          </button>
         </div>
 
         {/* Achievements */}
@@ -248,6 +250,7 @@ export default function Profile() {
           Sign Out
         </button>
       </div>
+      <ProfileStatModal type={activeModal} onClose={() => setActiveModal(null)} investigations={investigations} favorites={favorites} />
       <NavBar />
     </PageContainer>
   );
