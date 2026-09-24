@@ -3,7 +3,7 @@
 // offline users only see the 2-3 sentence skeleton summaries.
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
-import { stripConclusionOpeners, BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, STOP_CONTENT_VERSION } from '@/lib/stopContent';
+import { stripConclusionOpeners, stripPropertyHistoryOpeners, BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, STOP_CONTENT_VERSION } from '@/lib/stopContent';
 import { checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
 
 const THIN_THRESHOLD = 600;
@@ -33,7 +33,7 @@ export function countThinStops(stops) {
 // is already rich (used by regenerateTourContent for old tours).
 // Returns { updates, generatedPeople }.
 async function enrichStop(stop, tourContext = {}, options = {}) {
-  const { force = false } = options;
+  const { force = false, isFirstStop = false } = options;
   const needsFull =
     force || isThinContent(stop.historical_info) || isThinContent(stop.paranormal_info);
   const updates = {};
@@ -86,7 +86,7 @@ Use real history and paranormal lore for this location. Output ONLY a valid JSON
     try { data = await callJson(prompt, { useWeb: true }); } catch (e) { console.error('Enrich (web) failed:', e); }
     if (!data) { try { data = await callJson(prompt, { useWeb: false }); } catch (e) { console.error('Enrich (no-web) failed:', e); } }
     if (data) {
-      if (data.historical_info) updates.historical_info = stripConclusionOpeners(data.historical_info, false);
+      if (data.historical_info) updates.historical_info = stripPropertyHistoryOpeners(stripConclusionOpeners(data.historical_info, false), isFirstStop);
       if (data.paranormal_info) updates.paranormal_info = stripConclusionOpeners(data.paranormal_info, false);
       generatedPeople = (data.people || []).filter((p) => p.name && p.story);
       if (generatedPeople.length) updates.people = generatedPeople;
@@ -144,9 +144,12 @@ export async function enrichTourStops(tour, stops, onProgress) {
   let completed = 0;
   let energySpent = 0;
 
+  let isFirstTourStop = true;
   for (let i = 0; i < enrichedStops.length; i++) {
     const s = enrichedStops[i];
     if (s.stop_type === 'parking' || s.stop_type === 'shuttle') continue;
+    const stopIsFirst = isFirstTourStop;
+    isFirstTourStop = false;
     const needsEnrichment =
       isThinContent(s.historical_info) ||
       isThinContent(s.paranormal_info) ||
@@ -156,7 +159,7 @@ export async function enrichTourStops(tour, stops, onProgress) {
 
     try {
       const siblingStopNames = siblingNames.filter(n => n !== s.name);
-      const { updates, generatedPeople } = await enrichStop(s, { ...tourContext, siblingStopNames });
+      const { updates, generatedPeople } = await enrichStop(s, { ...tourContext, siblingStopNames }, { force: false, isFirstStop: stopIsFirst });
       if (Object.keys(updates).length > 0) {
         try {
           await base44.entities.TourStop.update(s.id, updates);
@@ -213,13 +216,16 @@ export async function regenerateTourContent(tour, stops, onProgress) {
   let completed = 0;
   let energySpent = 0;
 
+  let isFirstTourStop = true;
   for (let i = 0; i < enrichedStops.length; i++) {
     const s = enrichedStops[i];
     if (s.stop_type === 'parking' || s.stop_type === 'shuttle') continue;
+    const stopIsFirst = isFirstTourStop;
+    isFirstTourStop = false;
 
     try {
       const siblingStopNames = siblingNames.filter(n => n !== s.name);
-      const { updates, generatedPeople } = await enrichStop(s, { ...tourContext, siblingStopNames }, { force: true });
+      const { updates, generatedPeople } = await enrichStop(s, { ...tourContext, siblingStopNames }, { force: true, isFirstStop: stopIsFirst });
       if (Object.keys(updates).length > 0) {
         try {
           await base44.entities.TourStop.update(s.id, updates);

@@ -94,6 +94,71 @@ export function stripStopConclusion(stop, isFinalStop = false) {
   return updates;
 }
 
+// Patterns that indicate a sentence is about the general property's
+// construction, founding, or overall significance — NOT the specific stop.
+// These match the LLM's default "opening biography" for any historic property:
+// "The [Property] was constructed in [year] by [Founder]...", "Originally
+// built by...", "stands as a sentinel of history", "earned its name from",
+// etc. They are unambiguous — they only appear in general property biography,
+// never in stop-specific content about a room, area, or section.
+const PROPERTY_HISTORY_PATTERNS = [
+  // Construction date: "was constructed/built/established/founded in [year]"
+  /\b(was|were)\s+(constructed|built|established|founded|erected|completed)\s+(in|circa|around|by)\s/i,
+  // Original builder: "originally built/constructed/established/founded"
+  /\boriginally\s+(built|constructed|established|founded|opened)\b/i,
+  // Generic significance: "stands as a sentinel/testament/monument/reminder"
+  /\bstands as (a|the)\s+(sentinel|testament|monument|reminder)\b/i,
+  // Name etymology: "earned its name from" / "derived its name from"
+  /\b(earned|derived)\s+(its|the)\s+name\s+(from|after)\b/i,
+  // Strategic positioning: "strategically positioned/located/situated along"
+  /\bstrategically\s+(positioned|located|situated)\b/i,
+  // Vital artery/stagecoach: generic property role descriptions
+  /\bvital\s+(stagecoach|artery)\b/i,
+  // Deep roots: "deep roots in American/local history"
+  /\bdeep roots in\b/i,
+];
+
+// Strip general property history sentences from a stop's historical_info.
+// On single-site tours (landmark/ship/cold_spot), the LLM routinely opens
+// every stop with the same general property biography ("The Cashtown Inn was
+// constructed in 1797 by Peter Marck...") instead of focusing on the specific
+// room/area. This scrubber removes those opening sentences deterministically
+// — no LLM call, no credits. The first stop keeps one sentence of property
+// context; stops 2+ get up to 3 leading property-history sentences stripped.
+// Only strips from the first 4 sentences — the redundancy is always at the
+// start. Returns the cleaned text, or the original if nothing changed.
+export function stripPropertyHistoryOpeners(text, isFirstStop = false) {
+  if (!text) return text;
+  const sentences = text.match(/[^.!?]+[.!?]+["'\u201d]?\s*/g);
+  if (!sentences) return text;
+  const filtered = [];
+  let removed = 0;
+  // First stop: allow 1 property-history sentence for context, strip the rest.
+  // Stops 2+: strip up to 3 leading property-history sentences.
+  const maxRemovable = isFirstStop ? 2 : 3;
+  const skipFirst = isFirstStop ? 1 : 0;
+  for (let i = 0; i < sentences.length; i++) {
+    if (i >= skipFirst && i < (skipFirst + 4) && removed < maxRemovable &&
+        PROPERTY_HISTORY_PATTERNS.some(re => re.test(sentences[i]))) {
+      removed++;
+      continue;
+    }
+    filtered.push(sentences[i]);
+  }
+  return filtered.length > 0 ? filtered.join('').trim() : text;
+}
+
+// Strip general property history from a stop's historical_info. Returns an
+// object with only the fields that actually changed (for bulkUpdate / update).
+// isFirstStop: true for the first tour stop on a single-site tour — allows it
+// to keep one property-history sentence for context.
+export function stripStopPropertyHistory(stop, isFirstStop = false) {
+  if (!stop) return {};
+  const clean = stripPropertyHistoryOpeners(stop.historical_info, isFirstStop);
+  if (clean !== stop.historical_info) return { historical_info: clean };
+  return {};
+}
+
 // Brand rule for STOP-level content (narration_text, paranormal_info,
 // historical_info). The full expansion "AGES (Accessible Ghost Exploration
 // Solutions)" is reserved for the tour's introduction and conclusion only.
