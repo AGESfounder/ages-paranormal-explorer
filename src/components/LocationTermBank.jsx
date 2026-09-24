@@ -61,8 +61,23 @@ export default function LocationTermBank() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { isSpeaking, isGenerating, speak, unlock, attachMicToRecording } = useGhostVoice();
-  const { gateManifestation, spendManifestation, gateNarration, spendNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { unlock, attachMicToRecording } = useGhostVoice();
+  const { gateManifestation, spendManifestation, gateNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+
+  // Known male iOS / system voice names. We pick one of these for the
+  // triggered-word voice so it sounds distinctly male vs. the female dictation
+  // voice. If none is installed, we fall back to whatever en voice exists with
+  // a low pitch so it still reads as masculine.
+  const MALE_VOICE_NAMES = ['Daniel', 'Alex', 'Oliver', 'Tom', 'Arthur', 'Ralph', 'Rocko', 'Aaron', 'Finn', 'Fred', 'Greg', 'Gordon', 'James', 'Joey', 'Juan', 'Kanya', 'Karl', 'Kenji', 'Lee', 'Mark', 'Matt', 'Nicky', 'Noah', 'Nora', 'Paul', 'Rishi', 'Tyler', 'Wayne'];
+
+  const pickMaleVoice = (voices) => {
+    const en = voices.filter(v => /^en/i.test(v.lang));
+    for (const name of MALE_VOICE_NAMES) {
+      const match = en.find(v => v.name.toLowerCase().includes(name.toLowerCase()));
+      if (match) return match;
+    }
+    return en[0] || null;
+  };
 
   const speakNormal = (word) => {
     try {
@@ -88,6 +103,39 @@ export default function LocationTermBank() {
       };
       synth.speak(u);
     } catch { femaleBusyRef.current = false; }
+  };
+
+  // Speak the triggered (locked) word in a male voice using the browser's
+  // built-in speechSynthesis — same mechanism as the female dictation voice.
+  // This avoids the server-side GenerateSpeech round-trip that hung on iOS
+  // (network latency + AudioContext suspended by getUserMedia + autoplay
+  // policy blocking audio.play() from a sensor event). onEnd fires when the
+  // word finishes speaking so the lock can release; a timer fallback covers
+  // the iOS WKWebView case where onend occasionally never fires.
+  const speakMaleVoice = (word, onDone) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { onDone?.(); return; }
+      const synth = window.speechSynthesis;
+      try { synth.cancel(); } catch {}
+      try { synth.getVoices(); } catch {}
+      const u = new SpeechSynthesisUtterance(formatForSpeech(word));
+      u.lang = 'en-US';
+      u.rate = 0.85;
+      u.pitch = 0.3;   // deep, masculine pitch
+      u.volume = 1;
+      const voices = synth.getVoices();
+      const male = pickMaleVoice(voices);
+      if (male) u.voice = male;
+      let done = false;
+      const finish = () => { if (done) return; done = true; onDone?.(); };
+      // Fallback: if iOS never fires onend, release after an estimate based
+      // on word length (~300ms per syllable, ~2 syllables per word) + buffer.
+      const estMs = Math.max(1500, formatForSpeech(word).length * 180 + 800);
+      const timer = setTimeout(finish, estMs);
+      u.onend = () => { clearTimeout(timer); finish(); };
+      u.onerror = () => { clearTimeout(timer); finish(); };
+      synth.speak(u);
+    } catch { onDone?.(); }
   };
 
   const stopNormalVoice = () => {
@@ -132,19 +180,10 @@ export default function LocationTermBank() {
   useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
   useEffect(() => { motionDetectedRef.current = motionDetected; }, [motionDetected]);
 
-  // Resume scanning once narration of a locked word has actually started AND
-  // finished — wait for isGenerating/isSpeaking to go true first so we don't
-  // resume before the male voice begins.
-  useEffect(() => {
-    if (lockedWord && (isGenerating || isSpeaking)) speechStartedRef.current = true;
-    if (lockedWord && speechStartedRef.current && !isSpeaking && !isGenerating) {
-      speechStartedRef.current = false;
-      setLockedWord(null);
-      lockedWordRef.current = null;
-      lockedRef.current = false;
-      if (phase === 'running') startRotation();
-    }
-  }, [isSpeaking, isGenerating, lockedWord, phase]);
+  // The lock is now released directly from speakMaleVoice's onDone callback
+  // (called when the male speechSynthesis voice finishes or the timer fallback
+  // fires). No isGenerating/isSpeaking effect needed — those tracked the
+  // server-side GenerateSpeech call that we've replaced with browser TTS.
 
   useEffect(() => () => stopEverything(), []);
 
@@ -359,31 +398,19 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     currentWordRef.current = word;
     setCaptured(prev => { const updated = [...prev, { word, at: new Date().toLocaleTimeString() }]; capturedRef.current = updated; return updated; });
     speechStartedRef.current = false;
-    // Speak the triggered word in the male voice IMMEDIATELY. We do NOT wait
-    // for the female voice's speechSynthesis onend — on iOS WKWebView that
-    // callback frequently never fires, which left speakMale queued forever
-    // and the word frozen on screen. Cancel the female voice outright
-    // (cutting it off mid-word is the desired "lock" effect) and fire the
-    // male GenerateSpeech voice right now.
+    // Cancel the female dictation voice immediately (cutting it off mid-word
+    // is the desired "lock" effect) and speak the triggered word in the male
+    // voice. Both use browser speechSynthesis — no server round-trip, no
+    // credits, no iOS autoplay block. The lock releases when the male voice
+    // finishes (onDone), with a timer fallback for the iOS WKWebView case
+    // where onend occasionally never fires.
     stopNormalVoice();
-    const speakMale = () => {
-      if (!gateNarration(formatForSpeech(word))) return false;
-      try { speak(formatForSpeech(word), {}); spendNarration(1); } catch {}
-      return true;
-    };
-    const started = speakMale();
-    // Safety net: if the male voice couldn't start (gate blocked or speak
-    // threw), release the lock after a short pause so the word doesn't
-    // freeze on screen forever. The rotation interval is still running
-    // and will resume once lockedRef clears.
-    if (!started) {
-      setTimeout(() => {
-        lockedRef.current = false;
-        lockedWordRef.current = null;
-        setLockedWord(null);
-      }, 1500);
-    }
-  }, [speak]);
+    speakMaleVoice(word, () => {
+      lockedRef.current = false;
+      lockedWordRef.current = null;
+      setLockedWord(null);
+    });
+  }, []);
 
   const flashMotion = useCallback(() => {
     setMotionDetected(true);
