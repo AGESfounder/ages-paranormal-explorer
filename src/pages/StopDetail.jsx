@@ -139,7 +139,7 @@ export default function StopDetail() {
 Stop name: ${currentStop.name}
 Address: ${currentStop.address || ''}
 Existing notes: ${(currentStop.historical_info || '')} ${(currentStop.paranormal_info || '')}
-${isFinalStop ? 'This is the FINAL stop on the tour — you may use conclusion-style wrap-up language.' : 'This is NOT the final stop on the tour — do NOT begin with conclusion or wrap-up phrases.'}
+This is a stop on a paranormal tour — do NOT include any conclusion, wrap-up, or ending statements. The tour has a dedicated Conclusion field for all closing remarks.
 
 Produce a JSON object with:
 - historical_info: 4-5 DETAILED paragraphs covering construction dates and architecture, major historical events that occurred there, notable figures who lived/worked/visited/died there, scandals/murders/tragedies, and the area's significance over time. Include specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters.
@@ -151,8 +151,8 @@ Use real history and paranormal lore for this location. Output ONLY a valid JSON
         try { data = await callJson(prompt, { useWeb: true }); } catch (e) { console.error('Enrich (web) failed:', e); }
         if (!data) { try { data = await callJson(prompt, { useWeb: false }); } catch (e) { console.error('Enrich (no-web) failed:', e); } }
         if (data) {
-          if (data.historical_info) updates.historical_info = stripConclusionOpeners(data.historical_info, isFinalStop);
-          if (data.paranormal_info) updates.paranormal_info = stripConclusionOpeners(data.paranormal_info, isFinalStop);
+          if (data.historical_info) updates.historical_info = stripConclusionOpeners(data.historical_info, false);
+          if (data.paranormal_info) updates.paranormal_info = stripConclusionOpeners(data.paranormal_info, false);
           generatedPeople = (data.people || []).filter(p => p.name && p.story);
           if (generatedPeople.length) updates.people = generatedPeople;
         }
@@ -301,8 +301,8 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       // strip any premature conclusion phrases from it.
       if (isLastStop && tourStops.length > 0) {
         const newFinal = tourStops[renumber.length - 1];
-        const cleanPara = stripConclusionOpeners(newFinal.paranormal_info, true);
-        const cleanNarr = stripConclusionOpeners(newFinal.narration_text, true);
+        const cleanPara = stripConclusionOpeners(newFinal.paranormal_info, false);
+        const cleanNarr = stripConclusionOpeners(newFinal.narration_text, false);
         if (cleanPara !== newFinal.paranormal_info || cleanNarr !== newFinal.narration_text) {
           await base44.entities.TourStop.update(newFinal.id, { paranormal_info: cleanPara, narration_text: cleanNarr });
         }

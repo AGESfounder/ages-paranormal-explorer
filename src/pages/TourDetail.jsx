@@ -29,7 +29,7 @@ import ValidateTourCard from '@/components/ValidateTourCard';
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
-import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP } from '@/lib/stopContent';
+import { stripConclusionOpeners, stripStopConclusion, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP } from '@/lib/stopContent';
 import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
@@ -462,6 +462,26 @@ export default function TourDetail() {
           toClassify.map(s => ({ id: s.id, access_area: s.access_area }))
         ).catch(e => console.error('Failed to persist access classification:', e));
       }
+      // SCRUB CONCLUSION PHRASES from all stops on load — no stop (not even
+      // the final one) may contain conclusion language. The tour's Conclusion
+      // field is the only place for closing statements. This fixes
+      // already-generated tours (e.g. Gettysburg) that have conclusion phrases
+      // scattered across non-final stops from before this rule existed.
+      // Runs at no energy cost — pure text processing, no LLM call.
+      const scrubUpdates = [];
+      for (const s of tourStops) {
+        if (s.stop_type === 'parking' || s.stop_type === 'shuttle') continue;
+        const clean = stripStopConclusion(s, false);
+        if (Object.keys(clean).length > 0) {
+          scrubUpdates.push({ id: s.id, ...clean });
+          Object.assign(s, clean);
+        }
+      }
+      if (scrubUpdates.length > 0) {
+        base44.entities.TourStop.bulkUpdate(scrubUpdates)
+          .catch(e => console.error('Failed to persist conclusion scrub:', e));
+      }
+
       // Clean up duplicate parking stops (keep the first, delete the rest)
       const allParking = tourStops.filter(s => s.stop_type === 'parking');
       if (allParking.length > 1) {
