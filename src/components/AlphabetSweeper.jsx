@@ -188,6 +188,7 @@ export default function AlphabetSweeper() {
     setLockedLetter(null);
     lockedLetterRef.current = null;
     lockedRef.current = false;
+    lastTriggerRef.current = 0; // clear cooldown so A/B can trigger immediately
     indexRef.current = 0;
     currentLetterRef.current = LETTERS[0];
     setCurrentLetter(LETTERS[0]);
