@@ -25,7 +25,7 @@ import { toast } from '@/components/ui/use-toast';
 import { verifyStopLocation } from '@/lib/verifyStop';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP } from '@/lib/stopContent';
+import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
 import { stripUrlsForNarration } from '@/lib/urlText';
 import LinkifiedText from '@/components/LinkifiedText';
 import DeleteStopDialog from '@/components/DeleteStopDialog';
@@ -103,7 +103,7 @@ export default function StopDetail() {
   // lightweight summaries, so the full rich historical/paranormal detail and
   // notable people are generated here per-stop (small, reliable calls) and
   // persisted. Stops that already have rich content only get people filled in.
-  const ensureRichContent = async (currentStop, isFinalStop) => {
+  const ensureRichContent = async (currentStop, tourContext = {}) => {
     const gate = await checkManifestationGate();
     if (!gate.allowed) {
       setEnrichStatus({
@@ -134,16 +134,31 @@ export default function StopDetail() {
       let updates = {};
       let generatedPeople = [];
       if (needsFull) {
+        const isSingleSite = tourContext.category === 'landmark' || tourContext.category === 'ship' || tourContext.category === 'cold_spot';
+        const tourIntroText = tourContext.introduction
+          ? `\nTOUR INTRODUCTION (already covers the general property history — DO NOT repeat this information in this stop):\n${tourContext.introduction.slice(0, 1500)}\n`
+          : '';
+        const siblingText = tourContext.siblingStopNames && tourContext.siblingStopNames.length > 0
+          ? `\nOTHER STOPS ON THIS TOUR (for context — this stop is one of several areas within the same location; focus on THIS stop, do not repeat their content):\n${tourContext.siblingStopNames.map(n => `- ${n}`).join('\n')}\n`
+          : '';
+        const stopFocusRule = isSingleSite
+          ? `\nSTOP-FOCUS RULE — FOLLOW EXACTLY: This is a single-property tour where all stops are rooms, areas, or sections within ONE location. The general property history (construction date, founder, overall significance, Civil War context, etc.) was already covered in the tour introduction above. Do NOT repeat it here. Focus EXCLUSIVELY on what is unique to THIS specific stop — the specific room, area, or section named "${currentStop.name}". What happened HERE? Who was in THIS room? What paranormal activity occurs in THIS specific spot? The historical_info must cover events and details specific to this area, not the building as a whole.\n`
+          : '';
+        const singleSiteHistRule = ' — events that occurred in this specific room/area/section, not the property as a whole. Who used THIS room? What was THIS area for? What specific events happened HERE';
+        const multiSiteHistRule = " — construction dates and architecture, major historical events that occurred there, notable figures who lived/worked/visited/died there, scandals/murders/tragedies, and the area's significance over time";
+        const histRule = isSingleSite ? singleSiteHistRule : multiSiteHistRule;
+        const paraRuleSuffix = isSingleSite ? ' — all SPECIFIC TO THIS STOP, not the property in general' : '';
         const prompt = `Generate rich, detailed content for a single paranormal investigation stop.
 
+Tour: ${tourContext.title || ''}
 Stop name: ${currentStop.name}
 Address: ${currentStop.address || ''}
-Existing notes: ${(currentStop.historical_info || '')} ${(currentStop.paranormal_info || '')}
+Existing notes: ${(currentStop.historical_info || '')} ${(currentStop.paranormal_info || '')}${tourIntroText}${siblingText}${stopFocusRule}
 This is a stop on a paranormal tour — do NOT include any conclusion, wrap-up, or ending statements. The tour has a dedicated Conclusion field for all closing remarks.
 
 Produce a JSON object with:
-- historical_info: 4-5 DETAILED paragraphs covering construction dates and architecture, major historical events that occurred there, notable figures who lived/worked/visited/died there, scandals/murders/tragedies, and the area's significance over time. Include specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters.
-- paranormal_info: 4-5 DETAILED paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, exact location), shadow figures, cold spots, poltergeist activity, residual vs intelligent hauntings, and local folklore. Include investigator testimonies and well-known paranormal events. Tell full ghost stories, not just names.
+- historical_info: 4-5 DETAILED paragraphs covering the history SPECIFIC TO THIS STOP${histRule}. Include specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters.
+- paranormal_info: 4-5 DETAILED paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, exact location), shadow figures, cold spots, poltergeist activity, residual vs intelligent hauntings, and local folklore${paraRuleSuffix}. Include investigator testimonies and well-known paranormal events. Tell full ghost stories, not just names.
 - people: array of { name, story }. Include EVERY notable person mentioned in historical_info or paranormal_info. "name" MUST appear verbatim (same spelling/casing) in the text so it can be highlighted. "story": 4-6 detailed sentences — who they were, their role, fate (how they died if relevant), and their paranormal connection (sightings, apparitions, EVPs, phenomena).
 ${BRAND_RULE_STOP}${CONCLUSION_PHRASE_RULE}
 Use real history and paranormal lore for this location. Output ONLY a valid JSON object. No markdown fences, no commentary.`;
@@ -242,15 +257,28 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         const tourSiblings = sortedSiblings.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
         const maxStopNum = tourSiblings.length > 0 ? Math.max(...tourSiblings.map(s => s.stop_number || 0)) : 0;
         const isFinalStop = currentStop.stop_type !== 'parking' && (currentStop.stop_number || 0) === maxStopNum && tourSiblings.length > 1;
-        if (currentStop.stop_type !== 'parking' && (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0)) ensureRichContent(currentStop, isFinalStop);
+        // Fetch tour data for enrichment context and last-visited tracking
+        let tourData = null;
         try {
           const tours = await base44.entities.Tour.filter({ id: currentStop.tour_id });
+          tourData = tours[0];
+        } catch (e) {}
+        if (currentStop.stop_type !== 'parking' && (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0)) {
+          const siblingNames = tourSiblings.filter(s => s.id !== currentStop.id).map(s => s.name).filter(Boolean);
+          ensureRichContent(currentStop, {
+            title: tourData?.title,
+            category: tourData?.tour_category,
+            introduction: tourData?.introduction,
+            siblingStopNames: siblingNames,
+          });
+        }
+        try {
           await base44.auth.updateMe({
             last_tour_id: currentStop.tour_id,
             last_stop_id: currentStop.id,
             last_stop_number: currentStop.stop_number,
             last_stop_name: currentStop.name,
-            last_tour_title: tours[0]?.title || '',
+            last_tour_title: tourData?.title || '',
           });
         } catch (e) {}
       }

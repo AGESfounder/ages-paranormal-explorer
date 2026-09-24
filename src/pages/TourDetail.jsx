@@ -29,7 +29,8 @@ import ValidateTourCard from '@/components/ValidateTourCard';
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
-import { stripConclusionOpeners, stripStopConclusion, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP } from '@/lib/stopContent';
+import { stripConclusionOpeners, stripStopConclusion, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
+import { regenerateTourContent } from '@/lib/enrichStops';
 import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
@@ -190,6 +191,8 @@ export default function TourDetail() {
   const [stopSearchName, setStopSearchName] = useState('');
   const [travelMode, setTravelMode] = useState('mixed');
   const [isOfflineCached, setIsOfflineCached] = useState(false);
+  const [regeneratingContent, setRegeneratingContent] = useState(false);
+  const [regenerationProgress, setRegenerationProgress] = useState(null);
 
   const handleRemoveOffline = async () => {
     await clearTourAudio(tourId);
@@ -592,6 +595,35 @@ export default function TourDetail() {
         // Lazily generate parking for tours that don't have it yet
         if (!parkingStop && tourData[0].tour_type !== 'driving') {
           generateParking(tourData[0], tourStopsOnly).catch(console.error);
+        }
+
+        // Auto-regenerate stop content for old tours (content_version <
+        // STOP_CONTENT_VERSION) when a paid user or admin opens them. Runs
+        // in the background — the tour displays immediately with old content,
+        // then stops refresh when regeneration completes. One-time: once
+        // stamped, the tour never regenerates again. Free users see the
+        // original content until a paid user/admin triggers the upgrade.
+        if ((tourData[0].content_version || 0) < STOP_CONTENT_VERSION && tourStopsOnly.length > 0) {
+          checkManifestationGate().then(gate => {
+            if (!gate.allowed) return;
+            setRegeneratingContent(true);
+            setRegenerationProgress({ completed: 0, total: tourStopsOnly.length });
+            regenerateTourContent(tourData[0], tourStops, (completed, total, stopName) => {
+              setRegenerationProgress({ completed, total, stopName });
+            })
+              .then(({ enrichedStops }) => {
+                setStops(prev => prev.map(s => {
+                  const enriched = enrichedStops.find(e => e.id === s.id);
+                  return enriched ? { ...s, ...enriched } : s;
+                }));
+                setTour(prev => prev ? { ...prev, content_version: STOP_CONTENT_VERSION } : prev);
+              })
+              .catch(e => console.error('Content regeneration failed:', e))
+              .finally(() => {
+                setRegeneratingContent(false);
+                setRegenerationProgress(null);
+              });
+          }).catch(e => console.error('Content regeneration gate check failed:', e));
         }
       }
     }
@@ -1261,7 +1293,14 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
 
       <div className="px-4 pb-28 space-y-4 pt-3">
         <div className="p-4 rounded-xl border border-border/40 bg-card/40 space-y-3">
-          <VerificationBadge verified={tour.verified} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <VerificationBadge verified={tour.verified} />
+            {user?.role === 'admin' && (
+              <span className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground/60 border border-border/40 rounded px-1.5 py-0.5">
+                Content v{tour.content_version || 0}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3 flex-wrap">
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               {tour.tour_type === 'walking' ? <Footprints className="w-3.5 h-3.5" /> : tour.tour_type === 'mixed' ? <><Footprints className="w-3.5 h-3.5" /><Car className="w-3 h-3" /></> : <Car className="w-3.5 h-3.5" />}
@@ -1285,6 +1324,17 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           )}
           {hasDrivingStops && <TravelModeSelector value={travelMode} onChange={setTravelMode} />}
         </div>
+
+        {regeneratingContent && (
+          <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 flex items-center gap-2">
+            <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+            <p className="text-xs text-primary font-heading uppercase tracking-wider">
+              {regenerationProgress?.completed != null && regenerationProgress?.total
+                ? `Upgrading stop content… (${regenerationProgress.completed}/${regenerationProgress.total})`
+                : 'Upgrading stop content…'}
+            </p>
+          </div>
+        )}
 
         <TourAccessInfo tour={tour} stops={stops} />
 

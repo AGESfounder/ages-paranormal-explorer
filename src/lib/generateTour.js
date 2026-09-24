@@ -1,7 +1,7 @@
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { US_STATES } from '@/lib/statesData';
-import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_TOUR } from '@/lib/stopContent';
+import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_TOUR, STOP_CONTENT_VERSION } from '@/lib/stopContent';
 import { enforceWalkingDistance } from '@/lib/routeOptimizer';
 import { getVerifiedCoordsForStops, applyVerifiedCoords } from '@/lib/reuseVerifiedCoords';
 
@@ -381,6 +381,7 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       tags,
       safety_info: toStr(raw.safety_info),
       best_time: toStr(raw.best_time),
+      content_version: STOP_CONTENT_VERSION,
     };
 
     const isLandmarkOrShip = correctedCategory === 'landmark' || correctedCategory === 'ship';

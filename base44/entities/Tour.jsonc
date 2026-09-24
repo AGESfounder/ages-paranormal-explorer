@@ -111,6 +111,11 @@
       "default": 0,
       "description": "Validation version of the stops. 0 = unvalidated. When validation rules change, STOPS_VALIDATION_VERSION is bumped in TourDetail.jsx, and all tours with an older version are re-validated (and regenerated if non-compliant) on next view at no energy cost. Boolean true (legacy) is treated as version 1."
     },
+    "content_version": {
+      "type": "number",
+      "default": 0,
+      "description": "Version of the stop-content enrichment prompt used to generate this tour's stop narratives. 0 = original prompt (pre-stop-focus rules, stops repeated general property history). When STOP_CONTENT_VERSION is bumped in stopContent.js, tours with an older content_version are auto-regenerated with the improved prompt when a paid user or admin opens them (one-time, at their energy expense). Once stamped, the tour's stops are permanently upgraded for all users and never regenerate again."
+    },
     "verified": {
       "type": "boolean",
       "default": false,
