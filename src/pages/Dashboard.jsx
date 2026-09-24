@@ -318,7 +318,14 @@ export default function Dashboard() {
         title="Dashboard"
         subtitle="Subscription & Energy"
         showBack
-
+        rightAction={isAdmin ? (
+          <Link
+            to="/plan-analysis"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-xs font-heading uppercase tracking-wider min-h-[36px]"
+          >
+            <FileBarChart className="w-3.5 h-3.5" /> Cost Analysis
+          </Link>
+        ) : null}
       />
       <div className="px-4 pb-28 space-y-5 pt-3">
 
@@ -568,22 +575,6 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-        )}
-
-        {/* ── Admin: Cost Analysis ── */}
-        {isAdmin && (
-          <Link
-            to="/plan-analysis"
-            className="flex items-center gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors"
-          >
-            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
-              <FileBarChart className="w-4 h-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-xs font-heading font-semibold text-foreground uppercase tracking-wider">Cost &amp; Profit Analysis</p>
-              <p className="text-[10px] text-muted-foreground">Subscription plan, credit costs &amp; revenue projections</p>
-            </div>
-          </Link>
         )}
 
         {/* ── Purchase History ── */}
