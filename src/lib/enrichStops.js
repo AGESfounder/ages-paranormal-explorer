@@ -5,6 +5,7 @@ import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { stripConclusionOpeners, BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, STOP_CONTENT_VERSION } from '@/lib/stopContent';
 import { checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
+import { estimateStopTime, estimateTourDuration } from '@/lib/estimateTimes';
 
 const THIN_THRESHOLD = 600;
 
@@ -145,6 +146,10 @@ Use real history and paranormal lore for this location. Output ONLY a valid JSON
       if (rewritten.paranormal_info) updates.paranormal_info = stripConclusionOpeners(rewritten.paranormal_info, false);
       generatedPeople = (data.people || []).filter((p) => p.name && p.story);
       if (generatedPeople.length) updates.people = generatedPeople;
+      // Recalculate investigation time based on actual content length
+      if (updates.historical_info || updates.paranormal_info) {
+        updates.estimated_investigation_time = estimateStopTime({ ...stop, ...updates });
+      }
     }
   } else if (!stop.people || stop.people.length === 0) {
     // Content is rich but people haven't been extracted yet
@@ -236,6 +241,16 @@ export async function enrichTourStops(tour, stops, onProgress) {
     if (onProgress) onProgress(completed, total, s.name || `Stop ${s.stop_number}`);
   }
 
+  // Recalculate tour duration based on updated stop times
+  const newDuration = estimateTourDuration(enrichedStops, tour.tour_type);
+  if (newDuration) {
+    try {
+      await base44.entities.Tour.update(tour.id, { estimated_duration: newDuration });
+    } catch (e) {
+      console.error('Failed to update tour duration:', e);
+    }
+  }
+
   return { enrichedStops, energySpent };
 }
 
@@ -301,9 +316,12 @@ export async function regenerateTourContent(tour, stops, onProgress) {
     if (onProgress) onProgress(completed, total, s.name || `Stop ${s.stop_number}`);
   }
 
-  // Stamp the tour with the current content version so it never regenerates again
+  // Stamp the tour with the current content version and recalculate duration
+  const newDuration = estimateTourDuration(enrichedStops, tour.tour_type);
   try {
-    await base44.entities.Tour.update(tour.id, { content_version: STOP_CONTENT_VERSION });
+    const tourUpdates = { content_version: STOP_CONTENT_VERSION };
+    if (newDuration) tourUpdates.estimated_duration = newDuration;
+    await base44.entities.Tour.update(tour.id, tourUpdates);
   } catch (e) {
     console.error('Failed to stamp content_version:', e);
   }
