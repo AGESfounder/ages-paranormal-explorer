@@ -25,7 +25,8 @@ import { toast } from '@/components/ui/use-toast';
 import { verifyStopLocation } from '@/lib/verifyStop';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { stripConclusionOpeners, stripPropertyHistoryOpeners, stripStopPropertyHistory, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
+import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
+import { rewriteForStopFocus } from '@/lib/enrichStops';
 import { stripUrlsForNarration } from '@/lib/urlText';
 import LinkifiedText from '@/components/LinkifiedText';
 import DeleteStopDialog from '@/components/DeleteStopDialog';
@@ -176,8 +177,11 @@ Use real history and paranormal lore for this location. Output ONLY a valid JSON
         try { data = await callJson(prompt, { useWeb: true }); } catch (e) { console.error('Enrich (web) failed:', e); }
         if (!data) { try { data = await callJson(prompt, { useWeb: false }); } catch (e) { console.error('Enrich (no-web) failed:', e); } }
         if (data) {
-          if (data.historical_info) updates.historical_info = stripPropertyHistoryOpeners(stripConclusionOpeners(data.historical_info, false), tourContext.isFirstStop || false);
-          if (data.paranormal_info) updates.paranormal_info = stripConclusionOpeners(data.paranormal_info, false);
+          // Second-pass rewrite for single-site tours: remove general property
+          // history and keep only stop-specific content.
+          const rewritten = await rewriteForStopFocus(currentStop, data, tourContext);
+          if (rewritten.historical_info) updates.historical_info = stripConclusionOpeners(rewritten.historical_info, false);
+          if (rewritten.paranormal_info) updates.paranormal_info = stripConclusionOpeners(rewritten.paranormal_info, false);
           generatedPeople = (data.people || []).filter(p => p.name && p.story);
           if (generatedPeople.length) updates.people = generatedPeople;
         }
@@ -273,19 +277,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           const tours = await base44.entities.Tour.filter({ id: currentStop.tour_id });
           tourData = tours[0];
         } catch (e) {}
-        // Determine if this is the first tour stop (for property-history scrubbing)
+        // Determine if this is the first tour stop (for enrichment context)
         const minStopNum = tourSiblings.length > 0 ? Math.min(...tourSiblings.map(s => s.stop_number || 0)) : 0;
         const stopIsFirst = currentStop.stop_type !== 'parking' && currentStop.stop_type !== 'shuttle' && (currentStop.stop_number || 0) === minStopNum;
-        // Load-time scrub: strip general property history from non-first stops
-        // on single-site tours (deterministic, no LLM call, no credits).
-        if (tourData && (tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot')) {
-          const cleanHist = stripStopPropertyHistory(currentStop, stopIsFirst);
-          if (Object.keys(cleanHist).length > 0) {
-            Object.assign(currentStop, cleanHist);
-            setStop({ ...currentStop });
-            base44.entities.TourStop.update(currentStop.id, cleanHist).catch(e => console.error('Failed to persist property history scrub:', e));
-          }
-        }
         if (currentStop.stop_type !== 'parking' && (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0)) {
           const siblingNames = tourSiblings.filter(s => s.id !== currentStop.id).map(s => s.name).filter(Boolean);
           ensureRichContent(currentStop, {

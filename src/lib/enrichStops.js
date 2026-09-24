@@ -3,10 +3,61 @@
 // offline users only see the 2-3 sentence skeleton summaries.
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
-import { stripConclusionOpeners, stripPropertyHistoryOpeners, BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, STOP_CONTENT_VERSION } from '@/lib/stopContent';
+import { stripConclusionOpeners, BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, STOP_CONTENT_VERSION } from '@/lib/stopContent';
 import { checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
 
 const THIN_THRESHOLD = 600;
+
+// Second-pass LLM rewrite: takes generated content and removes general
+// property history, keeping only what's specific to this stop. The LLM is
+// much better at EDITING existing content to remove redundancy than at
+// following negative constraints during generation — this is why the
+// first-pass prompt's "don't repeat property history" rules fail but a
+// focused rewrite succeeds.
+//
+// Only runs for single-site tours (landmark/ship/cold_spot) where all stops
+// are rooms/areas within one property. Area/road_trip tours don't have this
+// problem — each stop is a different property.
+export async function rewriteForStopFocus(stop, generatedContent, tourContext) {
+  const isSingleSite = tourContext.category === 'landmark' || tourContext.category === 'ship' || tourContext.category === 'cold_spot';
+  if (!isSingleSite) return generatedContent;
+
+  const intro = tourContext.introduction ? tourContext.introduction.slice(0, 1500) : '';
+  const prompt = `You are editing content for a paranormal tour stop at "${tourContext.title}".
+
+The content below was written for "${stop.name}" but contains general property history that belongs in the tour introduction, not this specific stop.
+
+${intro ? `TOUR INTRODUCTION (already covers the property's general history — construction, founder, Civil War role, etc.):\n${intro}\n` : ''}
+
+CURRENT HISTORICAL CONTENT:
+${generatedContent.historical_info || ''}
+
+CURRENT PARANORMAL CONTENT:
+${generatedContent.paranormal_info || ''}
+
+REWRITE INSTRUCTIONS — FOLLOW EXACTLY:
+1. Remove ALL general property history — anything about the property's construction, founding, overall significance, or historical role that applies to the WHOLE property, not just this stop. That's in the tour introduction.
+2. Keep ONLY content specific to "${stop.name}" — what this specific room/area was used for, what happened HERE, what paranormal activity occurs in THIS exact spot.
+3. Start with a sentence about "${stop.name}" specifically, not about the property.
+4. If most of the content is general property history with little stop-specific detail, keep whatever stop-specific details exist and expand on them to fill 3-4 paragraphs.
+5. Do not add new historical facts — just remove the redundant property history and keep/expand the stop-specific content.
+
+Return JSON: { "historical_info": "...", "paranormal_info": "..." }
+Output ONLY valid JSON. No markdown fences.`;
+
+  try {
+    const result = await callJson(prompt, { useWeb: false });
+    if (result && (result.historical_info || result.paranormal_info)) {
+      return {
+        historical_info: result.historical_info || generatedContent.historical_info,
+        paranormal_info: result.paranormal_info || generatedContent.paranormal_info,
+      };
+    }
+  } catch (e) {
+    console.error('Rewrite for stop focus failed:', e);
+  }
+  return generatedContent; // Fall back to original if rewrite fails
+}
 
 export function isThinContent(s) {
   return !s || s.trim().length < THIN_THRESHOLD;
@@ -86,8 +137,12 @@ Use real history and paranormal lore for this location. Output ONLY a valid JSON
     try { data = await callJson(prompt, { useWeb: true }); } catch (e) { console.error('Enrich (web) failed:', e); }
     if (!data) { try { data = await callJson(prompt, { useWeb: false }); } catch (e) { console.error('Enrich (no-web) failed:', e); } }
     if (data) {
-      if (data.historical_info) updates.historical_info = stripPropertyHistoryOpeners(stripConclusionOpeners(data.historical_info, false), isFirstStop);
-      if (data.paranormal_info) updates.paranormal_info = stripConclusionOpeners(data.paranormal_info, false);
+      // Second-pass rewrite for single-site tours: remove general property
+      // history and keep only stop-specific content. The LLM edits the
+      // generated content — far more reliable than regex scrubbing.
+      const rewritten = await rewriteForStopFocus(stop, data, tourContext);
+      if (rewritten.historical_info) updates.historical_info = stripConclusionOpeners(rewritten.historical_info, false);
+      if (rewritten.paranormal_info) updates.paranormal_info = stripConclusionOpeners(rewritten.paranormal_info, false);
       generatedPeople = (data.people || []).filter((p) => p.name && p.story);
       if (generatedPeople.length) updates.people = generatedPeople;
     }

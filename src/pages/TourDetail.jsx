@@ -29,7 +29,7 @@ import ValidateTourCard from '@/components/ValidateTourCard';
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
-import { stripConclusionOpeners, stripStopConclusion, stripStopPropertyHistory, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
+import { stripConclusionOpeners, stripStopConclusion, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
 import { regenerateTourContent } from '@/lib/enrichStops';
 import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
@@ -483,34 +483,6 @@ export default function TourDetail() {
       if (scrubUpdates.length > 0) {
         base44.entities.TourStop.bulkUpdate(scrubUpdates)
           .catch(e => console.error('Failed to persist conclusion scrub:', e));
-      }
-
-      // SCRUB GENERAL PROPERTY HISTORY from non-first stops on single-site
-      // tours (landmark/ship/cold_spot). The LLM routinely opens every stop
-      // with the same property biography ("The Cashtown Inn was constructed
-      // in 1797 by Peter Marck...") instead of focusing on the specific room.
-      // This deterministic scrubber removes those opening sentences — no LLM
-      // call, no credits. The first stop keeps one sentence of context.
-      const isSingleSiteTour = tourData[0].tour_category === 'landmark' || tourData[0].tour_category === 'ship' || tourData[0].tour_category === 'cold_spot';
-      if (isSingleSiteTour) {
-        const sortedForFirst = tourStops
-          .filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle')
-          .sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-        const firstStopId = sortedForFirst[0]?.id;
-        const historyScrubUpdates = [];
-        for (const s of tourStops) {
-          if (s.stop_type === 'parking' || s.stop_type === 'shuttle') continue;
-          const isFirstStop = s.id === firstStopId;
-          const clean = stripStopPropertyHistory(s, isFirstStop);
-          if (Object.keys(clean).length > 0) {
-            historyScrubUpdates.push({ id: s.id, ...clean });
-            Object.assign(s, clean);
-          }
-        }
-        if (historyScrubUpdates.length > 0) {
-          base44.entities.TourStop.bulkUpdate(historyScrubUpdates)
-            .catch(e => console.error('Failed to persist property history scrub:', e));
-        }
       }
 
       // Clean up duplicate parking stops (keep the first, delete the rest)
