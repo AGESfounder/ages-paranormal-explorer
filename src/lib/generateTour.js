@@ -205,8 +205,8 @@ Return a JSON object with:
 - city: the primary city or area where "${dest}" is located
 - tour_type: "walking", "driving", or "mixed" (per the category rules above)
 - description: 4-6 detailed sentences about the destination's haunted history, founding, and why it's notorious
-- introduction: 2-3 rich paragraphs setting the scene for investigators — the atmosphere, what to expect, and the location's dark legacy
-- conclusion: 2-3 paragraphs wrapping up the investigation and reflecting on what was explored
+- introduction: 3-4 DETAILED paragraphs (minimum 900 characters) setting the scene for investigators. Cover the property's founding and early history, its dark legacy and how it became haunted, the atmosphere investigators will encounter, what to expect tonight, and the broader historical context (e.g. Civil War role, notable events, famous figures). Include specific dates, names, and documented events — this is the tour's opening narrative, so make it immersive and information-rich, not a brief teaser.
+- conclusion: 3-4 DETAILED paragraphs (minimum 800 characters) wrapping up the investigation. Reflect on the specific stops and rooms explored, the spirits that reportedly remain, the historical significance of what was witnessed, how the location's past shapes its present haunting, and a respectful, atmospheric send-off. Reference specific stops, names, and events from the tour — this is the tour's closing narrative, so make it substantive and reflective, not a brief sign-off.
 - difficulty: "easy", "moderate", or "challenging"
 - estimated_duration: e.g. "2-3 hours"
 - total_distance: e.g. "~0.8 miles" (walking) or "~15 miles" (driving)
