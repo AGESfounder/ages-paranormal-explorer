@@ -121,6 +121,30 @@ export async function generateLocationTour(destination, state, coords, category 
     } catch (e) { console.error('Failed to fetch stops for dedup:', e); }
   }
 
+  // AREA-TO-LANDMARK RECLASSIFICATION: If the user selected "area" but typed
+  // a destination that starts with a city name that already has area tours,
+  // followed by a specific site name (e.g., "Gettysburg Battlefield" starts
+  // with "Gettysburg"), reclassify to "landmark" so the LLM generates stops
+  // within that specific site rather than duplicating the existing city area
+  // tour. Uses startsWith(city + ' ') — not includes — so "New York" won't
+  // false-positive against "York, PA". Generic qualifiers like "City" or
+  // "Downtown" are excluded so "New York City" stays an area tour. Only fires
+  // when no specific locations were provided (that path already works).
+  if (category === 'area' && !(specificLocations && specificLocations.trim().length > 0)) {
+    const destNorm = norm(dest);
+    const GENERIC_QUALIFIERS = new Set(['city', 'town', 'metro', 'area', 'downtown', 'district', 'region', 'borough']);
+    const hasAreaTourInCity = existingToursInState.some(t => {
+      if (t.tour_category !== 'area') return false;
+      const tCity = norm(t.city);
+      if (tCity.length < 4 || !destNorm.startsWith(tCity + ' ')) return false;
+      const remaining = destNorm.slice(tCity.length + 1).trim();
+      return remaining.length > 0 && !GENERIC_QUALIFIERS.has(remaining);
+    });
+    if (hasAreaTourInCity) {
+      category = 'landmark';
+    }
+  }
+
   // Build prompt sections for specific locations and existing stops
   const specificLocationsList = specificLocations
     ? specificLocations.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 2)
