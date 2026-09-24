@@ -26,6 +26,8 @@ const TRIGGER_COOLDOWN_MS = 3500;
 const ACCEL_THRESHOLD = 0.8;
 const ORIENT_THRESHOLD = 6;
 
+const MALE_VOICE_NAMES = ['Daniel', 'Alex', 'Oliver', 'Tom', 'Arthur', 'Ralph', 'Rocko', 'Aaron', 'Finn', 'Fred', 'Greg', 'Gordon', 'James', 'Joey', 'Juan', 'Kanya', 'Karl', 'Kenji', 'Lee', 'Mark', 'Matt', 'Nicky', 'Noah', 'Nora', 'Paul', 'Rishi', 'Tyler', 'Wayne'];
+
 function formatDuration(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
@@ -52,8 +54,8 @@ export default function YesNoSweeper() {
   // Web Audio–based voice (unlocked on the Start tap) so the spoken answer
   // plays reliably on iOS even though it's triggered by a sensor event. Called
   // WITHOUT the creepy flag → normal-speed delivery.
-  const { isSpeaking, isGenerating, speak, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
-  const { gateNarration, spendNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { gateNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   // Normal browser TTS announces each phrase as it cycles (instant, local,
   // female voice). The locked phrase is then spoken in the deep male
@@ -96,6 +98,44 @@ export default function YesNoSweeper() {
     pendingMaleRef.current = null;
     femaleBusyRef.current = false;
     try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
+  };
+
+  const pickMaleVoice = (voices) => {
+    const en = voices.filter(v => /^en/i.test(v.lang));
+    for (const name of MALE_VOICE_NAMES) {
+      const match = en.find(v => v.name.toLowerCase().includes(name.toLowerCase()));
+      if (match) return match;
+    }
+    return en[0] || null;
+  };
+
+  // Speak the triggered (locked) phrase in a male voice using the browser's
+  // built-in speechSynthesis — same mechanism as the Term Sweeper. This avoids
+  // the server-side GenerateSpeech round-trip that hung on iOS. onDone fires
+  // when the voice finishes; a timer fallback covers the iOS WKWebView case
+  // where onend occasionally never fires.
+  const speakMaleVoice = (text, onDone) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { onDone?.(); return; }
+      const synth = window.speechSynthesis;
+      try { synth.cancel(); } catch {}
+      try { synth.getVoices(); } catch {}
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      u.rate = 0.85;
+      u.pitch = 0.3;
+      u.volume = 1;
+      const voices = synth.getVoices();
+      const male = pickMaleVoice(voices);
+      if (male) u.voice = male;
+      let done = false;
+      const finish = () => { if (done) return; done = true; onDone?.(); };
+      const estMs = Math.max(1500, text.length * 180 + 800);
+      const timer = setTimeout(finish, estMs);
+      u.onend = () => { clearTimeout(timer); finish(); };
+      u.onerror = () => { clearTimeout(timer); finish(); };
+      synth.speak(u);
+    } catch { onDone?.(); }
   };
 
   const stepRef = useRef(null);
@@ -218,27 +258,26 @@ export default function YesNoSweeper() {
     setCaptured(prev => { const updated = [...prev, phrase.display]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     sweepingRef.current = false;
-    // Let the female voice finish the current phrase, then speak male
+    // Speak the locked phrase in a deep male voice via speechSynthesis (same
+    // reliable mechanism as the Term Sweeper). The lock releases and the
+    // asking phase restarts when the voice finishes (onDone), with a timer
+    // fallback for the iOS WKWebView case where onend never fires.
     const speakMale = () => {
-      if (!gateNarration(phrase.speech)) return;
-      try { speak(phrase.speech, {}); spendNarration(1); } catch {} // deep male "storm" voice
+      speakMaleVoice(phrase.speech, () => {
+        setLockedPhrase(null);
+        lockedIdxRef.current = null;
+        lockedRef.current = false;
+        indexRef.current = 0;
+        setCurrentIdx(0);
+        startAskingPhase();
+      });
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
     } else {
       speakMale();
     }
-    // 5-second pause after locking, then restart the asking phase
-    if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
-    resumeDelayRef.current = setTimeout(() => {
-      setLockedPhrase(null);
-      lockedIdxRef.current = null;
-      lockedRef.current = false;
-      indexRef.current = 0;
-      setCurrentIdx(0);
-      startAskingPhase();
-    }, 5000);
-  }, [speak]);
+  }, []);
 
   const requestSensorPermissions = async () => {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {

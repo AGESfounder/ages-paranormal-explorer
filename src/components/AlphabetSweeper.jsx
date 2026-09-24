@@ -49,8 +49,8 @@ export default function AlphabetSweeper() {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { speak, stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
-  const { gateNarration, spendNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
+  const { gateNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   // Pick the most natural-sounding female system voice available (Samantha on
   // iOS, Karen on AU, etc.). Falls back to any en-US voice.
@@ -108,6 +108,35 @@ export default function AlphabetSweeper() {
     femaleBusyRef.current = false;
     try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
     try { stopVoice(); } catch {}
+  };
+
+  // Speak the triggered (locked) letter in a male voice using the browser's
+  // built-in speechSynthesis — same mechanism as the Term Sweeper. This avoids
+  // the server-side GenerateSpeech round-trip that hung on iOS. onDone fires
+  // when the voice finishes; a timer fallback covers the iOS WKWebView case
+  // where onend occasionally never fires.
+  const speakMaleVoice = (text, onDone) => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { onDone?.(); return; }
+      const synth = window.speechSynthesis;
+      try { synth.cancel(); } catch {}
+      try { synth.getVoices(); } catch {}
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      u.rate = 0.85;
+      u.pitch = 0.3;
+      u.volume = 1;
+      const voices = synth.getVoices();
+      const male = pickMaleVoice(voices);
+      if (male) u.voice = male;
+      let done = false;
+      const finish = () => { if (done) return; done = true; onDone?.(); };
+      const estMs = Math.max(1500, text.length * 180 + 800);
+      const timer = setTimeout(finish, estMs);
+      u.onend = () => { clearTimeout(timer); finish(); };
+      u.onerror = () => { clearTimeout(timer); finish(); };
+      synth.speak(u);
+    } catch { onDone?.(); }
   };
 
   const stepRef = useRef(null);
@@ -217,29 +246,21 @@ export default function AlphabetSweeper() {
     setLockedLetter(letter);
     setCaptured(prev => { const updated = [...prev, letter]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
-    // Let the female voice finish the current letter, then speak the male
-    // trigger voice via GenerateSpeech (high-quality "storm" voice — same as
-    // the Yes/No sweeper). A fixed 5-second window gives the API call + audio
-    // playback time to complete, so the letter is never cut off and the sweep
-    // never freezes waiting for an onend event that may not fire on iOS.
     // Speak the locked letter in a deep male voice via speechSynthesis (same
-    // reliable mechanism as the directions/letters). Low pitch + male system
-    // voice gives a distinct, deep trigger announcement.
-    // Speak the locked letter in a deep male voice — same approach as the
-    // Yes/No/IDK sweeper: speak() from useGhostVoice (GenerateSpeech "storm"
-    // voice via Web Audio, connected to the recording destination).
+    // reliable mechanism as the Term Sweeper). The lock releases and the
+    // alphabet restarts from A when the voice finishes (onDone), with a
+    // timer fallback for the iOS WKWebView case where onend never fires.
     const speakMale = () => {
-      if (!gateNarration(LETTER_TEXT[letter] || letter.toLowerCase())) return;
-      try { speak(LETTER_TEXT[letter] || letter.toLowerCase(), { volume: 1.6 }); spendNarration(1); } catch {}
+      speakMaleVoice(LETTER_TEXT[letter] || letter.toLowerCase(), () => {
+        resumeFromLock();
+      });
     };
     if (femaleBusyRef.current) {
       pendingMaleRef.current = speakMale;
     } else {
       speakMale();
     }
-    if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
-    resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 5000);
-  }, [speak, resumeFromLock]);
+  }, [resumeFromLock]);
 
   const flashMotion = useCallback(() => {
     setMotionDetected(true);
