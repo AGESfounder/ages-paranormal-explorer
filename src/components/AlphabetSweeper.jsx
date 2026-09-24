@@ -252,7 +252,8 @@ export default function AlphabetSweeper() {
     // timer fallback for the iOS WKWebView case where onend never fires.
     const speakMale = () => {
       speakMaleVoice(LETTER_TEXT[letter] || letter.toLowerCase(), () => {
-        resumeFromLock();
+        if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
+        resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 1000);
       });
     };
     if (femaleBusyRef.current) {
