@@ -117,4 +117,4 @@ export const CONCLUSION_PHRASE_RULE = `\nCONCLUSION PHRASE RULE — FOLLOW EXACT
 // are auto-regenerated with the improved prompt when a paid user or admin
 // opens them (one-time, at their energy expense). Once stamped, the tour's
 // stops are permanently upgraded for all users.
-export const STOP_CONTENT_VERSION = 1;
+export const STOP_CONTENT_VERSION = 2;

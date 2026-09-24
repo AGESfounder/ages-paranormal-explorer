@@ -142,7 +142,17 @@ export default function StopDetail() {
           ? `\nOTHER STOPS ON THIS TOUR (for context — this stop is one of several areas within the same location; focus on THIS stop, do not repeat their content):\n${tourContext.siblingStopNames.map(n => `- ${n}`).join('\n')}\n`
           : '';
         const stopFocusRule = isSingleSite
-          ? `\nSTOP-FOCUS RULE — FOLLOW EXACTLY: This is a single-property tour where all stops are rooms, areas, or sections within ONE location. The general property history (construction date, founder, overall significance, Civil War context, etc.) was already covered in the tour introduction above. Do NOT repeat it here. Focus EXCLUSIVELY on what is unique to THIS specific stop — the specific room, area, or section named "${currentStop.name}". What happened HERE? Who was in THIS room? What paranormal activity occurs in THIS specific spot? The historical_info must cover events and details specific to this area, not the building as a whole.\n`
+          ? `\nSTOP-FOCUS RULE — FOLLOW EXACTLY (CRITICAL — THE MOST IMPORTANT RULE IN THIS PROMPT):
+This is a single-property tour where all stops are rooms, areas, or sections within ONE location ("${tourContext.title || ''}"). The general property history — construction date, founder's name, the building's overall significance, Civil War context, the property's timeline — was already covered in the tour introduction above. DO NOT repeat ANY of it here. Every paragraph must be about THIS specific stop, not the building as a whole.
+
+FIRST SENTENCE RULE: Your very first sentence MUST be about THIS specific stop ("${currentStop.name}"), not the property. Do NOT begin with the property name, construction date, founder, or address.
+BAD first sentences (NEVER WRITE THESE): "The [Property Name] was constructed in [year]...", "Originally built by [Founder]...", "The [Property], established in [year]...", "The [Property], located at [address], was originally...", "The [Property] stands as a testament to..."
+GOOD first sentences: "This room served as...", "Within these walls...", "This area was used for...", "The [stop name] witnessed...", "This specific corridor held..."
+
+Focus EXCLUSIVELY on what is unique to THIS specific stop — the specific room, area, or section named "${currentStop.name}". What happened HERE, in this room? Who occupied THIS specific space? What was THIS area used for? What paranormal activity occurs in THIS exact spot? If a sentence is about the property in general (not this specific room/area), DELETE it.
+
+SELF-CHECK before returning: Re-read your historical_info. If any sentence could be moved to a different stop on this tour unchanged (because it's about the general property, not this specific room), DELETE that sentence and replace it with something specific to THIS stop. If any sentence starts with the property name or construction date, DELETE it and start with something about THIS stop.
+`
           : '';
         const singleSiteHistRule = ' — events that occurred in this specific room/area/section, not the property as a whole. Who used THIS room? What was THIS area for? What specific events happened HERE';
         const multiSiteHistRule = " — construction dates and architecture, major historical events that occurred there, notable figures who lived/worked/visited/died there, scandals/murders/tragedies, and the area's significance over time";
@@ -157,8 +167,8 @@ Existing notes: ${(currentStop.historical_info || '')} ${(currentStop.paranormal
 This is a stop on a paranormal tour — do NOT include any conclusion, wrap-up, or ending statements. The tour has a dedicated Conclusion field for all closing remarks.
 
 Produce a JSON object with:
-- historical_info: 4-5 DETAILED paragraphs covering the history SPECIFIC TO THIS STOP${histRule}. Include specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters.
-- paranormal_info: 4-5 DETAILED paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, exact location), shadow figures, cold spots, poltergeist activity, residual vs intelligent hauntings, and local folklore${paraRuleSuffix}. Include investigator testimonies and well-known paranormal events. Tell full ghost stories, not just names.
+- historical_info: 3-4 DETAILED paragraphs covering the history SPECIFIC TO THIS STOP${histRule}. Include specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters. Every paragraph must be about THIS stop, not the property as a whole.
+- paranormal_info: 3-4 DETAILED paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, exact location), shadow figures, cold spots, poltergeist activity, residual vs intelligent hauntings, and local folklore${paraRuleSuffix}. Include investigator testimonies and well-known paranormal events. Tell full ghost stories, not just names. Every paragraph must be about paranormal activity in THIS specific stop, not the property in general.
 - people: array of { name, story }. Include EVERY notable person mentioned in historical_info or paranormal_info. "name" MUST appear verbatim (same spelling/casing) in the text so it can be highlighted. "story": 4-6 detailed sentences — who they were, their role, fate (how they died if relevant), and their paranormal connection (sightings, apparitions, EVPs, phenomena).
 ${BRAND_RULE_STOP}${CONCLUSION_PHRASE_RULE}
 Use real history and paranormal lore for this location. Output ONLY a valid JSON object. No markdown fences, no commentary.`;
