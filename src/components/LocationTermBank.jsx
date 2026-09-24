@@ -242,10 +242,18 @@ ${stopText}`,
       }
 
       // ── Fallback: original geolocation + LLM approach ──
-      const coords = await new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error('no geo'));
-        navigator.geolocation.getCurrentPosition(p => resolve(p.coords), () => reject(new Error('denied')), { timeout: 8000 });
-      });
+      // Hard timeout via Promise.race: in the builder preview iframe (and
+      // some iOS WKWebView states) geolocation is silently blocked by the
+      // permissions policy — neither success nor error fires, so the bare
+      // getCurrentPosition Promise never settles and the spinner hangs
+      // forever. The race guarantees we move on within 10s either way.
+      const coords = await Promise.race([
+        new Promise((resolve, reject) => {
+          if (!navigator.geolocation) return reject(new Error('no geo'));
+          navigator.geolocation.getCurrentPosition(p => resolve(p.coords), () => reject(new Error('denied')), { timeout: 8000, maximumAge: 60000 });
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('geo-timeout')), 10000)),
+      ]);
 
       // Pull nearby AGES ghost tours + their documented stops so the term
       // bank reflects localized paranormal history and the closest tours.
@@ -351,15 +359,29 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     currentWordRef.current = word;
     setCaptured(prev => { const updated = [...prev, { word, at: new Date().toLocaleTimeString() }]; capturedRef.current = updated; return updated; });
     speechStartedRef.current = false;
-    // Let the female voice finish the current word, then speak male
+    // Speak the triggered word in the male voice IMMEDIATELY. We do NOT wait
+    // for the female voice's speechSynthesis onend — on iOS WKWebView that
+    // callback frequently never fires, which left speakMale queued forever
+    // and the word frozen on screen. Cancel the female voice outright
+    // (cutting it off mid-word is the desired "lock" effect) and fire the
+    // male GenerateSpeech voice right now.
+    stopNormalVoice();
     const speakMale = () => {
-      if (!gateNarration(formatForSpeech(word))) return;
+      if (!gateNarration(formatForSpeech(word))) return false;
       try { speak(formatForSpeech(word), {}); spendNarration(1); } catch {}
+      return true;
     };
-    if (femaleBusyRef.current) {
-      pendingMaleRef.current = speakMale;
-    } else {
-      speakMale();
+    const started = speakMale();
+    // Safety net: if the male voice couldn't start (gate blocked or speak
+    // threw), release the lock after a short pause so the word doesn't
+    // freeze on screen forever. The rotation interval is still running
+    // and will resume once lockedRef clears.
+    if (!started) {
+      setTimeout(() => {
+        lockedRef.current = false;
+        lockedWordRef.current = null;
+        setLockedWord(null);
+      }, 1500);
     }
   }, [speak]);
 
