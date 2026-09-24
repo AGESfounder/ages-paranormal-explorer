@@ -110,6 +110,8 @@ const PROPERTY_HISTORY_PATTERNS = [
   /\bstands as (a|the)\s+(sentinel|testament|monument|reminder)\b/i,
   // Name etymology: "earned its name from" / "derived its name from"
   /\b(earned|derived)\s+(its|the)\s+name\s+(from|after)\b/i,
+  // Name etymology (passive voice): "its name is derived from" / "the name was earned from"
+  /\b(its|the)\s+name\s+(is|was)\s+(derived|earned)\s+(from|after)\b/i,
   // Strategic positioning: "strategically positioned/located/situated along"
   /\bstrategically\s+(positioned|located|situated)\b/i,
   // Vital artery/stagecoach: generic property role descriptions
