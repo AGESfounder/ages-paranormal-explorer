@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Printer, Download } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
+import { ArrowLeft } from 'lucide-react';
 
 // ===== DATA (mirrors src/lib/plans.js + base44/shared/plans.js) =====
 const PLANS = [
@@ -577,6 +578,12 @@ export default function PlanAnalysis() {
             <p className="text-sm text-muted-foreground mt-1">Generated {today}</p>
           </div>
           <div className="flex gap-2">
+            <Link
+              to="/dashboard"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-card text-foreground font-heading text-sm uppercase tracking-wider hover:bg-card/60 transition-colors min-h-[44px]"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back
+            </Link>
             <button
               onClick={downloadPDF}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px]"
