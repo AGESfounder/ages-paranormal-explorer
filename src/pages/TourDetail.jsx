@@ -845,11 +845,12 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       for (let i = 0; i < deduped.length; i++) {
         deduped[i].stop_number = i + 1;
       }
-      // Strip conclusion-like opening phrases from all non-final stops.
-      const lastIdx = deduped.length - 1;
+      // Strip conclusion-like phrases from ALL stops — no stop (not even the
+      // final one) may contain conclusion language; the tour's Conclusion
+      // field is the only place for closing statements.
       for (let i = 0; i < deduped.length; i++) {
-        deduped[i].narration_text = stripConclusionOpeners(deduped[i].narration_text, i === lastIdx);
-        deduped[i].paranormal_info = stripConclusionOpeners(deduped[i].paranormal_info, i === lastIdx);
+        deduped[i].narration_text = stripConclusionOpeners(deduped[i].narration_text, false);
+        deduped[i].paranormal_info = stripConclusionOpeners(deduped[i].paranormal_info, false);
       }
       // LLM-generated coordinates are ESTIMATES, not verified. Mark as
       // geocoded: false (amber "EST" badge) so users know to verify at the

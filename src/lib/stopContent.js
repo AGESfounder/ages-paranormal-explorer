@@ -41,8 +41,9 @@ const CONCLUSION_ANYWHERE = [
   /\b(reaches|reaching|nears|nearing|approaches|approaching)\s+(its|a|their)\s+conclusion\b/i,
 ];
 
-// Strip conclusion-like references from a stop's text. Only the final stop
-// on a tour may keep these phrases. Two passes:
+// Strip conclusion-like references from a stop's text. NO stop — not even
+// the final stop — may contain conclusion language. The tour's Conclusion
+// field is the ONLY place wrap-up/closing statements belong. Two passes:
 // 1. Opening pass: removes up to 2 leading sentences (from the first 3) that
 //    begin with a conclusion opener phrase.
 // 2. Anywhere pass: removes ANY sentence (regardless of position) that
@@ -51,8 +52,10 @@ const CONCLUSION_ANYWHERE = [
 //    buries deeper in the narration, not just at the start.
 // If all sentences are stripped (text was entirely conclusion filler),
 // fall back to the original text rather than returning an empty string.
-export function stripConclusionOpeners(text, isFinalStop) {
-  if (!text || isFinalStop) return text;
+// The isFinalStop parameter is accepted for backward compatibility but
+// has no effect — ALL stops are scrubbed.
+export function stripConclusionOpeners(text, isFinalStop = false) {
+  if (!text) return text;
   const sentences = text.match(/[^.!?]+[.!?]+["'\u201d]?\s*/g);
   if (!sentences) return text;
   const filtered = [];
@@ -76,9 +79,11 @@ export function stripConclusionOpeners(text, isFinalStop) {
 
 // Strip conclusion phrases from all three text fields on a stop. Returns an
 // object with only the fields that actually changed (for bulkUpdate / update).
-// If isFinalStop is true, returns an empty object (final stop keeps everything).
-export function stripStopConclusion(stop, isFinalStop) {
-  if (!stop || isFinalStop) return {};
+// NO stop keeps conclusion language — the tour's Conclusion field is the only
+// place for closing statements. The isFinalStop parameter is accepted for
+// backward compatibility but has no effect.
+export function stripStopConclusion(stop, isFinalStop = false) {
+  if (!stop) return {};
   const updates = {};
   const cleanNarration = stripConclusionOpeners(stop.narration_text, false);
   const cleanParanormal = stripConclusionOpeners(stop.paranormal_info, false);
@@ -102,5 +107,6 @@ export const BRAND_RULE_STOP = `\nBRAND RULE — FOLLOW EXACTLY: The app is bran
 export const BRAND_RULE_TOUR = `\nBRAND RULE: The app is branded AGES, which stands for "Accessible Ghost Exploration Solutions" (never "Affordable"). You may use the full expansion "AGES (Accessible Ghost Exploration Solutions)" in the tour's introduction and conclusion. However, in STOP content (narration_text, paranormal_info, historical_info), use ONLY the abbreviation "AGES" — never write out the full expansion in stops. The full expansion in every stop is repetitive; "AGES" alone is correct for stops.`;
 
 // Shared prompt instruction block — append to any stop-generation prompt
-// so the LLM reserves conclusion phrasing for the final stop only.
-export const CONCLUSION_PHRASE_RULE = `\nCONCLUSION PHRASE RULE — FOLLOW EXACTLY: For any stop that is NOT the last stop on the tour, do NOT include ANY references to the tour ending, wrapping up, concluding, finishing, or coming to a close — not just at the beginning, but ANYWHERE in the narration_text, paranormal_info, or historical_info. This means: no "as we end our tour", no "where the tour concludes", no "our final stop", no "this final stop", no "as we wrap up", no "before we finish", no "the cellar where our tour ends", no "bringing our investigation to a close", and no similar phrasing anywhere in the text — beginning, middle, or end. Each non-final stop must focus ENTIRELY on its own haunted history and paranormal activity as if it is a standalone story. Only the LAST stop on the tour may reference the tour ending or use wrap-up / conclusion language.`;
+// so the LLM never includes conclusion language in stop content. The tour's
+// Conclusion field is the ONLY place closing statements belong.
+export const CONCLUSION_PHRASE_RULE = `\nCONCLUSION PHRASE RULE — FOLLOW EXACTLY: Do NOT include ANY conclusion, wrap-up, or ending statements in ANY stop's narration_text, paranormal_info, or historical_info — not even the last stop. The tour has a dedicated Conclusion field where all closing remarks belong. This means: no "as we end our tour", no "we conclude", no "final stop", no "last stop", no "finish", no "wrapping up", no "to conclude", no "in conclusion", no "bringing our investigation to a close", no "our tour ends here", no "as we wrap up", and no similar phrasing ANYWHERE in the text — beginning, middle, or end. Each stop must focus ENTIRELY on its own haunted history and paranormal activity as if it is a standalone story. The tour's Conclusion field handles all wrap-up language.`;
