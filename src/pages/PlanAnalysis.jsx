@@ -26,6 +26,30 @@ const CREDITS_PER_MANIFESTATION = 3;   // 1 InvokeLLM call (Automatic model) = ~
 const CREDITS_PER_NARRATION = 1;       // 1 narration energy = 1 GenerateSpeech credit
 const COST_PER_CREDIT = 0.004;         // Builder plan: $40/mo ÷ 10,000 included credits
 
+// Two-pass stop enrichment (Sept 2026): single-site tours (landmark, ship,
+// cold_spot) now run a second LLM pass (rewriteForStopFocus) to remove general
+// property history and keep stop-specific content. This doubles the InvokeLLM
+// cost per enrichment for those tours. Area/road_trip tours are unchanged
+// (1 pass). The user still pays 1 manifestation energy per stop — the extra
+// cost is borne by the app owner, not the user.
+const ENRICHMENT_CREDITS_SINGLE_SITE = CREDITS_PER_MANIFESTATION * 2; // 6 credits (2 passes)
+const ENRICHMENT_CREDITS_MULTI_SITE = CREDITS_PER_MANIFESTATION;      // 3 credits (1 pass)
+const SINGLE_SITE_FRACTION = 0.6;     // ~60% of tours are single-site (landmark/ship/cold_spot)
+const AVG_ENRICHMENT_CREDITS = Math.round(
+  ENRICHMENT_CREDITS_SINGLE_SITE * SINGLE_SITE_FRACTION +
+  ENRICHMENT_CREDITS_MULTI_SITE * (1 - SINGLE_SITE_FRACTION)
+); // ~5 credits (blended average)
+
+// Blended manifestation credit rate: enrichment is ~50% of manifestation calls,
+// and enrichment now averages 5 credits vs 3 for other actions. The blended
+// rate rises from 3 to ~4 credits per manifestation energy unit. This drives
+// the per-plan and scenario profit analysis below.
+const ENRICHMENT_CALL_FRACTION = 0.5;
+const BLENDED_MANIFESTATION_CREDITS = Math.round(
+  CREDITS_PER_MANIFESTATION * (1 - ENRICHMENT_CALL_FRACTION) +
+  AVG_ENRICHMENT_CREDITS * ENRICHMENT_CALL_FRACTION
+); // ~4 credits (blended)
+
 // Base44 plan tiers and their monthly integration credit allowances
 const BASE44_PLANS = [
   { name: 'Builder', monthlyCost: 40, credits: 10000, costPerCredit: 40 / 10000 },
@@ -67,7 +91,7 @@ const AD_REWARD_ENERGY = 10;           // energy granted per ad (matches base44/
 const AD_REWARD_NARRATION = 8;        // 80% narration
 const AD_REWARD_MANIFESTATION = 2;    // 20% manifestation
 const AD_REWARD_CREDITS_PER_AD = AD_REWARD_NARRATION * CREDITS_PER_NARRATION
-  + AD_REWARD_MANIFESTATION * CREDITS_PER_MANIFESTATION; // 8 + 6 = 14 credits if fully consumed
+  + AD_REWARD_MANIFESTATION * BLENDED_MANIFESTATION_CREDITS; // 8 + 8 = 16 credits (blended 2-pass enrichment)
 const AD_REWARD_UTILIZATION = 0.7;    // % of granted energy actually consumed by the user
 const AD_REWARD_REV_PER_PAID_USER_MO = ADS_PER_PAID_USER_MO * ADMOB_REWARDED_PER_IMPRESSION;
 const AD_REWARD_COST_PER_PAID_USER_MO = ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION * COST_PER_CREDIT;
@@ -128,7 +152,7 @@ const CREDIT_AUDIT = [
   { action: 'Abroad Tour Creation', page: 'Abroad Tours → Create', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
   { action: 'Auto Stop Generation (no stops)', page: 'Tour Detail (auto)', type: 'Manifest.', integration: 'InvokeLLM (automatic)', credits: '2–4', gated: 'Yes' },
   { action: 'Add Stops to Tour', page: 'Tour Card → Add Stops', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
-  { action: 'Stop Enrichment (thin content)', page: 'Stop Detail (auto, 1st view)', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3–6', gated: 'Yes' },
+  { action: 'Stop Enrichment (thin content, 2-pass for single-site)', page: 'Stop Detail (auto, 1st view)', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web) + rewrite pass (single-site only)', credits: '3–6 (6 = single-site 2-pass)', gated: 'Yes' },
   { action: 'People Extraction (rich content)', page: 'Stop Detail (auto, 1st view)', type: 'Manifest.', integration: 'InvokeLLM (automatic)', credits: '2', gated: 'Yes' },
   { action: 'Haunted Locations Discovery', page: 'Home → Nearby/Zip search', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash + web)', credits: '3', gated: 'Yes' },
   { action: 'Term Sweeper → Build Terms (stop)', page: 'Toolkit → Term Sweeper', type: 'Manifest.', integration: 'InvokeLLM (gemini_3_flash)', credits: '3', gated: 'Yes' },
@@ -154,19 +178,23 @@ const CREDIT_AUDIT = [
 // Worst-case monthly cost per active paid user (energy-limited)
 const UNGATED_WORST_CASE = {
   manifestationCalls: 32, narrationCalls: 40, narrationAvgCredits: 20,
-  totalCredits: 32 * 3 + 40 * 20, // 896
-  monthlyCost: (32 * 3 + 40 * 20) * COST_PER_CREDIT,
+  // 16 of 32 manifestation calls are enrichments at ~5 credits (blended 2-pass);
+  // other 16 at 3 credits. Man: 16*5 + 16*3 = 128. Narration: 40*20 = 800. Total: 928.
+  totalCredits: 16 * AVG_ENRICHMENT_CREDITS + 16 * CREDITS_PER_MANIFESTATION + 40 * 20,
+  monthlyCost: (16 * AVG_ENRICHMENT_CREDITS + 16 * CREDITS_PER_MANIFESTATION + 40 * 20) * COST_PER_CREDIT,
 };
 // Typical monthly cost per active paid user (energy-limited)
 const UNGATED_TYPICAL = {
   manifestationCalls: 10, narrationCalls: 10, narrationAvgCredits: 15,
-  totalCredits: 10 * 3 + 10 * 15, // 180
-  monthlyCost: (10 * 3 + 10 * 15) * COST_PER_CREDIT,
+  // 5 of 10 manifestation calls are enrichments at ~5 credits (blended 2-pass);
+  // other 5 at 3 credits. Man: 5*5 + 5*3 = 40. Narration: 10*15 = 150. Total: 190.
+  totalCredits: 5 * AVG_ENRICHMENT_CREDITS + 5 * CREDITS_PER_MANIFESTATION + 10 * 15,
+  monthlyCost: (5 * AVG_ENRICHMENT_CREDITS + 5 * CREDITS_PER_MANIFESTATION + 10 * 15) * COST_PER_CREDIT,
 };
 
 // Itemized per-action breakdown of credits saved by gating for a typical free (Observer) user.
 const FREE_USER_BREAKDOWN = [
-  { action: 'Stop Enrichment (thin content)', trigger: 'Auto — fires on 1st stop view', freq: 7, creditsEach: 3, type: 'Manifest.', fix: 'Gate: require Explorer+ to trigger enrichment' },
+  { action: 'Stop Enrichment (thin content, 2-pass for single-site)', trigger: 'Auto — fires on 1st stop view', freq: 7, creditsEach: AVG_ENRICHMENT_CREDITS, type: 'Manifest.', fix: 'Gate: require Explorer+ to trigger enrichment' },
   { action: 'People Extraction (rich content)', trigger: 'Auto — fires on 1st stop view', freq: 3, creditsEach: 2, type: 'Manifest.', fix: 'Gate: require Explorer+ to extract people' },
   { action: 'Custom Tour Creation', trigger: 'User taps Create Tour', freq: 1, creditsEach: 3, type: 'Manifest.', fix: 'Gate: require Explorer+ manifestation energy' },
   { action: 'Haunted Locations Discovery', trigger: 'User searches nearby/zip', freq: 2, creditsEach: 3, type: 'Manifest.', fix: 'Gate: require Explorer+ to search' },
@@ -185,7 +213,9 @@ const FREE_USER_BREAKDOWN_TOTAL = FREE_USER_BREAKDOWN.reduce((sum, r) => sum + r
 const FREE_USER_BREAKDOWN_COST = FREE_USER_BREAKDOWN_TOTAL * COST_PER_CREDIT;
 
 function calcCosts(manE, narE, months) {
-  const credits = (manE * CREDITS_PER_MANIFESTATION + narE * CREDITS_PER_NARRATION) * months;
+  // Uses BLENDED_MANIFESTATION_CREDITS to account for two-pass enrichment
+  // (single-site tours cost 2× InvokeLLM credits per manifestation energy).
+  const credits = (manE * BLENDED_MANIFESTATION_CREDITS + narE * CREDITS_PER_NARRATION) * months;
   const platformCost = credits * COST_PER_CREDIT;
   return { credits, platformCost };
 }
@@ -380,14 +410,15 @@ function downloadPDF() {
   para(`AdMob Interstitial: $${ADMOB_ECPM}/1k impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para(`AdMob Rewarded: $${ADMOB_REWARDED_ECPM}/1k impressions. Paid users watch ~${ADS_PER_PAID_USER_MO} ads/mo for +${AD_REWARD_ENERGY} energy each. Ad rev: $${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Energy cost: ${AD_REWARD_CREDITS_PER_AD} credits/ad × ${Math.round(AD_REWARD_UTILIZATION * 100)}% utilization × $${COST_PER_CREDIT.toFixed(4)} = $${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Net: $${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(3)}/paid user/mo (retention investment, not profit).`);
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
+  para(`Two-Pass Stop Enrichment (Sept 2026): Single-site tours (landmark, ship, cold_spot) now run a second LLM pass (rewriteForStopFocus) to remove general property history and keep stop-specific content. This doubles the enrichment cost to ~${ENRICHMENT_CREDITS_SINGLE_SITE} credits for those tours (was ${ENRICHMENT_CREDITS_MULTI_SITE}). Area/road_trip tours are unchanged (1 pass, ${ENRICHMENT_CREDITS_MULTI_SITE} credits). The user still pays 1 manifestation energy per stop — the extra cost is borne by the app owner. Blended average: ~${AVG_ENRICHMENT_CREDITS} credits/enrichment. Blended manifestation rate: ~${BLENDED_MANIFESTATION_CREDITS} credits/manifestation energy (was ${CREDITS_PER_MANIFESTATION}). One-time content_version upgrade: old tours regenerate at 2× cost when first opened by a paid user/admin.`);
 
   heading('3a. Base44 Credit Capacity — When to Upgrade');
   para('Integration credits are hard-capped per plan. Actions FAIL when exhausted — no pay-per-credit overflow.');
-  para('Builder ($40/mo, 10k credits): ~19 Explorer, ~6 Investigator, ~6 Trailblazer users at 100% utilization');
-  para('Pro ($80/mo, 20k credits): ~38 Explorer, ~12 Investigator, ~12 Trailblazer users at 100% utilization');
-  para('At 50% realistic utilization: Builder supports ~38 Explorer, ~12 Investigator, ~12 Trailblazer');
+  para(`Builder ($40/mo, 10k credits): ~${Math.floor(10000 / (5 * BLENDED_MANIFESTATION_CREDITS + 500))} Explorer, ~${Math.floor(10000 / (15 * BLENDED_MANIFESTATION_CREDITS + 1500))} Investigator, ~${Math.floor(10000 / (15 * BLENDED_MANIFESTATION_CREDITS + 1500))} Trailblazer users at 100% utilization`);
+  para(`Pro ($80/mo, 20k credits): ~${Math.floor(20000 / (5 * BLENDED_MANIFESTATION_CREDITS + 500))} Explorer, ~${Math.floor(20000 / (15 * BLENDED_MANIFESTATION_CREDITS + 1500))} Investigator, ~${Math.floor(20000 / (15 * BLENDED_MANIFESTATION_CREDITS + 1500))} Trailblazer users at 100% utilization`);
+  para(`At 50% realistic utilization: Builder supports ~${Math.floor(10000 / ((5 * BLENDED_MANIFESTATION_CREDITS + 500) * 0.5))} Explorer, ~${Math.floor(10000 / ((15 * BLENDED_MANIFESTATION_CREDITS + 1500) * 0.5))} Investigator, ~${Math.floor(10000 / ((15 * BLENDED_MANIFESTATION_CREDITS + 1500) * 0.5))} Trailblazer`);
   para('Free (Observer) users are gated — they consume 0 credits. Only paid-user credits determine the required plan tier.');
-  para('Upgrade Builder→Pro at ~19 active Explorer users; Pro→Elite at ~38');
+  para(`Upgrade Builder→Pro at ~${Math.floor(10000 / (5 * BLENDED_MANIFESTATION_CREDITS + 500))} active Explorer users; Pro→Elite at ~${Math.floor(20000 / (5 * BLENDED_MANIFESTATION_CREDITS + 500))}`);
 
   heading('3b. Full Narration Cost Per Tour (All Tabs)');
   para(`Per stop: Ghost Story ~6 credits + History ~20 + Paranormal ~20 + Investigate ~6 = ${NARRATION_PER_STOP} credits/stop`);
@@ -489,6 +520,7 @@ function downloadPDF() {
   para('Annual plans improve cash flow and reduce per-transaction store fee burden (one charge vs. twelve).');
   para('TOOLKIT VISIBILITY (Sept 2026): All 12 tools now visible to all users. Observer/Explorer see locked tools with upgrade prompts. Zero direct cost change — gating blocks consumption. Conversion funnel improvement: lower-tier users now see Term Sweeper, Alphabet Sweeper, Anomaly Camera, Vibration Communicator. See section 3e.');
   para('COMMUNITY MAP (Sept 2026): Author names resolve via backend function (no credit cost). Stacked markers grouped by coordinate. Sign-in simplified: Google/Apple OAuth removed — email/password only.');
+  para(`TWO-PASS ENRICHMENT (Sept 2026): Single-site tours (landmark, ship, cold_spot) now run a second LLM pass (rewriteForStopFocus) to remove general property history and keep stop-specific content. This doubles the enrichment cost to ~${ENRICHMENT_CREDITS_SINGLE_SITE} credits for those tours. The user still pays 1 manifestation energy per stop — the extra cost is borne by the app owner. Blended average: ~${AVG_ENRICHMENT_CREDITS} credits/enrichment (was ${ENRICHMENT_CREDITS_MULTI_SITE}). Blended manifestation rate: ~${BLENDED_MANIFESTATION_CREDITS} credits/manifestation energy (was ${CREDITS_PER_MANIFESTATION}). One-time content_version upgrade: old tours regenerate at 2× cost when first opened by a paid user/admin — budget for a one-time credit spike when rolling out the new prompt.`);
 
   doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
   if (y > 760) { doc.addPage(); y = 50; }
@@ -618,6 +650,7 @@ export default function PlanAnalysis() {
             <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
             <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis shows 100% utilization (worst case) and 50–70% (realistic average).</p>
             <p className="print-text text-xs font-semibold text-green-500 mt-2">✓ Energy gating is now implemented. All actions below are gated — free (Observer) users are blocked, and paid users are limited by their monthly energy allotment. Costs shown reflect gated usage.</p>
+            <p className="print-text text-xs mt-2"><span className="font-semibold text-amber-500">⚠ Two-Pass Stop Enrichment (Sept 2026):</span> Single-site tours (landmark, ship, cold_spot) now run a <span className="font-semibold">second LLM pass</span> (rewriteForStopFocus) to remove general property history and keep stop-specific content. This doubles the enrichment cost to ~{ENRICHMENT_CREDITS_SINGLE_SITE} credits for those tours (was {ENRICHMENT_CREDITS_MULTI_SITE}). Area/road_trip tours are unchanged (1 pass). <span className="font-semibold">The user still pays 1 manifestation energy per stop</span> — the extra cost is borne by the app owner. Blended average: ~{AVG_ENRICHMENT_CREDITS} credits/enrichment. Blended manifestation rate: ~{BLENDED_MANIFESTATION_CREDITS} credits/manifestation energy (was {CREDITS_PER_MANIFESTATION}). One-time content_version upgrade: old tours regenerate at 2× cost when first opened by a paid user/admin.</p>
           </div>
         </section>
 
@@ -640,9 +673,9 @@ export default function PlanAnalysis() {
               </thead>
               <tbody>
                 {BASE44_PLANS.map(p => {
-                  const explorerCredits = 5 * 3 + 500; // 515
-                  const investigatorCredits = 15 * 3 + 1500; // 1545
-                  const trailblazerCredits = 15 * 3 + 1500; // 1545 (same as Investigator)
+                  const explorerCredits = 5 * BLENDED_MANIFESTATION_CREDITS + 500; // 520
+                  const investigatorCredits = 15 * BLENDED_MANIFESTATION_CREDITS + 1500; // 1560
+                  const trailblazerCredits = 15 * BLENDED_MANIFESTATION_CREDITS + 1500; // 1560 (same as Investigator)
                   return (
                     <tr key={p.name}>
                       <td className={`${td} font-semibold print-text`}>{p.name}</td>
@@ -661,8 +694,8 @@ export default function PlanAnalysis() {
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-3 rounded-lg bg-card/40 border border-border/40">
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">At 50% Realistic Utilization</p>
-              <p className="text-sm print-text mt-1">Builder (10k credits) supports: ~{Math.floor(10000 / (515 * 0.5))} Explorer, ~{Math.floor(10000 / (1545 * 0.5))} Investigator, ~{Math.floor(10000 / (1545 * 0.5))} Trailblazer users</p>
-              <p className="text-sm print-text">Pro (20k credits) supports: ~{Math.floor(20000 / (515 * 0.5))} Explorer, ~{Math.floor(20000 / (1545 * 0.5))} Investigator, ~{Math.floor(20000 / (1545 * 0.5))} Trailblazer users</p>
+              <p className="text-sm print-text mt-1">Builder (10k credits) supports: ~{Math.floor(10000 / ((5 * BLENDED_MANIFESTATION_CREDITS + 500) * 0.5))} Explorer, ~{Math.floor(10000 / ((15 * BLENDED_MANIFESTATION_CREDITS + 1500) * 0.5))} Investigator, ~{Math.floor(10000 / ((15 * BLENDED_MANIFESTATION_CREDITS + 1500) * 0.5))} Trailblazer users</p>
+              <p className="text-sm print-text">Pro (20k credits) supports: ~{Math.floor(20000 / ((5 * BLENDED_MANIFESTATION_CREDITS + 500) * 0.5))} Explorer, ~{Math.floor(20000 / ((15 * BLENDED_MANIFESTATION_CREDITS + 1500) * 0.5))} Investigator, ~{Math.floor(20000 / ((15 * BLENDED_MANIFESTATION_CREDITS + 1500) * 0.5))} Trailblazer users</p>
             </div>
             <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/30">
               <p className="text-[10px] font-heading uppercase tracking-wider text-green-500">Upgrade Triggers (100% Util)</p>
@@ -1221,6 +1254,7 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold text-green-500">✓ Toolkit visibility change (Sept 2026):</span> All 12 tools are now visible to every user — Observer and Explorer users see the full toolkit including Term Sweeper, Alphabet Sweeper, Anomaly Camera, and Vibration Communicator. Tapping a locked tool shows an upgrade prompt. This is a conversion funnel improvement with zero direct cost increase — gating still blocks credit consumption. The 4 newly-visible tools include 2 that consume credits (Term Sweeper: 3 + 1/trigger, Alphabet Sweeper: 1/trigger) and 2 that are sensor-only (Vibration Communicator, Anomaly Camera: 0 credits). See section 3e.</p>
             <p>• <span className="font-semibold text-green-500">✓ Community Map improvements (Sept 2026):</span> Author names now resolve via a service-role backend function (display_name → full_name → "Explorer" fallback), and stacked evidence markers at the same coordinates are grouped with a count badge. No credit cost impact — name resolution uses User.get() (no InvokeLLM), and marker grouping is client-side.</p>
             <p>• <span className="font-semibold">Sign-in simplified (Sept 2026):</span> Google and Apple OAuth buttons removed from Login and Register pages — email/password only. Reduces auth complexity and potential confusion. No cost impact.</p>
+            <p>• <span className="font-semibold text-amber-500">⚠ Two-pass stop enrichment (Sept 2026):</span> Single-site tours (landmark, ship, cold_spot) now run a second LLM pass (rewriteForStopFocus) to remove general property history and keep stop-specific content. This doubles the enrichment cost to ~{ENRICHMENT_CREDITS_SINGLE_SITE} credits for those tours. The user still pays 1 manifestation energy per stop — the <span className="font-semibold">extra cost is borne by the app owner</span>, not the user. Blended average: ~{AVG_ENRICHMENT_CREDITS} credits/enrichment (was {ENRICHMENT_CREDITS_MULTI_SITE}). Blended manifestation rate: ~{BLENDED_MANIFESTATION_CREDITS} credits/manifestation energy (was {CREDITS_PER_MANIFESTATION}). One-time content_version upgrade: old tours regenerate at 2× cost when first opened by a paid user/admin — budget for a one-time credit spike when rolling out the new prompt.</p>
           </div>
         </section>
 
