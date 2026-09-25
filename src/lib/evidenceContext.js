@@ -5,13 +5,16 @@ import { getDevicePosition } from '@/lib/deviceCapabilities';
  * Captures the current device GPS coordinates.
  * Returns { latitude, longitude } or null if unavailable/denied.
  */
-export function captureGPS() {
-  return getDevicePosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 })
-    .then((result) => {
-      if (!result?.ok) return null;
-      return { latitude: result.coords.lat, longitude: result.coords.lng };
-    })
-    .catch(() => null);
+export async function captureGPS() {
+  // First attempt: high accuracy, 8s timeout. If that fails (weak signal,
+  // indoor use, timeout), retry with low accuracy and a longer timeout so
+  // we still get approximate coordinates rather than none at all.
+  let result = await getDevicePosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
+  if (!result?.ok) {
+    result = await getDevicePosition({ enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+  }
+  if (!result?.ok) return null;
+  return { latitude: result.coords.lat, longitude: result.coords.lng };
 }
 
 /**
