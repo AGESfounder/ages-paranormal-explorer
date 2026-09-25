@@ -88,7 +88,7 @@ export default function Evidence() {
     personal_experience: 0,
     latitude: initialLat,
     longitude: initialLng,
-    is_private: false,
+    is_private: true,
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -172,7 +172,7 @@ export default function Evidence() {
       personal_experience: 0,
       latitude: initialLat,
       longitude: initialLng,
-      is_private: false,
+      is_private: true,
     });
     setOtherDeviceText('');
     setEquipmentOpen(false);
@@ -224,7 +224,7 @@ export default function Evidence() {
         : await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
       setStopEvidences(stopData);
     } else {
-      setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0, latitude: '', longitude: '' });
+      setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0, latitude: '', longitude: '', is_private: true });
       setOtherDeviceText('');
       setEquipmentOpen(false);
       setShowForm(false);
