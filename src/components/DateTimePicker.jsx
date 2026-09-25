@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 const MONTHS = [
@@ -84,17 +84,40 @@ function MiniSelect({ value, onChange, options }) {
 }
 
 export default function DateTimePicker({ date, time, onChange }) {
-  const d = parseDate(date);
-  const t = parseTime(time);
+  // Internal state preserves partial selections (e.g., month selected but
+  // day/year not yet) so the dropdowns don't reset when the composed string
+  // is still empty.
+  const [d, setD] = useState(() => parseDate(date));
+  const [t, setT] = useState(() => parseTime(time));
+
+  // Refs let the sync effects read the latest internal state without adding
+  // it to the dependency array (which would cause unwanted resets).
+  const dRef = useRef(d);
+  dRef.current = d;
+  const tRef = useRef(t);
+  tRef.current = t;
+
+  // Sync from parent when the prop changes externally (form reset, auto-fill).
+  // When the change originated from our own onChange, the composed value
+  // matches the prop, so we skip and keep the user's partial selection.
+  useEffect(() => {
+    if (composeDate(dRef.current) !== date) setD(parseDate(date));
+  }, [date]);
+
+  useEffect(() => {
+    if (composeTime(tRef.current) !== time) setT(parseTime(time));
+  }, [time]);
 
   const updateDate = (field, value) => {
     const newParts = { ...d, [field]: value };
-    onChange({ date: composeDate(newParts), time });
+    setD(newParts);
+    onChange({ date: composeDate(newParts), time: composeTime(t) });
   };
 
   const updateTime = (field, value) => {
     const newParts = { ...t, [field]: value };
-    onChange({ date, time: composeTime(newParts) });
+    setT(newParts);
+    onChange({ date: composeDate(d), time: composeTime(newParts) });
   };
 
   return (
