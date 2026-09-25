@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3, MapPin, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
-import { captureGPS } from '@/lib/evidenceContext';
+import { captureGPS, geocodeAddress } from '@/lib/evidenceContext';
 import EquipmentSelectDrawer from '@/components/EquipmentSelectDrawer';
+import DateTimePicker from '@/components/DateTimePicker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -178,7 +179,15 @@ export default function Evidence() {
   };
 
   const handleSubmit = async () => {
-    if (!form.title.trim()) return;
+    if (!form.title.trim()) {
+      setSubmitError('Please enter a title for this evidence entry.');
+      return;
+    }
+    if (!form.date || !form.time) {
+      setSubmitError('Please fill in all date and time fields.');
+      return;
+    }
+    setSubmitError(null);
     setSubmitting(true);
     const payload = { ...form };
     if (payload.equipment.includes('Other') && otherDeviceText.trim()) {
@@ -188,6 +197,15 @@ export default function Evidence() {
     // string values for latitude/longitude (schema type: number).
     if (typeof payload.latitude !== 'number') payload.latitude = null;
     if (typeof payload.longitude !== 'number') payload.longitude = null;
+    // If no coordinates but we have a manual address, geocode it so the
+    // evidence appears on the community map.
+    if (payload.latitude == null && payload.longitude == null && payload.location_name) {
+      const coords = await geocodeAddress(payload.location_name);
+      if (coords) {
+        payload.latitude = coords.latitude;
+        payload.longitude = coords.longitude;
+      }
+    }
     try {
       await base44.entities.Evidence.create(payload);
     } catch (err) {
@@ -235,16 +253,11 @@ export default function Evidence() {
         <div className="px-4 pb-28 space-y-4 pt-3">
 
           {/* Date + Time (auto-filled) */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Date</label>
-              <Input value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="bg-card/50 border-border/50" />
-            </div>
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Time</label>
-              <Input value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="bg-card/50 border-border/50" />
-            </div>
-          </div>
+          <DateTimePicker
+            date={form.date}
+            time={form.time}
+            onChange={({ date, time }) => setForm(prev => ({ ...prev, date, time }))}
+          />
 
           {/* Location (auto-filled) */}
           <div>
@@ -448,16 +461,11 @@ export default function Evidence() {
         <div className="px-4 pb-28 space-y-4 pt-3">
 
           {/* Date + Time */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Date</label>
-              <Input value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="bg-card/50 border-border/50" />
-            </div>
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Time</label>
-              <Input value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="bg-card/50 border-border/50" />
-            </div>
-          </div>
+          <DateTimePicker
+            date={form.date}
+            time={form.time}
+            onChange={({ date, time }) => setForm(prev => ({ ...prev, date, time }))}
+          />
 
           {/* Location Picker — GPS capture or manual address entry */}
           <LocationPicker

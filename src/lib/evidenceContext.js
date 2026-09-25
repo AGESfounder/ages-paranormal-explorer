@@ -61,6 +61,25 @@ export async function reverseGeocodePlace(lat, lon) {
   }
 }
 
+/**
+ * Forward-geocode a typed address to GPS coordinates using Nominatim.
+ * Returns { latitude, longitude } or null if geocoding fails.
+ */
+export async function geocodeAddress(address) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.length > 0) {
+      return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function buildEvidenceContext(overrides = {}) {
   const [gps, activeCtx] = await Promise.all([captureGPS(), getActiveContext()]);
   const ctx = {};
