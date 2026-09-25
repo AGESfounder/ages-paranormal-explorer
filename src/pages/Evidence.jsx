@@ -14,6 +14,7 @@ import { base44 } from '@/api/base44Client';
 import PullToRefresh from '@/components/PullToRefresh';
 import BePatient from '@/components/BePatient';
 import EvidenceMiniMap from '@/components/EvidenceMiniMap';
+import LocationPicker from '@/components/LocationPicker';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
@@ -89,6 +90,7 @@ export default function Evidence() {
     is_private: false,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [gpsCapturing, setGpsCapturing] = useState(false);
   const [expandedMapId, setExpandedMapId] = useState(null);
@@ -182,7 +184,18 @@ export default function Evidence() {
     if (payload.equipment.includes('Other') && otherDeviceText.trim()) {
       payload.equipment = payload.equipment.map(e => e === 'Other' ? 'Other: ' + otherDeviceText.trim() : e);
     }
-    await base44.entities.Evidence.create(payload);
+    // Convert empty strings to null for number fields — the backend rejects
+    // string values for latitude/longitude (schema type: number).
+    if (typeof payload.latitude !== 'number') payload.latitude = null;
+    if (typeof payload.longitude !== 'number') payload.longitude = null;
+    try {
+      await base44.entities.Evidence.create(payload);
+    } catch (err) {
+      setSubmitting(false);
+      setSubmitError(err?.response?.data?.detail || err?.message || 'Failed to save evidence. Please try again.');
+      return;
+    }
+    setSubmitError(null);
     setSubmitting(false);
 
     if (cameFromStop) {
@@ -368,6 +381,7 @@ export default function Evidence() {
             <Input placeholder="Name this evidence entry" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="bg-card/50 border-border/50" />
           </div>
 
+          {submitError && <p className="text-[11px] text-red-400/80 text-center">{submitError}</p>}
           <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-heading uppercase tracking-wider">
             {submitting ? <BePatient /> : 'Save Evidence'}
           </Button>
@@ -445,30 +459,18 @@ export default function Evidence() {
             </div>
           </div>
 
-          {/* Location */}
-          <div>
-            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Location</label>
-            <Input value={form.location_name} onChange={e => setForm({...form, location_name: e.target.value})} placeholder="Where did this evidence come from?" className="bg-card/50 border-border/50" />
-          </div>
-
-          {/* GPS Location */}
-          <div>
-            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1.5">GPS Location</label>
-            {form.latitude && form.longitude ? (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                <MapPin className="w-4 h-4 text-primary shrink-0" />
-                <span className="text-xs text-primary flex-1">{Number(form.latitude).toFixed(5)}, {Number(form.longitude).toFixed(5)}</span>
-                <button onClick={captureLocation} disabled={gpsCapturing} className="text-[10px] text-muted-foreground hover:text-primary transition-colors">
-                  {gpsCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
-                </button>
-              </div>
-            ) : (
-              <button onClick={captureLocation} disabled={gpsCapturing} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/60 bg-card/30 text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50">
-                {gpsCapturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
-                <span className="text-xs font-heading uppercase tracking-wider">{gpsCapturing ? 'Capturing GPS…' : 'Capture My Location'}</span>
-              </button>
-            )}
-          </div>
+          {/* Location Picker — GPS capture or manual address entry */}
+          <LocationPicker
+            latitude={form.latitude}
+            longitude={form.longitude}
+            locationName={form.location_name}
+            onChange={({ latitude, longitude, location_name }) => setForm(prev => ({
+              ...prev,
+              latitude,
+              longitude,
+              location_name,
+            }))}
+          />
 
           {/* Privacy Toggle */}
           <button
@@ -580,6 +582,7 @@ export default function Evidence() {
             <Input placeholder="Name this evidence entry" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="bg-card/50 border-border/50" />
           </div>
 
+          {submitError && <p className="text-[11px] text-red-400/80 text-center">{submitError}</p>}
           <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-heading uppercase tracking-wider">
             {submitting ? <BePatient /> : 'Save Evidence'}
           </Button>

@@ -42,7 +42,7 @@ export async function getActiveContext() {
  * into the Evidence.create payload. Existing fields on the payload (e.g.
  * a tool-specific location_name) take precedence — this only fills gaps.
  */
-async function reverseGeocodePlace(lat, lon) {
+export async function reverseGeocodePlace(lat, lon) {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=14`;
     const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
