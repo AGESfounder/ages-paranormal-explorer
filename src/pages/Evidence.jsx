@@ -474,7 +474,7 @@ export default function Evidence() {
                         className={`mt-2 ml-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${e.is_private ? 'border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40' : 'border-primary/30 text-primary bg-primary/5'}`}
                       >
                         {e.is_private ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                        {e.is_private ? 'Share to Community' : 'Make Private'}
+                        {e.is_private ? 'Make Public' : 'Make Private'}
                       </button>
                     </motion.div>
                   );
@@ -709,7 +709,7 @@ export default function Evidence() {
                   className={`mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${e.is_private ? 'border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40' : 'border-primary/30 text-primary bg-primary/5'}`}
                 >
                   {e.is_private ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                  {e.is_private ? 'Share to Community' : 'Make Private'}
+                  {e.is_private ? 'Make Public' : 'Make Private'}
                 </button>
               </motion.div>
             );
