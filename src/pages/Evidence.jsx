@@ -245,6 +245,34 @@ export default function Evidence() {
     }
   };
 
+  const refreshStopEvidences = async () => {
+    const me = await base44.auth.me().catch(() => null);
+    const stopData = me?.id
+      ? await base44.entities.Evidence.filter({ stop_id: stopId, created_by_id: me.id }, '-created_date')
+      : await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
+    setStopEvidences(stopData);
+  };
+
+  const handleToggleShare = async (e) => {
+    const makingPublic = e.is_private;
+    const updates = { is_private: !e.is_private };
+    // When sharing, ensure coordinates so the evidence appears on the
+    // community map — geocode from the location name if needed.
+    if (makingPublic && e.latitude == null && e.longitude == null && e.location_name) {
+      const coords = await geocodeAddress(e.location_name);
+      if (coords) {
+        updates.latitude = coords.latitude;
+        updates.longitude = coords.longitude;
+      }
+    }
+    await base44.entities.Evidence.update(e.id, updates);
+    if (cameFromStop) {
+      refreshStopEvidences();
+    } else {
+      loadEvidence();
+    }
+  };
+
   // ── Stop-based evidence view (form + numbered entries) ──
   if (cameFromStop) {
     return (
@@ -441,6 +469,13 @@ export default function Evidence() {
                           )}
                         </div>
                       )}
+                      <button
+                        onClick={() => handleToggleShare(e)}
+                        className={`mt-2 ml-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${e.is_private ? 'border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40' : 'border-primary/30 text-primary bg-primary/5'}`}
+                      >
+                        {e.is_private ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                        {e.is_private ? 'Share to Community' : 'Make Private'}
+                      </button>
                     </motion.div>
                   );
                 })}
@@ -669,6 +704,13 @@ export default function Evidence() {
                 {e.file_url && e.type === 'photo' && <img src={e.file_url} alt={e.title} className="mt-2 w-full max-h-48 object-cover rounded-lg" />}
                 {e.file_url && e.type === 'video' && <video src={e.file_url} controls className="mt-2 w-full max-h-48 rounded-lg" />}
                 {e.file_url && e.type === 'evp' && <audio src={e.file_url} controls className="mt-2 w-full" />}
+                <button
+                  onClick={() => handleToggleShare(e)}
+                  className={`mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${e.is_private ? 'border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40' : 'border-primary/30 text-primary bg-primary/5'}`}
+                >
+                  {e.is_private ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                  {e.is_private ? 'Share to Community' : 'Make Private'}
+                </button>
               </motion.div>
             );
           })
