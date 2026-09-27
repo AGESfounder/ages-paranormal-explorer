@@ -8,6 +8,9 @@ workflows:
         - ages-explorer-upload
       node: 20
       java: 21
+      vars:
+        VITE_BASE44_APP_ID: 6a2dfe40e73c2bacfe73eeb1
+        VITE_BASE44_APP_BASE_URL: https://accessible-ghost-exploration-solutions.base44.app
     scripts:
       - name: Install npm dependencies
         script: npm ci
