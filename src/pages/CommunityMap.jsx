@@ -7,6 +7,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import { haversineMiles } from '@/lib/deviceCapabilities';
 import ReportContentDialog from '@/components/ReportContentDialog';
 import { getBlockedIds } from '@/lib/userBlocks';
 import EvidenceViewerDialog from '@/components/EvidenceViewerDialog';
@@ -89,15 +90,26 @@ export default function CommunityMap() {
 
   const filtered = filter === 'all' ? visiblePins : visiblePins.filter(p => p.type === filter);
 
-  // Group evidence by approximate coordinates so stacked markers show all items
-  const coordKey = (pin) => `${pin.latitude.toFixed(6)},${pin.longitude.toFixed(6)}`;
-  const groups = {};
+  // Cluster evidence by proximity so stacked markers show all items at the
+  // same property — even when GPS jitter places captures a few feet apart.
+  // 0.05 mi ≈ 260 ft, covering any single house/estate while keeping distinct
+  // locations on the same block separate.
+  const CLUSTER_RADIUS_MILES = 0.05;
+  const groupedPins = [];
+  const assigned = new Set();
   filtered.forEach(pin => {
-    const key = coordKey(pin);
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(pin);
+    if (assigned.has(pin.id)) return;
+    const cluster = [pin];
+    assigned.add(pin.id);
+    filtered.forEach(other => {
+      if (assigned.has(other.id)) return;
+      if (haversineMiles(pin.latitude, pin.longitude, other.latitude, other.longitude) <= CLUSTER_RADIUS_MILES) {
+        cluster.push(other);
+        assigned.add(other.id);
+      }
+    });
+    groupedPins.push(cluster);
   });
-  const groupedPins = Object.values(groups);
 
   const center = filtered.length > 0
     ? [
@@ -189,7 +201,7 @@ export default function CommunityMap() {
                   const icon = isStack ? createStackPin(group) : createPin(first.type);
                   return (
                     <Marker
-                      key={isStack ? `stack-${coordKey(first)}` : first.id}
+                      key={isStack ? `stack-${first.latitude.toFixed(4)},${first.longitude.toFixed(4)}` : first.id}
                       position={[first.latitude, first.longitude]}
                       icon={icon}
                     >
