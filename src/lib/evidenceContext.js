@@ -45,10 +45,21 @@ export async function getActiveContext() {
  * into the Evidence.create payload. Existing fields on the payload (e.g.
  * a tool-specific location_name) take precedence — this only fills gaps.
  */
+async function fetchWithTimeout(url, opts = {}, ms = 8000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, { ...opts, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 export async function reverseGeocodePlace(lat, lon) {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=14`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'en' } });
     if (!res.ok) return null;
     const data = await res.json();
     const addr = data.address || {};
@@ -71,7 +82,7 @@ export async function reverseGeocodePlace(lat, lon) {
 export async function geocodeAddress(address) {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'en' } });
     if (!res.ok) return null;
     const data = await res.json();
     if (data && data.length > 0) {
