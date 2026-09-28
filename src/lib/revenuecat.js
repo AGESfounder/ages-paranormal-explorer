@@ -3,12 +3,18 @@
 // - iOS: purchase Explorer/Investigator subscriptions and Aura Bundle
 //   consumables via StoreKit (Apple product IDs below), plus the one-time
 //   Trailblazer product (non-subscription). Wix remains the web Trailblazer path.
-// - Android: configure + purchase Google Play one-time product trailblazer.30month
+// - Android: purchase Google Play Explorer/Investigator subscriptions (Play
+//   subscription products explorer / investigator with base plans
+//   monthly / annual), the Google Play one-time product
+//   trailblazer.30month, and the Google Play one-time Aura Bundle products
+//   (bare Play IDs flicker / apparition / haunting / spectral). Web
+//   subscriptions and web Aura bundles stay on the Wix path.
 //
 // Access is NEVER granted from CustomerInfo entitlements here. Base44 webhook
-// writes plan fields (Apple subscriptions) / aura_*_energy fields (Apple Aura
-// consumables) / google_trailblazer_* fields (Google); the client reloads
-// auth.me() after purchase.
+// writes the generic plan fields (Apple + Google Play subscriptions) /
+// aura_*_energy fields (Apple Aura consumables + Google Play Aura one-time
+// products) / google_trailblazer_* fields (Google Trailblazer one-time); the
+// client reloads auth.me() after purchase.
 
 import { Capacitor } from '@capacitor/core';
 import { Purchases, PRODUCT_CATEGORY, LOG_LEVEL, PURCHASES_ERROR_CODE } from '@revenuecat/purchases-capacitor';
@@ -53,10 +59,66 @@ export function getAppleSubscriptionPlanId(productId) {
 }
 
 /**
+ * Google Play subscription products (Play Console) for Android
+ * Explorer/Investigator subscriptions, keyed by the Dashboard product id.
+ * Each Play subscription product (explorer / investigator) carries two Active
+ * base plans (monthly / annual); RevenueCat reports the purchased product as
+ * '<product>:<basePlan>' (e.g. explorer:monthly) in webhook events. Purchased
+ * only on native Android by selecting the exact base plan as a
+ * SubscriptionOption. Must match Play Console and the RevenueCat catalog.
+ */
+export const GOOGLE_SUBSCRIPTION_PRODUCTS = {
+  explorer_monthly: { playProductId: 'explorer', basePlanId: 'monthly' },
+  explorer_annual: { playProductId: 'explorer', basePlanId: 'annual' },
+  investigator_monthly: { playProductId: 'investigator', basePlanId: 'monthly' },
+  investigator_annual: { playProductId: 'investigator', basePlanId: 'annual' },
+};
+
+/** Base44 plan granted by the webhook for each Android subscription product. */
+export const GOOGLE_SUBSCRIPTION_PLAN_IDS = {
+  explorer_monthly: 'explorer',
+  explorer_annual: 'explorer',
+  investigator_monthly: 'investigator',
+  investigator_annual: 'investigator',
+};
+
+/** True when a Dashboard product id is an Android Google Play subscription. */
+export function isGoogleSubscriptionCheckout(productId) {
+  return Object.prototype.hasOwnProperty.call(GOOGLE_SUBSCRIPTION_PRODUCTS, productId);
+}
+
+/** Plan id the Base44 webhook grants for a Dashboard subscription product id. */
+export function getGoogleSubscriptionPlanId(productId) {
+  return GOOGLE_SUBSCRIPTION_PLAN_IDS[productId] || null;
+}
+
+/**
+ * Google Play product IDs (Play Console) for Android Aura Bundle one-time
+ * products, keyed by the Dashboard bundle id. These are the exact bare Play
+ * product IDs — deliberately different from the Apple
+ * com.ages.explorer.aura.* consumable IDs. Purchased only on native Android
+ * as NON_SUBSCRIPTION products. Must match Play Console and the RevenueCat
+ * product catalog. Web keeps the Wix path for these bundles; iOS uses the
+ * Apple consumables below.
+ */
+export const GOOGLE_AURA_PRODUCT_IDS = {
+  flicker: 'flicker',
+  apparition: 'apparition',
+  haunting: 'haunting',
+  spectral: 'spectral',
+};
+
+/** True when a Dashboard product id is an Android Google Play Aura one-time product. */
+export function isGoogleAuraCheckout(productId) {
+  return Object.prototype.hasOwnProperty.call(GOOGLE_AURA_PRODUCT_IDS, productId);
+}
+
+/**
  * Apple App Store product IDs (App Store Connect) for iOS Aura Bundle
  * consumables, keyed by the Dashboard bundle id. Must match the RevenueCat
  * product catalog. Purchased only on native iOS as StoreKit consumables —
- * never as subscriptions. Web/Android keep the Wix path for these bundles.
+ * never as subscriptions. Web keeps the Wix path for these bundles; Android
+ * uses the Google Play one-time products above.
  */
 export const APPLE_AURA_PRODUCT_IDS = {
   flicker: 'com.ages.explorer.aura.flicker',
@@ -265,6 +327,160 @@ export async function purchaseGoogleTrailblazer(userId) {
 }
 
 /**
+ * Purchase an Android Explorer/Investigator subscription via RevenueCat /
+ * Google Play Billing. Native Android only. Fetches the Play subscription
+ * product, selects the exact base plan (monthly / annual) as a
+ * SubscriptionOption, and purchases it with purchaseSubscriptionOption —
+ * purchaseStoreProduct would buy Google's default base plan instead of the
+ * one the user chose. Does NOT grant access locally: the Base44 webhook
+ * writes the generic plan fields; the caller must poll base44.auth.me()
+ * afterwards.
+ *
+ * @param {string} productId Dashboard product id (explorer_monthly, explorer_annual, investigator_monthly, investigator_annual)
+ * @param {string} [userId] Base44 user id used as the RevenueCat appUserID
+ * @returns {Promise<{ ok: boolean, cancelled?: boolean, error?: any, reason?: string, purchase?: any, product?: any, subscriptionOption?: any }>}
+ */
+export async function purchaseGoogleSubscription(productId, userId) {
+  if (!isAndroidNative()) {
+    return { ok: false, reason: 'not_android' };
+  }
+
+  const mapping = GOOGLE_SUBSCRIPTION_PRODUCTS[productId];
+  if (!mapping) {
+    return { ok: false, reason: 'unknown_product' };
+  }
+  const { playProductId, basePlanId } = mapping;
+
+  if (userId) {
+    await identifyRevenueCatUser(userId);
+  } else {
+    const ready = await configureRevenueCat();
+    if (!ready.ok) return { ok: false, reason: ready.reason || 'not_configured' };
+  }
+
+  if (!configured) {
+    return { ok: false, reason: 'not_configured' };
+  }
+
+  try {
+    const { products } = await Purchases.getProducts({
+      productIdentifiers: [playProductId],
+      type: PRODUCT_CATEGORY.SUBSCRIPTION,
+    });
+
+    const product = (products || []).find((p) => p.identifier === playProductId)
+      || (products || [])[0];
+
+    if (!product) {
+      return {
+        ok: false,
+        reason: 'product_unavailable',
+        error: new Error(
+          `Product ${playProductId} is not available. Check Google Play and RevenueCat configuration.`,
+        ),
+      };
+    }
+
+    // Google Play subscriptions expose their base plans as
+    // subscriptionOptions: a base plan option has isBasePlan true and
+    // id === basePlanId (paid offers use 'basePlanId:offerId'). Select the
+    // exact base plan — never fall back to the product's default option.
+    const options = product.subscriptionOptions || [];
+    const subscriptionOption =
+      options.find((o) => o && o.isBasePlan && o.id === basePlanId)
+      || options.find((o) => o && o.storeProductId === `${playProductId}:${basePlanId}`);
+
+    if (!subscriptionOption) {
+      return {
+        ok: false,
+        reason: 'product_unavailable',
+        error: new Error(
+          `Base plan ${playProductId}:${basePlanId} is not available. Check Google Play and RevenueCat configuration.`,
+        ),
+      };
+    }
+
+    const result = await Purchases.purchaseSubscriptionOption({ subscriptionOption });
+    // Intentionally ignore result.customerInfo.entitlements — the Base44
+    // webhook is authoritative for plan grants.
+    return { ok: true, purchase: result, product, subscriptionOption };
+  } catch (e) {
+    if (isUserCancelled(e)) {
+      return { ok: false, cancelled: true };
+    }
+    console.error('[revenuecat] Google subscription purchase failed:', e);
+    return { ok: false, reason: 'purchase_failed', error: e };
+  }
+}
+
+/**
+ * Purchase an Android Aura Bundle one-time product via RevenueCat / Google
+ * Play Billing. Native Android only. Uses the NON_SUBSCRIPTION product
+ * category — Aura bundles are consumable-style one-time products, never
+ * subscriptions. Selects the exact returned product by its bare Play
+ * identifier and fails closed when the store does not return it (no fallback
+ * to a different product). Does NOT grant energy locally: the Base44 webhook
+ * adds aura_*_energy; the caller must poll base44.auth.me() afterwards.
+ *
+ * @param {string} productId Dashboard bundle id (flicker, apparition, haunting, spectral)
+ * @param {string} [userId] Base44 user id used as the RevenueCat appUserID
+ * @returns {Promise<{ ok: boolean, cancelled?: boolean, error?: any, reason?: string, purchase?: any, product?: any }>}
+ */
+export async function purchaseGoogleAuraBundle(productId, userId) {
+  if (!isAndroidNative()) {
+    return { ok: false, reason: 'not_android' };
+  }
+
+  const playProductId = GOOGLE_AURA_PRODUCT_IDS[productId];
+  if (!playProductId) {
+    return { ok: false, reason: 'unknown_product' };
+  }
+
+  if (userId) {
+    await identifyRevenueCatUser(userId);
+  } else {
+    const ready = await configureRevenueCat();
+    if (!ready.ok) return { ok: false, reason: ready.reason || 'not_configured' };
+  }
+
+  if (!configured) {
+    return { ok: false, reason: 'not_configured' };
+  }
+
+  try {
+    // One-time product → NON_SUBSCRIPTION product category (never SUBSCRIPTION).
+    const { products } = await Purchases.getProducts({
+      productIdentifiers: [playProductId],
+      type: PRODUCT_CATEGORY.NON_SUBSCRIPTION,
+    });
+
+    // Exact identifier match only — never fall back to a different product.
+    const product = (products || []).find((p) => p.identifier === playProductId);
+
+    if (!product) {
+      return {
+        ok: false,
+        reason: 'product_unavailable',
+        error: new Error(
+          `Product ${playProductId} is not available. Check Google Play and RevenueCat configuration.`,
+        ),
+      };
+    }
+
+    const result = await Purchases.purchaseStoreProduct({ product });
+    // Intentionally ignore result.customerInfo.entitlements — Aura one-time
+    // products map to no entitlement; the Base44 webhook is authoritative.
+    return { ok: true, purchase: result, product };
+  } catch (e) {
+    if (isUserCancelled(e)) {
+      return { ok: false, cancelled: true };
+    }
+    console.error('[revenuecat] Google Aura purchase failed:', e);
+    return { ok: false, reason: 'purchase_failed', error: e };
+  }
+}
+
+/**
  * Poll base44.auth.me until Google Trailblazer grant appears (or timeout).
  * Used after a successful SDK purchase while waiting for the webhook.
  */
@@ -466,6 +682,53 @@ export async function waitForApplePlanGrant(fetchUser, {
   timeoutMs = 30000,
   intervalMs = 1500,
 } = {}) {
+  return pollForPlanGrant(fetchUser, {
+    expectedPlanId,
+    timeoutMs,
+    intervalMs,
+    logLabel: 'Apple',
+  });
+}
+
+/**
+ * Poll base44.auth.me until the Google Play subscription grant appears (or
+ * timeout). The webhook writes the same generic plan fields as Apple (plan
+ * plus a future plan_expiration_date), so the poll semantics are identical.
+ *
+ * @param {() => Promise<any>} fetchUser
+ * @param {{ expectedPlanId?: string | null, timeoutMs?: number, intervalMs?: number }} [options]
+ * @returns {Promise<{ ok: boolean, reason?: string, user?: any }>}
+ */
+export async function waitForGooglePlanGrant(fetchUser, {
+  expectedPlanId,
+  timeoutMs = 30000,
+  intervalMs = 1500,
+} = {}) {
+  return pollForPlanGrant(fetchUser, {
+    expectedPlanId,
+    timeoutMs,
+    intervalMs,
+    logLabel: 'Google',
+  });
+}
+
+/**
+ * Shared plan-grant poll. Waits until base44.auth.me shows the expected plan
+ * (explorer / investigator) with a future plan_expiration_date; requiring
+ * both avoids matching a pre-existing Wix grant (which has no expiration
+ * date). Used by both the Apple and Google Play subscription flows — the
+ * Base44 webhook is authoritative in both cases.
+ *
+ * @param {() => Promise<any>} fetchUser
+ * @param {{ expectedPlanId?: string | null, timeoutMs?: number, intervalMs?: number, logLabel: string }} options
+ * @returns {Promise<{ ok: boolean, reason?: string, user?: any }>}
+ */
+async function pollForPlanGrant(fetchUser, {
+  expectedPlanId,
+  timeoutMs = 30000,
+  intervalMs = 1500,
+  logLabel,
+}) {
   const started = Date.now();
   let lastUser = null;
 
@@ -483,7 +746,7 @@ export async function waitForApplePlanGrant(fetchUser, {
         return { ok: true, user: lastUser };
       }
     } catch (e) {
-      console.warn('[revenuecat] Apple grant poll error:', e);
+      console.warn(`[revenuecat] ${logLabel} grant poll error:`, e);
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
@@ -521,6 +784,44 @@ export async function waitForAppleAuraGrant(fetchUser, {
       }
     } catch (e) {
       console.warn('[revenuecat] Aura grant poll error:', e);
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  return { ok: false, reason: 'timeout', user: lastUser };
+}
+
+/**
+ * Poll base44.auth.me until the Google Play Aura grant appears (or timeout).
+ * The webhook adds to the rollover aura pools, so success means either pool
+ * grew past its pre-purchase baseline. Identical semantics to the Apple Aura
+ * poll — the Base44 webhook writes the same aura_*_energy fields for both
+ * stores. Deliberately never inspects plan / plan_expiration_date — AURA is
+ * a consumable top-up, not a subscription.
+ *
+ * @param {() => Promise<any>} fetchUser
+ * @param {{ baselineNarration?: number, baselineManifestation?: number, timeoutMs?: number, intervalMs?: number }} [options]
+ * @returns {Promise<{ ok: boolean, reason?: string, user?: any }>}
+ */
+export async function waitForGoogleAuraGrant(fetchUser, {
+  baselineNarration = 0,
+  baselineManifestation = 0,
+  timeoutMs = 30000,
+  intervalMs = 1500,
+} = {}) {
+  const started = Date.now();
+  let lastUser = null;
+
+  while (Date.now() - started < timeoutMs) {
+    try {
+      lastUser = await fetchUser();
+      const narration = lastUser?.aura_narration_energy || 0;
+      const manifestation = lastUser?.aura_manifestation_energy || 0;
+      if (narration > baselineNarration || manifestation > baselineManifestation) {
+        return { ok: true, user: lastUser };
+      }
+    } catch (e) {
+      console.warn('[revenuecat] Google Aura grant poll error:', e);
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }

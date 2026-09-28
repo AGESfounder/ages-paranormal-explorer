@@ -548,3 +548,275 @@ export function normalizeLedgerFields(event, {
     currency,
   };
 }
+
+// ── Google Play Explorer/Investigator subscriptions via RevenueCat / Play Billing ─
+// Auto-renewable Play subscriptions bought only on native Android. Each Play
+// subscription product (explorer / investigator) carries two Active base
+// plans (monthly / annual); RevenueCat reports the purchased product in
+// webhook events as '<product>:<basePlan>' (e.g. explorer:monthly). Grants
+// reuse the generic Base44 entitlement fields (plan, plan_expiration_date,
+// subscription_status, subscription_id, energy) — the same fields the Wix
+// payments-webhook and the Apple subscription flow write. Google Trailblazer
+// stays isolated in google_trailblazer_* and is untouched by this flow.
+
+/** RevenueCat store value for Google Play. */
+export const PLAY_STORE = 'PLAY_STORE';
+
+/**
+ * Google Play product identity (subscriptionId:basePlanId) → plan mapping.
+ * Must match Play Console base plans and the RevenueCat product catalog.
+ * The Android client selects the exact base plan via a SubscriptionOption;
+ * this module reconciles the webhook lifecycle events.
+ */
+export const GOOGLE_SUBSCRIPTION_PRODUCTS = {
+  'explorer:monthly': {
+    plan_id: 'explorer',
+    period: 'monthly',
+    product_name: 'AGES Explorer — Monthly (Google Play)',
+  },
+  'explorer:annual': {
+    plan_id: 'explorer',
+    period: 'annual',
+    product_name: 'AGES Explorer — Annual (Google Play)',
+  },
+  'investigator:monthly': {
+    plan_id: 'investigator',
+    period: 'monthly',
+    product_name: 'AGES Investigator — Monthly (Google Play)',
+  },
+  'investigator:annual': {
+    plan_id: 'investigator',
+    period: 'annual',
+    product_name: 'AGES Investigator — Annual (Google Play)',
+  },
+};
+
+export function getGoogleSubscriptionProduct(productId) {
+  return GOOGLE_SUBSCRIPTION_PRODUCTS[productId] || null;
+}
+
+export function isGoogleSubscriptionProduct(productId) {
+  return Boolean(getGoogleSubscriptionProduct(productId));
+}
+
+/**
+ * Classify a Google Play subscription lifecycle event. Mirrors the Apple
+ * subscription classification:
+ * - grant: INITIAL_PURCHASE / RENEWAL — (re)grant the plan and extend
+ *   plan_expiration_date. On Google Play, INITIAL_PURCHASE also covers
+ *   resubscribe-after-expiry and the new base plan of a product change (the
+ *   PRODUCT_CHANGE event itself is bookkeeping only).
+ * - product_change: PRODUCT_CHANGE — the new product is in new_product_id;
+ *   the paired INITIAL_PURCHASE performs the actual plan change.
+ * - cancel: CANCELLATION — auto-renew turned off. Access continues until
+ *   plan_expiration_date; the later EXPIRATION event ends it.
+ * - uncancel: UNCANCELLATION — auto-renew re-enabled before expiry.
+ * - refund: CANCELLATION/EXPIRATION with reason CUSTOMER_SUPPORT (store
+ *   support refund) or a defensive REFUND type. Revokes access.
+ * - expire: EXPIRATION — paid period ended; revoke access.
+ * BILLING_ISSUE / SUBSCRIPTION_PAUSED do not revoke access — the later
+ * EXPIRATION event covers them.
+ */
+export function classifyGoogleSubscriptionEvent(event) {
+  if (!event || typeof event !== 'object') return null;
+  switch (event.type) {
+    case 'INITIAL_PURCHASE':
+    case 'RENEWAL':
+      return 'grant';
+    case 'PRODUCT_CHANGE':
+      return 'product_change';
+    case 'CANCELLATION':
+      return event.cancel_reason === 'CUSTOMER_SUPPORT' ? 'refund' : 'cancel';
+    case 'UNCANCELLATION':
+      return 'uncancel';
+    case 'EXPIRATION':
+      return event.expiration_reason === 'CUSTOMER_SUPPORT' ? 'refund' : 'expire';
+    case 'REFUND':
+      // Not a current RevenueCat event type — kept defensively.
+      return 'refund';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Whether this RevenueCat event should be processed as a Google Play
+ * Explorer/Investigator subscription. Apple / other stores / other Play
+ * products (e.g. the trailblazer.30month one-time product) are ignored
+ * (200, no grant). PRODUCT_CHANGE carries the new product in new_product_id.
+ */
+export function shouldProcessGoogleSubscriptionEvent(event) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.type === 'TEST') return false;
+  if (!isPlayStore(event.store)) return false;
+  if (!classifyGoogleSubscriptionEvent(event)) return false;
+  const productId = event.type === 'PRODUCT_CHANGE' ? event.new_product_id : event.product_id;
+  return isGoogleSubscriptionProduct(productId);
+}
+
+/**
+ * Latest still-active Google Play subscription ledger row for a user, if any.
+ * Used to keep access when one Google subscription is refunded/expired while
+ * another remains active. Google Trailblazer rows are excluded by the product
+ * map and the 'active' status model (one-time rows are 'paid').
+ */
+export function latestActiveGoogleSubscription(ledgerRows, now = new Date()) {
+  let best = null;
+  for (const row of ledgerRows || []) {
+    if (row.status !== 'active') continue;
+    const product = getGoogleSubscriptionProduct(row.product_id);
+    if (!product) continue;
+    if (!row.plan_expiration_date) continue;
+    const expMs = new Date(row.plan_expiration_date).getTime();
+    if (Number.isNaN(expMs)) continue;
+    if (expMs <= now.getTime()) continue;
+    if (!best || expMs > best.expMs) best = { row, product, expMs };
+  }
+  return best;
+}
+
+/**
+ * Normalize a RevenueCat Google Play subscription event into ledger fields
+ * for RevenueCatPurchase. Subscription rows use status 'active' while
+ * entitled ('refunded' / 'expired' once revoked), like Apple subscriptions
+ * and unlike the Google Trailblazer one-time 'paid'.
+ */
+export function normalizeGoogleLedgerFields(event, {
+  userId,
+  productId,
+  purchaseDateIso,
+  expirationIso,
+  status,
+  eventIds = [],
+}) {
+  const product = getGoogleSubscriptionProduct(productId);
+  const price = typeof event.price === 'number' ? event.price : 0;
+
+  return {
+    event_id: event.id || event.event_id || '',
+    event_ids: eventIds,
+    user_id: userId,
+    app_user_id: event.app_user_id || '',
+    original_app_user_id: event.original_app_user_id || '',
+    product_id: productId,
+    store: event.store || PLAY_STORE,
+    environment: event.environment || 'PRODUCTION',
+    transaction_id: event.transaction_id || '',
+    original_transaction_id: event.original_transaction_id || event.transaction_id || '',
+    event_type: event.type || '',
+    purchase_date: purchaseDateIso,
+    plan_expiration_date: expirationIso,
+    status,
+    product_name: product?.product_name || productId,
+    amount: Math.abs(price),
+    currency: event.currency || 'USD',
+  };
+}
+
+// ── Google Play Aura Bundle one-time products via RevenueCat / Play Billing ─
+// One-time consumable-style energy top-ups bought only on native Android.
+// These use the exact bare Play product IDs (flicker / apparition / haunting /
+// spectral) — deliberately different from the Apple com.ages.explorer.aura.*
+// consumable IDs. The grant mirrors the Apple Aura and Wix Aura paths exactly:
+// additive aura_narration_energy / aura_manifestation_energy rollover pools
+// computed from AURA_BUNDLES via getGrantForProduct in shared/plans.js. These
+// events never read or write plan / plan_expiration_date / subscription_* /
+// google_trailblazer_* fields — AURA is a consumable top-up, not a
+// subscription, and stays isolated from the Google Trailblazer fields.
+
+/**
+ * Google Play product IDs (Play Console) for Aura Bundle one-time products →
+ * the existing Dashboard/Wix bundle id. Must match Play Console and the
+ * RevenueCat product catalog. Kept separate from GOOGLE_TRAILBLAZER_PRODUCT_ID
+ * and GOOGLE_SUBSCRIPTION_PRODUCTS — disjoint product families.
+ */
+export const PLAY_AURA_PRODUCTS = {
+  flicker: {
+    bundle_id: 'flicker',
+    product_name: 'Aura Bundle — Flicker (150 Energy)',
+  },
+  apparition: {
+    bundle_id: 'apparition',
+    product_name: 'Aura Bundle — Apparition (500 Energy)',
+  },
+  haunting: {
+    bundle_id: 'haunting',
+    product_name: 'Aura Bundle — Haunting (1500 Energy)',
+  },
+  spectral: {
+    bundle_id: 'spectral',
+    product_name: 'Aura Bundle — Spectral (2500 Energy)',
+  },
+};
+
+export function getPlayAuraProduct(productId) {
+  return PLAY_AURA_PRODUCTS[productId] || null;
+}
+
+export function isPlayAuraProduct(productId) {
+  return Boolean(getPlayAuraProduct(productId));
+}
+
+/**
+ * True when a Play Aura event revokes a purchase. Reuses the existing
+ * one-time revoke family (REVOKE_EVENT_TYPES: CANCELLATION / REFUND) — a
+ * one-time product has no auto-renew to cancel, so a CANCELLATION event for
+ * an Aura product can only be a store-support refund/revoke. REFUND is kept
+ * defensively (not a current RevenueCat event type).
+ */
+export function isPlayAuraRefundEvent(event) {
+  if (!event || typeof event !== 'object') return false;
+  return REVOKE_EVENT_TYPES.has(event.type);
+}
+
+/**
+ * Whether this RevenueCat event should be processed as a Google Play Aura
+ * one-time product. Reuses the existing one-time purchase event families
+ * (GRANT_EVENT_TYPES: NON_RENEWING_PURCHASE / INITIAL_PURCHASE;
+ * REVOKE_EVENT_TYPES: CANCELLATION / REFUND). Apple / other stores / other
+ * Play products (trailblazer.30month, the explorer and investigator base-plan
+ * ids) are ignored by the caller (200, no grant).
+ */
+export function shouldProcessPlayAuraEvent(event) {
+  if (!event || typeof event !== 'object') return false;
+  if (event.type === 'TEST') return false;
+  if (!isPlayStore(event.store)) return false;
+  if (!isPlayAuraProduct(event.product_id)) return false;
+  return GRANT_EVENT_TYPES.has(event.type) || isPlayAuraRefundEvent(event);
+}
+
+/**
+ * Normalize a RevenueCat Google Play Aura one-time event into ledger fields
+ * for RevenueCatPurchase. Consumable-style rows use status 'paid' (like the
+ * Google Trailblazer one-time product and the Apple Aura consumables) and
+ * carry no plan_expiration_date — Aura energy never expires.
+ */
+export function normalizePlayAuraLedgerFields(event, {
+  userId,
+  purchaseDateIso,
+  status,
+  eventIds = [],
+}) {
+  const product = getPlayAuraProduct(event.product_id);
+  const price = typeof event.price === 'number' ? event.price : 0;
+
+  return {
+    event_id: event.id || event.event_id || '',
+    event_ids: eventIds,
+    user_id: userId,
+    app_user_id: event.app_user_id || '',
+    original_app_user_id: event.original_app_user_id || '',
+    product_id: event.product_id || '',
+    store: event.store || PLAY_STORE,
+    environment: event.environment || 'PRODUCTION',
+    transaction_id: event.transaction_id || '',
+    original_transaction_id: event.original_transaction_id || event.transaction_id || '',
+    event_type: event.type || '',
+    purchase_date: purchaseDateIso,
+    plan_expiration_date: null,
+    status,
+    product_name: product?.product_name || event.product_id || '',
+    amount: Math.abs(price),
+    currency: event.currency || 'USD',
+  };
+}

@@ -19,18 +19,25 @@ import {
 } from '@/lib/access';
 import {
   getAppleSubscriptionPlanId,
+  getGoogleSubscriptionPlanId,
   isAndroidNative,
   isAppleAuraCheckout,
   isAppleSubscriptionCheckout,
+  isGoogleAuraCheckout,
+  isGoogleSubscriptionCheckout,
   isIosNative,
   purchaseAppleAuraBundle,
   purchaseAppleSubscription,
   purchaseAppleTrailblazer,
+  purchaseGoogleAuraBundle,
+  purchaseGoogleSubscription,
   purchaseGoogleTrailblazer,
   restoreApplePurchases,
   waitForAppleAuraGrant,
   waitForApplePlanGrant,
   waitForAppleTrailblazerGrant,
+  waitForGoogleAuraGrant,
+  waitForGooglePlanGrant,
   waitForGoogleTrailblazerGrant,
 } from '@/lib/revenuecat';
 
@@ -161,7 +168,7 @@ export default function Dashboard() {
       }
 
       // Native iOS Explorer/Investigator → RevenueCat / App Store subscription.
-      // Web, Android, and Trailblazer keep the Wix path below.
+      // Web keeps the Wix path below; Android uses the Google Play path below.
       if (isIosNative() && isAppleSubscriptionCheckout(productId)) {
         const result = await purchaseAppleSubscription(productId, user?.id);
         if (result.cancelled) {
@@ -182,6 +189,44 @@ export default function Dashboard() {
         // Never grant access from the SDK result alone.
         const grant = await waitForApplePlanGrant(() => base44.auth.me(), {
           expectedPlanId: getAppleSubscriptionPlanId(productId),
+          timeoutMs: 45000,
+          intervalMs: 1500,
+        });
+        if (grant.ok && grant.user) {
+          setUser(grant.user);
+          await loadData();
+        } else {
+          // Purchase succeeded at the store; webhook may still be in flight.
+          alert('Purchase complete. Your plan will activate in a moment — pull to refresh if needed.');
+          await loadData();
+        }
+        setRedirecting(null);
+        return;
+      }
+
+      // Android Explorer/Investigator → RevenueCat / Google Play subscription
+      // with an explicit base plan (explorer / investigator × monthly / annual).
+      // Web keeps the Wix path below; iOS uses the App Store path above.
+      if (isAndroidNative() && isGoogleSubscriptionCheckout(productId)) {
+        const result = await purchaseGoogleSubscription(productId, user?.id);
+        if (result.cancelled) {
+          setRedirecting(null);
+          return;
+        }
+        if (!result.ok) {
+          if (result.reason === 'product_unavailable') {
+            alert('This subscription is not available on Google Play yet. Please try again later or contact support.');
+          } else {
+            alert(result.error?.message || result.reason || 'Purchase failed');
+          }
+          setRedirecting(null);
+          return;
+        }
+
+        // Wait for the Base44 webhook to write the generic plan grant.
+        // Never grant access from the SDK result alone.
+        const grant = await waitForGooglePlanGrant(() => base44.auth.me(), {
+          expectedPlanId: getGoogleSubscriptionPlanId(productId),
           timeoutMs: 45000,
           intervalMs: 1500,
         });
@@ -222,6 +267,50 @@ export default function Dashboard() {
         // Wait for the Base44 webhook to add the Aura energy. AURA is a
         // consumable top-up — never wait on subscription plan fields here.
         const grant = await waitForAppleAuraGrant(() => base44.auth.me(), {
+          baselineNarration,
+          baselineManifestation,
+          timeoutMs: 45000,
+          intervalMs: 1500,
+        });
+        if (grant.ok && grant.user) {
+          setUser(grant.user);
+          await loadData();
+        } else {
+          // Purchase succeeded at the store; webhook may still be in flight.
+          alert('Purchase complete. Your Aura energy will appear in a moment — pull to refresh if needed.');
+          await loadData();
+        }
+        setRedirecting(null);
+        return;
+      }
+
+      // Native Android Aura Bundles → RevenueCat / Google Play one-time
+      // products (bare Play IDs flicker, apparition, haunting, spectral).
+      // Web and all other platforms keep the Wix path below; iOS uses the
+      // App Store consumable path above.
+      if (isAndroidNative() && isGoogleAuraCheckout(productId)) {
+        // Pre-purchase baseline — the webhook adds to these rollover pools.
+        const baselineNarration = user?.aura_narration_energy || 0;
+        const baselineManifestation = user?.aura_manifestation_energy || 0;
+
+        const result = await purchaseGoogleAuraBundle(productId, user?.id);
+        if (result.cancelled) {
+          setRedirecting(null);
+          return;
+        }
+        if (!result.ok) {
+          if (result.reason === 'product_unavailable') {
+            alert('This Aura Bundle is not available on Google Play yet. Please try again later or contact support.');
+          } else {
+            alert(result.error?.message || result.reason || 'Purchase failed');
+          }
+          setRedirecting(null);
+          return;
+        }
+
+        // Wait for the Base44 webhook to add the Aura energy. AURA is a
+        // consumable top-up — never wait on subscription plan fields here.
+        const grant = await waitForGoogleAuraGrant(() => base44.auth.me(), {
           baselineNarration,
           baselineManifestation,
           timeoutMs: 45000,
