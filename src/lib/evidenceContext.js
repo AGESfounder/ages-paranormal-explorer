@@ -56,7 +56,24 @@ async function fetchWithTimeout(url, opts = {}, ms = 8000) {
   }
 }
 
-export async function reverseGeocodePlace(lat, lon) {
+async function reverseGeocodeBigDataCloud(lat, lon) {
+  try {
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+    const res = await fetchWithTimeout(url);
+    if (!res.ok) return null;
+    const d = await res.json();
+    const street = d.streetName || d.streetNumber;
+    const locality = d.locality || d.city || d.principalSubdivision;
+    if (street && locality) return `${street}, ${locality}`;
+    if (locality) return locality;
+    if (street) return street;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function reverseGeocodeNominatim(lat, lon) {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=14`;
     const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'en' } });
@@ -73,6 +90,13 @@ export async function reverseGeocodePlace(lat, lon) {
   } catch {
     return null;
   }
+}
+
+export async function reverseGeocodePlace(lat, lon) {
+  // BigDataCloud is a free, key-less, client-side-friendly reverse geocoder
+  // that is far more reliable than Nominatim. Fall back to Nominatim only if
+  // BigDataCloud returns nothing, so the evidence still gets a place name.
+  return (await reverseGeocodeBigDataCloud(lat, lon)) || (await reverseGeocodeNominatim(lat, lon));
 }
 
 /**
