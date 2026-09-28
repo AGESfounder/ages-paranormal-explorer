@@ -86,6 +86,18 @@ export async function getDevicePosition(options = {}) {
   }
 
   return new Promise((resolve) => {
+    // Hard cutoff: the browser's own `timeout` option does not start until the
+    // permission prompt is answered, so an ignored/blocked prompt (or a
+    // sandboxed preview iframe) could otherwise never call back at all.
+    const hardTimer = setTimeout(() => {
+      resolve({
+        ok: false,
+        error: 'timeout',
+        message: 'Location request timed out. Check GPS signal and try again.',
+      });
+    }, timeout + 2000);
+    const origResolve = resolve;
+    resolve = (v) => { clearTimeout(hardTimer); origResolve(v); };
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         resolve({
