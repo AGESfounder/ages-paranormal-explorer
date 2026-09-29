@@ -364,12 +364,12 @@ export async function purchaseGoogleSubscription(productId, userId) {
 
   try {
     const { products } = await Purchases.getProducts({
-      productIdentifiers: [playProductId],
+      productIdentifiers: [`${playProductId}:${basePlanId}`],
       type: PRODUCT_CATEGORY.SUBSCRIPTION,
     });
 
-    const product = (products || []).find((p) => p.identifier === playProductId)
-      || (products || [])[0];
+    const requestedProductId = `${playProductId}:${basePlanId}`;
+    const product = (products || []).find((p) => p.identifier === requestedProductId);
 
     if (!product) {
       return {
