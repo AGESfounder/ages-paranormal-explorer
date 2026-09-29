@@ -1,5 +1,5 @@
 @import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-@import url('https://fonts.googleapis.com/css2?family=Germania+One&family=Pirata+One&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Germania+One&family=Pacifico&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -35,7 +35,7 @@
     --font-heading: 'Cinzel', serif;
     --font-body: 'Inter', sans-serif;
     --font-display: 'Germania One', cursive;
-    --font-script: 'Pirata One', cursive;
+    --font-script: 'Pacifico', cursive;
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --sidebar-background: 222 47% 8%;
     --sidebar-foreground: 210 40% 85%;
