@@ -67,10 +67,22 @@ export default function LocationTermBank() {
 
   const speakNormal = (word) => {
     femaleBusyRef.current = true;
-    speakToolText(formatForSpeech(word), { role: 'female', rate: 0.9, pitch: 1 }).then((result) => {
-      if (result === 'cancelled') return; // stopped/superseded — do not flush a pending male voice
-      femaleBusyRef.current = false;
-      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+    return new Promise((resolve) => {
+      let done = false;
+      const releaseBusy = () => {
+        if (done) return;
+        done = true;
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+        resolve();
+      };
+      speakToolText(formatForSpeech(word), { role: 'female', rate: 0.9, pitch: 1 }).then((result) => {
+        if (result === 'cancelled') return; // stopped/superseded — keep the safety below
+        releaseBusy();
+      });
+      // Safety: if the completion callback never fires, release after 3s so
+      // the male trigger isn't blocked and the rotation doesn't stall.
+      setTimeout(releaseBusy, 3000);
     });
   };
 
@@ -330,21 +342,28 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     return shuffleBagRef.current.pop();
   };
 
+  // Self-pacing rotation: each word's speak is awaited before the next is
+  // queued, so a slow native TTS start can't be flushed by the next word's
+  // QUEUE_FLUSH call. A minimum floor of ROTATION_MS preserves the 3-second
+  // visible cadence; if the engine is slow the cadence stretches to match.
   const startRotation = () => {
-    if (rotRef.current) clearInterval(rotRef.current);
+    if (rotRef.current) { clearTimeout(rotRef.current); rotRef.current = null; }
     shuffleBagRef.current = []; // fresh bag on each session/rotation start
+    scheduleNextWord();
+  };
+
+  const scheduleNextWord = () => {
+    if (lockedRef.current) return;
     const pool = termsRef.current;
-    if (pool.length) {
-      currentWordRef.current = pickNextWord();
-      speakNormal(currentWordRef.current);
-    }
-    rotRef.current = setInterval(() => {
+    if (!pool.length) return;
+    currentWordRef.current = pickNextWord();
+    const startedAt = Date.now();
+    speakNormal(currentWordRef.current).then(() => {
       if (lockedRef.current) return;
-      const p = termsRef.current;
-      if (!p.length) return;
-      currentWordRef.current = pickNextWord();
-      speakNormal(currentWordRef.current);
-    }, ROTATION_MS);
+      const elapsed = Date.now() - startedAt;
+      const wait = Math.max(0, ROTATION_MS - elapsed);
+      rotRef.current = setTimeout(scheduleNextWord, wait);
+    });
   };
 
   const triggerLock = useCallback(() => {

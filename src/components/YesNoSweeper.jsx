@@ -62,18 +62,24 @@ export default function YesNoSweeper() {
   // spoken in the deep male voice role.
   const speakNormal = (phrase) => {
     femaleBusyRef.current = true;
-    const releaseBusy = () => {
-      femaleBusyRef.current = false;
-      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-    };
-    speakToolText(phrase, { role: 'female', rate: 0.9, pitch: 1 }).then((result) => {
-      if (result === 'cancelled') return; // stopped/superseded — keep the 3s safety below
-      releaseBusy();
+    return new Promise((resolve) => {
+      let done = false;
+      const releaseBusy = () => {
+        if (done) return;
+        done = true;
+        femaleBusyRef.current = false;
+        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+        resolve();
+      };
+      speakToolText(phrase, { role: 'female', rate: 0.9, pitch: 1 }).then((result) => {
+        if (result === 'cancelled') return; // stopped/superseded — keep the 3s safety below
+        releaseBusy();
+      });
+      // Safety: if the completion callback never fires (e.g. web iOS
+      // speechSynthesis locked), reset femaleBusyRef and resolve after 3s
+      // so the male trigger isn't blocked and the rotation doesn't stall.
+      setTimeout(releaseBusy, 3000);
     });
-    // Safety: if the completion callback never fires (e.g. web iOS
-    // speechSynthesis locked), reset femaleBusyRef after 3s so the male
-    // trigger isn't blocked forever.
-    setTimeout(() => { if (femaleBusyRef.current) releaseBusy(); }, 3000);
   };
 
   const stopNormalVoice = () => {
@@ -183,29 +189,40 @@ export default function YesNoSweeper() {
   };
 
   // ── Sweep phase: one rotation of YES → NO → I DON'T KNOW, 4 sec each ──
+  // Self-pacing: each phrase's speak is awaited before the next is queued,
+  // so a slow native TTS start can't be flushed by the next phrase's
+  // QUEUE_FLUSH call. A minimum floor of PHRASE_MS preserves the 4-second
+  // visible cadence; if the engine is slow the cadence stretches to match.
   const startSweepPhase = () => {
     if (lockedRef.current) return;
     sweepingRef.current = true;
     indexRef.current = 0;
     setCurrentIdx(0);
-    speakNormal(PHRASES[0].speech);
-    scheduleNextSweepStep();
+    const startedAt = Date.now();
+    speakNormal(PHRASES[0].speech).then(() => {
+      if (lockedRef.current) return;
+      const elapsed = Date.now() - startedAt;
+      const wait = Math.max(0, PHRASE_MS - elapsed);
+      stepRef.current = setTimeout(scheduleNextSweepStep, wait);
+    });
   };
 
   const scheduleNextSweepStep = () => {
-    if (stepRef.current) clearTimeout(stepRef.current);
-    stepRef.current = setTimeout(() => {
+    if (lockedRef.current) return;
+    indexRef.current += 1;
+    if (indexRef.current >= PHRASES.length) {
+      // Rotation complete, no trigger → back to asking phase
+      startAskingPhase();
+      return;
+    }
+    setCurrentIdx(indexRef.current);
+    const startedAt = Date.now();
+    speakNormal(PHRASES[indexRef.current].speech).then(() => {
       if (lockedRef.current) return;
-      indexRef.current += 1;
-      if (indexRef.current >= PHRASES.length) {
-        // Rotation complete, no trigger → back to asking phase
-        startAskingPhase();
-        return;
-      }
-      setCurrentIdx(indexRef.current);
-      speakNormal(PHRASES[indexRef.current].speech);
-      scheduleNextSweepStep();
-    }, PHRASE_MS);
+      const elapsed = Date.now() - startedAt;
+      const wait = Math.max(0, PHRASE_MS - elapsed);
+      stepRef.current = setTimeout(scheduleNextSweepStep, wait);
+    });
   };
 
   const triggerLock = useCallback(() => {
