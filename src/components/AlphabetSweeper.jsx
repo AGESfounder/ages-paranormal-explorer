@@ -66,7 +66,7 @@ export default function AlphabetSweeper() {
     // Backstop: if the completion callback never arrives (e.g. web iOS
     // speechSynthesis stalls), release the male voice after 1.5s anyway.
     const busyTimeout = setTimeout(releaseBusy, 1500);
-    return speakToolText(letter.toLowerCase(), { role: 'female', rate: 0.95, pitch: 2.0 }).then((result) => {
+    return speakToolText(letter.toLowerCase(), { role: 'female', rate: 1.15, pitch: 2.0 }).then((result) => {
       if (result === 'cancelled') return result; // stopped/superseded — keep the backstop timer
       clearTimeout(busyTimeout);
       releaseBusy();
@@ -92,7 +92,7 @@ export default function AlphabetSweeper() {
     const finish = () => { if (done) return; done = true; onDone?.(); };
     const estMs = Math.max(1500, text.length * 180 + 800);
     const timer = setTimeout(finish, estMs);
-    speakToolText(text, { role: 'male', rate: 0.85, pitch: 0.1 }).then((result) => {
+    speakToolText(text, { role: 'male', rate: 0.65, pitch: 0.1 }).then((result) => {
       clearTimeout(timer);
       if (result === 'cancelled') return; // stopped/superseded — never restart a stopped session
       finish();
