@@ -66,7 +66,7 @@ export default function Toolkit() {
     return ordered;
   };
 
-  useEffect(() => { primeGPS(); }, []);
+  useEffect(() => primeGPS(), []);
 
   useEffect(() => {
     base44.auth.me().then(u => {

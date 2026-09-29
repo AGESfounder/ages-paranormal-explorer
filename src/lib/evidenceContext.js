@@ -1,5 +1,5 @@
 import { base44 } from '@/api/base44Client';
-import { getDevicePosition } from '@/lib/deviceCapabilities';
+import { getDevicePosition, isNativeApp } from '@/lib/deviceCapabilities';
 
 /**
  * Captures the current device GPS coordinates.
@@ -7,9 +7,44 @@ import { getDevicePosition } from '@/lib/deviceCapabilities';
  */
 let lastGps = null; // { latitude, longitude, at }
 
-/** Fire-and-forget: grab a fix early (e.g. when the toolkit opens) so a later save has one cached. */
+/**
+ * Continuously track location while the Toolkit is open so the latest fix is
+ * always ready at save time. Returns a stop function.
+ */
 export function primeGPS() {
-  captureGPS().catch(() => {});
+  let stopped = false;
+  let webId = null;
+  let nativeId = null;
+  const onFix = (lat, lng) => { lastGps = { latitude: lat, longitude: lng, at: Date.now() }; };
+  const startWeb = () => {
+    if (!navigator.geolocation) return;
+    webId = navigator.geolocation.watchPosition(
+      (p) => onFix(p.coords.latitude, p.coords.longitude),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
+    );
+  };
+  (async () => {
+    if (isNativeApp()) {
+      try {
+        const { Geolocation } = await import('@capacitor/geolocation');
+        const perm = await Geolocation.requestPermissions();
+        if (stopped) return;
+        nativeId = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 },
+          (pos) => { if (pos) onFix(pos.coords.latitude, pos.coords.longitude); }
+        );
+        if (stopped && nativeId) Geolocation.clearWatch({ id: nativeId });
+        return;
+      } catch { /* fall back to web */ }
+    }
+    if (!stopped) startWeb();
+  })();
+  return () => {
+    stopped = true;
+    if (webId != null) navigator.geolocation.clearWatch(webId);
+    if (nativeId) import('@capacitor/geolocation').then(({ Geolocation }) => Geolocation.clearWatch({ id: nativeId })).catch(() => {});
+  };
 }
 
 export async function captureGPS() {
@@ -134,10 +169,13 @@ export async function geocodeAddress(address) {
 export async function buildEvidenceContext(overrides = {}) {
   // Never let GPS hold up a save forever, but allow enough time for both the
   // high-accuracy (8s) and low-accuracy fallback (15s) attempts to finish.
-  const gpsWithCap = Promise.race([captureGPS(), new Promise((r) => setTimeout(() => r(null), 26000))]);
-  const [freshGps, activeCtx] = await Promise.all([gpsWithCap, getActiveContext()]);
-  // Fall back to a fix captured earlier this session (within 30 min).
-  const gps = freshGps || (lastGps && Date.now() - lastGps.at < 30 * 60 * 1000 ? lastGps : null);
+  // Use the fix tracked while the tool was open (instant); only if there is
+  // none, try a fresh capture.
+  const cached = lastGps && Date.now() - lastGps.at < 30 * 60 * 1000 ? lastGps : null;
+  const gpsWithCap = cached
+    ? Promise.resolve(cached)
+    : Promise.race([captureGPS(), new Promise((r) => setTimeout(() => r(null), 26000))]);
+  const [gps, activeCtx] = await Promise.all([gpsWithCap, getActiveContext()]);
   const ctx = {};
   if (activeCtx.tour_id && !overrides.tour_id) ctx.tour_id = activeCtx.tour_id;
   if (activeCtx.stop_id && !overrides.stop_id) ctx.stop_id = activeCtx.stop_id;
