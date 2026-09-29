@@ -733,6 +733,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
             <li>After each word is dictated, the scan resumes automatically with a new random word every 3 seconds.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
+          <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>
         </div>
         <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
         <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">

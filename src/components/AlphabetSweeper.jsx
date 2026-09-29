@@ -601,6 +601,7 @@ export default function AlphabetSweeper() {
             <li>After each letter is dictated, the alphabet restarts from A.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
+          <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>
         </div>
         <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
         <button onClick={startSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
