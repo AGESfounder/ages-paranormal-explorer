@@ -12,7 +12,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import { getEffectivePlanId } from '@/lib/access';
-import { buildEvidenceContext } from '@/lib/evidenceContext';
+import { buildEvidenceContext, primeGPS } from '@/lib/evidenceContext';
 import ResearchDatabase from '../components/ResearchDatabase';
 import useGhostVoice from '../hooks/useGhostVoice';
 import useWakeLock from '../hooks/useWakeLock';
@@ -65,6 +65,8 @@ export default function Toolkit() {
     defaults.forEach(t => { if (!seen.has(t.name)) ordered.push(t); });
     return ordered;
   };
+
+  useEffect(() => { primeGPS(); }, []);
 
   useEffect(() => {
     base44.auth.me().then(u => {
