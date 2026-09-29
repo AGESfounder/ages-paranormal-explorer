@@ -68,7 +68,7 @@ export default function Home() {
           transition={{ duration: 0.6 }}
           className="w-full pt-[max(2.5rem,env(safe-area-inset-top))] pb-4 px-6 text-center"
         >
-          <h1 className="font-display text-4xl text-primary tracking-[0.2em] text-3d-pop leading-none">
+          <h1 className="font-script text-5xl text-primary tracking-[0.15em] text-3d-pop leading-none">
             EXPLORER
           </h1>
           <p className="mt-2 font-heading text-[11px] tracking-[0.05em] uppercase text-primary font-semibold drop-shadow-[0_0_10px_hsl(199,89%,48%,0.5)] flex items-center justify-center gap-0.5 whitespace-nowrap px-2">
@@ -98,7 +98,7 @@ export default function Home() {
               transition={{ delay: 0.2, duration: 0.6 }}
               className="flex items-center justify-center pt-12"
             >
-              <h1 className="font-display text-5xl text-primary tracking-wider text-3d-pop leading-none">
+              <h1 className="font-script text-6xl text-primary tracking-wider text-3d-pop leading-none">
                 AGES
               </h1>
             </motion.div>
