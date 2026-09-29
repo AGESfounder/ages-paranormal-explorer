@@ -52,13 +52,24 @@ function preferLocal(list) {
   return local.length ? local : list;
 }
 
-function pickFemaleVoice(voices) {
+function pickFemaleVoice(voices, maleVoice) {
   const enUS = preferLocal(voices.filter(isEnUS));
   const en = preferLocal(voices.filter(isEnglish));
+  // Avoid landing on the same voice the male role picked — when the device
+  // has no gender-coded voice, both roles would otherwise fall back to the
+  // same first English voice and only pitch would differentiate them.
+  const notMale = (v) =>
+    !maleVoice ||
+    (v.voiceURI && maleVoice.voiceURI && v.voiceURI !== maleVoice.voiceURI) ||
+    v.index !== maleVoice.index;
   return (
+    enUS.find((v) => hasFemaleHint(v) && notMale(v)) ||
     enUS.find(hasFemaleHint) ||
-    enUS.find((v) => !/google|microsoft|zira/i.test(voiceLabel(v))) ||
+    en.find((v) => hasFemaleHint(v) && notMale(v)) ||
+    en.find(hasFemaleHint) ||
+    enUS.find(notMale) ||
     enUS[0] ||
+    en.find(notMale) ||
     en[0] ||
     null
   );
@@ -164,10 +175,19 @@ export function getToolVoices({ refresh = false } = {}) {
   return voicesLoading;
 }
 
-async function resolveRoleVoice(role) {
+let roleVoiceCache = null;
+
+// Resolve both roles together so the female voice can be chosen as a
+// *different* voice from the male voice (see pickFemaleVoice). Cached once a
+// non-empty voice list is available.
+async function resolveRoleVoices() {
+  if (roleVoiceCache) return roleVoiceCache;
   const voices = await getToolVoices();
-  if (!voices.length) return null;
-  return role === 'male' ? pickMaleVoice(voices) : pickFemaleVoice(voices);
+  if (!voices.length) return { male: null, female: null };
+  const male = pickMaleVoice(voices);
+  const female = pickFemaleVoice(voices, male);
+  roleVoiceCache = { male, female };
+  return roleVoiceCache;
 }
 
 // ── Speak / stop with a generation guard ───────────────────────────────────
@@ -186,8 +206,9 @@ function settleEntry(entry, result) {
 
 async function speakNative(text, opts, gen, settle) {
   try {
-    const voice = await resolveRoleVoice(opts.role);
+    const { male, female } = await resolveRoleVoices();
     if (gen !== generation) { settle('cancelled'); return; }
+    const voice = opts.role === 'male' ? male : female;
     const speakOpts = {
       text,
       lang: 'en-US',
@@ -210,8 +231,9 @@ async function speakWeb(text, opts, gen, settle) {
   try {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) { settle('error'); return; }
     const synth = window.speechSynthesis;
-    const voice = await resolveRoleVoice(opts.role);
+    const { male, female } = await resolveRoleVoices();
     if (gen !== generation) { settle('cancelled'); return; }
+    const voice = opts.role === 'male' ? male : female;
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'en-US';
     u.rate = opts.rate;

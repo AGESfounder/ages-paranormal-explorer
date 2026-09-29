@@ -127,6 +127,7 @@ export default function LocationTermBank() {
   const lastOrientRef = useRef(null);
   const lastTriggerRef = useRef(0);
   const lockedRef = useRef(false);
+  const epochRef = useRef(0); // bumped to invalidate stale scheduleNextWord callbacks
   const termsRef = useRef([]);
   const currentWordRef = useRef('');
   const lockedWordRef = useRef(null);
@@ -162,6 +163,7 @@ export default function LocationTermBank() {
 
   const stopEverything = () => {
     stopNormalVoice();
+    epochRef.current++; // invalidate any pending scheduleNextWord callback
     if (rotRef.current) { clearInterval(rotRef.current); rotRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -348,6 +350,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   // visible cadence; if the engine is slow the cadence stretches to match.
   const startRotation = () => {
     if (rotRef.current) { clearTimeout(rotRef.current); rotRef.current = null; }
+    epochRef.current++; // invalidate any stale scheduleNextWord callbacks
     shuffleBagRef.current = []; // fresh bag on each session/rotation start
     scheduleNextWord();
   };
@@ -356,10 +359,13 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     if (lockedRef.current) return;
     const pool = termsRef.current;
     if (!pool.length) return;
+    const myEpoch = epochRef.current;
     currentWordRef.current = pickNextWord();
     const startedAt = Date.now();
     speakNormal(currentWordRef.current).then(() => {
-      if (lockedRef.current) return;
+      // Ignore completions from before a lock/restart/stop so the rotation
+      // isn't double-scheduled (the trigger's onDone restarts it instead).
+      if (lockedRef.current || myEpoch !== epochRef.current) return;
       const elapsed = Date.now() - startedAt;
       const wait = Math.max(0, ROTATION_MS - elapsed);
       rotRef.current = setTimeout(scheduleNextWord, wait);
@@ -390,6 +396,12 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       lockedRef.current = false;
       lockedWordRef.current = null;
       setLockedWord(null);
+      // Restart the rotation after the triggered word finishes — the
+      // self-pacing chain broke when the lock was set, so without this the
+      // sweeper would freeze. Bumping the epoch first invalidates any stale
+      // scheduleNextWord callback still pending from the cancelled word.
+      epochRef.current++;
+      scheduleNextWord();
     });
   }, []);
 
@@ -652,6 +664,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
 
   const stopSession = () => {
     stopNormalVoice();
+    epochRef.current++; // invalidate any pending scheduleNextWord callback
     if (rotRef.current) { clearInterval(rotRef.current); rotRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     stopDrawing();
