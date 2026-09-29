@@ -25,26 +25,16 @@ export function isNativeToolSpeech() {
   }
 }
 
-// ── Best-effort voice name heuristics (no gender guarantee) ────────────────
-// Female names cover the iOS voices the Tools historically preferred plus a
-// generic "female" hint for Android engine voice ids ("en-us-x-sfg#female_1-local").
-const FEMALE_VOICE_RE = /samantha|karen|moira|tessa|fiona|serena|allison|ava|victoria|susan|kathy|zoe|female/i;
-const MALE_VOICE_NAMES = ['Daniel', 'Alex', 'Oliver', 'Tom', 'Arthur', 'Ralph', 'Rocko', 'Aaron', 'Finn', 'Fred', 'Greg', 'Gordon', 'James', 'Joey', 'Juan', 'Kanya', 'Karl', 'Kenji', 'Lee', 'Mark', 'Matt', 'Nicky', 'Noah', 'Nora', 'Paul', 'Rishi', 'Tyler', 'Wayne'];
-const MALE_VOICE_RE = /male|daniel|alex|fred|tom|david|mark|oliver|arthur|aaron|james|paul/i;
+// ── Voice selection ────────────────────────────────────────────────────────
+// Both roles (rotation + trigger) use the SAME physical voice and are
+// differentiated only by the pitch parameter the caller passes. Gender-based
+// voice matching was unreliable on Android (voice names are locale labels,
+// not "Samantha"/"Daniel") and could assign the naturally-deeper voice to the
+// "high" role — making the roles sound backwards. A single voice + a wide
+// pitch gap is predictable on every device.
 
 const isEnglish = (v) => /^en/i.test(v.lang || '');
 const isEnUS = (v) => /^en[-_]US/i.test(v.lang || '');
-const isEnGB = (v) => /^en[-_]GB/i.test(v.lang || '');
-
-// Android reports the engine voice id in voiceURI while `name` is only the
-// locale label ("English United States"), so match against both.
-const voiceLabel = (v) => `${v.name || ''} ${v.voiceURI || ''}`;
-const hasFemaleHint = (v) => FEMALE_VOICE_RE.test(voiceLabel(v));
-const hasMaleHint = (v) => {
-  const s = voiceLabel(v);
-  // "female" contains "male" — exclude female-labelled voices explicitly.
-  return MALE_VOICE_RE.test(s) && !/female/i.test(s);
-};
 
 /** Prefer on-device (localService) voices over network voices. */
 function preferLocal(list) {
@@ -52,41 +42,12 @@ function preferLocal(list) {
   return local.length ? local : list;
 }
 
-function pickFemaleVoice(voices, maleVoice) {
+/** Pick the one voice used for both roles: first local en-US voice, then any
+ *  local English voice, then any English voice. Returns null if none. */
+function pickVoice(voices) {
   const enUS = preferLocal(voices.filter(isEnUS));
   const en = preferLocal(voices.filter(isEnglish));
-  // Avoid landing on the same voice the male role picked — when the device
-  // has no gender-coded voice, both roles would otherwise fall back to the
-  // same first English voice and only pitch would differentiate them.
-  const notMale = (v) =>
-    !maleVoice ||
-    (v.voiceURI && maleVoice.voiceURI && v.voiceURI !== maleVoice.voiceURI) ||
-    v.index !== maleVoice.index;
-  return (
-    enUS.find((v) => hasFemaleHint(v) && notMale(v)) ||
-    enUS.find(hasFemaleHint) ||
-    en.find((v) => hasFemaleHint(v) && notMale(v)) ||
-    en.find(hasFemaleHint) ||
-    enUS.find(notMale) ||
-    enUS[0] ||
-    en.find(notMale) ||
-    en[0] ||
-    null
-  );
-}
-
-function pickMaleVoice(voices) {
-  const en = preferLocal(voices.filter(isEnglish));
-  for (const name of MALE_VOICE_NAMES) {
-    const match = en.find((v) => voiceLabel(v).toLowerCase().includes(name.toLowerCase()));
-    if (match && !hasFemaleHint(match)) return match;
-  }
-  return (
-    en.find(hasMaleHint) ||
-    preferLocal(voices.filter(isEnGB)).find((v) => /daniel/i.test(voiceLabel(v))) ||
-    en[0] ||
-    null
-  );
+  return enUS[0] || en[0] || null;
 }
 
 // ── Async voice enumeration ────────────────────────────────────────────────
@@ -177,16 +138,14 @@ export function getToolVoices({ refresh = false } = {}) {
 
 let roleVoiceCache = null;
 
-// Resolve both roles together so the female voice can be chosen as a
-// *different* voice from the male voice (see pickFemaleVoice). Cached once a
-// non-empty voice list is available.
+// Both roles resolve to the SAME voice — pitch (set by callers) is the only
+// differentiator. Cached once a non-empty voice list is available.
 async function resolveRoleVoices() {
   if (roleVoiceCache) return roleVoiceCache;
   const voices = await getToolVoices();
   if (!voices.length) return { male: null, female: null };
-  const male = pickMaleVoice(voices);
-  const female = pickFemaleVoice(voices, male);
-  roleVoiceCache = { male, female };
+  const voice = pickVoice(voices);
+  roleVoiceCache = { male: voice, female: voice };
   return roleVoiceCache;
 }
 

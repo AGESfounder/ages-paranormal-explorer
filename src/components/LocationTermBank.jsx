@@ -76,7 +76,7 @@ export default function LocationTermBank() {
         if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
         resolve();
       };
-      speakToolText(formatForSpeech(word), { role: 'female', rate: 0.9, pitch: 1 }).then((result) => {
+      speakToolText(formatForSpeech(word), { role: 'female', rate: 0.9, pitch: 1.6 }).then((result) => {
         if (result === 'cancelled') return; // stopped/superseded — keep the safety below
         releaseBusy();
       });
@@ -104,7 +104,7 @@ export default function LocationTermBank() {
     // word) + buffer.
     const estMs = Math.max(1500, formatForSpeech(word).length * 180 + 800);
     const timer = setTimeout(finish, estMs);
-    speakToolText(formatForSpeech(word), { role: 'male', rate: 0.85, pitch: 0.3 }).then((result) => {
+    speakToolText(formatForSpeech(word), { role: 'male', rate: 0.85, pitch: 0.4 }).then((result) => {
       clearTimeout(timer);
       if (result === 'cancelled') return; // stopped/superseded — never restart a stopped session
       finish();
