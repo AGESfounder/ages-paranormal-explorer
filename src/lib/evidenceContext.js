@@ -144,17 +144,7 @@ export async function buildEvidenceContext(overrides = {}) {
   if (activeCtx.location_name && !overrides.location_name) ctx.location_name = activeCtx.location_name;
   // GPS unavailable (denied, blocked preview, no signal): fall back to the
   // active stop's coordinates so the evidence still lands on the community map.
-  if (!gps && activeCtx.stop_id && overrides.latitude == null && overrides.longitude == null) {
-    try {
-      const stop = await base44.entities.TourStop.get(activeCtx.stop_id);
-      if (typeof stop?.latitude === 'number' && typeof stop?.longitude === 'number') {
-        ctx.latitude = stop.latitude;
-        ctx.longitude = stop.longitude;
-      }
-    } catch {
-      // ignore — save without coordinates
-    }
-  }
+
   if (gps) {
     if (overrides.latitude == null) ctx.latitude = gps.latitude;
     if (overrides.longitude == null) ctx.longitude = gps.longitude;
