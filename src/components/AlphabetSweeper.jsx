@@ -66,10 +66,11 @@ export default function AlphabetSweeper() {
     // Backstop: if the completion callback never arrives (e.g. web iOS
     // speechSynthesis stalls), release the male voice after 1.5s anyway.
     const busyTimeout = setTimeout(releaseBusy, 1500);
-    speakToolText(letter.toLowerCase(), { role: 'female', rate: 0.95, pitch: 1.0 }).then((result) => {
-      if (result === 'cancelled') return; // stopped/superseded — keep the backstop timer
+    return speakToolText(letter.toLowerCase(), { role: 'female', rate: 0.95, pitch: 1.0 }).then((result) => {
+      if (result === 'cancelled') return result; // stopped/superseded — keep the backstop timer
       clearTimeout(busyTimeout);
       releaseBusy();
+      return result;
     });
   };
 
@@ -166,7 +167,7 @@ export default function AlphabetSweeper() {
     if (creepyFallbackRef.current) { clearTimeout(creepyFallbackRef.current); creepyFallbackRef.current = null; }
     if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
-    if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
+    if (stepRef.current) { clearTimeout(stepRef.current); stepRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
@@ -181,19 +182,32 @@ export default function AlphabetSweeper() {
     setMotionDetected(false);
   };
 
+  // Self-pacing rotation: each letter's speak is awaited before the next is
+  // queued, so a slow native TTS start can't be flushed by the next letter's
+  // QUEUE_FLUSH call. A minimum floor of LETTER_MS preserves the 2-second
+  // visible cadence; if the engine is slow the cadence stretches to match.
+  const scheduleNextLetter = () => {
+    if (lockedRef.current || !sessionActiveRef.current) return;
+    const letter = LETTERS[indexRef.current];
+    currentLetterRef.current = letter;
+    setCurrentLetter(letter);
+    const startedAt = Date.now();
+    speakNormal(letter).then(() => {
+      if (lockedRef.current || !sessionActiveRef.current) return;
+      const elapsed = Date.now() - startedAt;
+      const wait = Math.max(0, LETTER_MS - elapsed);
+      stepRef.current = setTimeout(() => {
+        if (lockedRef.current || !sessionActiveRef.current) return;
+        indexRef.current = (indexRef.current + 1) % LETTERS.length;
+        scheduleNextLetter();
+      }, wait);
+    });
+  };
+
   const startStepping = () => {
-    if (stepRef.current) clearInterval(stepRef.current);
+    if (stepRef.current) { clearTimeout(stepRef.current); stepRef.current = null; }
     indexRef.current = 0;
-    currentLetterRef.current = LETTERS[0];
-    setCurrentLetter(LETTERS[0]);
-    speakNormal(LETTERS[0]);
-    stepRef.current = setInterval(() => {
-      if (lockedRef.current) return;
-      indexRef.current = (indexRef.current + 1) % LETTERS.length;
-      currentLetterRef.current = LETTERS[indexRef.current];
-      setCurrentLetter(LETTERS[indexRef.current]);
-      speakNormal(LETTERS[indexRef.current]);
-    }, LETTER_MS);
+    scheduleNextLetter();
   };
 
   const triggerLock = useCallback(() => {
@@ -517,7 +531,7 @@ export default function AlphabetSweeper() {
     pausedRef.current = false;
     setPaused(false);
     if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
-    if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
+    if (stepRef.current) { clearTimeout(stepRef.current); stepRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
