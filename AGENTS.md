@@ -12,6 +12,11 @@
 - `capacitor.config.ts` loads the Vite output from `dist/` with app id `com.ages.explorer`.
 - The Capacitor layer is an integration shell. Do not recreate the existing UI in React Native or redesign pages.
 
+## Tool voice (TTS)
+- Plugin: `@capacitor-community/text-to-speech@6.1.0` (MIT, pinned, Capacitor 7-compatible) — Android `android.speech.tts.TextToSpeech`, iOS `AVSpeechSynthesizer`. Wired via normal Capacitor dependency handling (no manual native edits; the plugin's manifest merge supplies the Android `TTS_SERVICE` `<queries>` entry — do not duplicate it; iOS needs no Info.plist additions).
+- Seam: `src/lib/toolSpeech.js` — speak/stop plus async voice enumeration with best-effort female/male role selection (voice-name heuristics + pitch; the OS gives no gender guarantee, local English voices preferred). `speakToolText()` resolves `ended`/`cancelled`/`error`; `cancelled` results must not resume a stopped session (generation-guarded against stale completions).
+- Callers: only the Tools — `AlphabetSweeper`, `LocationTermBank`, `YesNoSweeper` (native TTS on device, browser `window.speechSynthesis` on web). Ghost narration elsewhere stays on `useGhostVoice` + Base44 `GenerateSpeech`.
+
 ## Ads (AdMob)
 - Plugin: `@capacitor-community/admob@7.0.0` (Capacitor 7-compatible).
 - Seam: `src/lib/adService.js` — production interstitial/rewarded unit IDs, UMP consent bootstrap, iOS ATT, NPA when tracking unavailable, web simulation fallback.

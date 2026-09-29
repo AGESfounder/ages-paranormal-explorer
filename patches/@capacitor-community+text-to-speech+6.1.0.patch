@@ -1,0 +1,13 @@
+diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift
+index 90444f4..e2aab66 100644
+--- a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift
++++ b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift
+@@ -16,7 +16,7 @@ enum QUEUE_STRATEGY: Int {
+         // set session in background to avoid UI hangs.
+         queue.async {
+             do {
+-                let avAudioSessionCategory: AVAudioSession.Category = .playback
++                let avAudioSessionCategory: AVAudioSession.Category = .playAndRecord
+                 try AVAudioSession.sharedInstance().setCategory(avAudioSessionCategory, mode: .default, options: .duckOthers)
+                 try AVAudioSession.sharedInstance().setActive(true)
+             } catch {

@@ -11,6 +11,7 @@ import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
 
 // "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
 // appear once in rotation (4 sec each). If no trigger, the asking phase repeats.
@@ -25,8 +26,6 @@ const PHRASE_MS = 4000;
 const TRIGGER_COOLDOWN_MS = 3500;
 const ACCEL_THRESHOLD = 0.8;
 const ORIENT_THRESHOLD = 6;
-
-const MALE_VOICE_NAMES = ['Daniel', 'Alex', 'Oliver', 'Tom', 'Arthur', 'Ralph', 'Rocko', 'Aaron', 'Finn', 'Fred', 'Greg', 'Gordon', 'James', 'Joey', 'Juan', 'Kanya', 'Karl', 'Kenji', 'Lee', 'Mark', 'Matt', 'Nicky', 'Noah', 'Nora', 'Paul', 'Rishi', 'Tyler', 'Wayne'];
 
 function formatDuration(sec) {
   const m = Math.floor(sec / 60);
@@ -57,85 +56,48 @@ export default function YesNoSweeper() {
   const { stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
   const { gateNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
-  // Normal browser TTS announces each phrase as it cycles (instant, local,
-  // female voice). The locked phrase is then spoken in the deep male
-  // "creepy" voice via useGhostVoice.
+  // Local on-device TTS announces each phrase as it cycles (instant, female
+  // voice role) via the shared Tool speech adapter — native TTS on
+  // iOS/Android, browser speechSynthesis on web. The locked phrase is then
+  // spoken in the deep male voice role.
   const speakNormal = (phrase) => {
-    try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-      const synth = window.speechSynthesis;
-      try { synth.getVoices(); } catch {}
-      const u = new SpeechSynthesisUtterance(phrase);
-      u.lang = 'en-US';
-      u.rate = 0.9;
-      u.pitch = 1;
-      u.volume = 1;
-      const voices = synth.getVoices();
-      const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
-      if (en) u.voice = en;
-      femaleBusyRef.current = true;
-      u.onend = () => {
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      };
-      u.onerror = () => {
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      };
-      synth.speak(u);
-      // Safety: if onend/onerror never fires (e.g. iOS speechSynthesis locked),
-      // reset femaleBusyRef after 3s so the male trigger isn't blocked forever.
-      setTimeout(() => {
-        if (femaleBusyRef.current) {
-          femaleBusyRef.current = false;
-          if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-        }
-      }, 3000);
-    } catch { femaleBusyRef.current = false; }
+    femaleBusyRef.current = true;
+    const releaseBusy = () => {
+      femaleBusyRef.current = false;
+      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+    };
+    speakToolText(phrase, { role: 'female', rate: 0.9, pitch: 1 }).then((result) => {
+      if (result === 'cancelled') return; // stopped/superseded — keep the 3s safety below
+      releaseBusy();
+    });
+    // Safety: if the completion callback never fires (e.g. web iOS
+    // speechSynthesis locked), reset femaleBusyRef after 3s so the male
+    // trigger isn't blocked forever.
+    setTimeout(() => { if (femaleBusyRef.current) releaseBusy(); }, 3000);
   };
 
   const stopNormalVoice = () => {
     pendingMaleRef.current = null;
     femaleBusyRef.current = false;
-    try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
+    try { stopToolSpeech(); } catch {}
   };
 
-  const pickMaleVoice = (voices) => {
-    const en = voices.filter(v => /^en/i.test(v.lang));
-    for (const name of MALE_VOICE_NAMES) {
-      const match = en.find(v => v.name.toLowerCase().includes(name.toLowerCase()));
-      if (match) return match;
-    }
-    return en[0] || null;
-  };
-
-  // Speak the triggered (locked) phrase in a male voice using the browser's
-  // built-in speechSynthesis — same mechanism as the Term Sweeper. This avoids
-  // the server-side GenerateSpeech round-trip that hung on iOS. onDone fires
-  // when the voice finishes; a timer fallback covers the iOS WKWebView case
-  // where onend occasionally never fires.
+  // Speak the triggered (locked) phrase in a male voice via the shared Tool
+  // speech adapter — same local, on-device mechanism as the Term Sweeper.
+  // This avoids the server-side GenerateSpeech round-trip that hung on iOS.
+  // onDone fires when the voice finishes; a timer fallback covers the web iOS
+  // WKWebView case where the completion event occasionally never fires.
   const speakMaleVoice = (text, onDone) => {
-    try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { onDone?.(); return; }
-      const synth = window.speechSynthesis;
-      try { synth.cancel(); } catch {}
-      try { synth.getVoices(); } catch {}
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'en-US';
-      u.rate = 0.85;
-      u.pitch = 0.3;
-      u.volume = 1;
-      const voices = synth.getVoices();
-      const male = pickMaleVoice(voices);
-      if (male) u.voice = male;
-      let done = false;
-      const finish = () => { if (done) return; done = true; onDone?.(); };
-      const estMs = Math.max(1500, text.length * 180 + 800);
-      const timer = setTimeout(finish, estMs);
-      u.onend = () => { clearTimeout(timer); finish(); };
-      u.onerror = () => { clearTimeout(timer); finish(); };
-      synth.speak(u);
-    } catch { onDone?.(); }
+    try { stopToolSpeech(); } catch {}
+    let done = false;
+    const finish = () => { if (done) return; done = true; onDone?.(); };
+    const estMs = Math.max(1500, text.length * 180 + 800);
+    const timer = setTimeout(finish, estMs);
+    speakToolText(text, { role: 'male', rate: 0.85, pitch: 0.3 }).then((result) => {
+      clearTimeout(timer);
+      if (result === 'cancelled') return; // stopped/superseded — never restart a stopped session
+      finish();
+    });
   };
 
   const stepRef = useRef(null);
@@ -258,10 +220,11 @@ export default function YesNoSweeper() {
     setCaptured(prev => { const updated = [...prev, phrase.display]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     sweepingRef.current = false;
-    // Speak the locked phrase in a deep male voice via speechSynthesis (same
-    // reliable mechanism as the Term Sweeper). The lock releases and the
-    // asking phase restarts when the voice finishes (onDone), with a timer
-    // fallback for the iOS WKWebView case where onend never fires.
+    // Speak the locked phrase in a deep male voice via the shared Tool speech
+    // adapter (same reliable mechanism as the Term Sweeper). The lock releases
+    // and the asking phase restarts when the voice finishes (onDone), with a
+    // timer fallback for the web iOS WKWebView case where the completion
+    // event never fires.
     const speakMale = () => {
       speakMaleVoice(phrase.speech, () => {
         setLockedPhrase(null);
@@ -519,15 +482,10 @@ export default function YesNoSweeper() {
     // Unlock Web Audio inside the tap gesture so the later sensor-triggered
     // spoken answer plays on iOS.
     unlock();
-    // Prime speechSynthesis within the user gesture so later calls from
-    // timeouts work on iOS (first speakNormal is 10s after this tap).
-    try {
-      if ('speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance(' ');
-        u.volume = 0;
-        window.speechSynthesis.speak(u);
-      }
-    } catch {}
+    // Prime the speech engine within the user gesture so later calls from
+    // timeouts work on web iOS (first speakNormal is 10s after this tap); on
+    // native this pre-loads the voice list.
+    primeToolSpeech();
     startAskingPhase();
     await startSensors();
     await startCamera();

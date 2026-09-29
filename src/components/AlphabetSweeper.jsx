@@ -11,6 +11,7 @@ import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 // Phonetic spellings so TTS pronounces each letter as a clear letter name
@@ -52,91 +53,49 @@ export default function AlphabetSweeper() {
   const { stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
   const { gateNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
-  // Pick the most natural-sounding female system voice available (Samantha on
-  // iOS, Karen on AU, etc.). Falls back to any en-US voice.
-  const pickFemaleVoice = (voices) => {
-    return voices.find(v => /^en[-_]US/i.test(v.lang) && /samantha|karen|moira|tessa|fiona|serena|allison|ava/i.test(v.name))
-      || voices.find(v => /^en[-_]US/i.test(v.lang) && !/google|microsoft|zira/i.test(v.name))
-      || voices.find(v => /^en[-_]US/i.test(v.lang))
-      || voices.find(v => /^en/i.test(v.lang));
-  };
-
-  // Pick a deep male system voice for the trigger announcement.
-  const pickMaleVoice = (voices) => {
-    return voices.find(v => /^en[-_]US/i.test(v.lang) && /daniel|alex|fred|tom|david|mark|oliver|arthur/i.test(v.name))
-      || voices.find(v => /^en/i.test(v.lang) && /male|daniel|alex|fred|tom|david/i.test(v.name))
-      || voices.find(v => /^en[-_]GB/i.test(v.lang) && /daniel/i.test(v.name))
-      || voices.find(v => /^en/i.test(v.lang));
-  };
-
-  // Speak a letter aloud using the browser's built-in speechSynthesis. Uses
-  // the lowercase letter so the voice doesn't announce "Capital" before it.
-  // Sets femaleBusyRef so the male trigger voice waits for the current letter.
+  // Speak a letter aloud via the shared Tool speech adapter (native TTS on
+  // iOS/Android, browser speechSynthesis on web). Uses the lowercase letter
+  // so the voice doesn't announce "Capital" before it. Sets femaleBusyRef so
+  // the male trigger voice waits for the current letter.
   const speakNormal = (letter) => {
-    try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-      const synth = window.speechSynthesis;
-      const u = new SpeechSynthesisUtterance(letter.toLowerCase());
-      u.lang = 'en-US';
-      u.rate = 0.95;
-      u.pitch = 1.0;
-      u.volume = 1;
-      const voices = synth.getVoices();
-      const en = pickFemaleVoice(voices);
-      if (en) u.voice = en;
-      femaleBusyRef.current = true;
-      const busyTimeout = setTimeout(() => {
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      }, 1500);
-      u.onend = () => {
-        clearTimeout(busyTimeout);
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      };
-      u.onerror = () => {
-        clearTimeout(busyTimeout);
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      };
-      synth.speak(u);
-    } catch { femaleBusyRef.current = false; }
+    femaleBusyRef.current = true;
+    const releaseBusy = () => {
+      femaleBusyRef.current = false;
+      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+    };
+    // Backstop: if the completion callback never arrives (e.g. web iOS
+    // speechSynthesis stalls), release the male voice after 1.5s anyway.
+    const busyTimeout = setTimeout(releaseBusy, 1500);
+    speakToolText(letter.toLowerCase(), { role: 'female', rate: 0.95, pitch: 1.0 }).then((result) => {
+      if (result === 'cancelled') return; // stopped/superseded — keep the backstop timer
+      clearTimeout(busyTimeout);
+      releaseBusy();
+    });
   };
 
   const stopFemaleAudio = () => {
     pendingMaleRef.current = null;
     femaleBusyRef.current = false;
-    try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
+    try { stopToolSpeech(); } catch {}
     try { stopVoice(); } catch {}
   };
 
-  // Speak the triggered (locked) letter in a male voice using the browser's
-  // built-in speechSynthesis — same mechanism as the Term Sweeper. This avoids
-  // the server-side GenerateSpeech round-trip that hung on iOS. onDone fires
-  // when the voice finishes; a timer fallback covers the iOS WKWebView case
-  // where onend occasionally never fires.
+  // Speak the triggered (locked) letter in a male voice via the shared Tool
+  // speech adapter — same local, on-device mechanism as the Term Sweeper,
+  // avoiding the server-side GenerateSpeech round-trip that hung on iOS.
+  // onDone fires when the voice finishes; a timer fallback covers the web iOS
+  // WKWebView case where the completion event occasionally never fires.
   const speakMaleVoice = (text, onDone) => {
-    try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { onDone?.(); return; }
-      const synth = window.speechSynthesis;
-      try { synth.cancel(); } catch {}
-      try { synth.getVoices(); } catch {}
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = 'en-US';
-      u.rate = 0.85;
-      u.pitch = 0.3;
-      u.volume = 1;
-      const voices = synth.getVoices();
-      const male = pickMaleVoice(voices);
-      if (male) u.voice = male;
-      let done = false;
-      const finish = () => { if (done) return; done = true; onDone?.(); };
-      const estMs = Math.max(1500, text.length * 180 + 800);
-      const timer = setTimeout(finish, estMs);
-      u.onend = () => { clearTimeout(timer); finish(); };
-      u.onerror = () => { clearTimeout(timer); finish(); };
-      synth.speak(u);
-    } catch { onDone?.(); }
+    try { stopToolSpeech(); } catch {}
+    let done = false;
+    const finish = () => { if (done) return; done = true; onDone?.(); };
+    const estMs = Math.max(1500, text.length * 180 + 800);
+    const timer = setTimeout(finish, estMs);
+    speakToolText(text, { role: 'male', rate: 0.85, pitch: 0.3 }).then((result) => {
+      clearTimeout(timer);
+      if (result === 'cancelled') return; // stopped/superseded — never restart a stopped session
+      finish();
+    });
   };
 
   const stepRef = useRef(null);
@@ -247,10 +206,11 @@ export default function AlphabetSweeper() {
     setLockedLetter(letter);
     setCaptured(prev => { const updated = [...prev, letter]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
-    // Speak the locked letter in a deep male voice via speechSynthesis (same
-    // reliable mechanism as the Term Sweeper). The lock releases and the
-    // alphabet restarts from A when the voice finishes (onDone), with a
-    // timer fallback for the iOS WKWebView case where onend never fires.
+    // Speak the locked letter in a deep male voice via the shared Tool speech
+    // adapter (same reliable mechanism as the Term Sweeper). The lock releases
+    // and the alphabet restarts from A when the voice finishes (onDone), with
+    // a timer fallback for the web iOS WKWebView case where the completion
+    // event never fires.
     const speakMale = () => {
       speakMaleVoice(LETTER_TEXT[letter] || letter.toLowerCase(), () => {
         if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
@@ -492,15 +452,10 @@ export default function AlphabetSweeper() {
     setSessionDuration(0);
     setPhase('running');
     sessionActiveRef.current = true;
-    // Prime speechSynthesis within the user gesture so the directions
-    // (spoken after an await) play on iOS.
-    try {
-      if ('speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance(' ');
-        u.volume = 0;
-        window.speechSynthesis.speak(u);
-      }
-    } catch {}
+    // Prime the speech engine within the user gesture so the directions
+    // (spoken after an await) play on web iOS; on native this pre-loads the
+    // voice list.
+    primeToolSpeech();
     // Request sensor permissions up front (just the permission prompt).
     await requestSensorPermissions();
     startDrawing();
@@ -537,30 +492,17 @@ export default function AlphabetSweeper() {
         setSessionDuration(elapsed);
       }, 1000);
     };
-    // Speak the directions via the browser's built-in speechSynthesis (female
-    // voice). This is primed within the user gesture above so it plays on iOS.
-    try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { beginAfterPause(); }
-      else {
-        const synth = window.speechSynthesis;
-        synth.cancel();
-        const u = new SpeechSynthesisUtterance(directions);
-        u.lang = 'en-US';
-        u.rate = 0.92;
-        u.pitch = 1.0;
-        u.volume = 1;
-        const voices = synth.getVoices();
-        const en = pickFemaleVoice(voices);
-        if (en) u.voice = en;
-        u.onend = () => beginAfterPause();
-        u.onerror = () => beginAfterPause();
-        synth.speak(u);
-        // Safety fallback: if onend never fires, start anyway after 25s
-        startDelayRef.current = setTimeout(() => beginAfterPause(), 25000);
-      }
-    } catch { beginAfterPause(); }
-    // iOS fix: speechSynthesis pauses after ~15s. Resume periodically so
-    // letter dictation doesn't go silent partway through a session.
+    // Speak the directions in the female voice via the shared Tool speech
+    // adapter (primed within the user gesture above so web iOS plays them).
+    // A cancelled directions utterance (session stopped) must not start the
+    // sweep; if the completion callback never fires, start anyway after 25s.
+    speakToolText(directions, { role: 'female', rate: 0.92, pitch: 1.0 }).then((result) => {
+      if (result !== 'cancelled') beginAfterPause();
+    });
+    startDelayRef.current = setTimeout(() => beginAfterPause(), 25000);
+    // Web iOS fix: speechSynthesis pauses after ~15s. Resume periodically so
+    // letter dictation doesn't go silent partway through a session (no-op on
+    // native, where the OS TTS engine speaks instead).
     resumeIntervalRef.current = setInterval(() => {
       try {
         if ('speechSynthesis' in window && window.speechSynthesis.speaking) {

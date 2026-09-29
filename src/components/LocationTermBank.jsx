@@ -11,6 +11,7 @@ import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
@@ -64,84 +65,44 @@ export default function LocationTermBank() {
   const { unlock, attachMicToRecording } = useGhostVoice();
   const { gateManifestation, spendManifestation, gateNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
-  // Known male iOS / system voice names. We pick one of these for the
-  // triggered-word voice so it sounds distinctly male vs. the female dictation
-  // voice. If none is installed, we fall back to whatever en voice exists with
-  // a low pitch so it still reads as masculine.
-  const MALE_VOICE_NAMES = ['Daniel', 'Alex', 'Oliver', 'Tom', 'Arthur', 'Ralph', 'Rocko', 'Aaron', 'Finn', 'Fred', 'Greg', 'Gordon', 'James', 'Joey', 'Juan', 'Kanya', 'Karl', 'Kenji', 'Lee', 'Mark', 'Matt', 'Nicky', 'Noah', 'Nora', 'Paul', 'Rishi', 'Tyler', 'Wayne'];
-
-  const pickMaleVoice = (voices) => {
-    const en = voices.filter(v => /^en/i.test(v.lang));
-    for (const name of MALE_VOICE_NAMES) {
-      const match = en.find(v => v.name.toLowerCase().includes(name.toLowerCase()));
-      if (match) return match;
-    }
-    return en[0] || null;
-  };
-
   const speakNormal = (word) => {
-    try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-      const synth = window.speechSynthesis;
-      try { synth.getVoices(); } catch {}
-      const u = new SpeechSynthesisUtterance(formatForSpeech(word));
-      u.lang = 'en-US';
-      u.rate = 0.9;
-      u.pitch = 1;
-      u.volume = 1;
-      const voices = synth.getVoices();
-      const en = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang));
-      if (en) u.voice = en;
-      femaleBusyRef.current = true;
-      u.onend = () => {
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      };
-      u.onerror = () => {
-        femaleBusyRef.current = false;
-        if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
-      };
-      synth.speak(u);
-    } catch { femaleBusyRef.current = false; }
+    femaleBusyRef.current = true;
+    speakToolText(formatForSpeech(word), { role: 'female', rate: 0.9, pitch: 1 }).then((result) => {
+      if (result === 'cancelled') return; // stopped/superseded — do not flush a pending male voice
+      femaleBusyRef.current = false;
+      if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
+    });
   };
 
-  // Speak the triggered (locked) word in a male voice using the browser's
-  // built-in speechSynthesis — same mechanism as the female dictation voice.
+  // Speak the triggered (locked) word in a male voice via the shared Tool
+  // speech adapter (native TTS on iOS/Android, browser speechSynthesis on
+  // web) — same local, on-device mechanism as the female dictation voice.
   // This avoids the server-side GenerateSpeech round-trip that hung on iOS
   // (network latency + AudioContext suspended by getUserMedia + autoplay
-  // policy blocking audio.play() from a sensor event). onEnd fires when the
+  // policy blocking audio.play() from a sensor event). onDone fires when the
   // word finishes speaking so the lock can release; a timer fallback covers
-  // the iOS WKWebView case where onend occasionally never fires.
+  // the web iOS WKWebView case where the completion event occasionally never
+  // fires.
   const speakMaleVoice = (word, onDone) => {
-    try {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) { onDone?.(); return; }
-      const synth = window.speechSynthesis;
-      try { synth.cancel(); } catch {}
-      try { synth.getVoices(); } catch {}
-      const u = new SpeechSynthesisUtterance(formatForSpeech(word));
-      u.lang = 'en-US';
-      u.rate = 0.85;
-      u.pitch = 0.3;   // deep, masculine pitch
-      u.volume = 1;
-      const voices = synth.getVoices();
-      const male = pickMaleVoice(voices);
-      if (male) u.voice = male;
-      let done = false;
-      const finish = () => { if (done) return; done = true; onDone?.(); };
-      // Fallback: if iOS never fires onend, release after an estimate based
-      // on word length (~300ms per syllable, ~2 syllables per word) + buffer.
-      const estMs = Math.max(1500, formatForSpeech(word).length * 180 + 800);
-      const timer = setTimeout(finish, estMs);
-      u.onend = () => { clearTimeout(timer); finish(); };
-      u.onerror = () => { clearTimeout(timer); finish(); };
-      synth.speak(u);
-    } catch { onDone?.(); }
+    try { stopToolSpeech(); } catch {}
+    let done = false;
+    const finish = () => { if (done) return; done = true; onDone?.(); };
+    // Fallback: if the completion callback never fires, release after an
+    // estimate based on word length (~300ms per syllable, ~2 syllables per
+    // word) + buffer.
+    const estMs = Math.max(1500, formatForSpeech(word).length * 180 + 800);
+    const timer = setTimeout(finish, estMs);
+    speakToolText(formatForSpeech(word), { role: 'male', rate: 0.85, pitch: 0.3 }).then((result) => {
+      clearTimeout(timer);
+      if (result === 'cancelled') return; // stopped/superseded — never restart a stopped session
+      finish();
+    });
   };
 
   const stopNormalVoice = () => {
     pendingMaleRef.current = null;
     femaleBusyRef.current = false;
-    try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel(); } catch {}
+    try { stopToolSpeech(); } catch {}
   };
 
   const rotRef = useRef(null);
@@ -400,10 +361,11 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     speechStartedRef.current = false;
     // Cancel the female dictation voice immediately (cutting it off mid-word
     // is the desired "lock" effect) and speak the triggered word in the male
-    // voice. Both use browser speechSynthesis — no server round-trip, no
-    // credits, no iOS autoplay block. The lock releases when the male voice
-    // finishes (onDone), with a timer fallback for the iOS WKWebView case
-    // where onend occasionally never fires.
+    // voice. Both use the shared Tool speech adapter (native TTS on device,
+    // browser speechSynthesis on web) — no server round-trip, no credits, no
+    // iOS autoplay block. The lock releases when the male voice finishes
+    // (onDone), with a timer fallback for the web iOS WKWebView case where
+    // the completion event occasionally never fires.
     stopNormalVoice();
     speakMaleVoice(word, () => {
       lockedRef.current = false;
@@ -643,15 +605,10 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     sessionDurRef.current = 0;
     setSessionDuration(0);
     setPhase('running');
-    // Prime speechSynthesis within the user gesture so the word dictation
-    // (spoken later, after the permission prompts + settle pause) plays on iOS.
-    try {
-      if ('speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance(' ');
-        u.volume = 0;
-        window.speechSynthesis.speak(u);
-      }
-    } catch {}
+    // Prime the speech engine within the user gesture so the word dictation
+    // (spoken later, after the permission prompts + settle pause) plays on
+    // web iOS; on native this pre-loads the voice list.
+    primeToolSpeech();
     // Request all permissions up front (just the prompts). Sensor handlers
     // and camera frame processing are attached AFTER the settle pause so
     // motion from tapping the permission buttons doesn't trigger a lock.
