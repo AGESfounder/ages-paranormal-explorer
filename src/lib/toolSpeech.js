@@ -7,11 +7,9 @@
 //   - iOS (native):     same plugin over AVSpeechSynthesizer.
 //   - Web:              the browser's window.speechSynthesis (previous path).
 //
-// Voice gender is best-effort only: the OSes expose voice names but no
-// reliable gender flag, so the female/male roles are matched by name
-// heuristics and differentiated by pitch. When no role-matching voice exists
-// the Tools gracefully fall back to any local English voice (then the engine
-// default). Local (on-device) voices are preferred over network voices.
+// Use the device's reported voice order, with no gender or locale search.
+// White/rotation words use voice 1; blue/trigger words use voice 2.
+// If only one voice exists, both roles use it with their different pitches.
 
 import { Capacitor } from '@capacitor/core';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
@@ -23,31 +21,6 @@ export function isNativeToolSpeech() {
   } catch {
     return false;
   }
-}
-
-// ── Voice selection ────────────────────────────────────────────────────────
-// Both roles (rotation + trigger) use the SAME physical voice and are
-// differentiated only by the pitch parameter the caller passes. Gender-based
-// voice matching was unreliable on Android (voice names are locale labels,
-// not "Samantha"/"Daniel") and could assign the naturally-deeper voice to the
-// "high" role — making the roles sound backwards. A single voice + a wide
-// pitch gap is predictable on every device.
-
-const isEnglish = (v) => /^en/i.test(v.lang || '');
-const isEnUS = (v) => /^en[-_]US/i.test(v.lang || '');
-
-/** Prefer on-device (localService) voices over network voices. */
-function preferLocal(list) {
-  const local = list.filter((v) => v.local);
-  return local.length ? local : list;
-}
-
-/** Pick the one voice used for both roles: first local en-US voice, then any
- *  local English voice, then any English voice. Returns null if none. */
-function pickVoice(voices) {
-  const enUS = preferLocal(voices.filter(isEnUS));
-  const en = preferLocal(voices.filter(isEnglish));
-  return enUS[0] || en[0] || null;
 }
 
 // ── Async voice enumeration ────────────────────────────────────────────────
@@ -138,14 +111,13 @@ export function getToolVoices({ refresh = false } = {}) {
 
 let roleVoiceCache = null;
 
-// Both roles resolve to the SAME voice — pitch (set by callers) is the only
-// differentiator. Cached once a non-empty voice list is available.
+// Preserve the device's enumeration order. Existing role names are only
+// compatibility labels: female = voice 1, male = voice 2, not gender matching.
 async function resolveRoleVoices() {
   if (roleVoiceCache) return roleVoiceCache;
   const voices = await getToolVoices();
   if (!voices.length) return { male: null, female: null };
-  const voice = pickVoice(voices);
-  roleVoiceCache = { male: voice, female: voice };
+  roleVoiceCache = { female: voices[0], male: voices[1] || voices[0] };
   return roleVoiceCache;
 }
 
@@ -170,7 +142,7 @@ async function speakNative(text, opts, gen, settle) {
     const voice = opts.role === 'male' ? male : female;
     const speakOpts = {
       text,
-      lang: 'en-US',
+      lang: voice?.lang || 'en-US',
       rate: opts.rate,
       pitch: opts.pitch,
       volume: opts.volume,
@@ -194,7 +166,7 @@ async function speakWeb(text, opts, gen, settle) {
     if (gen !== generation) { settle('cancelled'); return; }
     const voice = opts.role === 'male' ? male : female;
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-US';
+    u.lang = voice?.lang || 'en-US';
     u.rate = opts.rate;
     u.pitch = opts.pitch;
     u.volume = opts.volume;
@@ -212,8 +184,8 @@ async function speakWeb(text, opts, gen, settle) {
  *
  * @param {string} text
  * @param {{ role?: 'female' | 'male', rate?: number, pitch?: number, volume?: number }} [opts]
- *   role selects the best-effort female (dictation) or male (trigger/lock)
- *   voice; pitch should still be set by the caller to differentiate roles.
+ *   role selects voice 1 ('female', white/dictation) or voice 2 ('male',
+ *   blue/trigger), in device order; callers set the high/low pitch.
  * @returns {Promise<'ended' | 'cancelled' | 'error'>} Always settles:
  *   'ended'     — speech finished naturally;
  *   'error'     — engine/playback failure (treat like 'ended' for flow);
