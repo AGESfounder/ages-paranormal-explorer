@@ -119,8 +119,9 @@ export async function geocodeAddress(address) {
 }
 
 export async function buildEvidenceContext(overrides = {}) {
-  // Never let GPS hold up a save: cap the whole capture at 12s.
-  const gpsWithCap = Promise.race([captureGPS(), new Promise((r) => setTimeout(() => r(null), 12000))]);
+  // Never let GPS hold up a save forever, but allow enough time for both the
+  // high-accuracy (8s) and low-accuracy fallback (15s) attempts to finish.
+  const gpsWithCap = Promise.race([captureGPS(), new Promise((r) => setTimeout(() => r(null), 26000))]);
   const [gps, activeCtx] = await Promise.all([gpsWithCap, getActiveContext()]);
   const ctx = {};
   if (activeCtx.tour_id && !overrides.tour_id) ctx.tour_id = activeCtx.tour_id;
