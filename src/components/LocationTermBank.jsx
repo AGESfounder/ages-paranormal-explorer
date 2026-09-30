@@ -76,13 +76,16 @@ export default function LocationTermBank() {
         if (pendingMaleRef.current) { const cb = pendingMaleRef.current; pendingMaleRef.current = null; cb(); }
         resolve();
       };
-      speakToolText(formatForSpeech(word), { role: 'female', rate: 1.15, pitch: 2.0 }).then((result) => {
-        if (result === 'cancelled') return; // stopped/superseded — keep the safety below
+      // Resolve on ANY settle (ended/cancelled/error) so the self-pacing
+      // `.then` in scheduleNextWord runs immediately and its lockedRef/epoch
+      // guard can short-circuit — instead of hanging on the 3s safety and
+      // then computing wait = max(0, ROTATION_MS - 3000) = 0, which fires
+      // the next word back-to-back (the "racing after a trigger" bug).
+      const safety = setTimeout(releaseBusy, 3000);
+      speakToolText(formatForSpeech(word), { role: 'female', rate: 1.15, pitch: 2.0 }).then(() => {
+        clearTimeout(safety);
         releaseBusy();
       });
-      // Safety: if the completion callback never fires, release after 3s so
-      // the male trigger isn't blocked and the rotation doesn't stall.
-      setTimeout(releaseBusy, 3000);
     });
   };
 
@@ -102,7 +105,7 @@ export default function LocationTermBank() {
     // Fallback: if the completion callback never fires, release after an
     // estimate based on word length (~300ms per syllable, ~2 syllables per
     // word) + buffer.
-    const estMs = Math.max(1500, formatForSpeech(word).length * 180 + 800);
+    const estMs = Math.max(3000, formatForSpeech(word).length * 180 + 800);
     const timer = setTimeout(finish, estMs);
     speakToolText(formatForSpeech(word), { role: 'male', rate: 0.65, pitch: 0.1 }).then((result) => {
       clearTimeout(timer);
@@ -391,6 +394,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     // iOS autoplay block. The lock releases when the male voice finishes
     // (onDone), with a timer fallback for the web iOS WKWebView case where
     // the completion event occasionally never fires.
+    if (rotRef.current) { clearTimeout(rotRef.current); rotRef.current = null; }
     stopNormalVoice();
     speakMaleVoice(word, () => {
       lockedRef.current = false;
@@ -587,7 +591,13 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
 
   const startRecording = async () => {
     try {
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Raw mic feed: disable echo cancellation, noise suppression, and AGC
+      // so the speaker's TTS output is captured acoustically instead of being
+      // filtered out — the biggest clarity win on iOS, where the defaults
+      // aggressively squash that bleed and make recordings sound distant.
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
       audioStreamRef.current = audioStream;
       await new Promise(r => setTimeout(r, 150));
       if (!canvasRef.current || typeof canvasRef.current.captureStream !== 'function') {

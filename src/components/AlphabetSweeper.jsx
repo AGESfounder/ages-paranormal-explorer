@@ -90,7 +90,7 @@ export default function AlphabetSweeper() {
     try { stopToolSpeech(); } catch {}
     let done = false;
     const finish = () => { if (done) return; done = true; onDone?.(); };
-    const estMs = Math.max(1500, text.length * 180 + 800);
+    const estMs = Math.max(3000, text.length * 180 + 800);
     const timer = setTimeout(finish, estMs);
     speakToolText(text, { role: 'male', rate: 0.65, pitch: 0.1 }).then((result) => {
       clearTimeout(timer);
@@ -416,7 +416,13 @@ export default function AlphabetSweeper() {
 
   const startRecording = async () => {
     try {
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Raw mic feed: disable echo cancellation, noise suppression, and AGC
+      // so the speaker's TTS output is captured acoustically instead of being
+      // filtered out — the biggest clarity win on iOS, where the defaults
+      // aggressively squash that bleed and make recordings sound distant.
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
       audioStreamRef.current = audioStream;
       await new Promise(r => setTimeout(r, 150));
       if (!canvasRef.current || typeof canvasRef.current.captureStream !== 'function') {

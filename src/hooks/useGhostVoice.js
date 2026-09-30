@@ -345,7 +345,14 @@ export default function useGhostVoice() {
       if (!recordDestRef.current) recordDestRef.current = ctx.createMediaStreamDestination();
       if (micStream) {
         const micSrc = ctx.createMediaStreamSource(micStream);
-        micSrc.connect(recordDestRef.current);
+        // Boost the mic level before the recording destination so the
+        // captured audio (ambient + acoustic TTS bleed) is hotter and
+        // clearer on playback, especially on iOS where the raw feed is
+        // otherwise quiet.
+        const micGain = ctx.createGain();
+        micGain.gain.value = 2.0;
+        micSrc.connect(micGain);
+        micGain.connect(recordDestRef.current);
       }
       return recordDestRef.current.stream.getAudioTracks()[0] || null;
     } catch { return null; }
