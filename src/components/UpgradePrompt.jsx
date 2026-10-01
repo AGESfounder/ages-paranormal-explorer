@@ -18,7 +18,13 @@ export default function UpgradePrompt({ show, onClose, reason = 'plan', onReward
     try {
       const result = await showRewardedAd();
       if (!result.rewarded) {
-        setAdError('Ad was not completed. Try again.');
+        setAdError(
+          result.reason === 'no_fill'
+            ? 'No ad available right now — try again later.'
+            : result.reason === 'skipped'
+              ? 'Ads are not ready yet. Try again in a moment.'
+              : 'Ad was not completed. Try again.'
+        );
         setWatching(false);
         return;
       }

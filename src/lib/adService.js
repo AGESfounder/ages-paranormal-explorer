@@ -449,7 +449,7 @@ export async function showRewardedAd(options) {
             message: `Rewarded ad load failed. ${loadDesc.code ? `[${loadDesc.code}] ` : ''}${loadDesc.message}`,
             data: { ...loadDesc, adId: rewardedAdId },
           });
-          throw loadError;
+          return { rewarded: false, reason: 'no_fill' };
         }
 
         try {
@@ -468,7 +468,7 @@ export async function showRewardedAd(options) {
             message: `Rewarded ad presentation failed. ${showDesc.code ? `[${showDesc.code}] ` : ''}${showDesc.message}`,
             data: { ...showDesc, adId: rewardedAdId },
           });
-          throw showError;
+          return { rewarded: false, reason: 'dismissed' };
         }
       } catch (e) {
         console.warn('AdMob rewarded ad failed:', e);
