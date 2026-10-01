@@ -128,8 +128,7 @@ export default function AdDiagnosticsPanel() {
     };
   }, [isIos]);
 
-  // TEMP: show on web too for diagnostics — restore `if (!isIos) return null;` before release.
-  // if (!isIos) return null;
+  if (!isIos) return null;
 
   const { status, events } = snapshot;
   const orderedEvents = [...events].reverse();
