@@ -379,7 +379,18 @@ export default function useGhostVoice() {
       setIsGenerating(false);
       setIsSpeaking(true);
       // acquireNarration() already called at the top of speakDevice.
-      u.onend = () => { setIsSpeaking(false); stopEerieBackground(); releaseNarration(); };
+      // Track whether speech actually started — Chrome desktop can fire onend
+      // prematurely (before onstart) due to the cancel()→speak() race, which
+      // would release the busy bus and un-duck the music before narration
+      // begins. Only release when speech genuinely started and ended.
+      let started = false;
+      u.onstart = () => { started = true; };
+      u.onend = () => {
+        setIsSpeaking(false); stopEerieBackground();
+        if (started) releaseNarration();
+        // If !started (premature onend), keep the busy bus acquired so the
+        // music stays ducked — stop() will release it when the user taps Stop.
+      };
       u.onerror = (e) => {
         // 'canceled'/'interrupted' fire from synth.cancel() or a new utterance
         // — stop() or the next speakDevice handles the release. Don't un-duck
