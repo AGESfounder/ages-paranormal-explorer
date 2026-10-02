@@ -609,7 +609,7 @@ export default function Toolkit() {
       case 'moon': {
         const now = new Date();
         const lp = 2551443;
-        const newMoon = new Date(2000, 0, 6, 18, 14).getTime() / 1000;
+        const newMoon = Date.UTC(2000, 0, 6, 18, 14) / 1000;
         const phase = ((now.getTime() / 1000 - newMoon) % lp) / lp;
         const phaseNames = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
         const phaseIdx = Math.round(phase * 8) % 8;
