@@ -1458,15 +1458,23 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 )}
               </Droppable>
             </DragDropContext>
-            {visibleTourStops.length === 0 && (
+            {visibleTourStops.length === 0 && tourStops.length > 0 && (
               <div className="flex flex-col items-center py-8 gap-3">
                 <AlertTriangle className="w-10 h-10 text-yellow-500" />
                 <p className="text-xs text-yellow-400 font-heading uppercase tracking-wider">
                   {tour.access_type === 'interior_only' ? 'No Interior Stops' : 'No Exterior Stops'}
                 </p>
-                <p className="text-xs text-muted-foreground text-center">
-                  Switch to "Interior/Exterior" to see all stops on this tour.
+                <p className="text-xs text-muted-foreground text-center max-w-xs">
+                  This tour has {tourStops.length} {tourStops.length === 1 ? 'stop' : 'stops'}, but{' '}
+                  {tour.access_type === 'interior_only' ? 'none are interior' : 'none are exterior'}.
+                  {' '}Your access filter is hiding {tourStops.length === 1 ? 'it' : 'them'}.
                 </p>
+                <button
+                  onClick={() => handleAccessTypeChange('exterior_interior')}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/80 text-primary-foreground font-heading text-xs uppercase tracking-wider transition-colors"
+                >
+                  Show All {tourStops.length} Stops
+                </button>
               </div>
             )}
             {(user?.role === 'admin' || isPaid) && (
