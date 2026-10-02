@@ -45,6 +45,87 @@ const formatForSpeech = (word) => {
   return word;
 };
 
+// Geolocation helper — hard 10s timeout via Promise.race. In the builder
+// preview iframe (and some iOS WKWebView states) geolocation is silently
+// blocked by the permissions policy: neither success nor error fires, so a
+// bare getCurrentPosition Promise never settles and the spinner hangs. The
+// race guarantees we move on within 10s either way. Rejects on denial/timeout.
+async function getCoords() {
+  return Promise.race([
+    new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('no geo'));
+      navigator.geolocation.getCurrentPosition(p => resolve(p.coords), () => reject(new Error('denied')), { timeout: 8000, maximumAge: 60000 });
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('geo-timeout')), 10000)),
+  ]);
+}
+
+// Great-circle distance in miles between two lat/lon points.
+function distanceMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Build a spirit-communication term bank from a tour stop's documented
+// history. Returns { list, label } or null when no usable text/terms.
+async function buildStopTerms(stop, tour) {
+  const textParts = [
+    stop.name,
+    stop.historical_info,
+    stop.paranormal_info,
+    stop.famous_people,
+    stop.construction_date,
+    stop.address,
+    stop.hours_of_operation,
+    ...(stop.investigation_suggestions || []),
+    ...((stop.people || []).map(p => p.name ? `${p.name}: ${p.story}` : p.story)),
+    tour?.description,
+    tour?.introduction,
+  ].filter(Boolean);
+  const stopText = textParts.join('\n\n');
+  if (stopText.trim().length <= 30) return null;
+  const res = await base44.integrations.Core.InvokeLLM({
+    prompt: `Analyze the following text from a paranormal tour stop and extract a word bank of terms for a "spirit communication" sweeper tool.
+
+ALL terms must come from the HISTORICAL and PARANORMAL history documented in the text below. Do NOT include generic words, filler, or terms unrelated to this stop's specific history and hauntings.
+
+IMPORTANT: Do NOT include ghost hunting terms, paranormal investigation jargon, or equipment names (e.g. EMF, EVP, spirit box, ghost, haunting, paranormal, investigation, recorder, camera, sensor, meter, sweep, detection). Terms should be ordinary words drawn from the stop's own history and stories — not investigator vocabulary.
+
+PRIORITY ORDER — when selecting terms, you MUST favor higher-priority categories and fill the list with them first, only using lower-priority categories to round out the count:
+1. (HIGHEST) NAMES — proper nouns: people's names, surnames, place names, building/landmark names, ship names, street names. These are the MOST important terms and MUST make up the largest share of the list. Never omit a name that appears in the text. Include full names AND first names when available.
+2. (HIGH) ADJECTIVES — descriptive adjectives found in the text (e.g. haunted, bloody, dark, ancient, cold, silent, restless). Prioritize vivid, evocative adjectives over generic ones.
+3. (HIGH) ACTION VERBS — dynamic, concrete action verbs that appear in the text (e.g. screamed, burned, fell, vanished, murdered, built, fled). EXCLUDE linking verbs and helping verbs. Prioritize vivid, specific verbs over generic ones.
+4. (HIGH) FEELINGS & EMOTIONS — words tied to emotions, sensations, and feelings (e.g. dread, grief, terror, sorrow, rage, despair, cold, anguish, hope, love) that appear in or are evoked by the text.
+5. (MEDIUM) NOUNS — nouns tied to this stop's history, era, landmarks, construction, events, occupations, objects, and documented stories.
+6. (MEDIUM) ONOMATOPOEIA & SOUND WORDS — sound words (e.g. scream, whisper, bang, crash, moan, creak) that appear in or are evoked by the text.
+7. (LOWER) TIME-RELATED WORDS — dates, years, days of the week, months, and time references found in the text.
+
+EXCLUDE these parts of speech entirely:
+- Articles (a, an, the)
+- Prepositions (in, on, at, to, of, for, with, from, by, about, under, over, etc.)
+- Linking verbs (is, are, was, were, be, been, being, seem, appear, become)
+- Helping verbs (have, has, had, do, does, did, will, would, can, could, should, shall, may, might, must)
+
+Return 40-60 terms total. Names (proper nouns) MUST be the largest group, followed by action verbs and feeling/emotion words. Each term should be a single word or short phrase (no full sentences). Return as JSON.
+
+STOP TEXT:
+${stopText}`,
+    response_json_schema: {
+      type: 'object',
+      properties: {
+        terms: { type: 'array', items: { type: 'string' } },
+      },
+    },
+    model: 'gemini_3_flash',
+  });
+  const list = (res.terms || []).filter(t => t && typeof t === 'string');
+  if (list.length === 0) return null;
+  return { list, label: stop.name || tour?.title || 'current stop' };
+}
+
 export default function LocationTermBank() {
   const [phase, setPhase] = useState('idle'); // idle | loading | ready | running | stopped
   const [terms, setTerms] = useState([]);
@@ -189,6 +270,12 @@ export default function LocationTermBank() {
     setCaptured([]);
     try {
       // ── Priority: extract terms from the user's current tour stop ──
+      // BUT only when the user is actually on-site. A "Tour In Progress" stop
+      // hundreds of miles away must not seed the sweeper — fall through to
+      // the geolocation-based fallback so terms reflect the user's real
+      // location. If GPS is blocked/unavailable, keep the stop terms as the
+      // best available context (no regression for users with no geo access).
+      const ON_SITE_MILES = 5;
       const me = await base44.auth.me().catch(() => null);
       if (me?.last_stop_id) {
         try {
@@ -196,60 +283,21 @@ export default function LocationTermBank() {
           if (stop) {
             let tour = null;
             if (stop.tour_id) { try { tour = await base44.entities.Tour.get(stop.tour_id); } catch {} }
-            const textParts = [
-              stop.name,
-              stop.historical_info,
-              stop.paranormal_info,
-              stop.famous_people,
-              stop.construction_date,
-              stop.address,
-              stop.hours_of_operation,
-              ...(stop.investigation_suggestions || []),
-              ...((stop.people || []).map(p => p.name ? `${p.name}: ${p.story}` : p.story)),
-              tour?.description,
-              tour?.introduction,
-            ].filter(Boolean);
-            const stopText = textParts.join('\n\n');
-            if (stopText.trim().length > 30) {
-              const res = await base44.integrations.Core.InvokeLLM({
-                prompt: `Analyze the following text from a paranormal tour stop and extract a word bank of terms for a "spirit communication" sweeper tool.
-
-ALL terms must come from the HISTORICAL and PARANORMAL history documented in the text below. Do NOT include generic words, filler, or terms unrelated to this stop's specific history and hauntings.
-
-IMPORTANT: Do NOT include ghost hunting terms, paranormal investigation jargon, or equipment names (e.g. EMF, EVP, spirit box, ghost, haunting, paranormal, investigation, recorder, camera, sensor, meter, sweep, detection). Terms should be ordinary words drawn from the stop's own history and stories — not investigator vocabulary.
-
-PRIORITY ORDER — when selecting terms, you MUST favor higher-priority categories and fill the list with them first, only using lower-priority categories to round out the count:
-1. (HIGHEST) NAMES — proper nouns: people's names, surnames, place names, building/landmark names, ship names, street names. These are the MOST important terms and MUST make up the largest share of the list. Never omit a name that appears in the text. Include full names AND first names when available.
-2. (HIGH) ADJECTIVES — descriptive adjectives found in the text (e.g. haunted, bloody, dark, ancient, cold, silent, restless). Prioritize vivid, evocative adjectives over generic ones.
-3. (HIGH) ACTION VERBS — dynamic, concrete action verbs that appear in the text (e.g. screamed, burned, fell, vanished, murdered, built, fled). EXCLUDE linking verbs and helping verbs. Prioritize vivid, specific verbs over generic ones.
-4. (HIGH) FEELINGS & EMOTIONS — words tied to emotions, sensations, and feelings (e.g. dread, grief, terror, sorrow, rage, despair, cold, anguish, hope, love) that appear in or are evoked by the text.
-5. (MEDIUM) NOUNS — nouns tied to this stop's history, era, landmarks, construction, events, occupations, objects, and documented stories.
-6. (MEDIUM) ONOMATOPOEIA & SOUND WORDS — sound words (e.g. scream, whisper, bang, crash, moan, creak) that appear in or are evoked by the text.
-7. (LOWER) TIME-RELATED WORDS — dates, years, days of the week, months, and time references found in the text.
-
-EXCLUDE these parts of speech entirely:
-- Articles (a, an, the)
-- Prepositions (in, on, at, to, of, for, with, from, by, about, under, over, etc.)
-- Linking verbs (is, are, was, were, be, been, being, seem, appear, become)
-- Helping verbs (have, has, had, do, does, did, will, would, can, could, should, shall, may, might, must)
-
-Return 40-60 terms total. Names (proper nouns) MUST be the largest group, followed by action verbs and feeling/emotion words. Each term should be a single word or short phrase (no full sentences). Return as JSON.
-
-STOP TEXT:
-${stopText}`,
-                response_json_schema: {
-                  type: 'object',
-                  properties: {
-                    terms: { type: 'array', items: { type: 'string' } },
-                  },
-                },
-                model: 'gemini_3_flash',
-              });
-              const list = (res.terms || []).filter(t => t && typeof t === 'string');
-              if (list.length > 0) {
+            let useStopTerms = true;
+            if (stop.latitude && stop.longitude) {
+              try {
+                const here = await getCoords();
+                if (distanceMiles(here.latitude, here.longitude, stop.latitude, stop.longitude) > ON_SITE_MILES) {
+                  useStopTerms = false;
+                }
+              } catch { /* GPS blocked — keep stop terms as best available */ }
+            }
+            if (useStopTerms) {
+              const result = await buildStopTerms(stop, tour);
+              if (result) {
                 spendManifestation();
-                setTerms(list);
-                setLocationLabel(stop.name || tour?.title || 'current stop');
+                setTerms(result.list);
+                setLocationLabel(result.label);
                 setPhase('ready');
                 return;
               }
@@ -259,18 +307,9 @@ ${stopText}`,
       }
 
       // ── Fallback: original geolocation + LLM approach ──
-      // Hard timeout via Promise.race: in the builder preview iframe (and
-      // some iOS WKWebView states) geolocation is silently blocked by the
-      // permissions policy — neither success nor error fires, so the bare
-      // getCurrentPosition Promise never settles and the spinner hangs
-      // forever. The race guarantees we move on within 10s either way.
-      const coords = await Promise.race([
-        new Promise((resolve, reject) => {
-          if (!navigator.geolocation) return reject(new Error('no geo'));
-          navigator.geolocation.getCurrentPosition(p => resolve(p.coords), () => reject(new Error('denied')), { timeout: 8000, maximumAge: 60000 });
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('geo-timeout')), 10000)),
-      ]);
+      // getCoords() wraps the same hard-timeout Promise.race used by the
+      // on-site gate above (see getCoords for why the race is required).
+      const coords = await getCoords();
 
       // Pull nearby AGES ghost tours + their documented stops so the term
       // bank reflects localized paranormal history and the closest tours.
