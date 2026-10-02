@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Sparkles, Zap, X, Play, Loader2, Check } from 'lucide-react';
@@ -48,7 +49,7 @@ export default function UpgradePrompt({ show, onClose, reason = 'plan', onReward
     }
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {show && (
         <motion.div
@@ -121,7 +122,8 @@ export default function UpgradePrompt({ show, onClose, reason = 'plan', onReward
             </div>
           </motion.div>
         </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
+        )}
+        </AnimatePresence>,
+        document.body
+        );
+        }
