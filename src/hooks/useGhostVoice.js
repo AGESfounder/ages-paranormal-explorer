@@ -371,11 +371,22 @@ export default function useGhostVoice() {
         return s;
       };
       const voice = savedVoice || [...voices].sort((a, b) => voiceScore(b) - voiceScore(a))[0] || voices[0];
+      // Read user tuning settings (rate/pitch/volume/echo) saved by the
+      // DeviceVoicePicker. Falls back to defaults if not set.
+      let savedSettings = { rate: 0.92, pitch: 0.9, volume: 1.0, echo: false };
+      try {
+        const raw = localStorage.getItem('ages_device_voice_settings');
+        if (raw) savedSettings = { ...savedSettings, ...JSON.parse(raw) };
+      } catch {}
+      const effectiveRate = opts.rate != null ? opts.rate : savedSettings.rate;
+      const effectivePitch = opts.pitch != null ? opts.pitch : savedSettings.pitch;
+      const effectiveVolume = Math.min(1, opts.volume != null ? opts.volume : savedSettings.volume);
+      const echoEnabled = savedSettings.echo === true;
       const u = new SpeechSynthesisUtterance(sanitizeText(text));
       if (voice) { u.voice = voice; u.lang = voice.lang; }
-      u.rate = opts.rate != null ? opts.rate : 0.92;
-      u.pitch = opts.pitch != null ? opts.pitch : 0.9;
-      u.volume = Math.min(1, opts.volume || 1.0);
+      u.rate = effectiveRate;
+      u.pitch = effectivePitch;
+      u.volume = effectiveVolume;
       setIsGenerating(false);
       setIsSpeaking(true);
       // acquireNarration() already called at the top of speakDevice.
@@ -384,12 +395,50 @@ export default function useGhostVoice() {
       // would release the busy bus and un-duck the music before narration
       // begins. Only release when speech genuinely started and ended.
       let started = false;
-      u.onstart = () => { started = true; };
+      // echoDone gates the busy-bus release: when echo is on, the main
+      // utterance's onend does NOT release — the echo's onend does. If echo
+      // is off, echoDone starts true so the main onend releases directly.
+      let echoDone = !echoEnabled;
+      u.onstart = () => {
+        started = true;
+        // Ghostly echo: queue a quieter, lower-pitch trailing voice shortly
+        // after the main narration starts. Creates a haunting layered effect.
+        if (echoEnabled) {
+          setTimeout(() => {
+            try {
+              const echo = new SpeechSynthesisUtterance(sanitizeText(text));
+              if (voice) { echo.voice = voice; echo.lang = voice.lang; }
+              echo.rate = effectiveRate * 0.8;
+              echo.pitch = effectivePitch * 0.6;
+              echo.volume = effectiveVolume * 0.35;
+              echo.onend = () => {
+                echoDone = true;
+                setIsSpeaking(false); stopEerieBackground(); releaseNarration();
+              };
+              echo.onerror = (e) => {
+                const code = e?.error || '';
+                if (code === 'canceled' || code === 'interrupted') return;
+                echoDone = true;
+                setIsSpeaking(false); stopEerieBackground(); releaseNarration();
+              };
+              synth.speak(echo);
+            } catch {
+              echoDone = true;
+              setIsSpeaking(false); stopEerieBackground(); releaseNarration();
+            }
+          }, 400);
+        }
+      };
       u.onend = () => {
-        setIsSpeaking(false); stopEerieBackground();
-        if (started) releaseNarration();
         // If !started (premature onend), keep the busy bus acquired so the
         // music stays ducked — stop() will release it when the user taps Stop.
+        if (!started) return;
+        if (echoDone) {
+          setIsSpeaking(false); stopEerieBackground(); releaseNarration();
+        }
+        // If echo is pending (echoDone = false), the echo's onend/onerror
+        // will release. If the echo never fires (browser bug), the user can
+        // tap Stop to release manually.
       };
       u.onerror = (e) => {
         // 'canceled'/'interrupted' fire from synth.cancel() or a new utterance
@@ -397,6 +446,7 @@ export default function useGhostVoice() {
         // the music on these benign errors.
         const code = e?.error || '';
         if (code === 'canceled' || code === 'interrupted') return;
+        echoDone = true;
         setIsSpeaking(false); stopEerieBackground(); releaseNarration();
       };
       startEerieBackground(); // mirror the server path so chimes play under narration
