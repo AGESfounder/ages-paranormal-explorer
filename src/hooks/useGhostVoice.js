@@ -333,12 +333,18 @@ export default function useGhostVoice() {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
     stopEerieBackground();
-    releaseNarration();
+    // Acquire the busy bus FIRST so HauntedMusic ducks immediately, before
+    // any voice selection or synth.speak(). The old releaseNarration() here
+    // briefly dropped busyCount to 0 — HauntedMusic saw "not busy" and called
+    // audio.play(); the async play() promise then resolved AFTER the later
+    // acquireNarration() had already run its duck, so the duck's pause()
+    // missed (the element wasn't "playing" yet) and the music kept playing.
+    acquireNarration();
     setIsSpeaking(false);
     setIsGenerating(true);
     try {
       const synth = window.speechSynthesis;
-      if (!synth) { setIsGenerating(false); return; }
+      if (!synth) { setIsGenerating(false); releaseNarration(); return; }
       synth.cancel();
       // Synchronous voice selection — on iOS, awaiting voices (even a
       // resolved promise) pushes synth.speak() past the user-gesture
@@ -372,9 +378,16 @@ export default function useGhostVoice() {
       u.volume = Math.min(1, opts.volume || 1.0);
       setIsGenerating(false);
       setIsSpeaking(true);
-      acquireNarration();
+      // acquireNarration() already called at the top of speakDevice.
       u.onend = () => { setIsSpeaking(false); stopEerieBackground(); releaseNarration(); };
-      u.onerror = () => { setIsSpeaking(false); stopEerieBackground(); releaseNarration(); };
+      u.onerror = (e) => {
+        // 'canceled'/'interrupted' fire from synth.cancel() or a new utterance
+        // — stop() or the next speakDevice handles the release. Don't un-duck
+        // the music on these benign errors.
+        const code = e?.error || '';
+        if (code === 'canceled' || code === 'interrupted') return;
+        setIsSpeaking(false); stopEerieBackground(); releaseNarration();
+      };
       startEerieBackground(); // mirror the server path so chimes play under narration
       synth.speak(u);
     } catch (e) {
