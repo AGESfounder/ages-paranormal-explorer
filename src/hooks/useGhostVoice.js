@@ -137,6 +137,12 @@ export default function useGhostVoice() {
 
   const sanitizeText = (text) => {
     let result = text.replace(/A\.G\.E\.S\.?/gi, 'Ages');
+    // Strip web addresses so TTS doesn't spell them out character-by-character
+    result = result.replace(/\bhttps?:\/\/[^\s]+/gi, '');
+    result = result.replace(/\bwww\.[^\s]+/gi, '');
+    result = result.replace(/\b[a-z0-9.-]+\.(?:com|org|net|edu|gov|io|co|us)\b(?:\/[^\s]*)?/gi, '');
+    // Clean up leftover punctuation/spacing from removed URLs
+    result = result.replace(/\s{2,}/g, ' ').replace(/\s+([.,;:])/g, '$1').trim();
     // Remove commas from comma-separated numbers (e.g., "1,500" → "1500")
     result = result.replace(/(\d{1,3}(?:,\d{3})+)/g, (m) => m.replace(/,/g, ''));
     // Convert standalone numbers to words so TTS pronounces them correctly
