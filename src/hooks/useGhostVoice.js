@@ -323,7 +323,65 @@ export default function useGhostVoice() {
     }
   }, []);
 
+  // Device-side TTS (browser speechSynthesis). Used only for the one-tour
+  // device-narration test — no server GenerateSpeech call, no credit cost.
+  // Prefers a male British-English voice, falling back to any English voice.
+  const speakDevice = useCallback(async (text, opts = {}) => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
+    stopEerieBackground();
+    releaseNarration();
+    setIsSpeaking(false);
+    setIsGenerating(true);
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) { setIsGenerating(false); return; }
+      synth.cancel();
+      const getVoices = () => new Promise((resolve) => {
+        const immediate = synth.getVoices();
+        if (immediate && immediate.length) return resolve(immediate);
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          try { synth.removeEventListener('voiceschanged', finish); } catch {}
+          resolve(synth.getVoices() || []);
+        };
+        try { synth.addEventListener('voiceschanged', finish); } catch {}
+        setTimeout(finish, 1200);
+      });
+      const voices = await getVoices();
+      const enGbMale = voices.find(v => /en[-_]GB/i.test(v.lang || '') && /male|daniel|arthur|george|oliver/i.test(v.name || ''));
+      const enGb = voices.find(v => /en[-_]GB/i.test(v.lang || ''));
+      const enMale = voices.find(v => /^en/i.test(v.lang || '') && /male|daniel|david|mark|james|fred/i.test(v.name || ''));
+      const enAny = voices.find(v => /^en/i.test(v.lang || ''));
+      const voice = enGbMale || enGb || enMale || enAny || voices[0];
+      const u = new SpeechSynthesisUtterance(sanitizeText(text));
+      if (voice) { u.voice = voice; u.lang = voice.lang; }
+      u.rate = opts.rate != null ? opts.rate : 0.92;
+      u.pitch = opts.pitch != null ? opts.pitch : 0.9;
+      u.volume = Math.min(1, opts.volume || 1.0);
+      setIsGenerating(false);
+      setIsSpeaking(true);
+      acquireNarration();
+      u.onend = () => { setIsSpeaking(false); stopEerieBackground(); releaseNarration(); };
+      u.onerror = () => { setIsSpeaking(false); stopEerieBackground(); releaseNarration(); };
+      synth.speak(u);
+    } catch (e) {
+      setIsGenerating(false);
+      setIsSpeaking(false);
+      stopEerieBackground();
+      releaseNarration();
+    }
+  }, []);
+
   const narrate = useCallback((text, opts = {}) => {
+    // Device-voice test path: bypass server GenerateSpeech entirely.
+    if (opts?.useDeviceVoice) {
+      if (isSpeaking || isGenerating) { stop(); return; }
+      speakDevice(text, opts);
+      return;
+    }
     // Pre-generated (offline) audio takes priority — playPreGenerated
     // handles stopping any current playback internally. The isSpeaking
     // check still allows the toggle (press again to stop) once the
@@ -339,7 +397,7 @@ export default function useGhostVoice() {
     } else {
       speak(text, opts);
     }
-  }, [isSpeaking, isGenerating, speak, stop, playPreGenerated]);
+  }, [isSpeaking, isGenerating, speak, stop, playPreGenerated, speakDevice]);
 
   // Connect the mic into the same Web Audio destination that captures the
   // dictated speech, returning one audio track containing both — so the

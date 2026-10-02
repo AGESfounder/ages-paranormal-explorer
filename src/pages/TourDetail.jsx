@@ -36,6 +36,7 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
+import { isDeviceNarrationTour } from '@/lib/deviceNarrationTest';
 import { verifyStopLocation } from '@/lib/verifyStop';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
@@ -217,6 +218,13 @@ export default function TourDetail() {
   // then falls back to live TTS generation (which costs narration credits).
   const narrate = async (text, opts = {}) => {
     const cleanText = stripUrlsForNarration(text);
+    // Device-narration test tour: speak via the device's built-in TTS — no
+    // server call, no credit cost, no offline-audio intercept. Revert by
+    // clearing DEVICE_NARRATION_TEST_TOUR_ID in src/lib/deviceNarrationTest.js.
+    if (isDeviceNarrationTour(tour?.id)) {
+      rawNarrate(cleanText, { ...opts, useDeviceVoice: true });
+      return;
+    }
     // Check for pre-generated offline audio FIRST — before the isSpeaking
     // check, so offline audio plays even if a previous live TTS attempt
     // left isSpeaking/isGenerating stuck.

@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
 import { rewriteForStopFocus } from '@/lib/enrichStops';
 import { stripUrlsForNarration } from '@/lib/urlText';
+import { isDeviceNarrationTour } from '@/lib/deviceNarrationTest';
 import LinkifiedText from '@/components/LinkifiedText';
 import DeleteStopDialog from '@/components/DeleteStopDialog';
 import { Trash2 } from 'lucide-react';
@@ -70,6 +71,13 @@ export default function StopDetail() {
   // then falls back to live TTS generation (which costs narration credits).
   const narrate = async (text, opts = {}) => {
     const cleanText = stripUrlsForNarration(text);
+    // Device-narration test tour: speak via the device's built-in TTS — no
+    // server call, no credit cost, no offline-audio intercept. Revert by
+    // clearing DEVICE_NARRATION_TEST_TOUR_ID in src/lib/deviceNarrationTest.js.
+    if (isDeviceNarrationTour(stop?.tour_id)) {
+      rawNarrate(cleanText, { ...opts, useDeviceVoice: true });
+      return;
+    }
     // Check for pre-generated offline audio FIRST — looks up the cache key
     // passed via opts.audioKey (e.g. "stop:${id}", "stop:${id}:history",
     // "stop:${id}:paranormal"). Falls through to live TTS if not cached.
