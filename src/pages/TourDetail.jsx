@@ -37,6 +37,7 @@ import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
 import { isDeviceNarrationTour } from '@/lib/deviceNarrationTest';
+import DeviceVoicePicker from '@/components/DeviceVoicePicker';
 import { verifyStopLocation } from '@/lib/verifyStop';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
@@ -1294,6 +1295,8 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           )}
           {hasDrivingStops && <TravelModeSelector value={travelMode} onChange={setTravelMode} />}
         </div>
+
+        {isDeviceNarrationTour(tour?.id) && <DeviceVoicePicker />}
 
         {regeneratingContent && (
           <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 flex items-center gap-2">

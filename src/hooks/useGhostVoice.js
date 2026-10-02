@@ -346,11 +346,25 @@ export default function useGhostVoice() {
       // synchronously on iOS, so we pick from the immediate list and call
       // speak() in the same tick as the tap.
       const voices = synth.getVoices() || [];
-      const enGbMale = voices.find(v => /en[-_]GB/i.test(v.lang || '') && /male|daniel|arthur|george|oliver/i.test(v.name || ''));
-      const enGb = voices.find(v => /en[-_]GB/i.test(v.lang || ''));
-      const enMale = voices.find(v => /^en/i.test(v.lang || '') && /male|daniel|david|mark|james|fred/i.test(v.name || ''));
-      const enAny = voices.find(v => /^en/i.test(v.lang || ''));
-      const voice = enGbMale || enGb || enMale || enAny || voices[0];
+      // 1. User-selected voice from the test-tour voice picker (localStorage)
+      let savedVoice = null;
+      try {
+        const savedURI = localStorage.getItem('ages_device_voice_uri');
+        if (savedURI) savedVoice = voices.find(v => v.voiceURI === savedURI);
+      } catch {}
+      // 2. Improved auto-selection (1a): score by quality (Enhanced/Premium),
+      //    then language (en-GB > any en), then gender (male preferred).
+      const voiceScore = (v) => {
+        const name = (v.name || '').toLowerCase();
+        const lang = (v.lang || '').toLowerCase();
+        let s = 0;
+        if (/enhanced|premium|neural|natural/.test(name)) s += 100;
+        if (/en[-_]gb/.test(lang)) s += 50;
+        else if (/^en/.test(lang)) s += 30;
+        if (/male|daniel|arthur|george|oliver|david|mark|james|fred/.test(name)) s += 20;
+        return s;
+      };
+      const voice = savedVoice || [...voices].sort((a, b) => voiceScore(b) - voiceScore(a))[0] || voices[0];
       const u = new SpeechSynthesisUtterance(sanitizeText(text));
       if (voice) { u.voice = voice; u.lang = voice.lang; }
       u.rate = opts.rate != null ? opts.rate : 0.92;
