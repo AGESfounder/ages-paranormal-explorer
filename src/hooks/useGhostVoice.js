@@ -268,6 +268,9 @@ export default function useGhostVoice() {
       audioRef.current = null;
     }
     if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
+    // Halt device-side speechSynthesis (device-voice test path) — the
+    // server path never uses speechSynthesis so this is a no-op there.
+    try { window.speechSynthesis?.cancel(); } catch {}
     stopEerieBackground();
     releaseNarration();
     setIsSpeaking(false);
@@ -366,6 +369,7 @@ export default function useGhostVoice() {
       acquireNarration();
       u.onend = () => { setIsSpeaking(false); stopEerieBackground(); releaseNarration(); };
       u.onerror = () => { setIsSpeaking(false); stopEerieBackground(); releaseNarration(); };
+      startEerieBackground(); // mirror the server path so chimes play under narration
       synth.speak(u);
     } catch (e) {
       setIsGenerating(false);
