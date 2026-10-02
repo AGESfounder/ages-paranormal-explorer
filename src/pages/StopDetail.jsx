@@ -33,6 +33,7 @@ import DeleteStopDialog from '@/components/DeleteStopDialog';
 import { Trash2 } from 'lucide-react';
 import { reverseGeocodeParking } from '@/lib/reverseGeocode';
 import { addShuttleStop } from '@/lib/addShuttleStop';
+import { haversineDistance } from '@/lib/routeOptimizer';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -63,6 +64,7 @@ export default function StopDetail() {
   const [showDeleteStop, setShowDeleteStop] = useState(false);
   const [deletingStop, setDeletingStop] = useState(false);
   const [addingShuttle, setAddingShuttle] = useState(false);
+  const [tour, setTour] = useState(null);
 
   // Gated narration wrapper — checks for pre-generated offline audio first,
   // then falls back to live TTS generation (which costs narration credits).
@@ -276,6 +278,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         try {
           const tours = await base44.entities.Tour.filter({ id: currentStop.tour_id });
           tourData = tours[0];
+          setTour(tourData);
         } catch (e) {}
         // Determine if this is the first tour stop (for enrichment context)
         const minStopNum = tourSiblings.length > 0 ? Math.min(...tourSiblings.map(s => s.stop_number || 0)) : 0;
@@ -390,29 +393,54 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       return;
     }
     setVerifying(true);
-    const MAX_ACCURACY_M = 30; // Reject stale/low-accuracy GPS fixes
+    // Dead-fix floor: if the GPS itself reports accuracy worse than 2 miles,
+    // the phone fell back to cell-tower triangulation and the position is
+    // meaningless — the distance measurement below can't be trusted. This
+    // is the ONLY accuracy gate; the real guard is the distance-from-stop
+    // check. (The old 30m cutoff blocked legit on-site users with a drifting
+    // fix while doing nothing against a couch validator with a crisp fix.)
+    const DEAD_FIX_M = 3219; // ~2 miles in meters
+    // Couch guard: reject fixes more than 2 miles from the stop's marker.
+    // For needs_placement stops (pink pins whose coordinates are a known-
+    // wrong placeholder near parking), measure from the TOUR's start
+    // coordinates instead — so a shuttle tour (park miles away, shuttle in)
+    // doesn't fail a stop you're standing right next to. 2 miles blocks
+    // Idaho→New York validation while giving on-site investigators generous
+    // headroom, even on large properties with a poor GPS fix.
+    const VALIDATION_RADIUS_MI = 2;
     let saved = false; // Prevent multiple saves — watchPosition fires repeatedly
-    let retried = false;
+    const reference = (stop.needs_placement && tour?.start_latitude != null)
+      ? { lat: tour.start_latitude, lon: tour.start_longitude }
+      : { lat: stop.latitude, lon: stop.longitude };
     const attempt = (pos) => {
       if (saved) return; // Already saved — ignore further GPS fixes
       const { latitude, longitude, accuracy } = pos.coords;
-      if (accuracy != null && accuracy > MAX_ACCURACY_M && !retried) {
-        // Stale or poor fix — wait for a better one instead of saving bad coords
-        retried = true;
-        return;
-      }
-      if (accuracy != null && accuracy > MAX_ACCURACY_M) {
+      if (accuracy != null && accuracy > DEAD_FIX_M) {
+        navigator.geolocation.clearWatch(watchId);
         toast({
-          title: 'GPS Too Imprecise',
-          description: `Accuracy was ${Math.round(accuracy)}m. Move to an open area and try again.`,
+          title: 'GPS Too Weak',
+          description: `Your phone only knows your position within ${Math.round(accuracy)}m — likely cell-tower fallback. Enable Precise Location (iOS) or High Accuracy mode (Android) and try again.`,
           variant: 'destructive',
         });
         setVerifying(false);
-        navigator.geolocation.clearWatch(watchId);
         return;
       }
-      // Got a good fix — save immediately and stop watching so we don't
-      // fire multiple toasts from repeated GPS updates.
+      // Couch guard — distance from the stop's marker (or tour start for
+      // needs_placement stops). Blocks remote validation while allowing
+      // on-site placement with a poor-but-real GPS fix.
+      const distMi = haversineDistance(reference.lat, reference.lon, latitude, longitude);
+      if (distMi > VALIDATION_RADIUS_MI) {
+        navigator.geolocation.clearWatch(watchId);
+        toast({
+          title: 'Too Far From Stop',
+          description: `You're ${distMi.toFixed(1)} mi from this stop. Validate on-site to confirm its location.`,
+          variant: 'destructive',
+        });
+        setVerifying(false);
+        return;
+      }
+      // Got a real, on-site fix — save immediately and stop watching so we
+      // don't fire multiple toasts from repeated GPS updates.
       saved = true;
       navigator.geolocation.clearWatch(watchId);
       verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id)
