@@ -111,13 +111,20 @@ export function getToolVoices({ refresh = false } = {}) {
 
 let roleVoiceCache = null;
 
-// Preserve the device's enumeration order. Existing role names are only
-// compatibility labels: female = voice 1, male = voice 2, not gender matching.
+// Prefer English voices so English words are read intelligibly. Many Android
+// TTS engines list non-English voices (Swedish, German, …) ahead of English
+// ones in their raw enumeration, so the old "first two voices" pick produced
+// heavily accented speech. English voices are taken in device order to keep
+// the white/rotation (voice 1) vs blue/trigger (voice 2) contrast; only fall
+// back to the raw first two voices when no English voice exists. Role names
+// remain compatibility labels (female = voice 1, male = voice 2).
 async function resolveRoleVoices() {
   if (roleVoiceCache) return roleVoiceCache;
   const voices = await getToolVoices();
   if (!voices.length) return { male: null, female: null };
-  roleVoiceCache = { female: voices[0], male: voices[1] || voices[0] };
+  const en = voices.filter((v) => typeof v.lang === 'string' && v.lang.toLowerCase().startsWith('en'));
+  const pool = en.length ? en : voices;
+  roleVoiceCache = { female: pool[0], male: pool[1] || pool[0] };
   return roleVoiceCache;
 }
 
