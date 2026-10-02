@@ -329,7 +329,7 @@ export default function useGhostVoice() {
   // Device-side TTS (browser speechSynthesis). Used only for the one-tour
   // device-narration test — no server GenerateSpeech call, no credit cost.
   // Prefers a male British-English voice, falling back to any English voice.
-  const speakDevice = useCallback(async (text, opts = {}) => {
+  const speakDevice = useCallback((text, opts = {}) => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
     stopEerieBackground();
@@ -340,20 +340,12 @@ export default function useGhostVoice() {
       const synth = window.speechSynthesis;
       if (!synth) { setIsGenerating(false); return; }
       synth.cancel();
-      const getVoices = () => new Promise((resolve) => {
-        const immediate = synth.getVoices();
-        if (immediate && immediate.length) return resolve(immediate);
-        let settled = false;
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          try { synth.removeEventListener('voiceschanged', finish); } catch {}
-          resolve(synth.getVoices() || []);
-        };
-        try { synth.addEventListener('voiceschanged', finish); } catch {}
-        setTimeout(finish, 1200);
-      });
-      const voices = await getVoices();
+      // Synchronous voice selection — on iOS, awaiting voices (even a
+      // resolved promise) pushes synth.speak() past the user-gesture
+      // window and the first tap is silently dropped. getVoices() returns
+      // synchronously on iOS, so we pick from the immediate list and call
+      // speak() in the same tick as the tap.
+      const voices = synth.getVoices() || [];
       const enGbMale = voices.find(v => /en[-_]GB/i.test(v.lang || '') && /male|daniel|arthur|george|oliver/i.test(v.name || ''));
       const enGb = voices.find(v => /en[-_]GB/i.test(v.lang || ''));
       const enMale = voices.find(v => /^en/i.test(v.lang || '') && /male|daniel|david|mark|james|fred/i.test(v.name || ''));
