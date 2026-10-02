@@ -44,7 +44,8 @@ export default function CustomTourModal({ isOpen, onClose }) {
         setLoading(false);
         return;
       }
-      const newTour = await generateLocationTour(destination, state, undefined, category, accessType, specificLocations);
+      const isShipOrOther = state === 'Ship / Other';
+      const newTour = await generateLocationTour(destination, state, undefined, category, accessType, specificLocations, { isAbroad: isShipOrOther });
       spendManifestation();
       onClose();
       setDestination('');
@@ -119,8 +120,11 @@ export default function CustomTourModal({ isOpen, onClose }) {
                   State
                 </label>
                 <div className="relative">
-                  <DrawerSelect icon={MapPin} value={state} onChange={setState} placeholder="Select a state..." options={US_STATES.map(s => ({ value: s.name, label: s.name }))} />
+                  <DrawerSelect icon={MapPin} value={state} onChange={setState} placeholder="Select a state..." options={[{ value: 'Ship / Other', label: 'Ship / Other' }, ...US_STATES.map(s => ({ value: s.name, label: s.name }))]} />
                 </div>
+                {state === 'Ship / Other' && (
+                  <p className="text-[10px] text-cyan-glow/70 mt-1">For ships at sea or locations outside the US — not for US places you can't place.</p>
+                )}
               </div>
 
               <div>
