@@ -265,40 +265,20 @@ export default function TourDetail() {
     const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourData.id });
     // Don't overwrite stops the user has manually placed via marker drag
     if (userDraggedRef.current) return;
-    // Re-order stops by proximity using the NOW-correct coordinates.
-    // Skip for tours the user manually reordered — respect their custom order.
-    if (tourData && !tourData.user_reordered && !tourData.manual_reorder) {
-      const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-      const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
-      const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
-      const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
-      const reordered = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
-      for (const s of reordered) {
-        const existing = tourStopsOnly.find(ts => ts.id === s.id);
-        if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
-          try {
-            await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
-          } catch (e) {}
-        }
-      }
-      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered]);
-    } else {
-      // user_reordered is true — respect the user's order, but update
-      // travel_method based on the corrected coordinates.
-      const pStop = updatedStops.find(s => s.stop_type === 'parking');
-      const sStop = updatedStops.find(s => s.stop_type === 'shuttle');
-      const tStops = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-      const parkingCoords = pStop?.latitude != null ? { lat: pStop.latitude, lon: pStop.longitude } : null;
-      const updatedMethods = await enforceWalkingDistance(tStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords, preserveOrder: true });
-      for (const s of updatedMethods) {
-        const existing = tStops.find(ts => ts.id === s.id);
-        if (existing && existing.travel_method !== s.travel_method) {
-          try { await base44.entities.TourStop.update(s.id, { travel_method: s.travel_method }); } catch (e) {}
-        }
-      }
-      const sorted = updatedMethods.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-      setStops([...(pStop ? [pStop] : []), ...(sStop ? [sStop] : []), ...sorted]);
-    }
+    // fix-collapsed-coords only updates coordinates (and geocoded status) —
+    // it does NOT reclassify travel_method. The self-heal that just ran set
+    // the correct walking/driving classification, and the reloaded stops
+    // retain it. Re-running enforceWalkingDistance here would reclassify ALL
+    // stops from whatever Overpass/LLM handed back, letting one bad unverified
+    // coordinate revert the self-heal's work (the Savannah bug: self-heal
+    // fixes all-walking, then this step reverts 4 stops to driving). Instead,
+    // just display the coordinate-corrected stops in their existing order;
+    // the NEXT load's self-heal reclassifies if the new coords warrant it.
+    const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
+    const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
+    const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
+    const sorted = tourStopsOnly.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+    setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
   };
 
   // Background validation — runs fix-collapsed-coords (verifyAll) WITHOUT
@@ -331,31 +311,13 @@ export default function TourDetail() {
     await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
     // Don't overwrite stops the user has manually placed via marker drag
     if (userDraggedRef.current) return;
-    // Re-order and update display with corrected coordinates
-    if (!tourData.user_reordered && !tourData.manual_reorder) {
-      const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
-      const reordered = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
-      for (const s of reordered) {
-        const existing = tourStopsOnly.find(ts => ts.id === s.id);
-        if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
-          try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
-        }
-      }
-      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered]);
-    } else {
-      // user_reordered is true — respect the user's order, but update
-      // travel_method based on the corrected coordinates.
-      const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
-      const updatedMethods = await enforceWalkingDistance(tourStopsOnly, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords, preserveOrder: true });
-      for (const s of updatedMethods) {
-        const existing = tourStopsOnly.find(ts => ts.id === s.id);
-        if (existing && existing.travel_method !== s.travel_method) {
-          try { await base44.entities.TourStop.update(s.id, { travel_method: s.travel_method }); } catch (e) {}
-        }
-      }
-      const sorted = updatedMethods.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
-    }
+    // fix-collapsed-coords only updates coordinates — it does NOT reclassify
+    // travel_method (same rationale as geocodeExistingStops: re-running
+    // enforceWalkingDistance here would let one bad Overpass result revert
+    // the self-heal's classification). Just display the coordinate-corrected
+    // stops in their existing order; the NEXT load's self-heal reclassifies.
+    const sorted = tourStopsOnly.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+    setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
   };
 
   const [narrationLength, setNarrationLengthState] = useState(getNarrationLength());
@@ -559,7 +521,7 @@ export default function TourDetail() {
             for (const s of reordered) {
               const existing = tourStopsOnly.find(ts => ts.id === s.id);
               if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
-                await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
+                try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
               }
             }
             // Auto-correct tour type if stops are now a mix of walking + driving
