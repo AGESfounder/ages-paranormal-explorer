@@ -360,6 +360,103 @@ const scenarios = [
   return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, rewardedAdRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, base44Plan };
 });
 
+// ===== DEVICE NARRATION HYPOTHETICALS (Oct 2026) =====
+// Device Narration uses the device's built-in speechSynthesis API — 0
+// GenerateSpeech credits. Enhanced Narration uses server-side GenerateSpeech
+// (1 credit / 50 chars). An average tour has ~25 narration opportunities (4
+// tabs × ~7 stops + intro + conclusion); a typical engaged user narrates ~10
+// of those per tour. Narration is the single biggest platform cost, so these
+// 3 hypotheticals have major profit implications. NO CODE CHANGES MADE —
+// planning scenarios only.
+const NARRATION_OPPS_PER_TOUR = 25;
+const NARRATION_OPPS_NARRATED = 10;
+const TOURS_PER_FREE_USER_HYPO = 2;
+const TOURS_PER_PAID_USER_HYPO = 3;
+const NARRATION_AD_INTERSTITIAL = ADMOB_PER_IMPRESSION;       // $0.015/imp
+const NARRATION_AD_REWARDED = ADMOB_REWARDED_PER_IMPRESSION;   // $0.020/imp
+
+// Per-plan monthly profit under a narration-credit + ad-revenue model.
+function hypoMonthly(manE, narCredits, adRevMo, price) {
+  const credits = manE * BLENDED_MANIFESTATION_CREDITS + narCredits;
+  const platformCost = credits * COST_PER_CREDIT;
+  const sf = storeFee(price);
+  const netCost = platformCost + sf - adRevMo;
+  const profit = price - netCost;
+  return { credits, platformCost, sf, adRevMo, netCost, profit, margin: price > 0 ? (profit / price * 100) : 0 };
+}
+
+// HYPO 1: Device narration for all. Observer: ad before each narration. Paid:
+// enhanced until energy depleted, then ad-gated device narration. Paid users
+// still consume their FULL enhanced narration energy — device only extends
+// access beyond depletion (more ad revenue, better retention, no credit cut).
+const HYPO1_OBSERVER_ADREV = NARRATION_OPPS_NARRATED * TOURS_PER_FREE_USER_HYPO * NARRATION_AD_INTERSTITIAL;
+const HYPO1_EXPLORER_ADREV = NARRATION_OPPS_NARRATED * 1 * NARRATION_AD_REWARDED;
+const HYPO1_INVESTIGATOR_ADREV = NARRATION_OPPS_NARRATED * 2 * NARRATION_AD_REWARDED;
+const HYPO1_TRAILBLAZER_ADREV = NARRATION_OPPS_NARRATED * 2 * NARRATION_AD_REWARDED;
+
+// HYPO 2: HYPO 1 + paid tiers choose per-narration: ad→device OR enhanced.
+// Modeled at ~50% device / 50% enhanced — halves enhanced narration credits.
+const HYPO2_DEVICE_FRACTION = 0.5;
+const HYPO2_EXPLORER_ADREV = NARRATION_OPPS_NARRATED * TOURS_PER_PAID_USER_HYPO * HYPO2_DEVICE_FRACTION * NARRATION_AD_REWARDED;
+const HYPO2_INVESTIGATOR_ADREV = NARRATION_OPPS_NARRATED * TOURS_PER_PAID_USER_HYPO * HYPO2_DEVICE_FRACTION * NARRATION_AD_REWARDED;
+const HYPO2_TRAILBLAZER_ADREV = HYPO2_INVESTIGATOR_ADREV;
+
+// HYPO 3: ALL plans use device narration exclusively. No enhanced narration.
+// Only manifestation credits consumed. No narration ad gating (narration free).
+const hypo1Plans = [
+  { plan: 'Observer', price: 0, manE: 0, narCredits: 0, adRevMo: HYPO1_OBSERVER_ADREV, ...hypoMonthly(0, 0, HYPO1_OBSERVER_ADREV, 0) },
+  { plan: 'Explorer', price: 7.99, manE: 5, narCredits: 500, adRevMo: HYPO1_EXPLORER_ADREV, ...hypoMonthly(5, 500, HYPO1_EXPLORER_ADREV, 7.99) },
+  { plan: 'Investigator', price: 11.99, manE: 15, narCredits: 1500, adRevMo: HYPO1_INVESTIGATOR_ADREV, ...hypoMonthly(15, 1500, HYPO1_INVESTIGATOR_ADREV, 11.99) },
+];
+const hypo2Plans = [
+  { plan: 'Observer', price: 0, manE: 0, narCredits: 0, adRevMo: HYPO1_OBSERVER_ADREV, ...hypoMonthly(0, 0, HYPO1_OBSERVER_ADREV, 0) },
+  { plan: 'Explorer', price: 7.99, manE: 5, narCredits: Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), adRevMo: HYPO2_EXPLORER_ADREV, ...hypoMonthly(5, Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), HYPO2_EXPLORER_ADREV, 7.99) },
+  { plan: 'Investigator', price: 11.99, manE: 15, narCredits: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), adRevMo: HYPO2_INVESTIGATOR_ADREV, ...hypoMonthly(15, Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), HYPO2_INVESTIGATOR_ADREV, 11.99) },
+];
+const hypo3Plans = [
+  { plan: 'Observer', price: 0, manE: 0, narCredits: 0, adRevMo: 0, ...hypoMonthly(0, 0, 0, 0) },
+  { plan: 'Explorer', price: 7.99, manE: 5, narCredits: 0, adRevMo: 0, ...hypoMonthly(5, 0, 0, 7.99) },
+  { plan: 'Investigator', price: 11.99, manE: 15, narCredits: 0, adRevMo: 0, ...hypoMonthly(15, 0, 0, 11.99) },
+];
+
+// Trailblazer (30-month) under each hypothetical
+const hypo1Trail = (() => { const c = calcCosts(15, 1500, 30); const adRev = HYPO1_TRAILBLAZER_ADREV * 30; const sf = storeFee(239.99); const netCost = c.platformCost + sf - adRev; return { credits: c.credits, platformCost: c.platformCost, sf, adRev, netCost, profit: 239.99 - netCost, margin: (239.99 - netCost) / 239.99 * 100 }; })();
+const hypo2Trail = (() => { const c = calcCosts(15, Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), 30); const adRev = HYPO2_TRAILBLAZER_ADREV * 30; const sf = storeFee(239.99); const netCost = c.platformCost + sf - adRev; return { credits: c.credits, platformCost: c.platformCost, sf, adRev, netCost, profit: 239.99 - netCost, margin: (239.99 - netCost) / 239.99 * 100 }; })();
+const hypo3Trail = (() => { const c = calcCosts(15, 0, 30); const sf = storeFee(239.99); const netCost = c.platformCost + sf; return { credits: c.credits, platformCost: c.platformCost, sf, adRev: 0, netCost, profit: 239.99 - netCost, margin: (239.99 - netCost) / 239.99 * 100 }; })();
+
+// Mature scenario (1,000 paid / 5,000 free, 70% util) under each hypothetical.
+// Excludes the existing rewarded-ad energy top-up system for clean comparison —
+// the narration-gating ads replace that mechanism in these models.
+function hypoMatureScenario(narCreditsByPlan, observerAdRev, paidAdRevPerUser) {
+  const mix = { explorer: 680, investigator: 270, trailblazer: 50 };
+  const freeUsers = 5000;
+  const explorerRev = mix.explorer * 7.99;
+  const investigatorRev = mix.investigator * 11.99;
+  const trailblazerRev = mix.trailblazer * (239.99 / 30);
+  const subRev = explorerRev + investigatorRev + trailblazerRev;
+  const interstitialAdRev = freeUsers * AD_REV_PER_FREE_USER_MO;
+  const narrationAdRev = freeUsers * observerAdRev + (mix.explorer + mix.investigator + mix.trailblazer) * paidAdRevPerUser;
+  const adRev = interstitialAdRev + narrationAdRev;
+  const totalRev = subRev + adRev;
+  const totalCredits = Math.round(
+    mix.explorer * calcCosts(5 * 0.7, narCreditsByPlan.explorer * 0.7, 1).credits
+    + mix.investigator * calcCosts(15 * 0.7, narCreditsByPlan.investigator * 0.7, 1).credits
+    + mix.trailblazer * calcCosts(15 * 0.7, narCreditsByPlan.trailblazer * 0.7, 1).credits
+  );
+  const base44Plan = requiredBase44Plan(totalCredits);
+  const platformCosts = base44Plan.cost;
+  const storeCosts = subRev * STORE_FEE_PCT;
+  const revcatCost = revenuecatFee(subRev);
+  const fixedCost = fixedOngoingMonthly;
+  const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
+  const profit = totalRev - totalCost;
+  return { subRev, interstitialAdRev, narrationAdRev, adRev, totalRev, totalCredits, base44Plan, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100) };
+}
+const baselineMature = hypoMatureScenario({ explorer: 500, investigator: 1500, trailblazer: 1500 }, 0, 0);
+const hypo1Mature = hypoMatureScenario({ explorer: 500, investigator: 1500, trailblazer: 1500 }, HYPO1_OBSERVER_ADREV, (HYPO1_EXPLORER_ADREV + HYPO1_INVESTIGATOR_ADREV) / 2);
+const hypo2Mature = hypoMatureScenario({ explorer: Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), investigator: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), trailblazer: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)) }, HYPO1_OBSERVER_ADREV, HYPO2_EXPLORER_ADREV);
+const hypo3Mature = hypoMatureScenario({ explorer: 0, investigator: 0, trailblazer: 0 }, 0, 0);
+
 const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
 function downloadPDF() {
@@ -508,6 +605,41 @@ function downloadPDF() {
     scenarios.map(s => [s.label, (s.totalCredits - s.rewardedAdCredits).toLocaleString(), s.rewardedAdCredits.toLocaleString(), s.base44Plan.plan, '$' + s.base44Plan.cost]),
     [85, 50, 50, 60, 45]);
   para('Base44 plan costs in section 9 ("B44 Plan" column) are the actual fixed monthly plan tier costs. Ad-reward credits (from paid users watching rewarded ads for energy top-ups) are included in the total and can push the required plan tier higher. Free (Observer) users are gated and consume 0 credits.');
+
+  heading('11. Device Narration Hypotheticals (Oct 2026)');
+  para(`Narration is the single biggest platform cost (~${FULL_TOUR_NARRATION_CREDITS} credits per fully-narrated tour). Device Narration uses the device's built-in speechSynthesis — 0 GenerateSpeech credits. Enhanced Narration uses server-side GenerateSpeech (1 credit/50 chars). An average tour has ~${NARRATION_OPPS_PER_TOUR} narration opportunities; a typical user narrates ~${NARRATION_OPPS_NARRATED} of them. These 3 hypotheticals model offering device narration across all tiers with different AdMob gating. NO CODE CHANGES MADE — planning scenarios only.`);
+  para(`HYPO 1 (Ad-Gated Device Narration): Observer sees an ad before each narration (device voice, 0 credits). Explorer/Investigator/Trailblazer use enhanced narration until energy depleted, then ad-gated device narration. Paid users still consume their FULL enhanced energy allotment — device narration only extends access beyond depletion, adding ad revenue and improving retention without cutting credit costs.`);
+  para(`HYPO 2 (Choice: Device or Enhanced): HYPO 1 + paid tiers choose per-narration: watch an ad for device narration OR spend enhanced energy. Modeled at ~50% device / 50% enhanced. Halves enhanced narration credits for paid users — major cost savings — at the cost of ad friction on half of narrations.`);
+  para(`HYPO 3 (Device Only, No Enhanced): All plans use device narration exclusively. Zero narration credits for everyone — only manifestation credits (tour generation, enrichment) are consumed. No narration ad gating. Lowest cost, but users lose the premium "storm" server voice and get device voices only.`);
+  para('11a. Per-Plan Monthly Profit (100% Utilization):');
+  table(['Scenario', 'Plan', 'Price', 'Man Cr', 'Nar Cr', 'Total Cr', 'Platform', 'Store', 'Ad Rev', 'Net Cost', 'Profit', 'Margin'],
+    [
+      ...monthlyAnalysis.map(r => ['Baseline', r.plan, '$' + r.price.toFixed(2), r.plan === 'Explorer' ? 5 : 15, r.plan === 'Explorer' ? 500 : 1500, r.credits, '$' + r.platformCost.toFixed(2), '$' + r.sf.toFixed(2), '—', '$' + r.totalCost.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
+      ...hypo1Plans.filter(p => p.price > 0).map(p => ['HYPO 1', p.plan, '$' + p.price.toFixed(2), p.manE, p.narCredits, p.credits, '$' + p.platformCost.toFixed(2), '$' + p.sf.toFixed(2), '$' + p.adRevMo.toFixed(2), '$' + p.netCost.toFixed(2), '$' + p.profit.toFixed(2), p.margin.toFixed(1) + '%']),
+      ...hypo2Plans.filter(p => p.price > 0).map(p => ['HYPO 2', p.plan, '$' + p.price.toFixed(2), p.manE, p.narCredits, p.credits, '$' + p.platformCost.toFixed(2), '$' + p.sf.toFixed(2), '$' + p.adRevMo.toFixed(2), '$' + p.netCost.toFixed(2), '$' + p.profit.toFixed(2), p.margin.toFixed(1) + '%']),
+      ...hypo3Plans.filter(p => p.price > 0).map(p => ['HYPO 3', p.plan, '$' + p.price.toFixed(2), p.manE, p.narCredits, p.credits, '$' + p.platformCost.toFixed(2), '$' + p.sf.toFixed(2), '$' + p.adRevMo.toFixed(2), '$' + p.netCost.toFixed(2), '$' + p.profit.toFixed(2), p.margin.toFixed(1) + '%']),
+    ],
+    [45, 50, 35, 30, 30, 35, 45, 40, 40, 45, 45, 40]);
+  para(`Observer (free): Under HYPO 1 & 2, Observer generates ~$${HYPO1_OBSERVER_ADREV.toFixed(2)}/mo in narration ad revenue at 0 credit cost. HYPO 3 Observer: 0 credits, 0 ad rev (narration is free, no gating).`);
+  para('11b. Trailblazer 30-Month ($239.99):');
+  table(['Scenario', 'Credits', 'Platform', 'Store', 'Ad Rev', 'Net Cost', 'Profit', 'Margin'],
+    [
+      ['Baseline (100%)', trailblazerAnalysis.credits.toLocaleString(), '$' + trailblazerAnalysis.platformCost.toFixed(2), '$' + trailblazerAnalysis.sf.toFixed(2), '—', '$' + trailblazerAnalysis.totalCost.toFixed(2), '$' + trailblazerAnalysis.profit.toFixed(2), trailblazerAnalysis.margin.toFixed(1) + '%'],
+      ['HYPO 1', hypo1Trail.credits.toLocaleString(), '$' + hypo1Trail.platformCost.toFixed(2), '$' + hypo1Trail.sf.toFixed(2), '$' + hypo1Trail.adRev.toFixed(2), '$' + hypo1Trail.netCost.toFixed(2), '$' + hypo1Trail.profit.toFixed(2), hypo1Trail.margin.toFixed(1) + '%'],
+      ['HYPO 2', hypo2Trail.credits.toLocaleString(), '$' + hypo2Trail.platformCost.toFixed(2), '$' + hypo2Trail.sf.toFixed(2), '$' + hypo2Trail.adRev.toFixed(2), '$' + hypo2Trail.netCost.toFixed(2), '$' + hypo2Trail.profit.toFixed(2), hypo2Trail.margin.toFixed(1) + '%'],
+      ['HYPO 3', hypo3Trail.credits.toLocaleString(), '$' + hypo3Trail.platformCost.toFixed(2), '$' + hypo3Trail.sf.toFixed(2), '$0.00', '$' + hypo3Trail.netCost.toFixed(2), '$' + hypo3Trail.profit.toFixed(2), hypo3Trail.margin.toFixed(1) + '%'],
+    ],
+    [55, 55, 50, 45, 45, 50, 50, 45]);
+  para('11c. Mature Revenue Scenario (1,000 paid / 5,000 free, 70% util — excludes existing rewarded-ad top-up system for clean comparison):');
+  table(['Scenario', 'Sub Rev', 'Interstitial', 'Narration Ads', 'Total Rev', 'Credits', 'B44 Plan', 'Total Cost', 'Profit', 'Margin'],
+    [
+      ['Baseline', '$' + baselineMature.subRev.toFixed(0), '$' + baselineMature.interstitialAdRev.toFixed(0), '$0', '$' + baselineMature.totalRev.toFixed(0), baselineMature.totalCredits.toLocaleString(), baselineMature.base44Plan.plan, '$' + baselineMature.totalCost.toFixed(0), '$' + baselineMature.profit.toFixed(0), baselineMature.margin.toFixed(1) + '%'],
+      ['HYPO 1', '$' + hypo1Mature.subRev.toFixed(0), '$' + hypo1Mature.interstitialAdRev.toFixed(0), '$' + hypo1Mature.narrationAdRev.toFixed(0), '$' + hypo1Mature.totalRev.toFixed(0), hypo1Mature.totalCredits.toLocaleString(), hypo1Mature.base44Plan.plan, '$' + hypo1Mature.totalCost.toFixed(0), '$' + hypo1Mature.profit.toFixed(0), hypo1Mature.margin.toFixed(1) + '%'],
+      ['HYPO 2', '$' + hypo2Mature.subRev.toFixed(0), '$' + hypo2Mature.interstitialAdRev.toFixed(0), '$' + hypo2Mature.narrationAdRev.toFixed(0), '$' + hypo2Mature.totalRev.toFixed(0), hypo2Mature.totalCredits.toLocaleString(), hypo2Mature.base44Plan.plan, '$' + hypo2Mature.totalCost.toFixed(0), '$' + hypo2Mature.profit.toFixed(0), hypo2Mature.margin.toFixed(1) + '%'],
+      ['HYPO 3', '$' + hypo3Mature.subRev.toFixed(0), '$' + hypo3Mature.interstitialAdRev.toFixed(0), '$0', '$' + hypo3Mature.totalRev.toFixed(0), hypo3Mature.totalCredits.toLocaleString(), hypo3Mature.base44Plan.plan, '$' + hypo3Mature.totalCost.toFixed(0), '$' + hypo3Mature.profit.toFixed(0), hypo3Mature.margin.toFixed(1) + '%'],
+    ],
+    [50, 45, 45, 50, 50, 50, 50, 50, 50, 45]);
+  para(`HYPO 1 adds ~$${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo profit vs baseline (ad revenue only — no credit savings since paid users keep full enhanced). HYPO 2 adds ~$${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (halved narration credits + ad revenue, may drop a Base44 tier). HYPO 3 adds ~$${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo (zero narration credits — manifestation only — but no narration ad revenue and weaker value prop).`);
 
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free (Observer) users are gated (0 credits). Must upgrade plans to scale.');
@@ -1262,6 +1394,271 @@ export default function PlanAnalysis() {
           </div>
         </section>
 
+        {/* 11. Device Narration Hypotheticals */}
+        <section className="mb-8">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">11. Device Narration Hypotheticals (Oct 2026)</h2>
+          <p className="text-xs print-muted mb-4">
+            Narration is the single biggest platform cost (~{FULL_TOUR_NARRATION_CREDITS} credits per fully-narrated tour). Device Narration uses the device's built-in speechSynthesis — <span className="font-semibold text-green-500 print-text">0 GenerateSpeech credits</span>. Enhanced Narration uses server-side GenerateSpeech (1 credit/50 chars). An average tour has ~{NARRATION_OPPS_PER_TOUR} narration opportunities; a typical user narrates ~{NARRATION_OPPS_NARRATED} of them. These 3 hypotheticals model offering device narration across all tiers with different AdMob gating strategies. <span className="font-semibold print-text">No code changes have been made — these are planning scenarios only.</span>
+          </p>
+
+          <div className="grid grid-cols-1 gap-3 mb-5">
+            <div className="p-3 rounded-lg border border-primary/30 bg-primary/5">
+              <p className="text-xs font-heading uppercase tracking-wider text-primary mb-1">HYPO 1 — Ad-Gated Device Narration</p>
+              <p className="text-xs print-text"><span className="font-semibold">Observer:</span> AdMob ad before each narration (device voice, 0 credits). <span className="font-semibold">Explorer / Investigator / Trailblazer:</span> Enhanced narration until energy depleted, then ad-gated device narration. Paid users still consume their full enhanced energy allotment — device narration only extends access beyond depletion, adding ad revenue and improving retention without cutting credit costs.</p>
+            </div>
+            <div className="p-3 rounded-lg border border-accent/30 bg-accent/5">
+              <p className="text-xs font-heading uppercase tracking-wider text-accent mb-1">HYPO 2 — Choice: Device (Ad) or Enhanced</p>
+              <p className="text-xs print-text">HYPO 1 + paid tiers choose per-narration: watch an ad to use device narration OR spend enhanced energy. Modeled at ~50% device / 50% enhanced. <span className="font-semibold">Halves enhanced narration credits for paid users</span> — major cost savings — at the cost of ad friction on half of narrations.</p>
+            </div>
+            <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
+              <p className="text-xs font-heading uppercase tracking-wider text-green-500 mb-1">HYPO 3 — Device Narration Only, No Enhanced</p>
+              <p className="text-xs print-text">All plans use device narration exclusively. <span className="font-semibold">Zero narration credits for everyone</span> — only manifestation credits (tour generation, enrichment) are consumed. No narration ad gating. Lowest cost, but users lose the premium "storm" server voice and get device voices only.</p>
+            </div>
+          </div>
+
+          {/* 11a. Per-plan comparison */}
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 print-text">11a. Per-Plan Monthly Profit (100% Utilization)</h3>
+          <p className="text-xs print-muted mb-3">Compares each hypothetical against the current baseline. "Nar Cr" = narration credits consumed. "Ad Rev" = ad revenue from narration gating. Net Cost = Platform + Store Fee − Ad Rev.</p>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead>
+                <tr>
+                  <th className={th}>Scenario</th>
+                  <th className={th}>Plan</th>
+                  <th className={`${th} ${num}`}>Price</th>
+                  <th className={`${th} ${num}`}>Man Cr</th>
+                  <th className={`${th} ${num}`}>Nar Cr</th>
+                  <th className={`${th} ${num}`}>Total Cr</th>
+                  <th className={`${th} ${num}`}>Platform</th>
+                  <th className={`${th} ${num}`}>Store</th>
+                  <th className={`${th} ${num}`}>Ad Rev</th>
+                  <th className={`${th} ${num}`}>Net Cost</th>
+                  <th className={`${th} ${num}`}>Profit</th>
+                  <th className={`${th} ${num}`}>Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyAnalysis.map(r => (
+                  <tr key={`base-${r.plan}`} className="bg-muted/20">
+                    <td className={`${td} text-xs print-muted`}>Baseline</td>
+                    <td className={`${td} text-xs font-semibold print-text`}>{r.plan}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${r.price.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{r.plan === 'Explorer' ? 5 : 15}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{r.plan === 'Explorer' ? 500 : 1500}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{r.credits}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${r.platformCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${r.sf.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${r.totalCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs font-semibold print-text`}>${r.profit.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{r.margin.toFixed(1)}%</td>
+                  </tr>
+                ))}
+                {hypo1Plans.filter(p => p.price > 0).map(p => (
+                  <tr key={`h1-${p.plan}`} className="bg-primary/5">
+                    <td className={`${td} text-xs text-primary print-text`}>HYPO 1</td>
+                    <td className={`${td} text-xs font-semibold print-text`}>{p.plan}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.price.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.manE}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.narCredits}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.credits}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.platformCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.sf.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs text-green-500 print-text`}>${p.adRevMo.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.netCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs font-semibold print-text`}>${p.profit.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.margin.toFixed(1)}%</td>
+                  </tr>
+                ))}
+                {hypo2Plans.filter(p => p.price > 0).map(p => (
+                  <tr key={`h2-${p.plan}`} className="bg-accent/5">
+                    <td className={`${td} text-xs text-accent print-text`}>HYPO 2</td>
+                    <td className={`${td} text-xs font-semibold print-text`}>{p.plan}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.price.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.manE}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.narCredits}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.credits}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.platformCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.sf.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs text-green-500 print-text`}>${p.adRevMo.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.netCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs font-semibold print-text`}>${p.profit.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.margin.toFixed(1)}%</td>
+                  </tr>
+                ))}
+                {hypo3Plans.filter(p => p.price > 0).map(p => (
+                  <tr key={`h3-${p.plan}`} className="bg-green-500/5">
+                    <td className={`${td} text-xs text-green-500 print-text`}>HYPO 3</td>
+                    <td className={`${td} text-xs font-semibold print-text`}>{p.plan}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.price.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.manE}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.narCredits}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.credits}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.platformCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.sf.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.netCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs font-semibold print-text`}>${p.profit.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.margin.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs print-muted mt-2 italic">Observer (free) rows omitted from the profit table (price $0). Under HYPO 1 & 2, Observer generates ~${HYPO1_OBSERVER_ADREV.toFixed(2)}/mo in narration ad revenue at 0 credit cost. HYPO 3 Observer: 0 credits, 0 ad rev (narration is free, no gating).</p>
+
+          {/* 11b. Trailblazer 30-month */}
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">11b. Trailblazer — 30-Month Lifetime ($239.99)</h3>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr>
+                  <th className={th}>Scenario</th>
+                  <th className={`${th} ${num}`}>Credits (30 mo)</th>
+                  <th className={`${th} ${num}`}>Platform</th>
+                  <th className={`${th} ${num}`}>Store Fee</th>
+                  <th className={`${th} ${num}`}>Ad Rev</th>
+                  <th className={`${th} ${num}`}>Net Cost</th>
+                  <th className={`${th} ${num}`}>Profit</th>
+                  <th className={`${th} ${num}`}>Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="bg-muted/20">
+                  <td className={`${td} text-xs font-semibold print-muted`}>Baseline (100%)</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{trailblazerAnalysis.credits.toLocaleString()}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${trailblazerAnalysis.platformCost.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${trailblazerAnalysis.sf.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${trailblazerAnalysis.totalCost.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${trailblazerAnalysis.profit.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{trailblazerAnalysis.margin.toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-primary/5">
+                  <td className={`${td} text-xs font-semibold text-primary print-text`}>HYPO 1</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo1Trail.credits.toLocaleString()}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo1Trail.platformCost.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo1Trail.sf.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo1Trail.adRev.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo1Trail.netCost.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo1Trail.profit.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo1Trail.margin.toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-accent/5">
+                  <td className={`${td} text-xs font-semibold text-accent print-text`}>HYPO 2</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo2Trail.credits.toLocaleString()}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2Trail.platformCost.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2Trail.sf.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo2Trail.adRev.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2Trail.netCost.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo2Trail.profit.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo2Trail.margin.toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-green-500/5">
+                  <td className={`${td} text-xs font-semibold text-green-500 print-text`}>HYPO 3</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo3Trail.credits.toLocaleString()}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo3Trail.platformCost.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo3Trail.sf.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>$0.00</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo3Trail.netCost.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo3Trail.profit.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo3Trail.margin.toFixed(1)}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* 11c. Mature revenue scenario */}
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">11c. Mature Revenue Scenario (1,000 paid / 5,000 free, 70% Utilization)</h3>
+          <p className="text-xs print-muted mb-3">Excludes the existing rewarded-ad energy top-up system for a clean comparison — the narration-gating ads replace that mechanism in these models. "Narration Ads" = ad revenue from narration gating (Observer interstitial + paid post-depletion/choice rewarded ads).</p>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead>
+                <tr>
+                  <th className={th}>Scenario</th>
+                  <th className={`${th} ${num}`}>Sub Rev</th>
+                  <th className={`${th} ${num}`}>Interstitial</th>
+                  <th className={`${th} ${num}`}>Narration Ads</th>
+                  <th className={`${th} ${num}`}>Total Rev</th>
+                  <th className={`${th} ${num}`}>Credits</th>
+                  <th className={th}>B44 Plan</th>
+                  <th className={`${th} ${num}`}>Total Cost</th>
+                  <th className={`${th} ${num}`}>Profit</th>
+                  <th className={`${th} ${num}`}>Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="bg-muted/20">
+                  <td className={`${td} text-xs font-semibold print-muted`}>Baseline</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${baselineMature.subRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${baselineMature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>$0</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${baselineMature.totalRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{baselineMature.totalCredits.toLocaleString()}</td>
+                  <td className={`${td} text-xs print-text`}>{baselineMature.base44Plan.plan}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${baselineMature.totalCost.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${baselineMature.profit.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{baselineMature.margin.toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-primary/5">
+                  <td className={`${td} text-xs font-semibold text-primary print-text`}>HYPO 1</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo1Mature.subRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo1Mature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo1Mature.narrationAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo1Mature.totalRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo1Mature.totalCredits.toLocaleString()}</td>
+                  <td className={`${td} text-xs print-text`}>{hypo1Mature.base44Plan.plan}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo1Mature.totalCost.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo1Mature.profit.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo1Mature.margin.toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-accent/5">
+                  <td className={`${td} text-xs font-semibold text-accent print-text`}>HYPO 2</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2Mature.subRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo2Mature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo2Mature.narrationAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo2Mature.totalRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo2Mature.totalCredits.toLocaleString()}</td>
+                  <td className={`${td} text-xs print-text`}>{hypo2Mature.base44Plan.plan}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2Mature.totalCost.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo2Mature.profit.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo2Mature.margin.toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-green-500/5">
+                  <td className={`${td} text-xs font-semibold text-green-500 print-text`}>HYPO 3</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo3Mature.subRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo3Mature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>$0</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo3Mature.totalRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo3Mature.totalCredits.toLocaleString()}</td>
+                  <td className={`${td} text-xs print-text`}>{hypo3Mature.base44Plan.plan}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo3Mature.totalCost.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo3Mature.profit.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo3Mature.margin.toFixed(1)}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* 11d. Savings summary cards */}
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">11d. Narration Credit Savings Summary (per user / month)</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3 rounded-lg border border-primary/30 bg-primary/5">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-primary">HYPO 1 — Ad Revenue Only</p>
+              <p className="text-xs print-text mt-1">Paid users keep full enhanced energy (no credit savings). Observer gains ~${HYPO1_OBSERVER_ADREV.toFixed(2)}/mo ad rev. Mature scenario: <span className="font-semibold text-green-500 print-text">+${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo</span> vs baseline.</p>
+            </div>
+            <div className="p-3 rounded-lg border border-accent/30 bg-accent/5">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-accent">HYPO 2 — 50% Credit Cut + Ads</p>
+              <p className="text-xs print-text mt-1">Explorer saves 250 nar credits (${(250 * COST_PER_CREDIT).toFixed(2)}/mo). Investigator saves 750 (${(750 * COST_PER_CREDIT).toFixed(2)}/mo). Mature: <span className="font-semibold text-green-500 print-text">+${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo</span>.</p>
+            </div>
+            <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-green-500">HYPO 3 — Zero Narration Credits</p>
+              <p className="text-xs print-text mt-1">Explorer saves 500 nar credits (${(500 * COST_PER_CREDIT).toFixed(2)}/mo). Investigator saves 1500 (${(1500 * COST_PER_CREDIT).toFixed(2)}/mo). Mature: <span className="font-semibold text-green-500 print-text">+${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo</span>. But no premium voice & no narration ad rev.</p>
+            </div>
+          </div>
+          <p className="text-xs print-muted mt-3 italic">Trade-off: HYPO 3 maximizes profit but weakens the value prop (device voices only — quality varies by device and lacks the premium "storm" narrator). HYPO 2 balances savings with user choice. HYPO 1 improves retention without changing the core narration experience. All three assume the device-narration test on the Eisenhower Farm tour proves viable on real devices before rollout.</p>
+        </section>
+
         {/* 10. Key Takeaways */}
         <section className="mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">10. Key Takeaways</h2>
@@ -1283,6 +1680,7 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold text-green-500">✓ Community Map improvements (Sept 2026):</span> Author names now resolve via a service-role backend function (display_name → full_name → "Explorer" fallback), and stacked evidence markers at the same coordinates are grouped with a count badge. No credit cost impact — name resolution uses User.get() (no InvokeLLM), and marker grouping is client-side.</p>
             <p>• <span className="font-semibold">Sign-in simplified (Sept 2026):</span> Google and Apple OAuth buttons removed from Login and Register pages — email/password only. Reduces auth complexity and potential confusion. No cost impact.</p>
             <p>• <span className="font-semibold text-amber-500">⚠ Two-pass stop enrichment (Sept 2026):</span> Single-site tours (landmark, ship, cold_spot) now run a second LLM pass (rewriteForStopFocus) to remove general property history and keep stop-specific content. This doubles the enrichment cost to ~{ENRICHMENT_CREDITS_SINGLE_SITE} credits for those tours. The user still pays 1 manifestation energy per stop — the <span className="font-semibold">extra cost is borne by the app owner</span>, not the user. Blended average: ~{AVG_ENRICHMENT_CREDITS} credits/enrichment (was {ENRICHMENT_CREDITS_MULTI_SITE}). Blended manifestation rate: ~{BLENDED_MANIFESTATION_CREDITS} credits/manifestation energy (was {CREDITS_PER_MANIFESTATION}). One-time content_version upgrade: old tours regenerate at 2× cost when first opened by a paid user/admin — budget for a one-time credit spike when rolling out the new prompt.</p>
+            <p>• <span className="font-semibold text-primary">DEVICE NARRATION HYPOTHETICALS (Oct 2026):</span> Three scenarios model offering device narration (0 GenerateSpeech credits) across all tiers. <span className="font-semibold">HYPO 1</span> (ad-gated device narration; paid keeps full enhanced): +~${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo at Mature scale (ad revenue only). <span className="font-semibold">HYPO 2</span> (paid chooses device-ad or enhanced, ~50/50): +~${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (halves narration credits + ads). <span className="font-semibold">HYPO 3</span> (device-only, no enhanced): +~${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo (zero narration credits — manifestation only — but no premium voice & no narration ad rev). See section 11 for full breakdown. No code changes made — planning scenarios pending the Eisenhower Farm device-narration test results.</p>
           </div>
         </section>
 
