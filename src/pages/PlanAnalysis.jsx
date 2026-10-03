@@ -544,6 +544,46 @@ const hypo2ToolkitMature = hypoMatureWithToolkit(
 // Trailblazer under HYPO 2 + toolkit = same as HYPO 2 (all 12 tools, no ad-gate, no save cost)
 const hypo2ToolkitTrail = hypo2Trail;
 
+// Section 13: HYPO 2 + Toolkit AdGate across all 4 revenue scenarios (mirrors section 9)
+function hypo2ToolkitScenario(mix, freeUsers) {
+  const narCreditsByPlan = { explorer: Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), investigator: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), trailblazer: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)) };
+  const explorerRev = mix.explorer * 7.99;
+  const investigatorRev = mix.investigator * 11.99;
+  const trailblazerRev = mix.trailblazer * (239.99 / 30);
+  const subRev = explorerRev + investigatorRev + trailblazerRev;
+  const totalPaidUsers = mix.explorer + mix.investigator + mix.trailblazer;
+  const interstitialAdRev = freeUsers * AD_REV_PER_FREE_USER_MO;
+  const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
+  const narrationAdRev = freeUsers * HYPO1_OBSERVER_ADREV + totalPaidUsers * HYPO2_EXPLORER_ADREV;
+  const toolkitUseAdRev = freeUsers * TOOL_USE_ADREV_OBSERVER + mix.explorer * TOOL_USE_ADREV_EXPLORER;
+  const toolkitSaveAdRev = freeUsers * TOOL_SAVE_ADREV_OBSERVER;
+  const toolkitSaveCost = freeUsers * TOOL_SAVE_COST_OBSERVER;
+  const toolkitAdRev = toolkitUseAdRev + toolkitSaveAdRev;
+  const adRev = interstitialAdRev + rewardedAdRev + narrationAdRev + toolkitAdRev;
+  const totalRev = subRev + adRev;
+  const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
+  const totalCredits = Math.round(
+    mix.explorer * calcCosts(5 * 0.7, narCreditsByPlan.explorer * 0.7, 1).credits
+    + mix.investigator * calcCosts(15 * 0.7, narCreditsByPlan.investigator * 0.7, 1).credits
+    + mix.trailblazer * calcCosts(15 * 0.7, narCreditsByPlan.trailblazer * 0.7, 1).credits
+    + rewardedAdCredits
+  );
+  const base44Plan = requiredBase44Plan(totalCredits);
+  const platformCosts = base44Plan.cost;
+  const storeCosts = subRev * STORE_FEE_PCT;
+  const revcatCost = revenuecatFee(subRev);
+  const fixedCost = fixedOngoingMonthly;
+  const totalCost = platformCosts + storeCosts + revcatCost + fixedCost + toolkitSaveCost;
+  const profit = totalRev - totalCost;
+  return { subRev, interstitialAdRev, rewardedAdRev, narrationAdRev, toolkitAdRev, toolkitSaveCost, adRev, totalRev, totalCredits, rewardedAdCredits, base44Plan, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100) };
+}
+const hypo2ToolkitScenarios = [
+  { label: 'Small (50 paid / 250 free)', mix: { explorer: 30, investigator: 15, trailblazer: 5 }, freeUsers: 250 },
+  { label: 'Growing (200 paid / 1,000 free)', mix: { explorer: 130, investigator: 55, trailblazer: 15 }, freeUsers: 1000 },
+  { label: 'Scale (500 paid / 2,500 free)', mix: { explorer: 330, investigator: 140, trailblazer: 30 }, freeUsers: 2500 },
+  { label: 'Mature (1,000 paid / 5,000 free)', mix: { explorer: 680, investigator: 270, trailblazer: 50 }, freeUsers: 5000 },
+].map(s => ({ ...s, ...hypo2ToolkitScenario(s.mix, s.freeUsers) }));
+
 const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
 function downloadPDF() {
@@ -760,6 +800,18 @@ function downloadPDF() {
     [55, 50, 30, 30, 40, 35, 40, 40, 40, 40, 35]);
   para(`Observer (free) under HYPO 2 + Toolkit: +$${(HYPO1_OBSERVER_ADREV + TOOL_USE_ADREV_OBSERVER + TOOL_SAVE_ADREV_OBSERVER - TOOL_SAVE_COST_OBSERVER).toFixed(2)}/mo net ad revenue per user at zero credit cost. Trailblazer unchanged from HYPO 2 (all 12 tools included): $${hypo2ToolkitTrail.profit.toFixed(2)} profit / ${hypo2ToolkitTrail.margin.toFixed(1)}% margin over 30 months.`);
   para(`12e. Verdict: The toolkit AdGate adds +$${(hypo2ToolkitMature.profit - hypo2Mature.profit).toFixed(0)}/mo at mature scale with near-zero risk. Device-only tools cost 0 credits (ad revenue is nearly pure profit). Save-gate is pre-paid by ad revenue (every save nets +$${(ADMOB_REWARDED_PER_IMPRESSION - UPLOAD_CREDITS_PER_SAVE * COST_PER_CREDIT).toFixed(3)}). No Base44 tier change. Improves free-tier value (6 tools via ad, was 2). Combined HYPO 2 + Toolkit: $${hypo2ToolkitMature.profit.toFixed(0)}/mo profit at ${hypo2ToolkitMature.margin.toFixed(1)}% margin — more than double the baseline's $${baselineMature.profit.toFixed(0)}/mo (${baselineMature.margin.toFixed(1)}%).`);
+
+  heading('13. HYPO 2 + Toolkit AdGate — Revenue Scenarios (Monthly, 70% Utilization)');
+  para('Same 4 scenarios as section 9, but under HYPO 2 (narration credit halving + Observer narration ads) + the proposed toolkit AdMob gating (device-tool use-time ads + Observer save-gate). Weather Monitor is free Open-Meteo (0 credits). No code changes made — planning scenarios.');
+  table(['Scenario', 'Sub Rev', 'Interstitial', 'Rewarded', 'Narr Ads', 'Toolkit Ads', 'Total Rev', 'Credits', 'B44 Plan', 'Total Cost', 'Profit', 'Δ vs Base', 'Margin'],
+    hypo2ToolkitScenarios.map((s, i) => [s.label, '$' + s.subRev.toFixed(0), '$' + s.interstitialAdRev.toFixed(0), '$' + s.rewardedAdRev.toFixed(0), '$' + s.narrationAdRev.toFixed(0), '$' + s.toolkitAdRev.toFixed(0), '$' + s.totalRev.toFixed(0), s.totalCredits.toLocaleString(), s.base44Plan.plan + ' ($' + s.base44Plan.cost + ')', '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), '+$' + (s.profit - scenarios[i].profit).toFixed(0), s.margin.toFixed(1) + '%']),
+    [50, 30, 30, 25, 30, 30, 35, 40, 50, 35, 35, 30, 30]);
+  para('"Δ vs Base" = profit difference vs the baseline scenario (section 9) at the same scale. Free (Observer) users generate ad revenue (interstitial + narration + toolkit) but consume 0 credits. HYPO 2 halves narration credits vs baseline, dropping most scenarios a Base44 tier.');
+  para('13a. Base44 Plan Required Per Scenario:');
+  table(['Scenario', 'Sub Credits', 'Ad-Reward Cr', 'Total Credits', 'B44 Plan', 'Plan $/mo'],
+    hypo2ToolkitScenarios.map(s => [s.label, (s.totalCredits - s.rewardedAdCredits).toLocaleString(), s.rewardedAdCredits.toLocaleString(), s.totalCredits.toLocaleString(), s.base44Plan.plan, '$' + s.base44Plan.cost]),
+    [85, 50, 50, 50, 60, 45]);
+  para('Device-only toolkit tools add 0 credits — the plan tier is driven by narration (halved by HYPO 2) + manifestation + ad-reward energy. HYPO 2 halves narration credits vs baseline, dropping the Base44 plan tier at every scale vs section 9a. The toolkit AdGate adds pure ad revenue without adding any credits.');
 
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free (Observer) users are gated (0 credits). Must upgrade plans to scale.');
@@ -2013,6 +2065,86 @@ export default function PlanAnalysis() {
             <p className="text-xs print-text">• <span className="font-semibold">Improves free-tier value</span> — Observers gain access to 6 tools (was 2) via ad-watching, strengthening the conversion funnel without giving away credit-consuming features.</p>
             <p className="text-xs print-text">• <span className="font-semibold">Weather Monitor</span> moves to free Open-Meteo (0 credits) — no cost-model change, but Weather becomes free for all users (was Explorer+ perk), improving the free experience.</p>
             <p className="text-xs print-text mt-2"><span className="font-semibold">Combined HYPO 2 + Toolkit:</span> ${hypo2ToolkitMature.profit.toFixed(0)}/mo profit at {hypo2ToolkitMature.margin.toFixed(1)}% margin — more than double the baseline's ${baselineMature.profit.toFixed(0)}/mo ({baselineMature.margin.toFixed(1)}%). The biggest single lever is HYPO 2's narration credit halving (drops Base44 ${baselineMature.base44Plan.cost}→${hypo2Mature.base44Plan.cost}/mo, −${(baselineMature.base44Plan.cost - hypo2Mature.base44Plan.cost).toFixed(0)}/mo); the toolkit change stacks cleanly on top for another +${(hypo2ToolkitMature.profit - hypo2Mature.profit).toFixed(0)}/mo of pure ad revenue.</p>
+          </div>
+        </section>
+
+        {/* 13. HYPO 2 + Toolkit AdGate Revenue Scenarios */}
+        <section className="mb-8">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">13. HYPO 2 + Toolkit AdGate — Revenue Scenarios (Monthly, 70% Utilization)</h2>
+          <p className="text-xs print-muted mb-3">Same 4 scenarios as section 9, but under HYPO 2 (narration credit halving + Observer narration ads) + the proposed toolkit AdMob gating (device-tool use-time ads + Observer save-gate). Weather Monitor is free Open-Meteo (0 credits). <span className="font-semibold print-text">No code changes made — planning scenarios.</span></p>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+            <table className="w-full min-w-[1000px]">
+              <thead>
+                <tr>
+                  <th className={th}>Scenario</th>
+                  <th className={`${th} ${num}`}>Sub Rev</th>
+                  <th className={`${th} ${num}`}>Interstitial</th>
+                  <th className={`${th} ${num}`}>Rewarded</th>
+                  <th className={`${th} ${num}`}>Narr Ads</th>
+                  <th className={`${th} ${num}`}>Toolkit Ads</th>
+                  <th className={`${th} ${num}`}>Total Rev</th>
+                  <th className={`${th} ${num}`}>Credits</th>
+                  <th className={th}>B44 Plan</th>
+                  <th className={`${th} ${num}`}>Total Cost</th>
+                  <th className={`${th} ${num}`}>Profit</th>
+                  <th className={`${th} ${num}`}>Δ vs Base</th>
+                  <th className={`${th} ${num}`}>Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hypo2ToolkitScenarios.map((s, i) => (
+                  <tr key={s.label} className="bg-green-500/5">
+                    <td className={`${td} text-xs font-semibold text-green-500 print-text whitespace-nowrap`}>{s.label}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${s.subRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} text-xs print-muted`}>${s.interstitialAdRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} text-xs print-muted`}>${s.rewardedAdRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} text-xs text-green-500 print-text`}>${s.narrationAdRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} text-xs text-green-500 print-text`}>${s.toolkitAdRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} text-xs font-semibold print-text`}>${s.totalRev.toFixed(0)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{s.totalCredits.toLocaleString()}</td>
+                    <td className={`${td} text-xs print-text`}>{s.base44Plan.plan} (${s.base44Plan.cost})</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${s.totalCost.toFixed(0)}</td>
+                    <td className={`${td} ${num} text-xs font-semibold print-text`}>${s.profit.toFixed(0)}</td>
+                    <td className={`${td} ${num} text-xs text-green-500 print-text`}>+${(s.profit - scenarios[i].profit).toFixed(0)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{s.margin.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio. "Δ vs Base" = profit difference vs the baseline scenario (section 9) at the same scale. Free (Observer) users generate ad revenue (interstitial + narration + toolkit) but consume 0 credits. HYPO 2 halves narration credits vs baseline, dropping most scenarios a Base44 tier.</p>
+
+          {/* 13a. Base44 Plan Required */}
+          <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <h3 className="font-heading text-sm font-semibold text-foreground mb-3 print-text">13a. Base44 Plan Required Per Scenario</h3>
+            <p className="text-xs print-muted mb-3">Total monthly integration credits (paid-user credits at 70% util + ad-reward energy credits) and the minimum Base44 plan. Device-only toolkit tools add 0 credits — the plan tier is driven by narration (halved by HYPO 2) + manifestation + ad-reward energy.</p>
+            <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
+              <table className="w-full min-w-[700px]">
+                <thead>
+                  <tr>
+                    <th className={th}>Scenario</th>
+                    <th className={`${th} ${num}`}>Sub Credits</th>
+                    <th className={`${th} ${num}`}>Ad-Reward Cr</th>
+                    <th className={`${th} ${num}`}>Total Credits</th>
+                    <th className={th}>Base44 Plan</th>
+                    <th className={`${th} ${num}`}>Plan Cost/mo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hypo2ToolkitScenarios.map(s => (
+                    <tr key={s.label}>
+                      <td className={`${td} font-semibold print-text whitespace-nowrap`}>{s.label}</td>
+                      <td className={`${td} ${num} print-text`}>{(s.totalCredits - s.rewardedAdCredits).toLocaleString()}</td>
+                      <td className={`${td} ${num} print-muted`}>{s.rewardedAdCredits.toLocaleString()}</td>
+                      <td className={`${td} ${num} font-semibold print-text`}>{s.totalCredits.toLocaleString()}</td>
+                      <td className={`${td} print-text`}><span className="font-semibold">{s.base44Plan.plan}</span></td>
+                      <td className={`${td} ${num} print-text`}>${s.base44Plan.cost}/mo</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-green-500 print-text mt-3">✓ HYPO 2 halves narration credits, dropping the Base44 plan tier at every scale vs baseline (section 9a). The toolkit AdGate adds pure ad revenue without adding any credits (device-only tools = 0 credits).</p>
           </div>
         </section>
 
