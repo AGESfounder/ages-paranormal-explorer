@@ -402,7 +402,10 @@ const HYPO2_INVESTIGATOR_ADREV = NARRATION_OPPS_NARRATED * TOURS_PER_PAID_USER_H
 const HYPO2_TRAILBLAZER_ADREV = HYPO2_INVESTIGATOR_ADREV;
 
 // HYPO 3: ALL plans use device narration exclusively. No enhanced narration.
-// Only manifestation credits consumed. No narration ad gating (narration free).
+// Only manifestation credits consumed. Observer STILL sees ads before each
+// device narration (same ad revenue as HYPO 1/2 — that gating is constant
+// across all 3 hypotheticals). Paid users get device narration free (no ad —
+// they paid for the app). Zero narration credits for everyone.
 const hypo1Plans = [
   { plan: 'Observer', price: 0, manE: 0, narCredits: 0, adRevMo: HYPO1_OBSERVER_ADREV, ...hypoMonthly(0, 0, HYPO1_OBSERVER_ADREV, 0) },
   { plan: 'Explorer', price: 7.99, manE: 5, narCredits: 500, adRevMo: HYPO1_EXPLORER_ADREV, ...hypoMonthly(5, 500, HYPO1_EXPLORER_ADREV, 7.99) },
@@ -414,7 +417,7 @@ const hypo2Plans = [
   { plan: 'Investigator', price: 11.99, manE: 15, narCredits: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), adRevMo: HYPO2_INVESTIGATOR_ADREV, ...hypoMonthly(15, Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), HYPO2_INVESTIGATOR_ADREV, 11.99) },
 ];
 const hypo3Plans = [
-  { plan: 'Observer', price: 0, manE: 0, narCredits: 0, adRevMo: 0, ...hypoMonthly(0, 0, 0, 0) },
+  { plan: 'Observer', price: 0, manE: 0, narCredits: 0, adRevMo: HYPO1_OBSERVER_ADREV, ...hypoMonthly(0, 0, HYPO1_OBSERVER_ADREV, 0) },
   { plan: 'Explorer', price: 7.99, manE: 5, narCredits: 0, adRevMo: 0, ...hypoMonthly(5, 0, 0, 7.99) },
   { plan: 'Investigator', price: 11.99, manE: 15, narCredits: 0, adRevMo: 0, ...hypoMonthly(15, 0, 0, 11.99) },
 ];
@@ -455,7 +458,7 @@ function hypoMatureScenario(narCreditsByPlan, observerAdRev, paidAdRevPerUser) {
 const baselineMature = hypoMatureScenario({ explorer: 500, investigator: 1500, trailblazer: 1500 }, 0, 0);
 const hypo1Mature = hypoMatureScenario({ explorer: 500, investigator: 1500, trailblazer: 1500 }, HYPO1_OBSERVER_ADREV, (HYPO1_EXPLORER_ADREV + HYPO1_INVESTIGATOR_ADREV) / 2);
 const hypo2Mature = hypoMatureScenario({ explorer: Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), investigator: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), trailblazer: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)) }, HYPO1_OBSERVER_ADREV, HYPO2_EXPLORER_ADREV);
-const hypo3Mature = hypoMatureScenario({ explorer: 0, investigator: 0, trailblazer: 0 }, 0, 0);
+const hypo3Mature = hypoMatureScenario({ explorer: 0, investigator: 0, trailblazer: 0 }, HYPO1_OBSERVER_ADREV, 0);
 
 const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -610,7 +613,8 @@ function downloadPDF() {
   para(`Narration is the single biggest platform cost (~${FULL_TOUR_NARRATION_CREDITS} credits per fully-narrated tour). Device Narration uses the device's built-in speechSynthesis — 0 GenerateSpeech credits. Enhanced Narration uses server-side GenerateSpeech (1 credit/50 chars). An average tour has ~${NARRATION_OPPS_PER_TOUR} narration opportunities; a typical user narrates ~${NARRATION_OPPS_NARRATED} of them. These 3 hypotheticals model offering device narration across all tiers with different AdMob gating. NO CODE CHANGES MADE — planning scenarios only.`);
   para(`HYPO 1 (Ad-Gated Device Narration): Observer sees an ad before each narration (device voice, 0 credits). Explorer/Investigator/Trailblazer use enhanced narration until energy depleted, then ad-gated device narration. Paid users still consume their FULL enhanced energy allotment — device narration only extends access beyond depletion, adding ad revenue and improving retention without cutting credit costs.`);
   para(`HYPO 2 (Choice: Device or Enhanced): HYPO 1 + paid tiers choose per-narration: watch an ad for device narration OR spend enhanced energy. Modeled at ~50% device / 50% enhanced. Halves enhanced narration credits for paid users — major cost savings — at the cost of ad friction on half of narrations.`);
-  para(`HYPO 3 (Device Only, No Enhanced): All plans use device narration exclusively. Zero narration credits for everyone — only manifestation credits (tour generation, enrichment) are consumed. No narration ad gating. Lowest cost, but users lose the premium "storm" server voice and get device voices only.`);
+  para(`HYPO 3 (Device Only, No Enhanced): All plans use device narration exclusively. Zero narration credits for everyone — only manifestation credits (tour generation, enrichment) are consumed. Observer STILL sees ads before each device narration (same ad revenue as HYPO 1/2 — that gating is constant across all 3 hypotheticals). Paid users get device narration free (no ad — they paid for the app). Lowest platform cost, but users lose the premium "storm" server voice and get device voices only.`);
+  para(`Baseline vs HYPO 1: Baseline offers NO device narration — Observer cannot narrate at all (0 narration ad revenue; free users lose the feature entirely), and paid users get enhanced narration only (once energy depletes, narration stops). HYPO 1 adds device narration for all: Observer gets ad-gated device narration (NEW ad revenue + a usable feature for free users), and paid users keep their FULL enhanced narration energy with ad-gated device narration as a fallback after depletion (same credits + small overflow ad revenue + better retention — narration never just "stops"). Net: HYPO 1 adds ad revenue without cutting any credits.`);
   para('11a. Per-Plan Monthly Profit (100% Utilization):');
   table(['Scenario', 'Plan', 'Price', 'Man Cr', 'Nar Cr', 'Total Cr', 'Platform', 'Store', 'Ad Rev', 'Net Cost', 'Profit', 'Margin'],
     [
@@ -620,7 +624,7 @@ function downloadPDF() {
       ...hypo3Plans.filter(p => p.price > 0).map(p => ['HYPO 3', p.plan, '$' + p.price.toFixed(2), p.manE, p.narCredits, p.credits, '$' + p.platformCost.toFixed(2), '$' + p.sf.toFixed(2), '$' + p.adRevMo.toFixed(2), '$' + p.netCost.toFixed(2), '$' + p.profit.toFixed(2), p.margin.toFixed(1) + '%']),
     ],
     [45, 50, 35, 30, 30, 35, 45, 40, 40, 45, 45, 40]);
-  para(`Observer (free): All 3 hypotheticals retain the existing interstitial stop ad revenue (~$${AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo = ~$${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo at 5,000 free users — see the "Interstitial" column in 11c). HYPO 1 & 2 add narration-gating ad revenue (~$${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo). HYPO 3 Observer: 0 narration credits, 0 narration ad rev (narration is free, no gating), but interstitial stop ads remain.`);
+  para(`Observer (free): All 3 hypotheticals retain the existing interstitial stop ad revenue (~$${AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo = ~$${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo at 5,000 free users — see the "Interstitial" column in 11c). All 3 hypotheticals ALSO add the same narration-gating ad revenue (~$${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo from ads before each device narration) — Observer's ad-gated device narration is identical across HYPO 1, 2 & 3. The hypotheticals differ only on the PAID side: HYPO 1 keeps full enhanced + device fallback, HYPO 2 lets paid choose, HYPO 3 is device-only (no enhanced).`);
   para('11b. Trailblazer 30-Month ($239.99):');
   table(['Scenario', 'Credits', 'Platform', 'Store', 'Ad Rev', 'Net Cost', 'Profit', 'Margin'],
     [
@@ -636,10 +640,10 @@ function downloadPDF() {
       ['Baseline', '$' + baselineMature.subRev.toFixed(0), '$' + baselineMature.interstitialAdRev.toFixed(0), '$0', '$' + baselineMature.totalRev.toFixed(0), baselineMature.totalCredits.toLocaleString(), baselineMature.base44Plan.plan, '$' + baselineMature.totalCost.toFixed(0), '$' + baselineMature.profit.toFixed(0), baselineMature.margin.toFixed(1) + '%'],
       ['HYPO 1', '$' + hypo1Mature.subRev.toFixed(0), '$' + hypo1Mature.interstitialAdRev.toFixed(0), '$' + hypo1Mature.narrationAdRev.toFixed(0), '$' + hypo1Mature.totalRev.toFixed(0), hypo1Mature.totalCredits.toLocaleString(), hypo1Mature.base44Plan.plan, '$' + hypo1Mature.totalCost.toFixed(0), '$' + hypo1Mature.profit.toFixed(0), hypo1Mature.margin.toFixed(1) + '%'],
       ['HYPO 2', '$' + hypo2Mature.subRev.toFixed(0), '$' + hypo2Mature.interstitialAdRev.toFixed(0), '$' + hypo2Mature.narrationAdRev.toFixed(0), '$' + hypo2Mature.totalRev.toFixed(0), hypo2Mature.totalCredits.toLocaleString(), hypo2Mature.base44Plan.plan, '$' + hypo2Mature.totalCost.toFixed(0), '$' + hypo2Mature.profit.toFixed(0), hypo2Mature.margin.toFixed(1) + '%'],
-      ['HYPO 3', '$' + hypo3Mature.subRev.toFixed(0), '$' + hypo3Mature.interstitialAdRev.toFixed(0), '$0', '$' + hypo3Mature.totalRev.toFixed(0), hypo3Mature.totalCredits.toLocaleString(), hypo3Mature.base44Plan.plan, '$' + hypo3Mature.totalCost.toFixed(0), '$' + hypo3Mature.profit.toFixed(0), hypo3Mature.margin.toFixed(1) + '%'],
+      ['HYPO 3', '$' + hypo3Mature.subRev.toFixed(0), '$' + hypo3Mature.interstitialAdRev.toFixed(0), '$' + hypo3Mature.narrationAdRev.toFixed(0), '$' + hypo3Mature.totalRev.toFixed(0), hypo3Mature.totalCredits.toLocaleString(), hypo3Mature.base44Plan.plan, '$' + hypo3Mature.totalCost.toFixed(0), '$' + hypo3Mature.profit.toFixed(0), hypo3Mature.margin.toFixed(1) + '%'],
     ],
     [50, 45, 45, 50, 50, 50, 50, 50, 50, 45]);
-  para(`HYPO 1 adds ~$${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo profit vs baseline (ad revenue only — no credit savings since paid users keep full enhanced). HYPO 2 adds ~$${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (halved narration credits + ad revenue, may drop a Base44 tier). HYPO 3 adds ~$${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo (zero narration credits — manifestation only — but no narration ad revenue and weaker value prop).`);
+  para(`HYPO 1 adds ~$${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo profit vs baseline (ad revenue only — no credit savings since paid users keep full enhanced). HYPO 2 adds ~$${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (halved narration credits + ad revenue, may drop a Base44 tier). HYPO 3 adds ~$${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo (zero narration credits — manifestation only — Observer narration ad revenue retained, but paid users lose the premium voice).`);
 
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free (Observer) users are gated (0 credits). Must upgrade plans to scale.');
@@ -1505,7 +1509,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Observer (free) rows omitted from the profit table (price $0). <span className="font-semibold print-text">All 3 hypotheticals retain the existing interstitial stop ad revenue</span> (~${AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo = ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo at 5,000 free users — see the "Interstitial" column in 11c). On top of that: HYPO 1 & 2 add narration-gating ad revenue (~${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo from ads before each device narration). HYPO 3 Observer: 0 narration credits, 0 <span className="font-semibold">narration</span> ad rev (narration is free, no gating) — but the existing interstitial stop ads remain unchanged.</p>
+          <p className="text-xs print-muted mt-2 italic">Observer (free) rows omitted from the profit table (price $0). <span className="font-semibold print-text">All 3 hypotheticals retain the existing interstitial stop ad revenue</span> (~${AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo = ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo at 5,000 free users — see the "Interstitial" column in 11c). <span className="font-semibold print-text">All 3 hypotheticals also add the same narration-gating ad revenue</span> (~${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo from ads before each device narration) — Observer's ad-gated device narration is identical across HYPO 1, 2 &amp; 3. The hypotheticals differ only on the PAID side (enhanced vs device credits).</p>
 
           {/* 11b. Trailblazer 30-month */}
           <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">11b. Trailblazer — 30-Month Lifetime ($239.99)</h3>
@@ -1653,7 +1657,7 @@ export default function PlanAnalysis() {
             </div>
             <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
               <p className="text-[10px] font-heading uppercase tracking-wider text-green-500">HYPO 3 — Zero Narration Credits</p>
-              <p className="text-xs print-text mt-1">Explorer saves 500 nar credits (${(500 * COST_PER_CREDIT).toFixed(2)}/mo). Investigator saves 1500 (${(1500 * COST_PER_CREDIT).toFixed(2)}/mo). Mature: <span className="font-semibold text-green-500 print-text">+${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo</span>. But no premium voice & no narration ad rev.</p>
+              <p className="text-xs print-text mt-1">Explorer saves 500 nar credits (${(500 * COST_PER_CREDIT).toFixed(2)}/mo). Investigator saves 1500 (${(1500 * COST_PER_CREDIT).toFixed(2)}/mo). Observer narration ad revenue retained (same as HYPO 1/2). Mature: <span className="font-semibold text-green-500 print-text">+${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo</span>. But paid users lose the premium voice.</p>
             </div>
           </div>
           <p className="text-xs print-muted mt-3 italic">Trade-off: HYPO 3 maximizes profit but weakens the value prop (device voices only — quality varies by device and lacks the premium "storm" narrator). HYPO 2 balances savings with user choice. HYPO 1 improves retention without changing the core narration experience. All three assume the device-narration test on the Eisenhower Farm tour proves viable on real devices before rollout.</p>
@@ -1680,7 +1684,7 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold text-green-500">✓ Community Map improvements (Sept 2026):</span> Author names now resolve via a service-role backend function (display_name → full_name → "Explorer" fallback), and stacked evidence markers at the same coordinates are grouped with a count badge. No credit cost impact — name resolution uses User.get() (no InvokeLLM), and marker grouping is client-side.</p>
             <p>• <span className="font-semibold">Sign-in simplified (Sept 2026):</span> Google and Apple OAuth buttons removed from Login and Register pages — email/password only. Reduces auth complexity and potential confusion. No cost impact.</p>
             <p>• <span className="font-semibold text-amber-500">⚠ Two-pass stop enrichment (Sept 2026):</span> Single-site tours (landmark, ship, cold_spot) now run a second LLM pass (rewriteForStopFocus) to remove general property history and keep stop-specific content. This doubles the enrichment cost to ~{ENRICHMENT_CREDITS_SINGLE_SITE} credits for those tours. The user still pays 1 manifestation energy per stop — the <span className="font-semibold">extra cost is borne by the app owner</span>, not the user. Blended average: ~{AVG_ENRICHMENT_CREDITS} credits/enrichment (was {ENRICHMENT_CREDITS_MULTI_SITE}). Blended manifestation rate: ~{BLENDED_MANIFESTATION_CREDITS} credits/manifestation energy (was {CREDITS_PER_MANIFESTATION}). One-time content_version upgrade: old tours regenerate at 2× cost when first opened by a paid user/admin — budget for a one-time credit spike when rolling out the new prompt.</p>
-            <p>• <span className="font-semibold text-primary">DEVICE NARRATION HYPOTHETICALS (Oct 2026):</span> Three scenarios model offering device narration (0 GenerateSpeech credits) across all tiers. <span className="font-semibold">HYPO 1</span> (ad-gated device narration; paid keeps full enhanced): +~${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo at Mature scale (ad revenue only). <span className="font-semibold">HYPO 2</span> (paid chooses device-ad or enhanced, ~50/50): +~${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (halves narration credits + ads). <span className="font-semibold">HYPO 3</span> (device-only, no enhanced): +~${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo (zero narration credits — manifestation only — but no premium voice & no narration ad rev). See section 11 for full breakdown. No code changes made — planning scenarios pending the Eisenhower Farm device-narration test results.</p>
+            <p>• <span className="font-semibold text-primary">DEVICE NARRATION HYPOTHETICALS (Oct 2026):</span> Three scenarios model offering device narration (0 GenerateSpeech credits) across all tiers. <span className="font-semibold">HYPO 1</span> (ad-gated device narration; paid keeps full enhanced): +~${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo at Mature scale (ad revenue only). <span className="font-semibold">HYPO 2</span> (paid chooses device-ad or enhanced, ~50/50): +~${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (halves narration credits + ads). <span className="font-semibold">HYPO 3</span> (device-only, no enhanced): +~${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo (zero narration credits — manifestation only — Observer narration ad rev retained, but paid users lose the premium voice). See section 11 for full breakdown. No code changes made — planning scenarios pending the Eisenhower Farm device-narration test results.</p>
           </div>
         </section>
 
