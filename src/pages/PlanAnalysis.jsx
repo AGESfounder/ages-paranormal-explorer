@@ -620,7 +620,7 @@ function downloadPDF() {
       ...hypo3Plans.filter(p => p.price > 0).map(p => ['HYPO 3', p.plan, '$' + p.price.toFixed(2), p.manE, p.narCredits, p.credits, '$' + p.platformCost.toFixed(2), '$' + p.sf.toFixed(2), '$' + p.adRevMo.toFixed(2), '$' + p.netCost.toFixed(2), '$' + p.profit.toFixed(2), p.margin.toFixed(1) + '%']),
     ],
     [45, 50, 35, 30, 30, 35, 45, 40, 40, 45, 45, 40]);
-  para(`Observer (free): Under HYPO 1 & 2, Observer generates ~$${HYPO1_OBSERVER_ADREV.toFixed(2)}/mo in narration ad revenue at 0 credit cost. HYPO 3 Observer: 0 credits, 0 ad rev (narration is free, no gating).`);
+  para(`Observer (free): All 3 hypotheticals retain the existing interstitial stop ad revenue (~$${AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo = ~$${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo at 5,000 free users — see the "Interstitial" column in 11c). HYPO 1 & 2 add narration-gating ad revenue (~$${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo). HYPO 3 Observer: 0 narration credits, 0 narration ad rev (narration is free, no gating), but interstitial stop ads remain.`);
   para('11b. Trailblazer 30-Month ($239.99):');
   table(['Scenario', 'Credits', 'Platform', 'Store', 'Ad Rev', 'Net Cost', 'Profit', 'Margin'],
     [
@@ -1505,7 +1505,7 @@ export default function PlanAnalysis() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs print-muted mt-2 italic">Observer (free) rows omitted from the profit table (price $0). Under HYPO 1 & 2, Observer generates ~${HYPO1_OBSERVER_ADREV.toFixed(2)}/mo in narration ad revenue at 0 credit cost. HYPO 3 Observer: 0 credits, 0 ad rev (narration is free, no gating).</p>
+          <p className="text-xs print-muted mt-2 italic">Observer (free) rows omitted from the profit table (price $0). <span className="font-semibold print-text">All 3 hypotheticals retain the existing interstitial stop ad revenue</span> (~${AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo = ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo at 5,000 free users — see the "Interstitial" column in 11c). On top of that: HYPO 1 & 2 add narration-gating ad revenue (~${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo from ads before each device narration). HYPO 3 Observer: 0 narration credits, 0 <span className="font-semibold">narration</span> ad rev (narration is free, no gating) — but the existing interstitial stop ads remain unchanged.</p>
 
           {/* 11b. Trailblazer 30-month */}
           <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">11b. Trailblazer — 30-Month Lifetime ($239.99)</h3>
