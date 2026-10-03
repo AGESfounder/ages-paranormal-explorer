@@ -431,8 +431,10 @@ const hypo2Trail = (() => { const c = calcCosts(15, Math.round(1500 * (1 - HYPO2
 const hypo3Trail = (() => { const c = calcCosts(15, 0, 30); const sf = storeFee(239.99); const netCost = c.platformCost + sf; return { credits: c.credits, platformCost: c.platformCost, sf, adRev: 0, netCost, profit: 239.99 - netCost, margin: (239.99 - netCost) / 239.99 * 100 }; })();
 
 // Mature scenario (1,000 paid / 5,000 free, 70% util) under each hypothetical.
-// Excludes the existing rewarded-ad energy top-up system for clean comparison —
-// the narration-gating ads replace that mechanism in these models.
+// KEEPS the existing rewarded-ad energy top-up system (matches section 9's
+// Mature row) so the baseline is directly comparable. The narration-gating
+// ads modeled here are ADDITIVE — a new revenue stream on top of the
+// rewarded-ad top-up, not a replacement for it.
 function hypoMatureScenario(narCreditsByPlan, observerAdRev, paidAdRevPerUser) {
   const mix = { explorer: 680, investigator: 270, trailblazer: 50 };
   const freeUsers = 5000;
@@ -440,14 +442,18 @@ function hypoMatureScenario(narCreditsByPlan, observerAdRev, paidAdRevPerUser) {
   const investigatorRev = mix.investigator * 11.99;
   const trailblazerRev = mix.trailblazer * (239.99 / 30);
   const subRev = explorerRev + investigatorRev + trailblazerRev;
+  const totalPaidUsers = mix.explorer + mix.investigator + mix.trailblazer;
   const interstitialAdRev = freeUsers * AD_REV_PER_FREE_USER_MO;
-  const narrationAdRev = freeUsers * observerAdRev + (mix.explorer + mix.investigator + mix.trailblazer) * paidAdRevPerUser;
-  const adRev = interstitialAdRev + narrationAdRev;
+  const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
+  const narrationAdRev = freeUsers * observerAdRev + totalPaidUsers * paidAdRevPerUser;
+  const adRev = interstitialAdRev + rewardedAdRev + narrationAdRev;
   const totalRev = subRev + adRev;
+  const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
   const totalCredits = Math.round(
     mix.explorer * calcCosts(5 * 0.7, narCreditsByPlan.explorer * 0.7, 1).credits
     + mix.investigator * calcCosts(15 * 0.7, narCreditsByPlan.investigator * 0.7, 1).credits
     + mix.trailblazer * calcCosts(15 * 0.7, narCreditsByPlan.trailblazer * 0.7, 1).credits
+    + rewardedAdCredits
   );
   const base44Plan = requiredBase44Plan(totalCredits);
   const platformCosts = base44Plan.cost;
@@ -456,7 +462,7 @@ function hypoMatureScenario(narCreditsByPlan, observerAdRev, paidAdRevPerUser) {
   const fixedCost = fixedOngoingMonthly;
   const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
   const profit = totalRev - totalCost;
-  return { subRev, interstitialAdRev, narrationAdRev, adRev, totalRev, totalCredits, base44Plan, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100) };
+  return { subRev, interstitialAdRev, rewardedAdRev, narrationAdRev, adRev, totalRev, totalCredits, base44Plan, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100) };
 }
 const baselineMature = hypoMatureScenario({ explorer: 500, investigator: 1500, trailblazer: 1500 }, 0, 0);
 const hypo1Mature = hypoMatureScenario({ explorer: 500, investigator: 1500, trailblazer: 1500 }, HYPO1_OBSERVER_ADREV, (HYPO1_EXPLORER_ADREV + HYPO1_INVESTIGATOR_ADREV) / 2);
@@ -637,15 +643,15 @@ function downloadPDF() {
       ['HYPO 3', hypo3Trail.credits.toLocaleString(), '$' + hypo3Trail.platformCost.toFixed(2), '$' + hypo3Trail.sf.toFixed(2), '$0.00', '$' + hypo3Trail.netCost.toFixed(2), '$' + hypo3Trail.profit.toFixed(2), hypo3Trail.margin.toFixed(1) + '%'],
     ],
     [55, 55, 50, 45, 45, 50, 50, 45]);
-  para('11c. Mature Revenue Scenario (1,000 paid / 5,000 free, 70% util — excludes existing rewarded-ad top-up system for clean comparison):');
-  table(['Scenario', 'Sub Rev', 'Interstitial', 'Narration Ads', 'Total Rev', 'Credits', 'B44 Plan', 'Total Cost', 'Profit', 'Margin'],
+  para('11c. Mature Revenue Scenario (1,000 paid / 5,000 free, 70% util — keeps the existing rewarded-ad top-up system, consistent with section 9):');
+  table(['Scenario', 'Sub Rev', 'Interstitial', 'Rewarded', 'Narration Ads', 'Total Rev', 'Credits', 'B44 Plan', 'Total Cost', 'Profit', 'Margin'],
     [
-      ['Baseline', '$' + baselineMature.subRev.toFixed(0), '$' + baselineMature.interstitialAdRev.toFixed(0), '$0', '$' + baselineMature.totalRev.toFixed(0), baselineMature.totalCredits.toLocaleString(), baselineMature.base44Plan.plan, '$' + baselineMature.totalCost.toFixed(0), '$' + baselineMature.profit.toFixed(0), baselineMature.margin.toFixed(1) + '%'],
-      ['HYPO 1', '$' + hypo1Mature.subRev.toFixed(0), '$' + hypo1Mature.interstitialAdRev.toFixed(0), '$' + hypo1Mature.narrationAdRev.toFixed(0), '$' + hypo1Mature.totalRev.toFixed(0), hypo1Mature.totalCredits.toLocaleString(), hypo1Mature.base44Plan.plan, '$' + hypo1Mature.totalCost.toFixed(0), '$' + hypo1Mature.profit.toFixed(0), hypo1Mature.margin.toFixed(1) + '%'],
-      ['HYPO 2', '$' + hypo2Mature.subRev.toFixed(0), '$' + hypo2Mature.interstitialAdRev.toFixed(0), '$' + hypo2Mature.narrationAdRev.toFixed(0), '$' + hypo2Mature.totalRev.toFixed(0), hypo2Mature.totalCredits.toLocaleString(), hypo2Mature.base44Plan.plan, '$' + hypo2Mature.totalCost.toFixed(0), '$' + hypo2Mature.profit.toFixed(0), hypo2Mature.margin.toFixed(1) + '%'],
-      ['HYPO 3', '$' + hypo3Mature.subRev.toFixed(0), '$' + hypo3Mature.interstitialAdRev.toFixed(0), '$' + hypo3Mature.narrationAdRev.toFixed(0), '$' + hypo3Mature.totalRev.toFixed(0), hypo3Mature.totalCredits.toLocaleString(), hypo3Mature.base44Plan.plan, '$' + hypo3Mature.totalCost.toFixed(0), '$' + hypo3Mature.profit.toFixed(0), hypo3Mature.margin.toFixed(1) + '%'],
+      ['Baseline', '$' + baselineMature.subRev.toFixed(0), '$' + baselineMature.interstitialAdRev.toFixed(0), '$' + baselineMature.rewardedAdRev.toFixed(0), '$0', '$' + baselineMature.totalRev.toFixed(0), baselineMature.totalCredits.toLocaleString(), baselineMature.base44Plan.plan, '$' + baselineMature.totalCost.toFixed(0), '$' + baselineMature.profit.toFixed(0), baselineMature.margin.toFixed(1) + '%'],
+      ['HYPO 1', '$' + hypo1Mature.subRev.toFixed(0), '$' + hypo1Mature.interstitialAdRev.toFixed(0), '$' + hypo1Mature.rewardedAdRev.toFixed(0), '$' + hypo1Mature.narrationAdRev.toFixed(0), '$' + hypo1Mature.totalRev.toFixed(0), hypo1Mature.totalCredits.toLocaleString(), hypo1Mature.base44Plan.plan, '$' + hypo1Mature.totalCost.toFixed(0), '$' + hypo1Mature.profit.toFixed(0), hypo1Mature.margin.toFixed(1) + '%'],
+      ['HYPO 2', '$' + hypo2Mature.subRev.toFixed(0), '$' + hypo2Mature.interstitialAdRev.toFixed(0), '$' + hypo2Mature.rewardedAdRev.toFixed(0), '$' + hypo2Mature.narrationAdRev.toFixed(0), '$' + hypo2Mature.totalRev.toFixed(0), hypo2Mature.totalCredits.toLocaleString(), hypo2Mature.base44Plan.plan, '$' + hypo2Mature.totalCost.toFixed(0), '$' + hypo2Mature.profit.toFixed(0), hypo2Mature.margin.toFixed(1) + '%'],
+      ['HYPO 3', '$' + hypo3Mature.subRev.toFixed(0), '$' + hypo3Mature.interstitialAdRev.toFixed(0), '$' + hypo3Mature.rewardedAdRev.toFixed(0), '$' + hypo3Mature.narrationAdRev.toFixed(0), '$' + hypo3Mature.totalRev.toFixed(0), hypo3Mature.totalCredits.toLocaleString(), hypo3Mature.base44Plan.plan, '$' + hypo3Mature.totalCost.toFixed(0), '$' + hypo3Mature.profit.toFixed(0), hypo3Mature.margin.toFixed(1) + '%'],
     ],
-    [50, 45, 45, 50, 50, 50, 50, 50, 50, 45]);
+    [50, 45, 45, 45, 50, 50, 50, 50, 50, 50, 45]);
   para(`Observer narration ad revenue (the "Narration Ads" column): ${OBSERVER_NARRATION_ADS_PER_TOUR} ads/tour x ${TOURS_PER_FREE_USER_HYPO} tours/mo x $${NARRATION_AD_INTERSTITIAL.toFixed(3)} = $${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo x 5,000 free users = $${(5000 * HYPO1_OBSERVER_ADREV).toLocaleString()}/mo. HYPO 3 shows exactly this amount; HYPO 1 and 2 show it plus paid-user ad revenue. Baseline has none (free users cannot narrate).`);
   para(`HYPO 1 adds ~$${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo profit vs baseline (ad revenue only — no credit savings since paid users keep full enhanced). HYPO 2 adds ~$${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (halved narration credits + ad revenue, may drop a Base44 tier). HYPO 3 adds ~$${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo (zero narration credits — manifestation only — Observer narration ad revenue retained, but paid users lose the premium voice).`);
 
@@ -1578,7 +1584,7 @@ export default function PlanAnalysis() {
 
           {/* 11c. Mature revenue scenario */}
           <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">11c. Mature Revenue Scenario (1,000 paid / 5,000 free, 70% Utilization)</h3>
-          <p className="text-xs print-muted mb-3">Excludes the existing rewarded-ad energy top-up system for a clean comparison — the narration-gating ads replace that mechanism in these models. "Narration Ads" = ad revenue from narration gating (Observer interstitial + paid post-depletion/choice rewarded ads).</p>
+          <p className="text-xs print-muted mb-3">Keeps the existing rewarded-ad energy top-up system (consistent with section 9's Mature row) — the baseline here now matches section 9. "Rewarded" = paid-user rewarded-ad top-up revenue. "Narration Ads" = the new narration-gating ad revenue (Observer device-narration ads + paid post-depletion/choice ads), additive on top of the rewarded top-up.</p>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full min-w-[900px]">
               <thead>
@@ -1586,6 +1592,7 @@ export default function PlanAnalysis() {
                   <th className={th}>Scenario</th>
                   <th className={`${th} ${num}`}>Sub Rev</th>
                   <th className={`${th} ${num}`}>Interstitial</th>
+                  <th className={`${th} ${num}`}>Rewarded</th>
                   <th className={`${th} ${num}`}>Narration Ads</th>
                   <th className={`${th} ${num}`}>Total Rev</th>
                   <th className={`${th} ${num}`}>Credits</th>
@@ -1600,6 +1607,7 @@ export default function PlanAnalysis() {
                   <td className={`${td} text-xs font-semibold print-muted`}>Baseline</td>
                   <td className={`${td} ${num} text-xs print-text`}>${baselineMature.subRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-muted`}>${baselineMature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${baselineMature.rewardedAdRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-muted`}>$0</td>
                   <td className={`${td} ${num} text-xs font-semibold print-text`}>${baselineMature.totalRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-text`}>{baselineMature.totalCredits.toLocaleString()}</td>
@@ -1612,6 +1620,7 @@ export default function PlanAnalysis() {
                   <td className={`${td} text-xs font-semibold text-primary print-text`}>HYPO 1</td>
                   <td className={`${td} ${num} text-xs print-text`}>${hypo1Mature.subRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-muted`}>${hypo1Mature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo1Mature.rewardedAdRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo1Mature.narrationAdRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo1Mature.totalRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-text`}>{hypo1Mature.totalCredits.toLocaleString()}</td>
@@ -1624,6 +1633,7 @@ export default function PlanAnalysis() {
                   <td className={`${td} text-xs font-semibold text-accent print-text`}>HYPO 2</td>
                   <td className={`${td} ${num} text-xs print-text`}>${hypo2Mature.subRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-muted`}>${hypo2Mature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo2Mature.rewardedAdRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo2Mature.narrationAdRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo2Mature.totalRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-text`}>{hypo2Mature.totalCredits.toLocaleString()}</td>
@@ -1636,6 +1646,7 @@ export default function PlanAnalysis() {
                   <td className={`${td} text-xs font-semibold text-green-500 print-text`}>HYPO 3</td>
                   <td className={`${td} ${num} text-xs print-text`}>${hypo3Mature.subRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-muted`}>${hypo3Mature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo3Mature.rewardedAdRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo3Mature.narrationAdRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo3Mature.totalRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-text`}>{hypo3Mature.totalCredits.toLocaleString()}</td>
