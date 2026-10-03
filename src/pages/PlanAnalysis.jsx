@@ -389,7 +389,10 @@ function hypoMonthly(manE, narCredits, adRevMo, price) {
 // enhanced until energy depleted, then ad-gated device narration. Paid users
 // still consume their FULL enhanced narration energy — device only extends
 // access beyond depletion (more ad revenue, better retention, no credit cut).
-const HYPO1_OBSERVER_ADREV = NARRATION_OPPS_NARRATED * TOURS_PER_FREE_USER_HYPO * NARRATION_AD_INTERSTITIAL;
+// Observer sees an ad before EVERY narration opportunity (~25/tour), not just
+// the ~10 a paying user typically narrates.
+const OBSERVER_NARRATION_ADS_PER_TOUR = NARRATION_OPPS_PER_TOUR;
+const HYPO1_OBSERVER_ADREV = OBSERVER_NARRATION_ADS_PER_TOUR * TOURS_PER_FREE_USER_HYPO * NARRATION_AD_INTERSTITIAL;
 const HYPO1_EXPLORER_ADREV = NARRATION_OPPS_NARRATED * 1 * NARRATION_AD_REWARDED;
 const HYPO1_INVESTIGATOR_ADREV = NARRATION_OPPS_NARRATED * 2 * NARRATION_AD_REWARDED;
 const HYPO1_TRAILBLAZER_ADREV = NARRATION_OPPS_NARRATED * 2 * NARRATION_AD_REWARDED;
@@ -610,7 +613,7 @@ function downloadPDF() {
   para('Base44 plan costs in section 9 ("B44 Plan" column) are the actual fixed monthly plan tier costs. Ad-reward credits (from paid users watching rewarded ads for energy top-ups) are included in the total and can push the required plan tier higher. Free (Observer) users are gated and consume 0 credits.');
 
   heading('11. Device Narration Hypotheticals (Oct 2026)');
-  para(`Narration is the single biggest platform cost (~${FULL_TOUR_NARRATION_CREDITS} credits per fully-narrated tour). Device Narration uses the device's built-in speechSynthesis — 0 GenerateSpeech credits. Enhanced Narration uses server-side GenerateSpeech (1 credit/50 chars). An average tour has ~${NARRATION_OPPS_PER_TOUR} narration opportunities; a typical user narrates ~${NARRATION_OPPS_NARRATED} of them. These 3 hypotheticals model offering device narration across all tiers with different AdMob gating. NO CODE CHANGES MADE — planning scenarios only.`);
+  para(`Narration is the single biggest platform cost (~${FULL_TOUR_NARRATION_CREDITS} credits per fully-narrated tour). Device Narration uses the device's built-in speechSynthesis — 0 GenerateSpeech credits. Enhanced Narration uses server-side GenerateSpeech (1 credit/50 chars). An average tour has ~${NARRATION_OPPS_PER_TOUR} narration opportunities; a typical paid user narrates ~${NARRATION_OPPS_NARRATED} of them, while an Observer watches an ad before all ~${OBSERVER_NARRATION_ADS_PER_TOUR}. These 3 hypotheticals model offering device narration across all tiers with different AdMob gating. NO CODE CHANGES MADE — planning scenarios only.`);
   para(`HYPO 1 (Ad-Gated Device Narration): Observer sees an ad before each narration (device voice, 0 credits). Explorer/Investigator/Trailblazer use enhanced narration until energy depleted, then ad-gated device narration. Paid users still consume their FULL enhanced energy allotment — device narration only extends access beyond depletion, adding ad revenue and improving retention without cutting credit costs.`);
   para(`HYPO 2 (Choice: Device or Enhanced): HYPO 1 + paid tiers choose per-narration: watch an ad for device narration OR spend enhanced energy. Modeled at ~50% device / 50% enhanced. Halves enhanced narration credits for paid users — major cost savings — at the cost of ad friction on half of narrations.`);
   para(`HYPO 3 (Device Only, No Enhanced): All plans use device narration exclusively. Zero narration credits for everyone — only manifestation credits (tour generation, enrichment) are consumed. Observer STILL sees ads before each device narration (same ad revenue as HYPO 1/2 — that gating is constant across all 3 hypotheticals). Paid users get device narration free (no ad — they paid for the app). Lowest platform cost, but users lose the premium "storm" server voice and get device voices only.`);
@@ -643,6 +646,7 @@ function downloadPDF() {
       ['HYPO 3', '$' + hypo3Mature.subRev.toFixed(0), '$' + hypo3Mature.interstitialAdRev.toFixed(0), '$' + hypo3Mature.narrationAdRev.toFixed(0), '$' + hypo3Mature.totalRev.toFixed(0), hypo3Mature.totalCredits.toLocaleString(), hypo3Mature.base44Plan.plan, '$' + hypo3Mature.totalCost.toFixed(0), '$' + hypo3Mature.profit.toFixed(0), hypo3Mature.margin.toFixed(1) + '%'],
     ],
     [50, 45, 45, 50, 50, 50, 50, 50, 50, 45]);
+  para(`Observer narration ad revenue (the "Narration Ads" column): ${OBSERVER_NARRATION_ADS_PER_TOUR} ads/tour x ${TOURS_PER_FREE_USER_HYPO} tours/mo x $${NARRATION_AD_INTERSTITIAL.toFixed(3)} = $${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo x 5,000 free users = $${(5000 * HYPO1_OBSERVER_ADREV).toLocaleString()}/mo. HYPO 3 shows exactly this amount; HYPO 1 and 2 show it plus paid-user ad revenue. Baseline has none (free users cannot narrate).`);
   para(`HYPO 1 adds ~$${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo profit vs baseline (ad revenue only — no credit savings since paid users keep full enhanced). HYPO 2 adds ~$${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (halved narration credits + ad revenue, may drop a Base44 tier). HYPO 3 adds ~$${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo (zero narration credits — manifestation only — Observer narration ad revenue retained, but paid users lose the premium voice).`);
 
   heading('10. Key Takeaways');
@@ -1402,7 +1406,7 @@ export default function PlanAnalysis() {
         <section className="mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">11. Device Narration Hypotheticals (Oct 2026)</h2>
           <p className="text-xs print-muted mb-4">
-            Narration is the single biggest platform cost (~{FULL_TOUR_NARRATION_CREDITS} credits per fully-narrated tour). Device Narration uses the device's built-in speechSynthesis — <span className="font-semibold text-green-500 print-text">0 GenerateSpeech credits</span>. Enhanced Narration uses server-side GenerateSpeech (1 credit/50 chars). An average tour has ~{NARRATION_OPPS_PER_TOUR} narration opportunities; a typical user narrates ~{NARRATION_OPPS_NARRATED} of them. These 3 hypotheticals model offering device narration across all tiers with different AdMob gating strategies. <span className="font-semibold print-text">No code changes have been made — these are planning scenarios only.</span>
+            Narration is the single biggest platform cost (~{FULL_TOUR_NARRATION_CREDITS} credits per fully-narrated tour). Device Narration uses the device's built-in speechSynthesis — <span className="font-semibold text-green-500 print-text">0 GenerateSpeech credits</span>. Enhanced Narration uses server-side GenerateSpeech (1 credit/50 chars). An average tour has ~{NARRATION_OPPS_PER_TOUR} narration opportunities; a typical paid user narrates ~{NARRATION_OPPS_NARRATED} of them, while an Observer watches an ad before all ~{OBSERVER_NARRATION_ADS_PER_TOUR}. These 3 hypotheticals model offering device narration across all tiers with different AdMob gating strategies. <span className="font-semibold print-text">No code changes have been made — these are planning scenarios only.</span>
           </p>
 
           <div className="grid grid-cols-1 gap-3 mb-5">
@@ -1416,7 +1420,7 @@ export default function PlanAnalysis() {
             </div>
             <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
               <p className="text-xs font-heading uppercase tracking-wider text-green-500 mb-1">HYPO 3 — Device Narration Only, No Enhanced</p>
-              <p className="text-xs print-text">All plans use device narration exclusively. <span className="font-semibold">Zero narration credits for everyone</span> — only manifestation credits (tour generation, enrichment) are consumed. No narration ad gating. Lowest cost, but users lose the premium "storm" server voice and get device voices only.</p>
+              <p className="text-xs print-text">All plans use device narration exclusively. <span className="font-semibold">Zero narration credits for everyone</span> — only manifestation credits (tour generation, enrichment) are consumed. Observer still watches an ad before each narration; paid users see no narration ads. Lowest cost, but users lose the premium "storm" server voice and get device voices only.</p>
             </div>
           </div>
 
@@ -1644,6 +1648,10 @@ export default function PlanAnalysis() {
             </table>
           </div>
 
+          <p className="text-xs print-muted mt-2 italic">
+            <span className="font-semibold print-text">Where the Observer narration ad revenue is:</span> the "Narration Ads" column. Observer math: {OBSERVER_NARRATION_ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_HYPO} tours/mo × ${NARRATION_AD_INTERSTITIAL.toFixed(3)} = ${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo × 5,000 free users = <span className="font-semibold text-green-500 print-text">${(5000 * HYPO1_OBSERVER_ADREV).toLocaleString()}/mo</span>. HYPO 3 shows exactly that amount (paid users add no ads there); HYPO 1 and 2 show it plus paid-user ad revenue. Baseline has none because free users can't narrate.
+          </p>
+
           {/* 11d. Savings summary cards */}
           <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">11d. Narration Credit Savings Summary (per user / month)</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1657,7 +1665,7 @@ export default function PlanAnalysis() {
             </div>
             <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
               <p className="text-[10px] font-heading uppercase tracking-wider text-green-500">HYPO 3 — Zero Narration Credits</p>
-              <p className="text-xs print-text mt-1">Explorer saves 500 nar credits (${(500 * COST_PER_CREDIT).toFixed(2)}/mo). Investigator saves 1500 (${(1500 * COST_PER_CREDIT).toFixed(2)}/mo). Observer still watches ~25 ads/tour for device narration — <span className="font-semibold text-green-500 print-text">~$${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo</span> (≈ $${(5000 * HYPO1_OBSERVER_ADREV).toFixed(0)}/mo at 5,000 free users, same as HYPO 1/2). Mature: <span className="font-semibold text-green-500 print-text">+${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo</span>. But paid users lose the premium voice.</p>
+              <p className="text-xs print-text mt-1">Explorer saves 500 nar credits (${(500 * COST_PER_CREDIT).toFixed(2)}/mo). Investigator saves 1500 (${(1500 * COST_PER_CREDIT).toFixed(2)}/mo). Observer still watches ~{OBSERVER_NARRATION_ADS_PER_TOUR} ads/tour for device narration — <span className="font-semibold text-green-500 print-text">~${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo</span> (≈ ${(5000 * HYPO1_OBSERVER_ADREV).toLocaleString()}/mo at 5,000 free users, same as HYPO 1/2). Mature: <span className="font-semibold text-green-500 print-text">+${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo</span>. But paid users lose the premium voice.</p>
             </div>
           </div>
           <p className="text-xs print-muted mt-3 italic">Trade-off: HYPO 3 maximizes profit but weakens the value prop (device voices only — quality varies by device and lacks the premium "storm" narrator). HYPO 2 balances savings with user choice. HYPO 1 improves retention without changing the core narration experience. All three assume the device-narration test on the Eisenhower Farm tour proves viable on real devices before rollout.</p>
