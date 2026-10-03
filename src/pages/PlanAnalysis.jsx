@@ -469,6 +469,81 @@ const hypo1Mature = hypoMatureScenario({ explorer: 500, investigator: 1500, trai
 const hypo2Mature = hypoMatureScenario({ explorer: Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), investigator: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), trailblazer: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)) }, HYPO1_OBSERVER_ADREV, HYPO2_EXPLORER_ADREV);
 const hypo3Mature = hypoMatureScenario({ explorer: 0, investigator: 0, trailblazer: 0 }, HYPO1_OBSERVER_ADREV, 0);
 
+// ===== HYPO 2 + TOOLKIT ADMOB GATING — COMBINED ANALYSIS (Oct 2026) =====
+// The proposed toolkit change (not yet implemented): 6 ad-gatable device tools
+// for Observer (Radio Sweeper, Audio Recorder, Alphabet Sweeper, Yes/No/IDK
+// Sweeper, Vibration Communicator, Anomaly Camera), 3 for Explorer (Alphabet,
+// Vibration, Anomaly Camera). Use-time: 30s ad = 30s tool use, 5 min/day/tool.
+// Save-gate: Observer only, 1 ad = 1 save, 10/day cap. Device-only tools cost
+// 0 credits (no LLM, no speech). Term Sweeper stays paid-only (generative).
+// Weather Monitor moves to free Open-Meteo (0 credits, no gate).
+const TOOL_USE_ADS_OBSERVER_MO = 10;   // active Observer watches ~10 use-time ads/mo across 6 tools
+const TOOL_USE_ADS_EXPLORER_MO = 5;    // active Explorer watches ~5 use-time ads/mo across 3 tools
+const TOOL_SAVE_ADS_OBSERVER_MO = 3;  // active Observer saves ~3 evidence items/mo (1 ad each)
+const UPLOAD_CREDITS_PER_SAVE = 1;    // UploadPrivateFile ≈ 1 integration credit
+const TOOL_USE_ADREV_OBSERVER = TOOL_USE_ADS_OBSERVER_MO * ADMOB_REWARDED_PER_IMPRESSION;
+const TOOL_USE_ADREV_EXPLORER = TOOL_USE_ADS_EXPLORER_MO * ADMOB_REWARDED_PER_IMPRESSION;
+const TOOL_SAVE_ADREV_OBSERVER = TOOL_SAVE_ADS_OBSERVER_MO * ADMOB_REWARDED_PER_IMPRESSION;
+const TOOL_SAVE_COST_OBSERVER = TOOL_SAVE_ADS_OBSERVER_MO * UPLOAD_CREDITS_PER_SAVE * COST_PER_CREDIT;
+
+// Per-plan monthly profit under HYPO 2 + toolkit (adds save cost + toolkit ad rev)
+function hypoMonthlyToolkit(manE, narCredits, adRevMo, price, saveCost) {
+  const credits = manE * BLENDED_MANIFESTATION_CREDITS + narCredits;
+  const platformCost = credits * COST_PER_CREDIT;
+  const sf = storeFee(price);
+  const netCost = platformCost + sf + saveCost - adRevMo;
+  const profit = price - netCost;
+  return { credits, platformCost, sf, adRevMo, saveCost, netCost, profit, margin: price > 0 ? (profit / price * 100) : 0 };
+}
+const hypo2ToolkitPlans = [
+  { plan: 'Observer', price: 0, manE: 0, narCredits: 0, adRevMo: HYPO1_OBSERVER_ADREV + TOOL_USE_ADREV_OBSERVER + TOOL_SAVE_ADREV_OBSERVER, saveCost: TOOL_SAVE_COST_OBSERVER, ...hypoMonthlyToolkit(0, 0, HYPO1_OBSERVER_ADREV + TOOL_USE_ADREV_OBSERVER + TOOL_SAVE_ADREV_OBSERVER, 0, TOOL_SAVE_COST_OBSERVER) },
+  { plan: 'Explorer', price: 7.99, manE: 5, narCredits: Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), adRevMo: HYPO2_EXPLORER_ADREV + TOOL_USE_ADREV_EXPLORER, saveCost: 0, ...hypoMonthlyToolkit(5, Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), HYPO2_EXPLORER_ADREV + TOOL_USE_ADREV_EXPLORER, 7.99, 0) },
+  { plan: 'Investigator', price: 11.99, manE: 15, narCredits: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), adRevMo: HYPO2_INVESTIGATOR_ADREV, saveCost: 0, ...hypoMonthlyToolkit(15, Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), HYPO2_INVESTIGATOR_ADREV, 11.99, 0) },
+];
+
+// Mature scenario (1,000 paid / 5,000 free, 70% util) with HYPO 2 + toolkit.
+// Same as hypoMatureScenario but adds toolkit ad revenue (use-time + save-gate)
+// and save upload cost. Credits unchanged — device-only tools cost 0 credits.
+function hypoMatureWithToolkit(narCreditsByPlan, observerAdRev, paidAdRevPerUser) {
+  const mix = { explorer: 680, investigator: 270, trailblazer: 50 };
+  const freeUsers = 5000;
+  const explorerRev = mix.explorer * 7.99;
+  const investigatorRev = mix.investigator * 11.99;
+  const trailblazerRev = mix.trailblazer * (239.99 / 30);
+  const subRev = explorerRev + investigatorRev + trailblazerRev;
+  const totalPaidUsers = mix.explorer + mix.investigator + mix.trailblazer;
+  const interstitialAdRev = freeUsers * AD_REV_PER_FREE_USER_MO;
+  const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
+  const narrationAdRev = freeUsers * observerAdRev + totalPaidUsers * paidAdRevPerUser;
+  const toolkitUseAdRev = freeUsers * TOOL_USE_ADREV_OBSERVER + mix.explorer * TOOL_USE_ADREV_EXPLORER;
+  const toolkitSaveAdRev = freeUsers * TOOL_SAVE_ADREV_OBSERVER;
+  const toolkitSaveCost = freeUsers * TOOL_SAVE_COST_OBSERVER;
+  const toolkitAdRev = toolkitUseAdRev + toolkitSaveAdRev;
+  const adRev = interstitialAdRev + rewardedAdRev + narrationAdRev + toolkitAdRev;
+  const totalRev = subRev + adRev;
+  const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
+  const totalCredits = Math.round(
+    mix.explorer * calcCosts(5 * 0.7, narCreditsByPlan.explorer * 0.7, 1).credits
+    + mix.investigator * calcCosts(15 * 0.7, narCreditsByPlan.investigator * 0.7, 1).credits
+    + mix.trailblazer * calcCosts(15 * 0.7, narCreditsByPlan.trailblazer * 0.7, 1).credits
+    + rewardedAdCredits
+  );
+  const base44Plan = requiredBase44Plan(totalCredits);
+  const platformCosts = base44Plan.cost;
+  const storeCosts = subRev * STORE_FEE_PCT;
+  const revcatCost = revenuecatFee(subRev);
+  const fixedCost = fixedOngoingMonthly;
+  const totalCost = platformCosts + storeCosts + revcatCost + fixedCost + toolkitSaveCost;
+  const profit = totalRev - totalCost;
+  return { subRev, interstitialAdRev, rewardedAdRev, narrationAdRev, toolkitAdRev, toolkitSaveCost, adRev, totalRev, totalCredits, base44Plan, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100) };
+}
+const hypo2ToolkitMature = hypoMatureWithToolkit(
+  { explorer: Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), investigator: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), trailblazer: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)) },
+  HYPO1_OBSERVER_ADREV, HYPO2_EXPLORER_ADREV
+);
+// Trailblazer under HYPO 2 + toolkit = same as HYPO 2 (all 12 tools, no ad-gate, no save cost)
+const hypo2ToolkitTrail = hypo2Trail;
+
 const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
 function downloadPDF() {
@@ -654,6 +729,37 @@ function downloadPDF() {
     [50, 45, 45, 45, 50, 50, 50, 50, 50, 50, 45]);
   para(`Observer narration ad revenue (the "Narration Ads" column): ${OBSERVER_NARRATION_ADS_PER_TOUR} ads/tour x ${TOURS_PER_FREE_USER_HYPO} tours/mo x $${NARRATION_AD_INTERSTITIAL.toFixed(3)} = $${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo x 5,000 free users = $${(5000 * HYPO1_OBSERVER_ADREV).toLocaleString()}/mo. HYPO 3 shows exactly this amount; HYPO 1 and 2 show it plus paid-user ad revenue. Baseline has none (free users cannot narrate).`);
   para(`HYPO 1 adds ~$${(hypo1Mature.profit - baselineMature.profit).toFixed(0)}/mo profit vs baseline (ad revenue only — no credit savings since paid users keep full enhanced). HYPO 2 adds ~$${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (halved narration credits + ad revenue, may drop a Base44 tier). HYPO 3 adds ~$${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo (zero narration credits — manifestation only — Observer narration ad revenue retained, but paid users lose the premium voice).`);
+
+  heading('12. HYPO 2 + Toolkit AdGate — Combined Analysis (Oct 2026)');
+  para('Combines the chosen narration hypothetical (HYPO 2 — paid users choose device-ad or enhanced, ~50/50) with the proposed toolkit AdMob gating change (6 ad-gatable device tools for Observer, 3 for Explorer; save-gate for Observer). Both are planning scenarios — no code changes made. Weather Monitor also moves from a 3-credit LLM call to free Open-Meteo (0 credits, no gate).');
+  para('12a. Toolkit AdGate Model:');
+  table(['Tier', 'Ad-Gatable Tools', 'Use Ads/mo', 'Ad Rev/mo', 'Save-Gate', 'Save Rev/mo', 'Save Cost/mo'],
+    [
+      ['Observer (Free)', '6 tools', '~10', '$' + TOOL_USE_ADREV_OBSERVER.toFixed(2), '~3 saves', '$' + TOOL_SAVE_ADREV_OBSERVER.toFixed(2), '$' + TOOL_SAVE_COST_OBSERVER.toFixed(3)],
+      ['Explorer ($7.99)', '3 tools', '~5', '$' + TOOL_USE_ADREV_EXPLORER.toFixed(2), '— (has credits)', '—', '—'],
+      ['Investigator+', '0 (all included)', '—', '—', '—', '—', '—'],
+    ],
+    [80, 60, 40, 45, 55, 45, 50]);
+  para(`Device-only tools cost 0 credits. Term Sweeper stays paid-only. Save-gate math: each save ad earns $${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)}, each save costs ${UPLOAD_CREDITS_PER_SAVE} credit × $${COST_PER_CREDIT.toFixed(4)} = $${(UPLOAD_CREDITS_PER_SAVE * COST_PER_CREDIT).toFixed(3)} — every save nets +$${(ADMOB_REWARDED_PER_IMPRESSION - UPLOAD_CREDITS_PER_SAVE * COST_PER_CREDIT).toFixed(3)}. Weather moves to free Open-Meteo (0 credits) — no cost-model change, but free for all users (was Explorer+ perk).`);
+  para('12b. Mature Scenario (1,000 paid / 5,000 free, 70% util):');
+  table(['Scenario', 'Sub Rev', 'Interstitial', 'Rewarded', 'Narr Ads', 'Toolkit Ads', 'Save Cost', 'Total Rev', 'Credits', 'B44 Plan', 'Total Cost', 'Profit', 'Margin'],
+    [
+      ['Baseline', '$' + baselineMature.subRev.toFixed(0), '$' + baselineMature.interstitialAdRev.toFixed(0), '$' + baselineMature.rewardedAdRev.toFixed(0), '$0', '—', '—', '$' + baselineMature.totalRev.toFixed(0), baselineMature.totalCredits.toLocaleString(), baselineMature.base44Plan.plan + ' ($' + baselineMature.base44Plan.cost + ')', '$' + baselineMature.totalCost.toFixed(0), '$' + baselineMature.profit.toFixed(0), baselineMature.margin.toFixed(1) + '%'],
+      ['HYPO 2', '$' + hypo2Mature.subRev.toFixed(0), '$' + hypo2Mature.interstitialAdRev.toFixed(0), '$' + hypo2Mature.rewardedAdRev.toFixed(0), '$' + hypo2Mature.narrationAdRev.toFixed(0), '—', '—', '$' + hypo2Mature.totalRev.toFixed(0), hypo2Mature.totalCredits.toLocaleString(), hypo2Mature.base44Plan.plan + ' ($' + hypo2Mature.base44Plan.cost + ')', '$' + hypo2Mature.totalCost.toFixed(0), '$' + hypo2Mature.profit.toFixed(0), hypo2Mature.margin.toFixed(1) + '%'],
+      ['HYPO 2 + Toolkit', '$' + hypo2ToolkitMature.subRev.toFixed(0), '$' + hypo2ToolkitMature.interstitialAdRev.toFixed(0), '$' + hypo2ToolkitMature.rewardedAdRev.toFixed(0), '$' + hypo2ToolkitMature.narrationAdRev.toFixed(0), '$' + hypo2ToolkitMature.toolkitAdRev.toFixed(0), '$' + hypo2ToolkitMature.toolkitSaveCost.toFixed(0), '$' + hypo2ToolkitMature.totalRev.toFixed(0), hypo2ToolkitMature.totalCredits.toLocaleString(), hypo2ToolkitMature.base44Plan.plan + ' ($' + hypo2ToolkitMature.base44Plan.cost + ')', '$' + hypo2ToolkitMature.totalCost.toFixed(0), '$' + hypo2ToolkitMature.profit.toFixed(0), hypo2ToolkitMature.margin.toFixed(1) + '%'],
+    ],
+    [50, 30, 30, 25, 35, 30, 25, 35, 40, 55, 35, 35, 30]);
+  para(`Deltas: HYPO 2 vs Baseline: +$${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo (narration credit halving drops Base44 ${baselineMature.base44Plan.plan} ($${baselineMature.base44Plan.cost}) → ${hypo2Mature.base44Plan.plan} ($${hypo2Mature.base44Plan.cost}), −$${(baselineMature.base44Plan.cost - hypo2Mature.base44Plan.cost).toFixed(0)}/mo platform + $${hypo2Mature.narrationAdRev.toFixed(0)}/mo narration ads). Toolkit vs HYPO 2: +$${(hypo2ToolkitMature.profit - hypo2Mature.profit).toFixed(0)}/mo (pure ad revenue from device-only tools + save-gate, no credit change). Total vs Baseline: +$${(hypo2ToolkitMature.profit - baselineMature.profit).toFixed(0)}/mo (${baselineMature.margin.toFixed(0)}% → ${hypo2ToolkitMature.margin.toFixed(0)}% margin).`);
+  para('12d. Per-Plan Monthly Profit (100% Utilization):');
+  table(['Scenario', 'Plan', 'Price', 'Nar Cr', 'Platform', 'Store', 'Ad Rev', 'Save Cost', 'Net Cost', 'Profit', 'Margin'],
+    [
+      ...monthlyAnalysis.map(r => ['Baseline', r.plan, '$' + r.price.toFixed(2), r.plan === 'Explorer' ? 500 : 1500, '$' + r.platformCost.toFixed(2), '$' + r.sf.toFixed(2), '—', '—', '$' + r.totalCost.toFixed(2), '$' + r.profit.toFixed(2), r.margin.toFixed(1) + '%']),
+      ...hypo2Plans.filter(p => p.price > 0).map(p => ['HYPO 2', p.plan, '$' + p.price.toFixed(2), p.narCredits, '$' + p.platformCost.toFixed(2), '$' + p.sf.toFixed(2), '$' + p.adRevMo.toFixed(2), '—', '$' + p.netCost.toFixed(2), '$' + p.profit.toFixed(2), p.margin.toFixed(1) + '%']),
+      ...hypo2ToolkitPlans.map(p => ['HYPO 2 + Toolkit', p.plan, '$' + p.price.toFixed(2), p.narCredits, '$' + p.platformCost.toFixed(2), '$' + p.sf.toFixed(2), '$' + p.adRevMo.toFixed(2), '$' + p.saveCost.toFixed(3), '$' + p.netCost.toFixed(2), '$' + p.profit.toFixed(2), p.margin.toFixed(1) + '%']),
+    ],
+    [55, 50, 30, 30, 40, 35, 40, 40, 40, 40, 35]);
+  para(`Observer (free) under HYPO 2 + Toolkit: +$${(HYPO1_OBSERVER_ADREV + TOOL_USE_ADREV_OBSERVER + TOOL_SAVE_ADREV_OBSERVER - TOOL_SAVE_COST_OBSERVER).toFixed(2)}/mo net ad revenue per user at zero credit cost. Trailblazer unchanged from HYPO 2 (all 12 tools included): $${hypo2ToolkitTrail.profit.toFixed(2)} profit / ${hypo2ToolkitTrail.margin.toFixed(1)}% margin over 30 months.`);
+  para(`12e. Verdict: The toolkit AdGate adds +$${(hypo2ToolkitMature.profit - hypo2Mature.profit).toFixed(0)}/mo at mature scale with near-zero risk. Device-only tools cost 0 credits (ad revenue is nearly pure profit). Save-gate is pre-paid by ad revenue (every save nets +$${(ADMOB_REWARDED_PER_IMPRESSION - UPLOAD_CREDITS_PER_SAVE * COST_PER_CREDIT).toFixed(3)}). No Base44 tier change. Improves free-tier value (6 tools via ad, was 2). Combined HYPO 2 + Toolkit: $${hypo2ToolkitMature.profit.toFixed(0)}/mo profit at ${hypo2ToolkitMature.margin.toFixed(1)}% margin — more than double the baseline's $${baselineMature.profit.toFixed(0)}/mo (${baselineMature.margin.toFixed(1)}%).`);
 
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free (Observer) users are gated (0 credits). Must upgrade plans to scale.');
@@ -1680,6 +1786,234 @@ export default function PlanAnalysis() {
             </div>
           </div>
           <p className="text-xs print-muted mt-3 italic">Trade-off: HYPO 3 maximizes profit but weakens the value prop (device voices only — quality varies by device and lacks the premium "storm" narrator). HYPO 2 balances savings with user choice. HYPO 1 improves retention without changing the core narration experience. All three assume the device-narration test on the Eisenhower Farm tour proves viable on real devices before rollout.</p>
+        </section>
+
+        {/* 12. HYPO 2 + Toolkit AdGate Combined Analysis */}
+        <section className="mb-8">
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">12. HYPO 2 + Toolkit AdGate — Combined Cost/Profit Analysis (Oct 2026)</h2>
+          <p className="text-xs print-muted mb-4">
+            This section combines the chosen narration hypothetical (<span className="font-semibold text-accent print-text">HYPO 2</span> — paid users choose device-ad or enhanced, ~50/50) with the <span className="font-semibold print-text">proposed toolkit AdMob gating change</span> (6 ad-gatable device tools for Observer, 3 for Explorer; save-gate for Observer). Both are <span className="font-semibold print-text">planning scenarios — no code changes have been made yet.</span> Weather Monitor also moves from a 3-credit LLM call to free Open-Meteo (0 credits, no gate).
+          </p>
+
+          {/* 12a. Toolkit AdGate model */}
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 print-text">12a. Toolkit AdGate Model</h3>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto mb-4">
+            <table className="w-full min-w-[700px]">
+              <thead>
+                <tr>
+                  <th className={th}>Tier</th>
+                  <th className={th}>Ad-Gatable Tools</th>
+                  <th className={`${th} ${num}`}>Use Ads/mo</th>
+                  <th className={`${th} ${num}`}>Ad Rev/mo</th>
+                  <th className={`${th} ${num}`}>Save-Gate</th>
+                  <th className={`${th} ${num}`}>Save Rev/mo</th>
+                  <th className={`${th} ${num}`}>Save Cost/mo</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className={`${td} font-semibold print-text`}>Observer (Free)</td>
+                  <td className={`${td} text-xs print-muted`}>6 (Radio, Audio, Alphabet, Yes/No, Vibration, Anomaly Cam)</td>
+                  <td className={`${td} ${num} text-xs print-text`}>~10</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${TOOL_USE_ADREV_OBSERVER.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>~3 saves</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${TOOL_SAVE_ADREV_OBSERVER.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${TOOL_SAVE_COST_OBSERVER.toFixed(3)}</td>
+                </tr>
+                <tr>
+                  <td className={`${td} font-semibold print-text`}>Explorer ($7.99)</td>
+                  <td className={`${td} text-xs print-muted`}>3 (Alphabet, Vibration, Anomaly Cam)</td>
+                  <td className={`${td} ${num} text-xs print-text`}>~5</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${TOOL_USE_ADREV_EXPLORER.toFixed(2)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>— (has plan credits)</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                </tr>
+                <tr>
+                  <td className={`${td} font-semibold print-text`}>Investigator / Trailblazer</td>
+                  <td className={`${td} text-xs print-muted`}>0 (all 12 tools included)</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs print-muted mb-4 italic">Device-only tools (Radio, Audio, Alphabet, Yes/No, Vibration, Anomaly Cam) cost <span className="font-semibold print-text">0 integration credits</span> — no LLM, no GenerateSpeech. Term Sweeper stays paid-only (generative: 3 credits + 1/trigger). Save-gate math: each save ad earns ${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)}, each save costs {UPLOAD_CREDITS_PER_SAVE} credit × ${COST_PER_CREDIT.toFixed(4)} = ${(UPLOAD_CREDITS_PER_SAVE * COST_PER_CREDIT).toFixed(3)} — <span className="font-semibold text-green-500 print-text">every save nets +${(ADMOB_REWARDED_PER_IMPRESSION - UPLOAD_CREDITS_PER_SAVE * COST_PER_CREDIT).toFixed(3)}</span>. Weather Monitor moves to free Open-Meteo (0 credits) — no cost-model change (energy allotment is fixed), but Weather becomes free for all users (was Explorer+ perk).</p>
+
+          {/* 12b. Mature scenario comparison */}
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 print-text">12b. Mature Scenario (1,000 paid / 5,000 free, 70% Utilization)</h3>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto mb-3">
+            <table className="w-full min-w-[1000px]">
+              <thead>
+                <tr>
+                  <th className={th}>Scenario</th>
+                  <th className={`${th} ${num}`}>Sub Rev</th>
+                  <th className={`${th} ${num}`}>Interstitial</th>
+                  <th className={`${th} ${num}`}>Rewarded</th>
+                  <th className={`${th} ${num}`}>Narration Ads</th>
+                  <th className={`${th} ${num}`}>Toolkit Ads</th>
+                  <th className={`${th} ${num}`}>Save Cost</th>
+                  <th className={`${th} ${num}`}>Total Rev</th>
+                  <th className={`${th} ${num}`}>Credits</th>
+                  <th className={th}>B44 Plan</th>
+                  <th className={`${th} ${num}`}>Total Cost</th>
+                  <th className={`${th} ${num}`}>Profit</th>
+                  <th className={`${th} ${num}`}>Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="bg-muted/20">
+                  <td className={`${td} text-xs font-semibold print-muted`}>Baseline (current)</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${baselineMature.subRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${baselineMature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${baselineMature.rewardedAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>$0</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${baselineMature.totalRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{baselineMature.totalCredits.toLocaleString()}</td>
+                  <td className={`${td} text-xs print-text`}>{baselineMature.base44Plan.plan} (${baselineMature.base44Plan.cost})</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${baselineMature.totalCost.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${baselineMature.profit.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{baselineMature.margin.toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-accent/5">
+                  <td className={`${td} text-xs font-semibold text-accent print-text`}>HYPO 2 (narration only)</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2Mature.subRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo2Mature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo2Mature.rewardedAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo2Mature.narrationAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo2Mature.totalRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo2Mature.totalCredits.toLocaleString()}</td>
+                  <td className={`${td} text-xs print-text`}>{hypo2Mature.base44Plan.plan} (${hypo2Mature.base44Plan.cost})</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2Mature.totalCost.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo2Mature.profit.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo2Mature.margin.toFixed(1)}%</td>
+                </tr>
+                <tr className="bg-green-500/5">
+                  <td className={`${td} text-xs font-semibold text-green-500 print-text`}>HYPO 2 + Toolkit AdGate</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2ToolkitMature.subRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo2ToolkitMature.interstitialAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-muted`}>${hypo2ToolkitMature.rewardedAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo2ToolkitMature.narrationAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo2ToolkitMature.toolkitAdRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2ToolkitMature.toolkitSaveCost.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo2ToolkitMature.totalRev.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo2ToolkitMature.totalCredits.toLocaleString()}</td>
+                  <td className={`${td} text-xs print-text`}>{hypo2ToolkitMature.base44Plan.plan} (${hypo2ToolkitMature.base44Plan.cost})</td>
+                  <td className={`${td} ${num} text-xs print-text`}>${hypo2ToolkitMature.totalCost.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo2ToolkitMature.profit.toFixed(0)}</td>
+                  <td className={`${td} ${num} text-xs print-text`}>{hypo2ToolkitMature.margin.toFixed(1)}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* 12c. Deltas */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div className="p-3 rounded-lg border border-accent/30 bg-accent/5">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-accent">HYPO 2 vs Baseline</p>
+              <p className="text-lg font-bold text-green-500 print-text mt-1">+${(hypo2Mature.profit - baselineMature.profit).toFixed(0)}/mo</p>
+              <p className="text-[10px] print-muted">Narration credit halving + Observer narration ads. Drops Base44 from {baselineMature.base44Plan.plan} (${baselineMature.base44Plan.cost}) to {hypo2Mature.base44Plan.plan} (${hypo2Mature.base44Plan.cost}) — −${(baselineMature.base44Plan.cost - hypo2Mature.base44Plan.cost).toFixed(0)}/mo platform.</p>
+            </div>
+            <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-green-500">Toolkit vs HYPO 2</p>
+              <p className="text-lg font-bold text-green-500 print-text mt-1">+${(hypo2ToolkitMature.profit - hypo2Mature.profit).toFixed(0)}/mo</p>
+              <p className="text-[10px] print-muted">Pure ad revenue from device-only tools (0 credits) + save-gate (pre-paid by ads). No Base44 tier change.</p>
+            </div>
+            <div className="p-3 rounded-lg border border-primary/30 bg-primary/5">
+              <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Total vs Baseline</p>
+              <p className="text-lg font-bold text-green-500 print-text mt-1">+${(hypo2ToolkitMature.profit - baselineMature.profit).toFixed(0)}/mo</p>
+              <p className="text-[10px] print-muted">Combined HYPO 2 + Toolkit. More than doubles baseline profit ({baselineMature.margin.toFixed(0)}% → {hypo2ToolkitMature.margin.toFixed(0)}% margin).</p>
+            </div>
+          </div>
+
+          {/* 12d. Per-plan */}
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 print-text">12d. Per-Plan Monthly Profit (100% Utilization)</h3>
+          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto mb-3">
+            <table className="w-full min-w-[800px]">
+              <thead>
+                <tr>
+                  <th className={th}>Scenario</th>
+                  <th className={th}>Plan</th>
+                  <th className={`${th} ${num}`}>Price</th>
+                  <th className={`${th} ${num}`}>Nar Cr</th>
+                  <th className={`${th} ${num}`}>Platform</th>
+                  <th className={`${th} ${num}`}>Store</th>
+                  <th className={`${th} ${num}`}>Ad Rev</th>
+                  <th className={`${th} ${num}`}>Save Cost</th>
+                  <th className={`${th} ${num}`}>Net Cost</th>
+                  <th className={`${th} ${num}`}>Profit</th>
+                  <th className={`${th} ${num}`}>Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthlyAnalysis.map(r => (
+                  <tr key={`b12-${r.plan}`} className="bg-muted/20">
+                    <td className={`${td} text-xs print-muted`}>Baseline</td>
+                    <td className={`${td} text-xs font-semibold print-text`}>{r.plan}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${r.price.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{r.plan === 'Explorer' ? 500 : 1500}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${r.platformCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${r.sf.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                    <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${r.totalCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs font-semibold print-text`}>${r.profit.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{r.margin.toFixed(1)}%</td>
+                  </tr>
+                ))}
+                {hypo2Plans.filter(p => p.price > 0).map(p => (
+                  <tr key={`h2d-${p.plan}`} className="bg-accent/5">
+                    <td className={`${td} text-xs text-accent print-text`}>HYPO 2</td>
+                    <td className={`${td} text-xs font-semibold print-text`}>{p.plan}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.price.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.narCredits}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.platformCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.sf.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs text-green-500 print-text`}>${p.adRevMo.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-muted`}>—</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.netCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs font-semibold print-text`}>${p.profit.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.margin.toFixed(1)}%</td>
+                  </tr>
+                ))}
+                {hypo2ToolkitPlans.map(p => (
+                  <tr key={`h2tk-${p.plan}`} className="bg-green-500/5">
+                    <td className={`${td} text-xs text-green-500 print-text`}>HYPO 2 + Toolkit</td>
+                    <td className={`${td} text-xs font-semibold print-text`}>{p.plan}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.price.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.narCredits}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.platformCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.sf.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs text-green-500 print-text`}>${p.adRevMo.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.saveCost.toFixed(3)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>${p.netCost.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs font-semibold print-text`}>{p.profit.toFixed(2)}</td>
+                    <td className={`${td} ${num} text-xs print-text`}>{p.margin.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs print-muted mb-4 italic">Observer (free) under HYPO 2 + Toolkit generates <span className="font-semibold text-green-500 print-text">+${(HYPO1_OBSERVER_ADREV + TOOL_USE_ADREV_OBSERVER + TOOL_SAVE_ADREV_OBSERVER - TOOL_SAVE_COST_OBSERVER).toFixed(2)}/mo</span> in net ad revenue per user (narration ads + toolkit use-time + save-gate − save upload cost) at zero credit cost. Trailblazer is unchanged from HYPO 2 (all 12 tools included — no ad-gate, no save cost): ${hypo2ToolkitTrail.profit.toFixed(2)} profit / {hypo2ToolkitTrail.margin.toFixed(1)}% margin over 30 months.</p>
+
+          {/* 12e. Verdict */}
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 print-text">12e. Verdict — Is the Toolkit Change Worth Making?</h3>
+          <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4 space-y-2">
+            <p className="text-sm font-semibold text-green-500 print-text">Yes — the toolkit AdGate adds +${(hypo2ToolkitMature.profit - hypo2Mature.profit).toFixed(0)}/mo at mature scale with near-zero risk.</p>
+            <p className="text-xs print-text">• <span className="font-semibold">Device-only tools cost zero credits</span> (no LLM, no GenerateSpeech) — the ad revenue is nearly pure profit.</p>
+            <p className="text-xs print-text">• <span className="font-semibold">Save-gate is pre-paid by ad revenue</span> — every save nets +${(ADMOB_REWARDED_PER_IMPRESSION - UPLOAD_CREDITS_PER_SAVE * COST_PER_CREDIT).toFixed(3)} (ad earns ${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)}, upload costs ${(UPLOAD_CREDITS_PER_SAVE * COST_PER_CREDIT).toFixed(3)}). You never spend more than the ad earned.</p>
+            <p className="text-xs print-text">• <span className="font-semibold">No Base44 plan tier change</span> — credits are identical to HYPO 2 alone (device tools = 0 credits).</p>
+            <p className="text-xs print-text">• <span className="font-semibold">Improves free-tier value</span> — Observers gain access to 6 tools (was 2) via ad-watching, strengthening the conversion funnel without giving away credit-consuming features.</p>
+            <p className="text-xs print-text">• <span className="font-semibold">Weather Monitor</span> moves to free Open-Meteo (0 credits) — no cost-model change, but Weather becomes free for all users (was Explorer+ perk), improving the free experience.</p>
+            <p className="text-xs print-text mt-2"><span className="font-semibold">Combined HYPO 2 + Toolkit:</span> ${hypo2ToolkitMature.profit.toFixed(0)}/mo profit at {hypo2ToolkitMature.margin.toFixed(1)}% margin — more than double the baseline's ${baselineMature.profit.toFixed(0)}/mo ({baselineMature.margin.toFixed(1)}%). The biggest single lever is HYPO 2's narration credit halving (drops Base44 ${baselineMature.base44Plan.cost}→${hypo2Mature.base44Plan.cost}/mo, −${(baselineMature.base44Plan.cost - hypo2Mature.base44Plan.cost).toFixed(0)}/mo); the toolkit change stacks cleanly on top for another +${(hypo2ToolkitMature.profit - hypo2Mature.profit).toFixed(0)}/mo of pure ad revenue.</p>
+          </div>
         </section>
 
         {/* 10. Key Takeaways */}
