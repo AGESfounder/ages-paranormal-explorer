@@ -1632,7 +1632,7 @@ export default function PlanAnalysis() {
                   <td className={`${td} text-xs font-semibold text-green-500 print-text`}>HYPO 3</td>
                   <td className={`${td} ${num} text-xs print-text`}>${hypo3Mature.subRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-muted`}>${hypo3Mature.interstitialAdRev.toFixed(0)}</td>
-                  <td className={`${td} ${num} text-xs print-muted`}>$0</td>
+                  <td className={`${td} ${num} text-xs text-green-500 print-text`}>${hypo3Mature.narrationAdRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs font-semibold print-text`}>${hypo3Mature.totalRev.toFixed(0)}</td>
                   <td className={`${td} ${num} text-xs print-text`}>{hypo3Mature.totalCredits.toLocaleString()}</td>
                   <td className={`${td} text-xs print-text`}>{hypo3Mature.base44Plan.plan}</td>
@@ -1657,7 +1657,7 @@ export default function PlanAnalysis() {
             </div>
             <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
               <p className="text-[10px] font-heading uppercase tracking-wider text-green-500">HYPO 3 — Zero Narration Credits</p>
-              <p className="text-xs print-text mt-1">Explorer saves 500 nar credits (${(500 * COST_PER_CREDIT).toFixed(2)}/mo). Investigator saves 1500 (${(1500 * COST_PER_CREDIT).toFixed(2)}/mo). Observer narration ad revenue retained (same as HYPO 1/2). Mature: <span className="font-semibold text-green-500 print-text">+${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo</span>. But paid users lose the premium voice.</p>
+              <p className="text-xs print-text mt-1">Explorer saves 500 nar credits (${(500 * COST_PER_CREDIT).toFixed(2)}/mo). Investigator saves 1500 (${(1500 * COST_PER_CREDIT).toFixed(2)}/mo). Observer still watches ~25 ads/tour for device narration — <span className="font-semibold text-green-500 print-text">~$${HYPO1_OBSERVER_ADREV.toFixed(2)}/free user/mo</span> (≈ $${(5000 * HYPO1_OBSERVER_ADREV).toFixed(0)}/mo at 5,000 free users, same as HYPO 1/2). Mature: <span className="font-semibold text-green-500 print-text">+${(hypo3Mature.profit - baselineMature.profit).toFixed(0)}/mo</span>. But paid users lose the premium voice.</p>
             </div>
           </div>
           <p className="text-xs print-muted mt-3 italic">Trade-off: HYPO 3 maximizes profit but weakens the value prop (device voices only — quality varies by device and lacks the premium "storm" narrator). HYPO 2 balances savings with user choice. HYPO 1 improves retention without changing the core narration experience. All three assume the device-narration test on the Eisenhower Farm tour proves viable on real devices before rollout.</p>
