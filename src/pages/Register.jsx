@@ -49,6 +49,13 @@ export default function Register() {
       const result = await base44.auth.verifyOtp({ email, otpCode });
       if (result?.access_token) {
         base44.auth.setToken(result.access_token);
+        if (username.trim()) {
+          try {
+            await base44.auth.updateMe({ display_name: username.trim() });
+          } catch (e) {
+            // non-fatal: name can be set later on Profile
+          }
+        }
       }
       window.location.href = "/";
     } catch (err) {
