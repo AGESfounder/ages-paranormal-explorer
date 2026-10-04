@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { computeDurationRange } from '@/lib/narrationLength';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AdminUsersTab from '@/components/admin/AdminUsersTab';
 
 export default function Admin() {
   const [user, setUser] = useState(null);
@@ -23,6 +25,7 @@ export default function Admin() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [activeTab, setActiveTab] = useState('tours');
 
   const loadTours = useCallback(async () => {
     try {
@@ -107,10 +110,20 @@ export default function Admin() {
     <PageContainer>
       <SectionHeader title="Admin Panel" showBack />
       <div className="px-4 pb-28 pt-3">
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search tours..." value={tourSearch} onChange={e => setTourSearch(e.target.value)} className="pl-9 bg-card/50 border-border/40 text-sm" />
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
+          <TabsList className="grid grid-cols-2 w-full">
+            <TabsTrigger value="tours">Tours</TabsTrigger>
+            <TabsTrigger value="users">Users</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {activeTab === 'users' ? (
+          <AdminUsersTab />
+        ) : (
+          <>
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Search tours..." value={tourSearch} onChange={e => setTourSearch(e.target.value)} className="pl-9 bg-card/50 border-border/40 text-sm" />
+          </div>
         <div className="space-y-2">
           {filteredTours.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-8">No tours found.</p>
@@ -135,6 +148,8 @@ export default function Admin() {
             ))
           )}
         </div>
+          </>
+        )}
       </div>
 
       {/* Tour Edit Dialog */}
