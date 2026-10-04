@@ -446,3 +446,4 @@ export default async function (req: Request) {
     console.error('revenuecat-webhook error:', (error as Error).message);
     return jsonResponse({ error: (error as Error).message }, 500);
   }
+}
