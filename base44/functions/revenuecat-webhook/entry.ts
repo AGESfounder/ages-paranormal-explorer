@@ -131,6 +131,21 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status });
 }
 
+/**
+ * Build the Base44 SDK client for a webhook request.
+ * RevenueCat's Authorization header carries the webhook shared secret (already
+ * validated by verifyAuthorization), not a Base44 "Bearer <token>". The SDK's
+ * createClientFromRequest() throws on any Authorization value that is not
+ * exactly "Bearer <token>", which 500s real purchase events. So the SDK gets a
+ * copy of the request without that header; service-role access comes from the
+ * platform's Base44-Service-Authorization header, which is preserved.
+ */
+function createBase44Client(req: Request) {
+  const headers = new Headers(req.headers);
+  headers.delete('Authorization');
+  return createClientFromRequest(new Request(req.url, { method: req.method, headers }));
+}
+
 async function findLedgerByTransaction(base44: any, transactionId: string) {
   if (!transactionId) return null;
   const rows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
@@ -327,7 +342,7 @@ export default async function (req: Request) {
       return jsonResponse({ received: true, skipped: 'filtered' });
     }
 
-    const base44 = createClientFromRequest(req);
+    const base44 = createBase44Client(req);
     const eventId = event.id || event.event_id || '';
     const transactionId = event.transaction_id || event.original_transaction_id || '';
 
@@ -842,7 +857,7 @@ async function handleAppleGrant(
  * event_ids.
  */
 async function handleAppleSubscriptionEvent(req: Request, event: any) {
-  const base44 = createClientFromRequest(req);
+  const base44 = createBase44Client(req);
   const eventId = event.id || event.event_id || '';
   const transactionId = event.transaction_id || event.original_transaction_id || '';
 
@@ -1007,7 +1022,7 @@ async function handleAppleAuraRefund(
  * or subscription fields.
  */
 async function handleAppleAuraEvent(req: Request, event: any) {
-  const base44 = createClientFromRequest(req);
+  const base44 = createBase44Client(req);
   const eventId = event.id || event.event_id || '';
   const transactionId = event.transaction_id || event.original_transaction_id || '';
 
@@ -1323,7 +1338,7 @@ async function handleAppleTrailblazerRefund(
  * event_ids. Grants write only the generic Trailblazer fields.
  */
 async function handleAppleTrailblazerEvent(req: Request, event: any) {
-  const base44 = createClientFromRequest(req);
+  const base44 = createBase44Client(req);
   const eventId = event.id || event.event_id || '';
   const transactionId = event.transaction_id || event.original_transaction_id || '';
 
@@ -1816,7 +1831,7 @@ async function handleGoogleSubscriptionGrant(
  * the ledger row's event_ids.
  */
 async function handleGoogleSubscriptionEvent(req: Request, event: any) {
-  const base44 = createClientFromRequest(req);
+  const base44 = createBase44Client(req);
   const eventId = event.id || event.event_id || '';
   const transactionId = event.transaction_id || event.original_transaction_id || '';
 
@@ -1987,7 +2002,7 @@ async function handlePlayAuraRefund(
  * or google_trailblazer_* fields.
  */
 async function handlePlayAuraEvent(req: Request, event: any) {
-  const base44 = createClientFromRequest(req);
+  const base44 = createBase44Client(req);
   const eventId = event.id || event.event_id || '';
   const transactionId = event.transaction_id || event.original_transaction_id || '';
 
