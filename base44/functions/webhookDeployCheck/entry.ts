@@ -1,6 +1,10 @@
 // TEMPORARY deploy diagnostic — deleted after use.
-import { tsProbe } from '../../shared/tsProbe.ts';
-
 export default async function (_req: Request) {
-  return Response.json({ marker: 'deploy-check-C', tsSharedModule: tsProbe(41) });
+  const g: any = globalThis;
+  return Response.json({
+    marker: 'deploy-check-D',
+    denoType: typeof g.Deno,
+    denoEnvGet: typeof g.Deno?.env?.get,
+    processType: typeof g.process,
+  });
 }
