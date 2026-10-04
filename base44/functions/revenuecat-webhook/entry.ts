@@ -1,3 +1,4 @@
+// RevenueCat webhook — redeployed 2026-10-04 to fix Authorization header handling.
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { PLANS, getGrantForProduct, getNextResetDate } from '../../shared/plans.js';
 import {
