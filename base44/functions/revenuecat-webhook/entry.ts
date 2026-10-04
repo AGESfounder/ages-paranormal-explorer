@@ -1,5 +1,6 @@
-// RevenueCat webhook — redeployed 2026-10-04 to fix Authorization header handling.
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+// RevenueCat webhook — Base44 access uses a service-role-only client (see shared/webhookClient.js).
+import { createClient } from 'npm:@base44/sdk@0.8.40';
+import { buildWebhookServiceClient } from '../../shared/webhookClient.js';
 import { PLANS, getGrantForProduct, getNextResetDate } from '../../shared/plans.js';
 import {
   APPLE_AURA_GRANT_EVENT_TYPES,
@@ -127,6 +128,9 @@ async function verifyHmacIfConfigured(req: Request, rawBody: string): Promise<bo
   return mismatch === 0;
 }
 
+// Build marker returned on non-POST requests so a deploy can be confirmed from outside.
+const WEBHOOK_BUILD = 'service-client-v2-r2';
+
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status });
 }
@@ -134,16 +138,14 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
 /**
  * Build the Base44 SDK client for a webhook request.
  * RevenueCat's Authorization header carries the webhook shared secret (already
- * validated by verifyAuthorization), not a Base44 "Bearer <token>". The SDK's
- * createClientFromRequest() throws on any Authorization value that is not
- * exactly "Bearer <token>", which 500s real purchase events. So the SDK gets a
- * copy of the request without that header; service-role access comes from the
- * platform's Base44-Service-Authorization header, which is preserved.
+ * validated by verifyAuthorization), not a Base44 user token. This builds a
+ * service-role-only client straight from the platform-injected
+ * Base44-Service-Authorization credential and never reads or forwards the
+ * caller's Authorization header. createClientFromRequest() is not used because
+ * it rejects any header that is not exactly "Bearer <token>".
  */
 function createBase44Client(req: Request) {
-  const headers = new Headers(req.headers);
-  headers.delete('Authorization');
-  return createClientFromRequest(new Request(req.url, { method: req.method, headers }));
+  return buildWebhookServiceClient(req, createClient, Deno.env.get('BASE44_APP_ID') || '');
 }
 
 async function findLedgerByTransaction(base44: any, transactionId: string) {
@@ -262,7 +264,7 @@ async function recomputeGoogleAccessAfterRefund(base44: any, userId: string) {
 export default async function (req: Request) {
   try {
     if (req.method !== 'POST') {
-      return jsonResponse({ error: 'Method not allowed' }, 405);
+      return jsonResponse({ error: 'Method not allowed', build: WEBHOOK_BUILD }, 405);
     }
 
     if (!verifyAuthorization(req)) {
