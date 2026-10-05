@@ -586,7 +586,7 @@ export default function HauntedLocations() {
               {results.length} exploration{results.length === 1 ? '' : 's'} — {originLabel}
             </p>
             <div className="mb-2">
-              <NarrationToggle mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} />
+              <NarrationToggle mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} className="!justify-center" />
             </div>
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {results.map((loc, i) => {
