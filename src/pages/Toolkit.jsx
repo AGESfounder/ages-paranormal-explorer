@@ -22,6 +22,8 @@ import EvidenceSaveButtons from '@/components/EvidenceSaveButtons';
 import ToolAdGate from '@/components/ToolAdGate';
 import { useToolAdGate } from '@/hooks/useToolAdGate';
 import { TIER_TOOLS as SHARED_TIER_TOOLS, needsToolAdGate, getToolRemaining } from '@/lib/toolAccess';
+import { fetchWeatherByCoords as omFetchByCoords, fetchWeatherByLocation as omFetchByLocation } from '@/lib/openMeteo';
+import { getWeatherFlavor } from '@/lib/weatherFlavor';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 
 // Two-column grid order (fills left→right, row by row):
@@ -534,28 +536,13 @@ export default function Toolkit() {
   };
 
   const fetchWeatherByCoords = async (lat, lon) => {
-    if (!gateManifestation()) return;
     setWeatherLoading(true);
     try {
-      const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `Get the current weather conditions for the location at latitude ${lat}, longitude ${lon}. Return temperature in Fahrenheit, humidity %, wind speed and direction, general conditions (e.g. Clear, Cloudy, Rain), and the nearest city/town name. Use current real-time data.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            temperature: { type: "number" },
-            humidity: { type: "number" },
-            wind: { type: "string" },
-            conditions: { type: "string" },
-            location: { type: "string" },
-          }
-        },
-        model: "gemini_3_flash",
-        add_context_from_internet: true,
-      });
+      const res = await omFetchByCoords(lat, lon);
       setWeatherData(res);
-      spendManifestation();
     } catch (err) {
       console.error('Weather fetch failed', err);
+      setWeatherData(null);
     }
     setWeatherLoading(false);
   };
@@ -563,28 +550,13 @@ export default function Toolkit() {
   const fetchWeatherByLocation = async () => {
     const loc = weatherLocation.trim();
     if (!loc) return;
-    if (!gateManifestation()) return;
     setWeatherLoading(true);
     try {
-      const res = await base44.integrations.Core.InvokeLLM({
-        prompt: `Get the current weather conditions for "${loc}". Return temperature in Fahrenheit, humidity %, wind speed and direction, and general conditions (e.g. Clear, Cloudy, Rain). Use current real-time data.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            temperature: { type: "number" },
-            humidity: { type: "number" },
-            wind: { type: "string" },
-            conditions: { type: "string" },
-            location: { type: "string" },
-          }
-        },
-        model: "gemini_3_flash",
-        add_context_from_internet: true,
-      });
+      const res = await omFetchByLocation(loc);
       setWeatherData(res);
-      spendManifestation();
     } catch (err) {
       console.error('Weather fetch failed', err);
+      setWeatherData(null);
     }
     setWeatherLoading(false);
   };
@@ -812,6 +784,12 @@ export default function Toolkit() {
                     <p className="text-sm font-medium text-foreground">{weatherData.conditions}</p>
                   </div>
                 </div>
+                <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20">
+                  <p className="text-[10px] font-heading uppercase tracking-wider text-primary mb-1">Investigative Guidance</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    {getWeatherFlavor(weatherData.weatherCode, weatherData.temperature, weatherData.humidity, weatherData.wind)}
+                  </p>
+                </div>
               </>
             ) : (
               <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-center space-y-3">
@@ -837,7 +815,7 @@ export default function Toolkit() {
                 {weatherLoading ? '...' : 'Fetch'}
               </button>
             </div>
-            <p className="text-[10px] text-muted-foreground/60 text-center">Powered by live weather data</p>
+            <p className="text-[10px] text-muted-foreground/60 text-center">Free weather by Open-Meteo · no API key, no energy cost</p>
           </div>
         );
 

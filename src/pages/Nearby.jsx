@@ -18,7 +18,7 @@ import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function Nearby() {
   const navigate = useNavigate();
-  const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateGeneration, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
   const [tours, setTours] = useState([]);
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(true);
@@ -45,7 +45,7 @@ export default function Nearby() {
 
   const generateTourForRange = async (range) => {
     if (!coords || generatingRange) return;
-    if (!gateManifestation()) return;
+    if (!gateGeneration()) return;
     setGeneratingRange(range.label);
     try {
       const locationContext = `${range.min}-${range.max} miles from these coordinates: (${coords.lat}, ${coords.lng}). The tour's start_latitude and start_longitude MUST place it ${range.min}-${range.max} miles away — pick a real town or city in that distance band`;
@@ -83,7 +83,7 @@ export default function Nearby() {
 
   const generateTourForZip = async (zipCodeParam) => {
     if (!zipCodeParam || !zipCodeParam.trim() || zipCodeParam.length < 5) return;
-    if (!gateManifestation()) return;
+    if (!gateGeneration()) return;
     setGeneratingRange('Custom Zip Code');
     try {
       let zipLat, zipLon, zipLabel;

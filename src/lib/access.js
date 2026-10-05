@@ -68,6 +68,15 @@ export function getEffectivePlanId(user, now = new Date()) {
   return best;
 }
 
+// Explorer+ can generate tours (Nearby/Abroad). Seeker/Technician are paid
+// but have no manifestation energy and are not generation-eligible by plan.
+export function canGenerate(user, now = new Date()) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const planId = getEffectivePlanId(user, now);
+  return planId === 'explorer' || planId === 'investigator' || planId === 'trailblazer';
+}
+
 export function isPaidAccess(user, now = new Date()) {
   if (!user) return false;
   if (user.role === 'admin') return true;

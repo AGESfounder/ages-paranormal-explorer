@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import {
   isPaidAccess,
+  canGenerate,
   getSpendableEnergy,
   applyManifestationSpend,
   applyNarrationSpend,
@@ -51,6 +52,8 @@ export function useEnergyGate() {
   const isAdmin = user?.role === 'admin';
   // Honors generic plan_expiration_date AND isolated Google Trailblazer expiry
   const isPaid = isPaidAccess(user);
+  // Explorer+ can generate tours (Nearby/Abroad). Seeker/Technician cannot.
+  const canGen = canGenerate(user);
   const spendable = getSpendableEnergy(user);
   const manEnergy = spendable.manifestation - (user?.aura_manifestation_energy || 0);
   const auraManEnergy = user?.aura_manifestation_energy || 0;
@@ -105,6 +108,14 @@ export function useEnergyGate() {
     return true;
   }, [isAdmin, isPaid, totalMan]);
 
+  // Gate a tour-generation action (Nearby/Abroad). Only Explorer+ may generate.
+  const gateGeneration = useCallback(() => {
+    if (isAdmin) return true;
+    if (!canGen) { setGateReason('plan'); setShowUpgrade(true); return false; }
+    if (totalMan <= 0) { setGateReason('energy'); setShowUpgrade(true); return false; }
+    return true;
+  }, [isAdmin, canGen, totalMan]);
+
   // Gate a narration (GenerateSpeech) action. Returns true if allowed.
   const gateNarration = useCallback((text) => {
     if (isAdmin) return true;
@@ -120,7 +131,7 @@ export function useEnergyGate() {
     narEnergy: Math.max(0, narEnergy), auraNarEnergy,
     canManifest, canNarrate, estimateNarrationCost,
     spendManifestation, spendNarration,
-    gateManifestation, gateNarration,
+    gateManifestation, gateGeneration, gateNarration,
     showUpgrade, setShowUpgrade, gateReason, setGateReason,
   };
 }

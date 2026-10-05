@@ -70,7 +70,7 @@ const LOCATION_OPTIONS = [
 
 export default function ToursAbroadModal({ isOpen, onClose }) {
   const navigate = useNavigate();
-  const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateGeneration, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
   const [destinationName, setDestinationName] = useState('');
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState('');
@@ -90,7 +90,7 @@ export default function ToursAbroadModal({ isOpen, onClose }) {
       setError('Please select a tour type.');
       return;
     }
-    if (!gateManifestation()) return;
+    if (!gateGeneration()) return;
     setError('');
     setLoading(true);
 

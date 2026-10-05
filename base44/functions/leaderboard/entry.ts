@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
+import { getEffectivePlanId } from '../../shared/access.js';
 
 Deno.serve(async (req) => {
   try {
@@ -19,7 +20,8 @@ Deno.serve(async (req) => {
       counts[inv.created_by_id] = (counts[inv.created_by_id] || 0) + 1;
     }
 
-    // Build leaderboard entries
+    // Build leaderboard entries — only Explorer/Investigator/Trailblazer
+    // (and admins) participate. All tiers can view the leaderboard.
     const leaderboard = users
       .map(u => ({
         id: u.id,
@@ -28,6 +30,11 @@ Deno.serve(async (req) => {
         count: counts[u.id] || 0,
       }))
       .filter(u => u.count > 0)
+      .filter(u => {
+        if (u.role === 'admin') return true;
+        const planId = getEffectivePlanId(u);
+        return planId === 'explorer' || planId === 'investigator' || planId === 'trailblazer';
+      })
       .sort((a, b) => b.count - a.count)
       .slice(0, 20);
 

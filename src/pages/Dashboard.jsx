@@ -16,7 +16,12 @@ import {
   getEffectivePlan,
   getEffectivePlanId,
   isPaidAccess,
+  canGenerate,
 } from '@/lib/access';
+import DashboardEvidenceTile from '@/components/DashboardEvidenceTile';
+import DashboardToolBanksTile from '@/components/DashboardToolBanksTile';
+import DashboardNarrationIndicator from '@/components/DashboardNarrationIndicator';
+import AdFreeBadge from '@/components/AdFreeBadge';
 import {
   getAppleSubscriptionPlanId,
   getGoogleSubscriptionPlanId,
@@ -434,11 +439,14 @@ export default function Dashboard() {
                 <h2 className="font-heading text-lg font-bold text-foreground">{currentPlan.name}</h2>
               </div>
             </div>
-            {isPaid && (
-              <span className={`px-2.5 py-1 rounded-full text-[10px] font-heading uppercase tracking-wider border ${currentPlan.badge}`}>
-                {user?.subscription_status === 'active' ? 'Active' : currentPlan.id === 'trailblazer' ? 'Elite' : 'Active'}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {isPaid && (
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-heading uppercase tracking-wider border ${currentPlan.badge}`}>
+                  {user?.subscription_status === 'active' ? 'Active' : currentPlan.id === 'trailblazer' ? 'Elite' : 'Active'}
+                </span>
+              )}
+              <AdFreeBadge user={user} />
+            </div>
           </div>
 
           {/* Plan features */}
@@ -464,8 +472,21 @@ export default function Dashboard() {
           )}
         </motion.div>
 
+        {/* ── Status Tiles ── */}
+        <div className="grid grid-cols-2 gap-3">
+          <DashboardEvidenceTile user={user} />
+          {effectivePlanId === 'observer' && !isAdmin && (
+            <DashboardToolBanksTile user={user} />
+          )}
+          {canGenerate(user) && (
+            <div className="p-3 rounded-xl border border-border/40 bg-card/30 flex items-center">
+              <DashboardNarrationIndicator user={user} />
+            </div>
+          )}
+        </div>
+
         {/* ── Energy Meters ── */}
-        {isPaid ? (
+        {canGenerate(user) ? (
           <div className="space-y-3">
             <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground flex items-center gap-2">
               <Zap className="w-4 h-4 text-primary" /> Manifestation Energy
@@ -525,7 +546,7 @@ export default function Dashboard() {
           <div className="p-4 rounded-xl border border-border/30 bg-card/20 text-center">
             <Ghost className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
             <p className="text-sm text-muted-foreground font-heading">No energy allocated</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">Upgrade to a paid plan to unlock AI features</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Upgrade to Explorer or above for AI narration &amp; generation energy</p>
           </div>
         )}
 
