@@ -4,7 +4,7 @@ import { Volume2, VolumeX, Loader2, User } from 'lucide-react';
 import BePatient from '@/components/BePatient';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 
-export default function PersonStoryDialog({ person, open, onOpenChange, isGenerating, isSpeaking, onNarrate }) {
+export default function PersonStoryDialog({ person, open, onOpenChange, isGenerating, isSpeaking, onNarrate, narrationMode }) {
   if (!person) return null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -21,7 +21,7 @@ export default function PersonStoryDialog({ person, open, onOpenChange, isGenera
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-sky-500/15 border border-sky-500/40 text-sky-400 font-heading text-xs uppercase tracking-wider hover:bg-sky-500/25 transition-colors"
         >
           {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isSpeaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-          {isGenerating ? <BePatient /> : isSpeaking ? 'Stop' : <>Narrate Story <EnergyCostBadge type="narration" text={person.story} /></>}
+          {isGenerating ? <BePatient /> : isSpeaking ? 'Stop' : <>Narrate Story <EnergyCostBadge type="narration" mode={narrationMode} text={person.story} /></>}
         </button>
       </DialogContent>
     </Dialog>

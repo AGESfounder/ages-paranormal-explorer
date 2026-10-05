@@ -18,6 +18,10 @@ import useGhostVoice from '../hooks/useGhostVoice';
 import useWakeLock from '../hooks/useWakeLock';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import NarrationToggle from '@/components/NarrationToggle';
+import EnergyCostBadge from '@/components/EnergyCostBadge';
+import { useNarrationMode } from '@/hooks/useNarrationMode';
+import { canUseEnhanced } from '@/lib/narrationMode';
 import EvidenceSaveButtons from '@/components/EvidenceSaveButtons';
 import ToolAdGate from '@/components/ToolAdGate';
 import { useToolAdGate } from '@/hooks/useToolAdGate';
@@ -170,10 +174,14 @@ export default function Toolkit() {
   const dirRef = useRef(1);
   const scrollRef = useRef(null);
   const { isSpeaking: narrating, isGenerating, narrate: rawNarrate, stop: stopNarration } = useGhostVoice();
-  const { gateNarration, spendNarration, estimateNarrationCost, gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason, setGateReason } = useEnergyGate();
+  const { gateNarration, spendNarration, estimateNarrationCost, gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason, setGateReason, user: gateUser } = useEnergyGate();
+  const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(gateUser);
+  const canEnhance = canUseEnhanced(gateUser);
 
-  // Gated narration wrapper — checks energy before speaking, toggles off for free.
+  // Gated narration wrapper — Device mode is free client-side TTS; Enhanced
+  // mode checks energy before speaking.
   const narrate = (text, opts = {}) => {
+    if (narrationMode === 'device') { rawNarrate(text, { ...opts, useDeviceVoice: true }); return; }
     if (narrating || isGenerating) { rawNarrate(text, opts); return; }
     if (!gateNarration(text)) return;
     rawNarrate(text, opts);
@@ -832,9 +840,10 @@ export default function Toolkit() {
                 </button>
                 <button onClick={handleGuideNarration} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-heading uppercase tracking-wider transition-colors ${narrating ? 'bg-primary/20 border border-primary/40 text-primary' : isGenerating ? 'bg-card/50 border border-border/50 text-muted-foreground' : 'bg-card/50 border border-border/50 text-muted-foreground hover:text-primary hover:border-primary/30'}`}>
                   <Volume2 className={`w-3 h-3 ${narrating || isGenerating ? 'animate-pulse' : ''}`} />
-                  {isGenerating ? 'Loading...' : narrating ? 'Stop' : 'Narrate'}
+                  {isGenerating ? 'Loading...' : narrating ? 'Stop' : <>Narrate <EnergyCostBadge type="narration" mode={narrationMode} text={guideDetail} /></>}
                 </button>
               </div>
+              <NarrationToggle mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} />
               <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-xs text-foreground/80 leading-relaxed space-y-3 whitespace-pre-line">
                 {guideDetail}
               </div>

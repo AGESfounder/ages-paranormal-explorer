@@ -11,6 +11,10 @@ import useGhostVoice from '../hooks/useGhostVoice';
 import BePatient from '@/components/BePatient';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import NarrationToggle from '@/components/NarrationToggle';
+import EnergyCostBadge from '@/components/EnergyCostBadge';
+import { useNarrationMode } from '@/hooks/useNarrationMode';
+import { canUseEnhanced } from '@/lib/narrationMode';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -142,10 +146,14 @@ export default function HauntedLocations() {
   const [createAccessType, setCreateAccessType] = useState('exterior_interior');
   const navigate = useNavigate();
   const { narrate: rawNarrate, stop, isSpeaking, isGenerating } = useGhostVoice();
-  const { gateManifestation, spendManifestation, gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateManifestation, spendManifestation, gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user } = useEnergyGate();
+  const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
+  const canEnhance = canUseEnhanced(user);
 
-  // Gated narration wrapper — checks energy before speaking, toggles off for free.
+  // Gated narration wrapper — Device mode is free client-side TTS; Enhanced
+  // mode checks energy before speaking.
   const narrate = (text, opts = {}) => {
+    if (narrationMode === 'device') { rawNarrate(text, { ...opts, useDeviceVoice: true }); return; }
     if (isSpeaking || isGenerating) { rawNarrate(text, opts); return; }
     if (!gateNarration(text)) return;
     rawNarrate(text, opts);
@@ -577,6 +585,9 @@ export default function HauntedLocations() {
             <p className="text-[10px] text-muted-foreground mb-2 font-heading uppercase tracking-wider">
               {results.length} exploration{results.length === 1 ? '' : 's'} — {originLabel}
             </p>
+            <div className="mb-2">
+              <NarrationToggle mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} />
+            </div>
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {results.map((loc, i) => {
                 const open = expandedId === loc.id;
@@ -660,7 +671,7 @@ export default function HauntedLocations() {
                                 ) : (
                                   <Volume2 className="w-3.5 h-3.5" />
                                 )}
-                                {narratingId === loc.id ? (isGenerating ? <BePatient /> : 'Stop Narration') : 'Narrate Summary'}
+                                {narratingId === loc.id ? (isGenerating ? <BePatient /> : 'Stop Narration') : <>Narrate Summary <EnergyCostBadge type="narration" mode={narrationMode} text={loc.overview || loc.name} /></>}
                               </button>
                             )}
                             {loc.existingTourId ? (

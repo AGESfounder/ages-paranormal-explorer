@@ -930,6 +930,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         isGenerating={isGenerating}
         isSpeaking={isSpeaking}
         onNarrate={() => selectedPerson && narrate(selectedPerson.story)}
+        narrationMode={narrationMode}
       />
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
       <DeleteStopDialog
