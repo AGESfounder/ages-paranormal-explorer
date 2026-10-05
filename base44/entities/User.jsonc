@@ -86,6 +86,16 @@
       "format": "date",
       "description": "The date (YYYY-MM-DD) for the current evidence_save_count. Used to reset the daily counter."
     },
+    "stop_ad_views_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of paranormal stop ad views today (Observer only). Resets when stop_ad_views_date changes. Capped at 10/day via grant-stop-access. Seeker+ and admins are ad-free and never increment this counter."
+    },
+    "stop_ad_views_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The date (YYYY-MM-DD) for the current stop_ad_views_count. Used to reset the daily counter."
+    },
     "subscription_id": {
       "type": "string",
       "description": "Wix subscription contract ID. Used to match cancel/expire webhooks."
