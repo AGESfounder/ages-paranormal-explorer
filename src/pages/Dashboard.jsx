@@ -20,7 +20,6 @@ import {
 } from '@/lib/access';
 import DashboardEvidenceTile from '@/components/DashboardEvidenceTile';
 import DashboardToolBanksTile from '@/components/DashboardToolBanksTile';
-import DashboardNarrationIndicator from '@/components/DashboardNarrationIndicator';
 import AdFreeBadge from '@/components/AdFreeBadge';
 import {
   getAppleSubscriptionPlanId,
@@ -478,11 +477,7 @@ export default function Dashboard() {
           {effectivePlanId === 'observer' && !isAdmin && (
             <DashboardToolBanksTile user={user} />
           )}
-          {canGenerate(user) && (
-            <div className="p-3 rounded-xl border border-border/40 bg-card/30 flex items-center">
-              <DashboardNarrationIndicator user={user} />
-            </div>
-          )}
+
         </div>
 
         {/* ── Energy Meters ── */}

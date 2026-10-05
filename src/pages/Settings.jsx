@@ -14,6 +14,7 @@ import { base44 } from '@/api/base44Client';
 import { getBlockedUsers, unblockUser } from '@/lib/userBlocks';
 import { setMusicSettings } from '@/lib/hauntedAudio';
 import DeviceVoicePicker from '@/components/DeviceVoicePicker';
+import DashboardNarrationIndicator from '@/components/DashboardNarrationIndicator';
 
 const defaultSettings = {
   backgroundMusic: true,
@@ -30,6 +31,7 @@ const defaultSettings = {
 export default function Settings() {
   const [settings, setSettings] = useState(defaultSettings);
   const [loaded, setLoaded] = useState(false);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     loadSettings();
@@ -37,10 +39,11 @@ export default function Settings() {
 
   const loadSettings = async () => {
     try {
-      const user = await base44.auth.me();
-      const isAdmin = user?.role === 'admin';
-      if (user?.settings) {
-        const saved = typeof user.settings === 'string' ? JSON.parse(user.settings) : user.settings;
+      const me = await base44.auth.me();
+      setUser(me);
+      const isAdmin = me?.role === 'admin';
+      if (me?.settings) {
+        const saved = typeof me.settings === 'string' ? JSON.parse(me.settings) : me.settings;
         setSettings({ ...defaultSettings, ...saved, isAdmin });
         setMusicSettings({
           enabled: saved.backgroundMusic ?? defaultSettings.backgroundMusic,
@@ -154,8 +157,9 @@ export default function Settings() {
 
         {/* Narration */}
         <div className="rounded-xl border border-border/40 bg-card/40 overflow-hidden">
-          <div className="p-3 border-b border-border/30">
+          <div className="p-3 border-b border-border/30 flex items-center justify-between gap-3">
             <h3 className="text-xs font-heading uppercase tracking-wider text-primary flex items-center gap-2"><Volume2 className="w-3.5 h-3.5" /> Narration</h3>
+            {user && <DashboardNarrationIndicator user={user} />}
           </div>
           <div className="p-3">
             <p className="text-[11px] text-muted-foreground mb-3">
