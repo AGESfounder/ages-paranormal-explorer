@@ -7,9 +7,11 @@ import { PLANS } from '@/lib/plans';
 
 const PLAN_RANK = {
   observer: 0,
-  explorer: 1,
-  investigator: 2,
-  trailblazer: 3,
+  seeker: 1,
+  technician: 2,
+  explorer: 3,
+  investigator: 4,
+  trailblazer: 5,
 };
 
 export function isDateActive(isoDate, now = new Date()) {
@@ -227,4 +229,52 @@ export function getEffectiveExpirationDate(user, now = new Date()) {
     if (max === null || ms > max) max = ms;
   }
   return max === null ? null : new Date(max).toISOString();
+}
+
+/**
+ * Compute field updates after spending 1 evidence save energy (post free daily).
+ * Order: aura_save_energy → aura_narration_energy → aura_manifestation_energy.
+ * NEVER touches monthly narration_energy, manifestation_energy, or
+ * google_trailblazer_* pools — those are reserved for narration/generation.
+ * Returns { updates: null, remaining: 1 } when no aura pool is available.
+ */
+export function applyEvidenceSaveSpend(user, now = new Date()) {
+  let saveEnergy = user?.aura_save_energy || 0;
+  let auraNar = user?.aura_narration_energy || 0;
+  let auraMan = user?.aura_manifestation_energy || 0;
+  const updates = {};
+
+  if (saveEnergy > 0) {
+    saveEnergy -= 1;
+    updates.aura_save_energy = saveEnergy;
+  } else if (auraNar > 0) {
+    auraNar -= 1;
+    updates.aura_narration_energy = auraNar;
+  } else if (auraMan > 0) {
+    auraMan -= 1;
+    updates.aura_manifestation_energy = auraMan;
+  } else {
+    return { updates: null, remaining: 1, next: user };
+  }
+
+  return {
+    updates,
+    remaining: 0,
+    next: {
+      ...user,
+      aura_save_energy: saveEnergy,
+      aura_narration_energy: auraNar,
+      aura_manifestation_energy: auraMan,
+    },
+  };
+}
+
+/** Aura energy available for evidence saves (display helper for Dashboard). */
+export function getSaveEnergy(user, now = new Date()) {
+  return {
+    save: user?.aura_save_energy || 0,
+    narration: user?.aura_narration_energy || 0,
+    manifestation: user?.aura_manifestation_energy || 0,
+    total: (user?.aura_save_energy || 0) + (user?.aura_narration_energy || 0) + (user?.aura_manifestation_energy || 0),
+  };
 }

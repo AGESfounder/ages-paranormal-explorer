@@ -13,7 +13,43 @@ export const PLANS = {
     features: [
       'Browse all 50 states + international tours',
       'View tour details, stops, maps, and text',
+      'Device Narration',
       'Save favorites',
+      'Toolkit: 4 tools (2 ad-gated)',
+      'Evidence Journal + Dashboard',
+    ],
+  },
+  seeker: {
+    id: 'seeker',
+    name: 'Seeker',
+    manifestation_energy: 0,
+    narration_energy: 0,
+    monthly_price: 3.99,
+    annual_price: 39.99,
+    color: 'text-emerald-400',
+    badge: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+    features: [
+      'Everything in Observer',
+      'Ad-Free experience',
+      'Toolkit: 4 tools (no ads)',
+      'Community Map posting',
+      'Evidence saves: 10/day (no ad)',
+    ],
+  },
+  technician: {
+    id: 'technician',
+    name: 'Technician',
+    manifestation_energy: 0,
+    narration_energy: 0,
+    monthly_price: 5.99,
+    annual_price: 59.99,
+    color: 'text-sky-400',
+    badge: 'bg-sky-500/20 text-sky-400 border-sky-500/40',
+    features: [
+      'Everything in Seeker',
+      'Toolkit: 10 of 12 tools',
+      'Aura Bundle access (100% Save Energy)',
+      'Evidence saves: 20/day, then Aura',
     ],
   },
   explorer: {
@@ -121,4 +157,4 @@ export const AURA_BUNDLES = {
   },
 };
 
-export const PLAN_ORDER = ['observer', 'explorer', 'investigator', 'trailblazer'];
+export const PLAN_ORDER = ['observer', 'seeker', 'technician', 'explorer', 'investigator', 'trailblazer'];

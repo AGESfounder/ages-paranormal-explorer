@@ -12,7 +12,41 @@ export const PLANS = {
     features: [
       'Browse all 50 states + international tours',
       'View tour details, stops, maps, and text',
+      'Device Narration',
       'Save favorites',
+      'Toolkit: 4 tools (2 ad-gated)',
+      'Evidence Journal + Dashboard',
+    ],
+  },
+  seeker: {
+    id: 'seeker',
+    name: 'Seeker',
+    manifestation_energy: 0,
+    narration_energy: 0,
+    monthly_price: 3.99,
+    annual_price: 39.99,
+    color: 'text-emerald-400',
+    features: [
+      'Everything in Observer',
+      'Ad-Free experience',
+      'Toolkit: 4 tools (no ads)',
+      'Community Map posting',
+      'Evidence saves: 10/day (no ad)',
+    ],
+  },
+  technician: {
+    id: 'technician',
+    name: 'Technician',
+    manifestation_energy: 0,
+    narration_energy: 0,
+    monthly_price: 5.99,
+    annual_price: 59.99,
+    color: 'text-sky-400',
+    features: [
+      'Everything in Seeker',
+      'Toolkit: 10 of 12 tools',
+      'Aura Bundle access (100% Save Energy)',
+      'Evidence saves: 20/day, then Aura',
     ],
   },
   explorer: {
@@ -135,6 +169,50 @@ export const WIX_PRODUCTS = {
       description: 'Standard access: AI narration (~1 fully narrated tour/mo, all tabs), tour generation, ranked tours, evidence journal, community map, and 8 toolkit tools. Billed annually (save 16%).',
     },
   },
+  seeker_monthly: {
+    name: 'AGES Seeker — Monthly',
+    price: '3.99',
+    product_type: 'subscription',
+    plan_id: 'seeker',
+    subscription_info: {
+      subscriptionSettings: { frequency: 'MONTH' },
+      title: 'AGES Seeker Monthly',
+      description: 'Ad-free access: browse all tours, device narration, 4 toolkit tools, evidence journal, and community map posting. Billed monthly.',
+    },
+  },
+  seeker_annual: {
+    name: 'AGES Seeker — Annual',
+    price: '39.99',
+    product_type: 'subscription',
+    plan_id: 'seeker',
+    subscription_info: {
+      subscriptionSettings: { frequency: 'YEAR' },
+      title: 'AGES Seeker Annual',
+      description: 'Ad-free access: browse all tours, device narration, 4 toolkit tools, evidence journal, and community map posting. Billed annually (save 16%).',
+    },
+  },
+  technician_monthly: {
+    name: 'AGES Technician — Monthly',
+    price: '5.99',
+    product_type: 'subscription',
+    plan_id: 'technician',
+    subscription_info: {
+      subscriptionSettings: { frequency: 'MONTH' },
+      title: 'AGES Technician Monthly',
+      description: 'Ad-free access plus 10 of 12 toolkit tools and Aura Bundle save energy. Billed monthly.',
+    },
+  },
+  technician_annual: {
+    name: 'AGES Technician — Annual',
+    price: '59.99',
+    product_type: 'subscription',
+    plan_id: 'technician',
+    subscription_info: {
+      subscriptionSettings: { frequency: 'YEAR' },
+      title: 'AGES Technician Annual',
+      description: 'Ad-free access plus 10 of 12 toolkit tools and Aura Bundle save energy. Billed annually (save 16%).',
+    },
+  },
   investigator_monthly: {
     name: 'AGES Investigator — Monthly',
     price: '11.99',
@@ -190,7 +268,7 @@ export const WIX_PRODUCTS = {
 };
 
 // Grant access based on product_id. Called from the payments-webhook on ORDER_APPROVED.
-export function getGrantForProduct(productId) {
+export function getGrantForProduct(productId, options = {}) {
   const wixProduct = WIX_PRODUCTS[productId];
   if (!wixProduct) return null;
 
@@ -219,11 +297,22 @@ export function getGrantForProduct(productId) {
 
   if (wixProduct.product_type === 'aura_bundle') {
     const bundle = AURA_BUNDLES[wixProduct.bundle_id];
+    // Technician Aura purchases route 100% to dedicated save energy.
+    // Explorer/Investigator/Trailblazer keep the existing 80/20 split.
+    // Phase 2 will pass options.userPlan from the webhook callers.
+    if (options.userPlan === 'technician') {
+      return {
+        aura_save_add: bundle.energy,
+        aura_narration_add: 0,
+        aura_manifestation_add: 0,
+      };
+    }
     const narrationAdd = Math.round(bundle.energy * bundle.narration_pct);
     const manifestationAdd = Math.round(bundle.energy * bundle.manifestation_pct);
     return {
       aura_narration_add: narrationAdd,
       aura_manifestation_add: manifestationAdd,
+      aura_save_add: 0,
     };
   }
 

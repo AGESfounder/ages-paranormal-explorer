@@ -31,6 +31,7 @@ export default function Profile() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
 
@@ -160,21 +161,26 @@ export default function Profile() {
           </div>
 
           {editing ? (
-            <div className="flex items-center justify-center gap-2 mt-1">
-              <input
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                className="bg-input border border-border rounded-md px-2 py-1 text-sm text-foreground text-center font-heading w-40 focus:outline-none focus:ring-1 focus:ring-primary"
-                autoFocus
-                onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditing(false); }}
-              />
-              <button onClick={saveName} disabled={saving} className="p-1 text-green-400 hover:text-green-300">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              </button>
-              <button onClick={() => setEditing(false)} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
-            </div>
+            <>
+              <div className="flex items-center justify-center gap-2 mt-1">
+                <input
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="bg-input border border-border rounded-md px-2 py-1 text-sm text-foreground text-center font-heading w-40 focus:outline-none focus:ring-1 focus:ring-primary"
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditing(false); }}
+                />
+                <button onClick={saveName} disabled={saving} className="p-1 text-green-400 hover:text-green-300">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                </button>
+                <button onClick={() => setEditing(false)} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+              </div>
+              {nameError && (
+                <p className="text-[10px] text-destructive mt-1">{nameError}</p>
+              )}
+            </>
           ) : (
-            <button onClick={() => setEditing(true)} className="group">
+            <button onClick={() => { setEditing(true); setNameError(''); }} className="group">
               <h2 className="font-heading text-lg font-bold text-foreground group-hover:text-primary transition-colors">{user?.display_name || user?.full_name || 'Paranormal Explorer'}</h2>
               <p className="text-[10px] text-muted-foreground font-heading uppercase tracking-wider">tap to edit name</p>
             </button>

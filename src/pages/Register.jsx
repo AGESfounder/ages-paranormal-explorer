@@ -19,6 +19,19 @@ export default function Register() {
   const [showOtp, setShowOtp] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState(null);
+
+  const checkUsername = async (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) { setUsernameStatus(null); return; }
+    setUsernameStatus('checking');
+    try {
+      const res = await base44.functions.invoke('check-username', { username: trimmed });
+      setUsernameStatus(res.data?.available ? 'free' : 'taken');
+    } catch (e) {
+      setUsernameStatus(null);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -29,6 +42,10 @@ export default function Register() {
     }
     if (!agreedToTerms) {
       setError("Please review and accept the Terms of Service to continue.");
+      return;
+    }
+    if (usernameStatus === 'taken') {
+      setError("That username is already taken. Please choose another.");
       return;
     }
     setLoading(true);
@@ -51,7 +68,7 @@ export default function Register() {
         base44.auth.setToken(result.access_token);
         if (username.trim()) {
           try {
-            await base44.auth.updateMe({ display_name: username.trim() });
+            await base44.functions.invoke('set-username', { username: username.trim() });
           } catch (e) {
             // non-fatal: name can be set later on Profile
           }
@@ -163,10 +180,20 @@ export default function Register() {
               autoComplete="username"
               placeholder="Your name or handle"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => { setUsername(e.target.value); setUsernameStatus(null); }}
+              onBlur={(e) => checkUsername(e.target.value)}
               className="pl-10 h-12"
               required
             />
+            {usernameStatus === 'checking' && (
+              <p className="text-[10px] text-muted-foreground mt-1">Checking…</p>
+            )}
+            {usernameStatus === 'taken' && (
+              <p className="text-[10px] text-destructive mt-1">That username is already taken.</p>
+            )}
+            {usernameStatus === 'free' && (
+              <p className="text-[10px] text-green-400 mt-1">Available.</p>
+            )}
           </div>
         </div>
         <div className="space-y-2">
