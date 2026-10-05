@@ -21,17 +21,17 @@ import UpgradePrompt from '@/components/UpgradePrompt';
 import EvidenceSaveButtons from '@/components/EvidenceSaveButtons';
 import ToolAdGate from '@/components/ToolAdGate';
 import { useToolAdGate } from '@/hooks/useToolAdGate';
-import { TIER_TOOLS as SHARED_TIER_TOOLS, needsToolAdGate, getToolRemaining, parseToolBanks } from '@/lib/toolAccess';
+import { TIER_TOOLS as SHARED_TIER_TOOLS, needsToolAdGate, getToolRemaining } from '@/lib/toolAccess';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 
 // Two-column grid order (fills left→right, row by row):
 //   Col 1: Equipment Guide, Audio Recorder, Anomaly Camera, Vibration Communicator, Weather Monitor, Paranormal Research: Terms
-//   Col 2: Radio Sweeper, Term Sweeper, Alphabet Sweeper, Yes/No/IDK Sweeper, Moon Phase, Safety Protocol
+//   Col 2: Radio Sweeper, Terms Sweeper, Alphabet Sweeper, Yes/No/IDK Sweeper, Moon Phase, Safety Protocol
 const DEFAULT_TOOLS = [
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Radio Sweeper', icon: Volume2, desc: 'AM/FM frequency sweep for EVP', type: 'audio' },
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
-  { name: 'Term Sweeper', icon: Library, desc: 'Sweep location terms — environment-triggered spirit dictation + screen record', type: 'termbank' },
+  { name: 'Terms Sweeper', icon: Library, desc: 'Sweep location terms — environment-triggered spirit dictation + screen record', type: 'termbank' },
   { name: 'Anomaly Camera', icon: ScanFace, desc: 'Detect human & ghost figures via IR depth scan', type: 'sls' },
   { name: 'Alphabet Sweeper', icon: Type, desc: 'Sweep A→Z — environment-triggered letter dictation + screen record', type: 'alphabet' },
   { name: 'Vibration Communicator', icon: Zap, desc: 'Detect energy disturbances via phone sensors + video record', type: 'rem' },
@@ -54,9 +54,7 @@ const SWEEP_SPEEDS = {
 export default function Toolkit() {
   const [activeTool, setActiveTool] = useState(null);
   const [adGateTool, setAdGateTool] = useState(null);
-  const [toolTimeRemaining, setToolTimeRemaining] = useState(0);
   const [user, setUser] = useState(null);
-  const toolTimerRef = useRef(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userPlan, setUserPlan] = useState(null);
   const [tools, setTools] = useState(DEFAULT_TOOLS);
@@ -84,7 +82,7 @@ export default function Toolkit() {
 
   // Gate tool access by tier — all 12 tools are visible, but tapping a tool
   // the user's plan doesn't include shows the upgrade prompt instead of opening it.
-  const handleSelectTool = (tool) => {
+  const handleSelectTool = async (tool) => {
     if (isAdmin) { setActiveTool(tool); return; }
     const allowed = SHARED_TIER_TOOLS[userPlan];
     if (allowed && !allowed.includes(tool.name)) {
@@ -93,12 +91,23 @@ export default function Toolkit() {
       return;
     }
     // Ad-gate check: Observer users must watch a rewarded ad for ad-gated tools.
-    // If they have remaining time from a previous ad, open the tool with countdown.
+    // Ask the server for the authoritative remaining (deducts any crash gap).
     if (needsToolAdGate(user, tool.name)) {
-      const remaining = getToolRemaining(user, tool.name);
-      if (remaining > 0) {
+      const localRemaining = getToolRemaining(user, tool.name);
+      if (localRemaining > 0) {
         setActiveTool(tool);
-        startToolCountdown(tool, remaining);
+        const serverRemaining = await toolAdGate.startConsumption(tool.name);
+        if (serverRemaining > 0) {
+          toolAdGate.startHeartbeat(() => {
+            setActiveTool(null);
+            setAdGateTool(tool);
+          }, tool.name);
+        } else {
+          // Server says no time (crash gap consumed it) — show ad-gate
+          await toolAdGate.stopConsumption(tool.name);
+          setActiveTool(null);
+          setAdGateTool(tool);
+        }
       } else {
         setAdGateTool(tool);
       }
@@ -108,53 +117,15 @@ export default function Toolkit() {
   };
 
   // Called when a rewarded ad is watched and the server grants 30s.
-  const handleAdGranted = (tool, grantData) => {
+  // Starts server-authoritative consumption (sets last_heartbeat, starts heartbeat).
+  const handleAdGranted = async (tool) => {
     setAdGateTool(null);
     setActiveTool(tool);
-    setToolTimeRemaining(grantData.remaining);
-    startToolCountdown(tool, grantData.remaining);
-  };
-
-  // Local countdown timer for ad-gated tools. When it hits 0, the tool closes
-  // and the ad-gate is shown again so the user can watch another ad.
-  const startToolCountdown = (tool, seconds) => {
-    setToolTimeRemaining(seconds);
-    if (toolTimerRef.current) clearInterval(toolTimerRef.current);
-    toolTimerRef.current = setInterval(() => {
-      setToolTimeRemaining(prev => {
-        if (prev <= 1) {
-          clearInterval(toolTimerRef.current);
-          toolTimerRef.current = null;
-          setActiveTool(null);
-          if (needsToolAdGate(user, tool.name)) {
-            setAdGateTool(tool);
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  // Stop the countdown and sync remaining time back to the server so it
-  // persists across sessions. Best-effort — failures just mean the server's
-  // remaining is slightly higher than actual.
-  const stopToolCountdown = () => {
-    if (toolTimerRef.current) {
-      clearInterval(toolTimerRef.current);
-      toolTimerRef.current = null;
-    }
-    if (user && activeTool && needsToolAdGate(user, activeTool.name) && toolTimeRemaining > 0) {
-      try {
-        const banks = parseToolBanks(user);
-        const entry = banks[activeTool.name] || { r: 0, e: 0 };
-        entry.r = Math.max(0, toolTimeRemaining);
-        banks[activeTool.name] = entry;
-        base44.auth.updateMe({ tool_banks: JSON.stringify(banks) });
-      } catch (e) {
-        console.error('Failed to sync tool_banks:', e);
-      }
-    }
+    await toolAdGate.startConsumption(tool.name);
+    toolAdGate.startHeartbeat(() => {
+      setActiveTool(null);
+      setAdGateTool(tool);
+    }, tool.name);
   };
 
   const handleReorder = (next) => {
@@ -217,7 +188,6 @@ export default function Toolkit() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
-      if (toolTimerRef.current) clearInterval(toolTimerRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
@@ -1234,11 +1204,11 @@ Best Practices
 • Distinguish genuine responses from coincidental broadcast fragments — consistency and relevance are key.`
               },
               {
-                name: 'Term Sweeper',
+                name: 'Terms Sweeper',
                 short: 'Environment-Triggered Spirit Dictation',
-                detail: `Term Sweepers in Ghost Hunting
+                detail: `Terms Sweepers in Ghost Hunting
 
-What Is a Term Sweeper?
+What Is a Terms Sweeper?
 
 A term sweeper is a phone-based tool that cycles through a list of location-relevant words (place names, object names, historical terms) and is believed to be triggered by environmental energy to "dictate" a term from the surrounding spirit. It typically pairs with screen recording to capture which term appears and when.
 
@@ -1479,8 +1449,8 @@ Best Practices
               granting={toolAdGate.granting}
               adError={toolAdGate.adError}
               onWatchAd={async () => {
-                const result = await toolAdGate.watchAd();
-                if (result) handleAdGranted(adGateTool, result);
+                const result = await toolAdGate.watchAd(adGateTool.name);
+                if (result) handleAdGranted(adGateTool);
               }}
               earned={toolAdGate.earned}
             />
@@ -1514,15 +1484,15 @@ Best Practices
                 setSavedWords([]);
                 setGuideDetail(null);
                 stopNarration();
-                stopToolCountdown();
+                toolAdGate.stopConsumption(activeTool?.name);
               }} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            {needsToolAdGate(user, activeTool?.name) && toolTimeRemaining > 0 && (
+            {needsToolAdGate(user, activeTool?.name) && toolAdGate.remaining > 0 && (
               <div className="flex items-center justify-center gap-1.5 mb-3 text-[10px] text-primary font-mono">
                 <Clock className="w-3 h-3" />
-                <span className="animate-glow-pulse">{toolTimeRemaining}s remaining</span>
+                <span className="animate-glow-pulse">{toolAdGate.remaining}s remaining</span>
               </div>
             )}
             {renderToolContent()}

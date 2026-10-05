@@ -69,7 +69,7 @@
     },
     "tool_banks": {
       "type": "string",
-      "description": "JSON-encoded map of tool name to { r: remaining_seconds, e: earned_today_seconds } for Observer ad-gated tools (Alphabet Sweeper, Yes/No/IDK Sweeper, Vibration Communicator, Anomaly Camera). 30s ad = 30s use, 5-min (300s) daily cap per tool. Resets daily via tool_banks_date. Only Observer (free) users use this counter; Seeker+ is ad-free."
+      "description": "JSON-encoded map of tool name to { r: remaining_seconds, e: earned_today_seconds, l: last_heartbeat_ms } for Observer ad-gated tools (Audio Recorder, Radio Sweeper). 30s ad = 30s use, 5-min (300s) daily cap per tool. Resets daily via tool_banks_date. r and e are written only by grant-tool-time (on ad watch) and consume-tool-time (on heartbeat/close) \u2014 the client never writes r directly. l is the server wall-clock timestamp set by consume-tool-time on each heartbeat and cleared on close. Only Observer (free) users use this counter; Seeker+ is ad-free."
     },
     "tool_banks_date": {
       "type": "string",

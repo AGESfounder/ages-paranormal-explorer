@@ -8,17 +8,29 @@ import {
   TOOL_DAILY_CAP,
 } from '@/lib/toolAccess';
 
+const HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
+
 /**
  * Manages the ad-gate lifecycle for a single Observer-tier ad-gated tool.
  *
- * Flow:
- *  1. User taps an ad-gated tool → if remaining > 0, open with countdown;
+ * Server-authoritative flow:
+ *  1. User taps an ad-gated tool → if remaining > 0, open with heartbeat;
  *     if remaining = 0, show the ToolAdGate UI.
  *  2. User watches a rewarded ad → showRewardedAd → grant-tool-time →
  *     server adds 30s to tool_banks[tool].r and .e (capped at 300/day).
- *  3. Tool opens with the granted time, counting down locally.
- *  4. On close or expiry, consumed seconds are synced back to the server
- *     via base44.auth.updateMe so remaining stays accurate across sessions.
+ *  3. Tool opens. Client calls consume-tool-time on open (sets last_heartbeat),
+ *     then every 5s (heartbeat). Server deducts elapsed via wall clock.
+ *  4. On close, client calls consume-tool-time with close=true (final deduction,
+ *     clears last_heartbeat).
+ *  5. The server's remaining value is authoritative — the client displays it
+ *     and closes the tool when it reaches 0.
+ *
+ * The client NEVER writes tool_banks.r directly. Only grant-tool-time and
+ * consume-tool-time modify r, both server-side.
+ *
+ * All functions accept an optional `name` parameter to override the hook's
+ * toolName — this avoids React state timing issues when the caller sets
+ * activeTool and immediately calls startConsumption in the same handler.
  *
  * @param {object|null} user — current Base44 user (from auth.me())
  * @param {string} toolName — the tool being gated (must be in AD_GATED_TOOLS)
@@ -29,7 +41,7 @@ export function useToolAdGate(user, toolName) {
   const [watching, setWatching] = useState(false);
   const [granting, setGranting] = useState(false);
   const [adError, setAdError] = useState(null);
-  const timerRef = useRef(null);
+  const heartbeatRef = useRef(null);
 
   // Load initial state from user record whenever user or toolName changes.
   useEffect(() => {
@@ -44,13 +56,13 @@ export function useToolAdGate(user, toolName) {
   }, [user, toolName]);
 
   const needsAd = user ? needsToolAdGate(user, toolName) : false;
-  const canUse = !needsAd || remaining > 0;
   const capReached = earned >= TOOL_DAILY_CAP;
 
   // Watch a rewarded ad and call grant-tool-time to add 30s server-side.
   // Returns the server response ({ remaining, earned }) on success, null on failure.
-  const watchAd = useCallback(async () => {
-    if (watching || granting) return null;
+  const watchAd = useCallback(async (name) => {
+    const t = name || toolName;
+    if (watching || granting || !t) return null;
     setAdError(null);
     setWatching(true);
     try {
@@ -68,7 +80,7 @@ export function useToolAdGate(user, toolName) {
       }
       setWatching(false);
       setGranting(true);
-      const response = await base44.functions.invoke('grant-tool-time', { toolName });
+      const response = await base44.functions.invoke('grant-tool-time', { toolName: t });
       if (response.data?.success) {
         setRemaining(response.data.remaining);
         setEarned(response.data.earned);
@@ -86,56 +98,84 @@ export function useToolAdGate(user, toolName) {
     }
   }, [toolName, watching, granting]);
 
-  // Start a local countdown from `seconds`. Calls onExpire when it hits 0.
-  const startCountdown = useCallback((onExpire) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current);
-          timerRef.current = null;
-          onExpire?.();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, []);
-
-  // Stop the countdown and sync consumed seconds back to the server so
-  // remaining stays accurate across sessions / page reloads.
-  const stopCountdown = useCallback(async () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    // Sync remaining back to the server (best-effort — failures just mean
-    // the server's remaining is slightly higher than actual).
-    if (user && toolName && needsAd) {
-      try {
-        const banks = parseToolBanks(user);
-        const entry = banks[toolName] || { r: 0, e: 0 };
-        entry.r = Math.max(0, remaining);
-        banks[toolName] = entry;
-        await base44.auth.updateMe({
-          tool_banks: JSON.stringify(banks),
-        });
-      } catch (e) {
-        // Non-critical — the next ad watch will re-sync from the server.
-        console.error('Failed to sync tool_banks:', e);
+  // Call consume-tool-time to sync remaining from the server.
+  // Sets last_heartbeat on the server (starts the clock).
+  // Returns the server's authoritative remaining value.
+  const startConsumption = useCallback(async (name) => {
+    const t = name || toolName;
+    if (!user || !t) return 0;
+    try {
+      const response = await base44.functions.invoke('consume-tool-time', { toolName: t });
+      if (response.data) {
+        setRemaining(response.data.remaining);
+        setEarned(response.data.earned || 0);
+        return response.data.remaining;
       }
+    } catch (e) {
+      console.error('Failed to start consumption:', e);
     }
-  }, [user, toolName, needsAd, remaining]);
+    return 0;
+  }, [user, toolName]);
+
+  // Heartbeat: call consume-tool-time every 5 seconds. The server deducts
+  // elapsed time via its own wall clock and returns the authoritative remaining.
+  // Calls onExpire when the server says remaining <= 0.
+  const startHeartbeat = useCallback((onExpire, name) => {
+    const t = name || toolName;
+    if (!t) return;
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    heartbeatRef.current = setInterval(async () => {
+      try {
+        const response = await base44.functions.invoke('consume-tool-time', { toolName: t });
+        if (response.data) {
+          setRemaining(response.data.remaining);
+          setEarned(response.data.earned || 0);
+          if (response.data.remaining <= 0) {
+            if (heartbeatRef.current) {
+              clearInterval(heartbeatRef.current);
+              heartbeatRef.current = null;
+            }
+            // Send close call to clear last_heartbeat
+            try {
+              await base44.functions.invoke('consume-tool-time', { toolName: t, close: true });
+            } catch (e) {
+              console.error('Failed to send close after expire:', e);
+            }
+            onExpire?.();
+          }
+        }
+      } catch (e) {
+        console.error('Heartbeat failed:', e);
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+  }, [toolName]);
+
+  // Stop the heartbeat and send a close call to clear last_heartbeat.
+  const stopConsumption = useCallback(async (name) => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+    const t = name || toolName;
+    if (!user || !t) return;
+    try {
+      const response = await base44.functions.invoke('consume-tool-time', { toolName: t, close: true });
+      if (response.data) {
+        setRemaining(response.data.remaining);
+      }
+    } catch (e) {
+      console.error('Failed to stop consumption:', e);
+    }
+  }, [user, toolName]);
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
   }, []);
 
   return {
     needsAd,
-    canUse,
     remaining,
     earned,
     capReached,
@@ -143,8 +183,9 @@ export function useToolAdGate(user, toolName) {
     granting,
     adError,
     watchAd,
-    startCountdown,
-    stopCountdown,
+    startConsumption,
+    startHeartbeat,
+    stopConsumption,
     setRemaining,
   };
 }

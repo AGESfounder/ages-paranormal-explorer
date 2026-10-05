@@ -1,16 +1,19 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 
-// Grants 30 seconds of tool use time to an Observer user after they watch a
-// rewarded ad. The server-side tool_banks counter (JSON map on the User entity)
-// tracks remaining + earned-today per tool to prevent localStorage spoofing.
+// Server-authoritative tool-time consumption for Observer ad-gated tools.
+// The client sends a heartbeat every 5 seconds while the tool is open.
+// The server uses its OWN wall clock to compute elapsed time (not the
+// client's report), decrements tool_banks[tool].r, and returns the new
+// remaining value. The client never writes r directly.
 //
-// Daily cap: 300s (5 min) earned per tool per day — 10 ad watches max.
-// Only Observer (free) users need ad-gated tool time; Seeker+ is ad-free.
-// The tool_banks structure: { "Tool Name": { r: remaining, e: earned_today } }
-// Resets daily via tool_banks_date comparison.
+// Always deducts the full elapsed time — NO timeout. This means:
+// - Backgrounding costs the user time (accepted trade-off)
+// - A crash costs the user up to 300s (accepted trade-off)
+// - Not exploitable: the user cannot preserve time by stopping heartbeats
+//
+// tool_banks structure: { "Tool Name": { r: remaining, e: earned_today, l: last_heartbeat_ms } }
+// l = 0 means no active session (clock stopped). l > 0 means heartbeat in progress.
 
-const TOOL_AD_DURATION = 30;
-const TOOL_DAILY_CAP = 300;
 const AD_GATED_TOOLS = ['Audio Recorder', 'Radio Sweeper'];
 
 export default async function(req) {
@@ -21,6 +24,8 @@ export default async function(req) {
 
     const body = await req.json().catch(() => ({}));
     const toolName = body?.toolName;
+    const close = body?.close === true;
+
     if (!toolName) {
       return Response.json({ error: 'toolName is required' }, { status: 400 });
     }
@@ -30,7 +35,7 @@ export default async function(req) {
       return Response.json({ error: 'Tool is not ad-gated' }, { status: 400 });
     }
 
-    // Only Observer users need ad-gated tool time. Admins can test.
+    // Only Observer users use ad-gated tools. Admins can test.
     const planId = user.plan || 'observer';
     if (planId !== 'observer' && user.role !== 'admin') {
       return Response.json(
@@ -40,6 +45,7 @@ export default async function(req) {
     }
 
     const today = new Date().toISOString().split('T')[0];
+    const now = Date.now();
 
     // Parse existing tool_banks (JSON string on User entity)
     let banks = {};
@@ -54,24 +60,25 @@ export default async function(req) {
       banks = {};
     }
 
-    const entry = banks[toolName] || { r: 0, e: 0 };
+    const entry = banks[toolName] || { r: 0, e: 0, l: 0 };
 
-    // Enforce daily cap (300s earned per tool per day)
-    if (entry.e >= TOOL_DAILY_CAP) {
-      return Response.json(
-        {
-          error: 'Daily cap reached for this tool',
-          remaining: entry.r,
-          earned: entry.e,
-          capped: true,
-        },
-        { status: 429 },
-      );
+    // If there's a last heartbeat, deduct elapsed time using the SERVER's wall clock.
+    // No timeout — always deduct the full elapsed. This prevents the exploit where
+    // a user stops heartbeats to preserve time.
+    if (entry.l) {
+      const elapsed = Math.floor((now - entry.l) / 1000);
+      if (elapsed > 0) {
+        entry.r = Math.max(0, entry.r - elapsed);
+      }
     }
 
-    // Grant 30s: add to both remaining (r) and earned-today (e)
-    entry.r += TOOL_AD_DURATION;
-    entry.e += TOOL_AD_DURATION;
+    // Update last heartbeat: clear on close, set to now on heartbeat
+    if (close) {
+      entry.l = 0;
+    } else {
+      entry.l = now;
+    }
+
     banks[toolName] = entry;
 
     await base44.asServiceRole.entities.User.update(user.id, {
@@ -79,19 +86,12 @@ export default async function(req) {
       tool_banks_date: today,
     });
 
-    console.log(
-      'Tool time granted:', user.id, toolName,
-      'remaining:', entry.r, 'earned:', entry.e,
-    );
-
     return Response.json({
-      success: true,
       remaining: entry.r,
       earned: entry.e,
-      capped: entry.e >= TOOL_DAILY_CAP,
     });
   } catch (error) {
-    console.error('grant-tool-time error:', error.message);
+    console.error('consume-tool-time error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 }

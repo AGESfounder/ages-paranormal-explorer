@@ -5,20 +5,19 @@ import { TIER_TOOLS } from '@/lib/toolAccess';
 
 // All 12 toolkit tools with access metadata.
 // ad_gate = true: ad-gated for Observer, free for Seeker+.
-// paid_only = true: no ad-watching option (generative tools).
 const ALL_TOOLS = [
-  { name: 'Equipment Guide', desc: 'Ghost hunting equipment guide' },
-  { name: 'Safety Protocol', desc: 'Investigation safety guidelines' },
-  { name: 'Alphabet Sweeper', desc: 'Sweep A→Z — environment-triggered letter dictation', ad_gate: true },
-  { name: 'Yes/No/IDK Sweeper', desc: 'Motion-triggered answer sweep + screen record', ad_gate: true },
-  { name: 'Vibration Communicator', desc: 'Detect energy disturbances via phone sensors', ad_gate: true },
-  { name: 'Anomaly Camera', desc: 'Detect human & ghost figures via IR depth scan', ad_gate: true },
-  { name: 'Audio Recorder', desc: 'EVP session recorder with save', paid_only: true },
-  { name: 'Radio Sweeper', desc: 'AM/FM frequency sweep for EVP', paid_only: true },
+  { name: 'Audio Recorder', desc: 'EVP session recorder with save', ad_gate: true },
+  { name: 'Radio Sweeper', desc: 'AM/FM frequency sweep for EVP', ad_gate: true },
+  { name: 'Yes/No/IDK Sweeper', desc: 'Motion-triggered answer sweep + screen record' },
+  { name: 'Vibration Communicator', desc: 'Detect energy disturbances via phone sensors' },
+  { name: 'Alphabet Sweeper', desc: 'Sweep A→Z — environment-triggered letter dictation' },
+  { name: 'Terms Sweeper', desc: 'Environment-triggered spirit dictation + screen record' },
+  { name: 'Anomaly Camera', desc: 'Detect human & ghost figures via IR depth scan' },
   { name: 'Weather Monitor', desc: 'Real-time local weather conditions' },
   { name: 'Moon Phase', desc: 'Current moon phase & illumination' },
   { name: 'Paranormal Research: Terms', desc: 'Research database & field manual' },
-  { name: 'Term Sweeper', desc: 'Environment-triggered spirit dictation + screen record', paid_only: true },
+  { name: 'Equipment Guide', desc: 'Ghost hunting equipment guide' },
+  { name: 'Safety Protocol', desc: 'Investigation safety guidelines' },
 ];
 
 export default function TierToolkitAccess({ planId }) {
@@ -67,9 +66,6 @@ export default function TierToolkitAccess({ planId }) {
                       <p className="text-[11px] font-medium text-foreground">{tool.name}</p>
                       <p className="text-[10px] text-muted-foreground leading-snug">{tool.desc}</p>
                     </div>
-                    {tool.paid_only && (
-                      <span className="text-[9px] font-heading uppercase tracking-wider text-amber-400 shrink-0">Paid</span>
-                    )}
                     {tool.ad_gate && planId === 'observer' && (
                       <span className="text-[9px] font-heading uppercase tracking-wider text-primary/70 shrink-0">Ad</span>
                     )}
