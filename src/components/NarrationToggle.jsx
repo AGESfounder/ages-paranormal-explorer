@@ -15,7 +15,7 @@ export default function NarrationToggle({ mode, setMode, canEnhance, className =
   if (!canEnhance) {
     return (
       <div className={className}>
-        <span className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1">Tour Narration</span>
+        <span className="block text-xs font-heading uppercase tracking-wider text-white text-center mb-1">Tour Narration</span>
         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30">
           <Smartphone className="w-3 h-3 text-primary" />
           <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Device Narration</span>
@@ -27,7 +27,7 @@ export default function NarrationToggle({ mode, setMode, canEnhance, className =
 
   return (
     <div className={className}>
-      <span className="block text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1">Tour Narration</span>
+      <span className="block text-xs font-heading uppercase tracking-wider text-white text-center mb-1">Tour Narration</span>
       <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-card/50 border border-border/50">
         <button
           onClick={() => setMode('device')}
