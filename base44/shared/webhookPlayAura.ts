@@ -26,22 +26,24 @@ import {
  * manifestation) via getGrantForProduct.
  */
 async function applyPlayAuraGrant(base44: any, user: any, bundleId: string) {
-  const grant = getGrantForProduct(bundleId);
-  if (!grant || (!grant.aura_narration_add && !grant.aura_manifestation_add)) {
+  const grant = getGrantForProduct(bundleId, { userPlan: user.plan || 'observer' });
+  if (!grant || (!grant.aura_narration_add && !grant.aura_manifestation_add && !grant.aura_save_add)) {
     throw new Error(`No Aura grant mapped for bundle ${bundleId}`);
   }
 
   const auraNarration = (user.aura_narration_energy || 0) + (grant.aura_narration_add || 0);
   const auraManifestation = (user.aura_manifestation_energy || 0) + (grant.aura_manifestation_add || 0);
+  const auraSave = (user.aura_save_energy || 0) + (grant.aura_save_add || 0);
 
   // Never write plan, plan_expiration_date, subscription_*, monthly energy,
   // or google_trailblazer_* fields here.
   await base44.asServiceRole.entities.User.update(user.id, {
     aura_narration_energy: auraNarration,
     aura_manifestation_energy: auraManifestation,
+    aura_save_energy: auraSave,
   });
 
-  return { auraNarration, auraManifestation };
+  return { auraNarration, auraManifestation, auraSave };
 }
 
 /**
@@ -68,9 +70,6 @@ async function handlePlayAuraRefund(
     return jsonResponse({ received: true, duplicate: true });
   }
 
-  const auraProduct = getPlayAuraProduct(event.product_id);
-  const grant = auraProduct ? getGrantForProduct(auraProduct.bundle_id) : null;
-
   try {
     await base44.asServiceRole.entities.RevenueCatPurchase.update(existing.id, {
       status: 'refunded',
@@ -79,23 +78,25 @@ async function handlePlayAuraRefund(
       event_type: event.type,
     });
 
-    // Only claw back energy this ledger row actually granted (status 'paid').
-    // Re-fetch the user so concurrent grants are not overwritten.
-    if (grant && existing.status === 'paid') {
+    // Claw back the EXACT energy this ledger row granted (recorded at grant
+    // time in aura_*_granted). Tier-correct even if the user's plan changed
+    // between purchase and refund.
+    const narrationGranted = existing.aura_narration_granted || 0;
+    const manifestationGranted = existing.aura_manifestation_granted || 0;
+    const saveGranted = existing.aura_save_granted || 0;
+
+    if (existing.status === 'paid' && (narrationGranted || manifestationGranted || saveGranted)) {
       const freshUser = await base44.asServiceRole.entities.User.get(user.id);
-      const auraNarration = Math.max(
-        0,
-        (freshUser?.aura_narration_energy || 0) - (grant.aura_narration_add || 0),
-      );
-      const auraManifestation = Math.max(
-        0,
-        (freshUser?.aura_manifestation_energy || 0) - (grant.aura_manifestation_add || 0),
-      );
+      const auraNarration = Math.max(0, (freshUser?.aura_narration_energy || 0) - narrationGranted);
+      const auraManifestation = Math.max(0, (freshUser?.aura_manifestation_energy || 0) - manifestationGranted);
+      const auraSave = Math.max(0, (freshUser?.aura_save_energy || 0) - saveGranted);
       await base44.asServiceRole.entities.User.update(user.id, {
         aura_narration_energy: auraNarration,
         aura_manifestation_energy: auraManifestation,
+        aura_save_energy: auraSave,
       });
-      console.log('Play Aura refund clawed back energy:', user.id, event.product_id);
+      console.log('Play Aura refund clawed back energy:', user.id, event.product_id,
+        'nar:', narrationGranted, 'man:', manifestationGranted, 'save:', saveGranted);
     }
   } catch (e) {
     console.error('Play Aura refund persistence failed:', (e as Error).message);
@@ -180,11 +181,20 @@ export async function handlePlayAuraEvent(base44: any, event: any) {
 
   const purchasedAtMs = event.purchased_at_ms || event.event_timestamp_ms || Date.now();
   const purchaseDateIso = new Date(Number(purchasedAtMs)).toISOString();
+
+  // Compute tier-aware grant amounts for the ledger row (Technician → save,
+  // Explorer+ → 80/20 narration/manifestation). Recorded at grant time so
+  // refunds claw back from the exact pools that received the energy.
+  const auraGrant = getGrantForProduct(auraProduct.bundle_id, { userPlan: user.plan || 'observer' });
+
   const ledgerFields = normalizePlayAuraLedgerFields(event, {
     userId: user.id,
     purchaseDateIso,
     status: 'paid',
     eventIds: mergeEventIds(existing, eventId),
+    auraNarrationGranted: auraGrant?.aura_narration_add || 0,
+    auraManifestationGranted: auraGrant?.aura_manifestation_add || 0,
+    auraSaveGranted: auraGrant?.aura_save_add || 0,
   });
 
   try {
@@ -195,14 +205,14 @@ export async function handlePlayAuraEvent(base44: any, event: any) {
       await base44.asServiceRole.entities.RevenueCatPurchase.create(ledgerFields);
     }
 
-    const { auraNarration, auraManifestation } = await applyPlayAuraGrant(
+    const { auraNarration, auraManifestation, auraSave } = await applyPlayAuraGrant(
       base44,
       user,
       auraProduct.bundle_id,
     );
     console.log(
       'Play Aura grant applied:', user.id, event.product_id,
-      'aura_narration:', auraNarration, 'aura_manifestation:', auraManifestation,
+      'aura_narration:', auraNarration, 'aura_manifestation:', auraManifestation, 'aura_save:', auraSave,
     );
   } catch (e) {
     console.error('Play Aura grant persistence failed:', (e as Error).message);

@@ -56,41 +56,47 @@ export default async function(req) {
         }
       }
 
-      // Grant access BEFORE marking purchase as paid
-      const grant = getGrantForProduct(purchase.product_id);
-      if (grant) {
-        try {
-          const user = await base44.asServiceRole.entities.User.get(purchase.user_id);
-          if (user) {
-            const updateData = {};
+      // Fetch user BEFORE computing grant so tier-aware Aura routing can use
+      // user.plan (Technician → 100% save energy, Explorer+ → 80/20 split).
+      try {
+        const user = await base44.asServiceRole.entities.User.get(purchase.user_id);
+        const grant = getGrantForProduct(purchase.product_id, { userPlan: user?.plan });
+        if (grant && user) {
+          const updateData = {};
 
-            if (grant.plan) {
-              // Subscription or one-time plan upgrade
-              updateData.plan = grant.plan;
-              updateData.manifestation_energy = grant.manifestation_energy;
-              updateData.narration_energy = grant.narration_energy;
-              updateData.energy_reset_date = getNextResetDate();
-              updateData.subscription_status = grant.subscription_status || 'none';
-              if (grant.plan_expiration_date) {
-                updateData.plan_expiration_date = grant.plan_expiration_date;
-              }
-              if (subscriptionId) {
-                updateData.subscription_id = subscriptionId;
-              }
+          if (grant.plan) {
+            // Subscription or one-time plan upgrade
+            updateData.plan = grant.plan;
+            updateData.manifestation_energy = grant.manifestation_energy;
+            updateData.narration_energy = grant.narration_energy;
+            updateData.energy_reset_date = getNextResetDate();
+            updateData.subscription_status = grant.subscription_status || 'none';
+            if (grant.plan_expiration_date) {
+              updateData.plan_expiration_date = grant.plan_expiration_date;
             }
-
-            if (grant.aura_narration_add || grant.aura_manifestation_add) {
-              // Aura Bundle — add to existing rollover energy
-              updateData.aura_narration_energy = (user.aura_narration_energy || 0) + (grant.aura_narration_add || 0);
-              updateData.aura_manifestation_energy = (user.aura_manifestation_energy || 0) + (grant.aura_manifestation_add || 0);
+            if (subscriptionId) {
+              updateData.subscription_id = subscriptionId;
             }
-
-            await base44.asServiceRole.entities.User.update(user.id, updateData);
-            console.log('Access granted for product:', purchase.product_id, 'user:', purchase.user_id);
           }
-        } catch (e) {
-          console.error('Failed to grant access:', e.message);
+
+          if (grant.aura_narration_add || grant.aura_manifestation_add || grant.aura_save_add) {
+            // Aura Bundle — add to existing rollover energy (tier-aware routing)
+            if (grant.aura_narration_add) {
+              updateData.aura_narration_energy = (user.aura_narration_energy || 0) + grant.aura_narration_add;
+            }
+            if (grant.aura_manifestation_add) {
+              updateData.aura_manifestation_energy = (user.aura_manifestation_energy || 0) + grant.aura_manifestation_add;
+            }
+            if (grant.aura_save_add) {
+              updateData.aura_save_energy = (user.aura_save_energy || 0) + grant.aura_save_add;
+            }
+          }
+
+          await base44.asServiceRole.entities.User.update(user.id, updateData);
+          console.log('Access granted for product:', purchase.product_id, 'user:', purchase.user_id);
         }
+      } catch (e) {
+        console.error('Failed to grant access:', e.message);
       }
 
       // Mark purchase as paid (after grant succeeds)

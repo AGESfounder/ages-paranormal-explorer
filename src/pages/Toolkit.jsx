@@ -19,6 +19,9 @@ import useWakeLock from '../hooks/useWakeLock';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EvidenceSaveButtons from '@/components/EvidenceSaveButtons';
+import ToolAdGate from '@/components/ToolAdGate';
+import { useToolAdGate } from '@/hooks/useToolAdGate';
+import { TIER_TOOLS as SHARED_TIER_TOOLS, needsToolAdGate, getToolRemaining, parseToolBanks } from '@/lib/toolAccess';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 
 // Two-column grid order (fills left→right, row by row):
@@ -39,13 +42,8 @@ const DEFAULT_TOOLS = [
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
 ];
 
-// Tier-based tool access. null = all tools. Mirrors TierToolsComparison.jsx.
-const TIER_TOOLS = {
-  observer: ['Equipment Guide', 'Safety Protocol'],
-  explorer: ['Audio Recorder', 'Radio Sweeper', 'Yes/No/IDK Sweeper', 'Equipment Guide', 'Weather Monitor', 'Moon Phase', 'Paranormal Research: Terms', 'Safety Protocol'],
-  investigator: null,
-  trailblazer: null,
-};
+// Tier-based tool access is imported from @/lib/toolAccess as SHARED_TIER_TOOLS.
+// null = all tools. Mirrors TierToolsComparison.jsx.
 
 const SWEEP_SPEEDS = {
   slow: { label: 'Slow', ms: 400 },
@@ -55,6 +53,10 @@ const SWEEP_SPEEDS = {
 
 export default function Toolkit() {
   const [activeTool, setActiveTool] = useState(null);
+  const [adGateTool, setAdGateTool] = useState(null);
+  const [toolTimeRemaining, setToolTimeRemaining] = useState(0);
+  const [user, setUser] = useState(null);
+  const toolTimerRef = useRef(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userPlan, setUserPlan] = useState(null);
   const [tools, setTools] = useState(DEFAULT_TOOLS);
@@ -73,6 +75,7 @@ export default function Toolkit() {
 
   useEffect(() => {
     base44.auth.me().then(u => {
+      setUser(u);
       setIsAdmin(u?.role === 'admin');
       setUserPlan(getEffectivePlanId(u));
       setTools(applyOrder(DEFAULT_TOOLS, u?.toolkit_order));
@@ -83,13 +86,75 @@ export default function Toolkit() {
   // the user's plan doesn't include shows the upgrade prompt instead of opening it.
   const handleSelectTool = (tool) => {
     if (isAdmin) { setActiveTool(tool); return; }
-    const allowed = TIER_TOOLS[userPlan];
+    const allowed = SHARED_TIER_TOOLS[userPlan];
     if (allowed && !allowed.includes(tool.name)) {
       setGateReason('plan');
       setShowUpgrade(true);
       return;
     }
+    // Ad-gate check: Observer users must watch a rewarded ad for ad-gated tools.
+    // If they have remaining time from a previous ad, open the tool with countdown.
+    if (needsToolAdGate(user, tool.name)) {
+      const remaining = getToolRemaining(user, tool.name);
+      if (remaining > 0) {
+        setActiveTool(tool);
+        startToolCountdown(tool, remaining);
+      } else {
+        setAdGateTool(tool);
+      }
+      return;
+    }
     setActiveTool(tool);
+  };
+
+  // Called when a rewarded ad is watched and the server grants 30s.
+  const handleAdGranted = (tool, grantData) => {
+    setAdGateTool(null);
+    setActiveTool(tool);
+    setToolTimeRemaining(grantData.remaining);
+    startToolCountdown(tool, grantData.remaining);
+  };
+
+  // Local countdown timer for ad-gated tools. When it hits 0, the tool closes
+  // and the ad-gate is shown again so the user can watch another ad.
+  const startToolCountdown = (tool, seconds) => {
+    setToolTimeRemaining(seconds);
+    if (toolTimerRef.current) clearInterval(toolTimerRef.current);
+    toolTimerRef.current = setInterval(() => {
+      setToolTimeRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(toolTimerRef.current);
+          toolTimerRef.current = null;
+          setActiveTool(null);
+          if (needsToolAdGate(user, tool.name)) {
+            setAdGateTool(tool);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  // Stop the countdown and sync remaining time back to the server so it
+  // persists across sessions. Best-effort — failures just mean the server's
+  // remaining is slightly higher than actual.
+  const stopToolCountdown = () => {
+    if (toolTimerRef.current) {
+      clearInterval(toolTimerRef.current);
+      toolTimerRef.current = null;
+    }
+    if (user && activeTool && needsToolAdGate(user, activeTool.name) && toolTimeRemaining > 0) {
+      try {
+        const banks = parseToolBanks(user);
+        const entry = banks[activeTool.name] || { r: 0, e: 0 };
+        entry.r = Math.max(0, toolTimeRemaining);
+        banks[activeTool.name] = entry;
+        base44.auth.updateMe({ tool_banks: JSON.stringify(banks) });
+      } catch (e) {
+        console.error('Failed to sync tool_banks:', e);
+      }
+    }
   };
 
   const handleReorder = (next) => {
@@ -143,10 +208,16 @@ export default function Toolkit() {
   };
   useWakeLock(!!activeTool);
 
+  // Ad-gate hook — manages the rewarded-ad lifecycle for the ad-gated tool
+  // currently waiting for an ad (adGateTool). Returns watching/granting/adError
+  // state plus the watchAd function that calls grant-tool-time server-side.
+  const toolAdGate = useToolAdGate(user, adGateTool?.name || null);
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
+      if (toolTimerRef.current) clearInterval(toolTimerRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
@@ -1382,7 +1453,39 @@ Best Practices
           </p>
         </div>
 
-        {activeTool ? (
+        {adGateTool ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-xl border border-primary/30 bg-card/40 mb-4"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <adGateTool.icon className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-heading text-sm font-semibold text-foreground">{adGateTool.name}</h3>
+                  <p className="text-[10px] text-muted-foreground">{adGateTool.desc}</p>
+                </div>
+              </div>
+              <button onClick={() => setAdGateTool(null)} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <ToolAdGate
+              toolName={adGateTool.name}
+              watching={toolAdGate.watching}
+              granting={toolAdGate.granting}
+              adError={toolAdGate.adError}
+              onWatchAd={async () => {
+                const result = await toolAdGate.watchAd();
+                if (result) handleAdGranted(adGateTool, result);
+              }}
+              earned={toolAdGate.earned}
+            />
+          </motion.div>
+        ) : activeTool ? (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1411,10 +1514,17 @@ Best Practices
                 setSavedWords([]);
                 setGuideDetail(null);
                 stopNarration();
+                stopToolCountdown();
               }} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
+            {needsToolAdGate(user, activeTool?.name) && toolTimeRemaining > 0 && (
+              <div className="flex items-center justify-center gap-1.5 mb-3 text-[10px] text-primary font-mono">
+                <Clock className="w-3 h-3" />
+                <span className="animate-glow-pulse">{toolTimeRemaining}s remaining</span>
+              </div>
+            )}
             {renderToolContent()}
           </motion.div>
         ) : (

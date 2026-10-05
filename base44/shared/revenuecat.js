@@ -49,6 +49,26 @@ export const APPLE_SUBSCRIPTION_PRODUCTS = {
     period: 'annual',
     product_name: 'AGES Investigator — Annual (App Store)',
   },
+  'com.ages.explorer.seeker.monthly': {
+    plan_id: 'seeker',
+    period: 'monthly',
+    product_name: 'AGES Seeker — Monthly (App Store)',
+  },
+  'com.ages.explorer.seeker.annual': {
+    plan_id: 'seeker',
+    period: 'annual',
+    product_name: 'AGES Seeker — Annual (App Store)',
+  },
+  'com.ages.explorer.technician.monthly': {
+    plan_id: 'technician',
+    period: 'monthly',
+    product_name: 'AGES Technician — Monthly (App Store)',
+  },
+  'com.ages.explorer.technician.annual': {
+    plan_id: 'technician',
+    period: 'annual',
+    product_name: 'AGES Technician — Annual (App Store)',
+  },
 };
 
 export function getAppleSubscriptionProduct(productId) {
@@ -356,6 +376,9 @@ export function normalizeAppleAuraLedgerFields(event, {
   purchaseDateIso,
   status,
   eventIds = [],
+  auraNarrationGranted = 0,
+  auraManifestationGranted = 0,
+  auraSaveGranted = 0,
 }) {
   const product = getAppleAuraProduct(event.product_id);
   const price = typeof event.price === 'number' ? event.price : 0;
@@ -378,6 +401,9 @@ export function normalizeAppleAuraLedgerFields(event, {
     product_name: product?.product_name || event.product_id || '',
     amount: Math.abs(price),
     currency: event.currency || 'USD',
+    aura_narration_granted: auraNarrationGranted,
+    aura_manifestation_granted: auraManifestationGranted,
+    aura_save_granted: auraSaveGranted,
   };
 }
 
@@ -589,6 +615,26 @@ export const GOOGLE_SUBSCRIPTION_PRODUCTS = {
     period: 'annual',
     product_name: 'AGES Investigator — Annual (Google Play)',
   },
+  'seeker:monthly': {
+    plan_id: 'seeker',
+    period: 'monthly',
+    product_name: 'AGES Seeker — Monthly (Google Play)',
+  },
+  'seeker:annual': {
+    plan_id: 'seeker',
+    period: 'annual',
+    product_name: 'AGES Seeker — Annual (Google Play)',
+  },
+  'technician:monthly': {
+    plan_id: 'technician',
+    period: 'monthly',
+    product_name: 'AGES Technician — Monthly (Google Play)',
+  },
+  'technician:annual': {
+    plan_id: 'technician',
+    period: 'annual',
+    product_name: 'AGES Technician — Annual (Google Play)',
+  },
 };
 
 export function getGoogleSubscriptionProduct(productId) {
@@ -796,6 +842,9 @@ export function normalizePlayAuraLedgerFields(event, {
   purchaseDateIso,
   status,
   eventIds = [],
+  auraNarrationGranted = 0,
+  auraManifestationGranted = 0,
+  auraSaveGranted = 0,
 }) {
   const product = getPlayAuraProduct(event.product_id);
   const price = typeof event.price === 'number' ? event.price : 0;
@@ -818,5 +867,8 @@ export function normalizePlayAuraLedgerFields(event, {
     product_name: product?.product_name || event.product_id || '',
     amount: Math.abs(price),
     currency: event.currency || 'USD',
+    aura_narration_granted: auraNarrationGranted,
+    aura_manifestation_granted: auraManifestationGranted,
+    aura_save_granted: auraSaveGranted,
   };
 }

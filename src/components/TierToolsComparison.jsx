@@ -1,29 +1,25 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Wrench, Check } from 'lucide-react';
+import { TIER_TOOLS } from '@/lib/toolAccess';
 
-// All 12 toolkit tools. Standard = first 8 (Explorer+), Premium = last 4 (Investigator+).
+// All 12 toolkit tools with access metadata.
+// ad_gate = true: ad-gated for Observer, free for Seeker+.
+// paid_only = true: no ad-watching option (generative tools).
 const ALL_TOOLS = [
-  { name: 'Audio Recorder', desc: 'EVP session recorder with save' },
-  { name: 'Radio Sweeper', desc: 'AM/FM frequency sweep for EVP' },
-  { name: 'Yes/No/IDK Sweeper', desc: 'Motion-triggered answer sweep + screen record' },
   { name: 'Equipment Guide', desc: 'Ghost hunting equipment guide' },
+  { name: 'Safety Protocol', desc: 'Investigation safety guidelines' },
+  { name: 'Alphabet Sweeper', desc: 'Sweep A→Z — environment-triggered letter dictation', ad_gate: true },
+  { name: 'Yes/No/IDK Sweeper', desc: 'Motion-triggered answer sweep + screen record', ad_gate: true },
+  { name: 'Vibration Communicator', desc: 'Detect energy disturbances via phone sensors', ad_gate: true },
+  { name: 'Anomaly Camera', desc: 'Detect human & ghost figures via IR depth scan', ad_gate: true },
+  { name: 'Audio Recorder', desc: 'EVP session recorder with save', paid_only: true },
+  { name: 'Radio Sweeper', desc: 'AM/FM frequency sweep for EVP', paid_only: true },
   { name: 'Weather Monitor', desc: 'Real-time local weather conditions' },
   { name: 'Moon Phase', desc: 'Current moon phase & illumination' },
   { name: 'Paranormal Research: Terms', desc: 'Research database & field manual' },
-  { name: 'Safety Protocol', desc: 'Investigation safety guidelines' },
-  { name: 'Vibration Communicator', desc: 'Detect energy disturbances via phone sensors', premium: true },
-  { name: 'Anomaly Camera', desc: 'Detect human & ghost figures via IR depth scan', premium: true },
-  { name: 'Term Sweeper', desc: 'Environment-triggered spirit dictation + screen record', premium: true },
-  { name: 'Alphabet Sweeper', desc: 'Sweep A→Z — environment-triggered letter dictation', premium: true },
+  { name: 'Term Sweeper', desc: 'Environment-triggered spirit dictation + screen record', paid_only: true },
 ];
-
-const TIER_TOOLS = {
-  observer: ['Equipment Guide', 'Safety Protocol'],
-  explorer: ['Audio Recorder', 'Radio Sweeper', 'Yes/No/IDK Sweeper', 'Equipment Guide', 'Weather Monitor', 'Moon Phase', 'Paranormal Research: Terms', 'Safety Protocol'],
-  investigator: null, // null = all tools
-  trailblazer: null,
-};
 
 export default function TierToolkitAccess({ planId }) {
   const [open, setOpen] = useState(false);
@@ -44,7 +40,7 @@ export default function TierToolkitAccess({ planId }) {
         </span>
         <span className="flex items-center gap-2">
           <span className={`text-xs font-heading ${count === 0 ? 'text-muted-foreground' : 'text-primary'}`}>
-            {count} of 12
+            {count === 12 ? 'All 12' : `${count} of 12`}
           </span>
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
         </span>
@@ -71,8 +67,11 @@ export default function TierToolkitAccess({ planId }) {
                       <p className="text-[11px] font-medium text-foreground">{tool.name}</p>
                       <p className="text-[10px] text-muted-foreground leading-snug">{tool.desc}</p>
                     </div>
-                    {tool.premium && (
-                      <span className="text-[9px] font-heading uppercase tracking-wider text-accent-foreground/80 shrink-0">Premium</span>
+                    {tool.paid_only && (
+                      <span className="text-[9px] font-heading uppercase tracking-wider text-amber-400 shrink-0">Paid</span>
+                    )}
+                    {tool.ad_gate && planId === 'observer' && (
+                      <span className="text-[9px] font-heading uppercase tracking-wider text-primary/70 shrink-0">Ad</span>
                     )}
                   </li>
                 ))}

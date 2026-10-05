@@ -95,6 +95,21 @@
         "expired"
       ],
       "default": "paid"
+    },
+    "aura_narration_granted": {
+      "type": "number",
+      "default": 0,
+      "description": "Aura narration energy granted by this purchase (recorded at grant time for exact refund clawback). Zero for non-Aura products."
+    },
+    "aura_manifestation_granted": {
+      "type": "number",
+      "default": 0,
+      "description": "Aura manifestation energy granted by this purchase (recorded at grant time for exact refund clawback). Zero for non-Aura products."
+    },
+    "aura_save_granted": {
+      "type": "number",
+      "default": 0,
+      "description": "Aura save energy granted by this purchase (Technician Aura bundles route 100% here). Recorded at grant time for exact refund clawback. Zero for non-Aura products and Explorer+ Aura bundles."
     }
   },
   "required": [
