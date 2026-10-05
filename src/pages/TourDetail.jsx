@@ -1273,6 +1273,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 Content v{tour.content_version || 0}
               </span>
             )}
+            <NarrationToggle className="ml-auto" mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} />
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -1297,8 +1298,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           )}
           {hasDrivingStops && <TravelModeSelector value={travelMode} onChange={setTravelMode} />}
         </div>
-
-        <NarrationToggle mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} />
 
         {regeneratingContent && (
           <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 flex items-center gap-2">
