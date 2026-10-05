@@ -264,21 +264,43 @@ export function getEffectiveExpirationDate(user, now = new Date()) {
 
 /**
  * Compute field updates after spending 1 evidence save energy (post free daily).
- * Order: aura_save_energy → aura_narration_energy → aura_manifestation_energy.
+ * Tier-aware pool selection:
+ *   Technician  → aura_save_energy ONLY (no fallback; blocked when empty)
+ *   Explorer+   → aura_narration_energy → aura_manifestation_energy (no save pool)
+ *   Observer/Seeker → no Aura pool access (blocked)
  * NEVER touches monthly narration_energy, manifestation_energy, or
  * google_trailblazer_* pools — those are reserved for narration/generation.
- * Returns { updates: null, remaining: 1 } when no aura pool is available.
+ * Returns { updates: null, remaining: 1 } when no eligible pool is available.
  */
 export function applyEvidenceSaveSpend(user, now = new Date()) {
-  let saveEnergy = user?.aura_save_energy || 0;
-  let auraNar = user?.aura_narration_energy || 0;
-  let auraMan = user?.aura_manifestation_energy || 0;
+  const planId = getEffectivePlanId(user, now);
   const updates = {};
 
-  if (saveEnergy > 0) {
-    saveEnergy -= 1;
-    updates.aura_save_energy = saveEnergy;
-  } else if (auraNar > 0) {
+  // Observer / Seeker: no Aura pool access for evidence saves
+  if (planId === 'observer' || planId === 'seeker') {
+    return { updates: null, remaining: 1, next: user };
+  }
+
+  // Technician: aura_save_energy only — no fallback to 80/20 Aura pools
+  if (planId === 'technician') {
+    let saveEnergy = user?.aura_save_energy || 0;
+    if (saveEnergy > 0) {
+      saveEnergy -= 1;
+      updates.aura_save_energy = saveEnergy;
+      return {
+        updates,
+        remaining: 0,
+        next: { ...user, aura_save_energy: saveEnergy },
+      };
+    }
+    return { updates: null, remaining: 1, next: user };
+  }
+
+  // Explorer / Investigator / Trailblazer: narration → manifestation (no save pool)
+  let auraNar = user?.aura_narration_energy || 0;
+  let auraMan = user?.aura_manifestation_energy || 0;
+
+  if (auraNar > 0) {
     auraNar -= 1;
     updates.aura_narration_energy = auraNar;
   } else if (auraMan > 0) {
@@ -293,7 +315,6 @@ export function applyEvidenceSaveSpend(user, now = new Date()) {
     remaining: 0,
     next: {
       ...user,
-      aura_save_energy: saveEnergy,
       aura_narration_energy: auraNar,
       aura_manifestation_energy: auraMan,
     },
