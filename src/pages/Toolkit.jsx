@@ -843,7 +843,7 @@ export default function Toolkit() {
                   {isGenerating ? 'Loading...' : narrating ? 'Stop' : <>Narrate <EnergyCostBadge type="narration" mode={narrationMode} text={guideDetail} /></>}
                 </button>
               </div>
-              <NarrationToggle mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} />
+              <NarrationToggle mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} className="!justify-center" label="Narration" />
               <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-xs text-foreground/80 leading-relaxed space-y-3 whitespace-pre-line">
                 {guideDetail}
               </div>

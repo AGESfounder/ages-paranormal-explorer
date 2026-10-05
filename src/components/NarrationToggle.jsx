@@ -11,12 +11,12 @@ import { Smartphone, Sparkles } from 'lucide-react';
 //   mode: 'device' | 'enhanced' — current narration mode
 //   setMode: (mode) => void — change the mode
 //   canEnhance: boolean — whether the user can use Enhanced narration
-export default function NarrationToggle({ mode, setMode, canEnhance, className = '' }) {
+export default function NarrationToggle({ mode, setMode, canEnhance, className = '', label = 'Tour Narration' }) {
   if (!canEnhance) {
     return (
       <div className={`flex justify-end ${className}`}>
         <div className="inline-block text-right">
-          <span className="block text-xs font-heading uppercase tracking-wider text-white text-center mb-1">Tour Narration</span>
+          <span className="block text-xs font-heading uppercase tracking-wider text-white text-center mb-1">{label}</span>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30">
             <Smartphone className="w-3 h-3 text-primary" />
             <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Device Narration</span>
@@ -30,7 +30,7 @@ export default function NarrationToggle({ mode, setMode, canEnhance, className =
   return (
     <div className={`flex justify-end ${className}`}>
       <div className="inline-block text-right">
-        <span className="block text-xs font-heading uppercase tracking-wider text-white text-center mb-1">Tour Narration</span>
+        <span className="block text-xs font-heading uppercase tracking-wider text-white text-center mb-1">{label}</span>
         <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-card/50 border border-border/50">
           <button
             onClick={() => setMode('device')}
