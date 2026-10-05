@@ -444,7 +444,7 @@ export default function Evidence() {
 
           {!isAdmin && (
             <p className="text-[10px] text-center text-muted-foreground font-heading uppercase tracking-wider">
-              {isFree
+              {isFree && dailyRemaining > 0
                 ? `${dailyRemaining}/${dailyCap} daily saves remaining (watch ad to save)`
                 : dailyRemaining > 0
                   ? `${dailyRemaining}/${dailyCap} free daily saves remaining`
@@ -669,7 +669,7 @@ export default function Evidence() {
 
           {!isAdmin && (
             <p className="text-[10px] text-center text-muted-foreground font-heading uppercase tracking-wider">
-              {isFree
+              {isFree && dailyRemaining > 0
                 ? `${dailyRemaining}/${dailyCap} daily saves remaining (watch ad to save)`
                 : dailyRemaining > 0
                   ? `${dailyRemaining}/${dailyCap} free daily saves remaining`

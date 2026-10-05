@@ -34,6 +34,7 @@ export const PLANS = {
       'Toolkit: 4 tools (no ads)',
       'Community Map posting',
       'Evidence saves: 10/day (no ad)',
+      'Aura Bundle access (Save Energy)',
     ],
   },
   technician: {

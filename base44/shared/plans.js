@@ -32,6 +32,7 @@ export const PLANS = {
       'Toolkit: 4 tools (no ads)',
       'Community Map posting',
       'Evidence saves: 10/day (no ad)',
+      'Aura Bundle access (Save Energy)',
     ],
   },
   technician: {
@@ -300,7 +301,9 @@ export function getGrantForProduct(productId, options = {}) {
     // Technician Aura purchases route 100% to dedicated save energy.
     // Explorer/Investigator/Trailblazer keep the existing 80/20 split.
     // Phase 2 will pass options.userPlan from the webhook callers.
-    if (options.userPlan === 'technician') {
+    // Seeker and Technician Aura purchases route 100% to dedicated save energy.
+    // Explorer/Investigator/Trailblazer keep the existing 80/20 split.
+    if (options.userPlan === 'seeker' || options.userPlan === 'technician') {
       return {
         aura_save_add: bundle.energy,
         aura_narration_add: 0,

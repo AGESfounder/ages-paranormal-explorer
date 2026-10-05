@@ -12,8 +12,9 @@ export default function DashboardEvidenceTile({ user }) {
   const count = isToday ? (user?.evidence_save_count || 0) : 0;
 
   const cap = (planId === 'observer' || planId === 'seeker') ? 10 : 20;
-  const showAura = planId === 'technician' || planId === 'explorer' || planId === 'investigator' || planId === 'trailblazer' || isAdmin;
+  const showAura = planId === 'seeker' || planId === 'technician' || planId === 'explorer' || planId === 'investigator' || planId === 'trailblazer' || isAdmin;
   const aura = getSaveEnergy(user);
+  const isSaveOnlyTier = planId === 'seeker' || planId === 'technician';
 
   return (
     <div className="p-3 rounded-xl border border-border/40 bg-card/30">
@@ -25,7 +26,11 @@ export default function DashboardEvidenceTile({ user }) {
         {count}<span className="text-sm text-muted-foreground"> / {cap}</span>
       </p>
       {showAura && (
-        <p className="text-[10px] text-muted-foreground mt-1">Aura saves: {aura.total}</p>
+        <p className="text-[10px] text-muted-foreground mt-1">
+          {isSaveOnlyTier
+            ? `Aura saves: ${aura.save}`
+            : `Aura saves: ${aura.narration + aura.manifestation}`}
+        </p>
       )}
     </div>
   );

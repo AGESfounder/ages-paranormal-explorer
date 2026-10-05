@@ -274,9 +274,9 @@ export function getEffectiveExpirationDate(user, now = new Date()) {
 /**
  * Compute field updates after spending 1 evidence save energy (post free daily).
  * Tier-aware pool selection:
- *   Technician  → aura_save_energy ONLY (no fallback; blocked when empty)
+ *   Seeker/Technician → aura_save_energy ONLY (no fallback; blocked when empty)
  *   Explorer+   → aura_narration_energy → aura_manifestation_energy (no save pool)
- *   Observer/Seeker → no Aura pool access (blocked)
+ *   Observer → no Aura pool access (blocked)
  * NEVER touches monthly narration_energy, manifestation_energy, or
  * google_trailblazer_* pools — those are reserved for narration/generation.
  * Returns { updates: null, remaining: 1 } when no eligible pool is available.
@@ -285,13 +285,13 @@ export function applyEvidenceSaveSpend(user, now = new Date()) {
   const planId = getEffectivePlanId(user, now);
   const updates = {};
 
-  // Observer / Seeker: no Aura pool access for evidence saves
-  if (planId === 'observer' || planId === 'seeker') {
+  // Observer: no Aura pool access for evidence saves
+  if (planId === 'observer') {
     return { updates: null, remaining: 1, next: user };
   }
 
-  // Technician: aura_save_energy only — no fallback to 80/20 Aura pools
-  if (planId === 'technician') {
+  // Seeker / Technician: aura_save_energy only — no fallback to 80/20 Aura pools
+  if (planId === 'seeker' || planId === 'technician') {
     let saveEnergy = user?.aura_save_energy || 0;
     if (saveEnergy > 0) {
       saveEnergy -= 1;

@@ -22,8 +22,11 @@ function getDailySaveCount(user) {
  *
  * Flow:
  *   Admin          → allowed immediately (free, unlimited)
- *   Observer/Seeker → if count < 10: show ad gate modal (promise-based);
+ *   Observer       → if count < 10: show ad gate modal (promise-based);
  *                    if count >= 10: show UpgradePrompt (daily_cap)
+ *   Seeker         → if count < 10: show ad gate modal (promise-based);
+ *                    if count >= 10: call spend-evidence-save (aura_save_energy);
+ *                    on energy_empty: show UpgradePrompt
  *   Technician+    → call spend-evidence-save server function;
  *                    on energy_empty: show UpgradePrompt
  *
@@ -68,7 +71,7 @@ export function useEvidenceSaveGate() {
   const saveEnergy = user?.aura_save_energy || 0;
   const auraNarEnergy = user?.aura_narration_energy || 0;
   const auraManEnergy = user?.aura_manifestation_energy || 0;
-  const auraSaveTotal = planId === 'technician'
+  const auraSaveTotal = (planId === 'seeker' || planId === 'technician')
     ? saveEnergy
     : (auraNarEnergy + auraManEnergy);
 
@@ -82,8 +85,8 @@ export function useEvidenceSaveGate() {
     if (isAdmin) return true;
     if (!user) return false;
 
-    // Observer/Seeker: ad-watched saves with daily cap
-    if (isFree) {
+    // Observer: ad-watched saves with daily cap, blocked at cap
+    if (planId === 'observer') {
       if (dailyCount >= dailyCap) {
         setGateReason('daily_cap');
         setShowUpgrade(true);
@@ -95,7 +98,18 @@ export function useEvidenceSaveGate() {
       });
     }
 
-    // Technician+: server-authoritative spend
+    // Seeker: ad-watched saves under cap, then Aura Save Energy over cap
+    if (planId === 'seeker') {
+      if (dailyCount < dailyCap) {
+        // Under cap: show ad gate modal — wait for ad completion + server call
+        return new Promise((resolve) => {
+          setAdGatePromise({ resolve });
+        });
+      }
+      // Over cap: fall through to server-authoritative spend (Aura Save Energy)
+    }
+
+    // Seeker (over cap) / Technician+: server-authoritative spend
     try {
       const res = await base44.functions.invoke('spend-evidence-save', {});
       if (res.data?.success) {

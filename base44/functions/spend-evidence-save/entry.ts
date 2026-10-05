@@ -4,8 +4,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 //
 // Tier-aware daily save accounting:
 //   Admin          → free, no count, unlimited
-//   Observer/Seeker → 10 free daily saves (ad-watched; client shows the ad
+//   Observer       → 10 free daily saves (ad-watched; client shows the ad
 //                     before calling this function). Over cap → blocked.
+//   Seeker         → 10 free daily saves (ad-watched). Over cap → aura_save_energy
+//                     (same as Technician; blocked if empty).
 //   Technician     → 20 free daily saves, then aura_save_energy only (blocked if empty)
 //   Explorer+      → 20 free daily saves, then aura_narration → aura_manifestation
 //                     (never aura_save_energy; blocked if both empty)
@@ -38,6 +40,7 @@ export default async function(req) {
 
     const planId = user.plan || 'observer';
     const isFree = planId === 'observer' || planId === 'seeker';
+    const isObserver = planId === 'observer';
     const dailyCap = isFree ? FREE_DAILY_CAP : PAID_DAILY_CAP;
 
     // ── Under daily cap: free save, increment counter ──
@@ -58,8 +61,8 @@ export default async function(req) {
     }
 
     // ── Over daily cap ──
-    if (isFree) {
-      // Observer/Seeker: no Aura pool access — blocked
+    // Observer: no Aura pool access — blocked
+    if (isObserver) {
       return Response.json({
         success: false,
         reason: 'daily_cap',
@@ -67,8 +70,8 @@ export default async function(req) {
       }, { status: 429 });
     }
 
-    // Technician: aura_save_energy only (no fallback)
-    if (planId === 'technician') {
+    // Seeker / Technician: aura_save_energy only (no fallback)
+    if (planId === 'seeker' || planId === 'technician') {
       const saveEnergy = user.aura_save_energy || 0;
       if (saveEnergy <= 0) {
         return Response.json({
