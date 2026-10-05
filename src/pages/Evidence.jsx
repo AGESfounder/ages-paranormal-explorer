@@ -16,6 +16,9 @@ import PullToRefresh from '@/components/PullToRefresh';
 import BePatient from '@/components/BePatient';
 import EvidenceMiniMap from '@/components/EvidenceMiniMap';
 import LocationPicker from '@/components/LocationPicker';
+import { useEvidenceSaveGate } from '@/hooks/useEvidenceSaveGate';
+import EvidenceSaveAdGate from '@/components/EvidenceSaveAdGate';
+import UpgradePrompt from '@/components/UpgradePrompt';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
@@ -95,6 +98,13 @@ export default function Evidence() {
   const [uploading, setUploading] = useState(false);
   const [gpsCapturing, setGpsCapturing] = useState(false);
   const [expandedMapId, setExpandedMapId] = useState(null);
+
+  // Evidence save gate — tier-aware daily caps + Aura energy + ad-watched saves
+  const {
+    isAdmin, isFree, dailyCount, dailyCap, dailyRemaining, auraSaveTotal,
+    gateSave, showUpgrade, setShowUpgrade, gateReason,
+    adGatePromise, onAdGateSuccess, onAdGateClose,
+  } = useEvidenceSaveGate();
 
   useEffect(() => { loadEvidence(); }, []);
 
@@ -189,6 +199,16 @@ export default function Evidence() {
     }
     setSubmitError(null);
     setSubmitting(true);
+
+    // ── Evidence save gate ──
+    // Admin: free. Observer/Seeker: ad-watched (10/day cap).
+    // Technician+: 20 free daily, then Aura energy.
+    const allowed = await gateSave();
+    if (!allowed) {
+      setSubmitting(false);
+      return;
+    }
+
     const payload = { ...form };
     if (payload.equipment.includes('Other') && otherDeviceText.trim()) {
       payload.equipment = payload.equipment.map(e => e === 'Other' ? 'Other: ' + otherDeviceText.trim() : e);
@@ -422,6 +442,17 @@ export default function Evidence() {
             <Input placeholder="Name this evidence entry" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="bg-card/50 border-border/50" />
           </div>
 
+          {!isAdmin && (
+            <p className="text-[10px] text-center text-muted-foreground font-heading uppercase tracking-wider">
+              {isFree
+                ? `${dailyRemaining}/${dailyCap} daily saves remaining (watch ad to save)`
+                : dailyRemaining > 0
+                  ? `${dailyRemaining}/${dailyCap} free daily saves remaining`
+                  : auraSaveTotal > 0
+                    ? `Using Aura energy (${auraSaveTotal} left)`
+                    : 'No save energy remaining'}
+            </p>
+          )}
           {submitError && <p className="text-[11px] text-red-400/80 text-center">{submitError}</p>}
           <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-heading uppercase tracking-wider">
             {submitting ? <BePatient /> : 'Save Evidence'}
@@ -484,6 +515,17 @@ export default function Evidence() {
           )}
         </div>
         <NavBar />
+        <EvidenceSaveAdGate
+          show={adGatePromise}
+          remaining={dailyRemaining}
+          onSuccess={onAdGateSuccess}
+          onClose={onAdGateClose}
+        />
+        <UpgradePrompt
+          show={showUpgrade}
+          onClose={() => setShowUpgrade(false)}
+          reason={gateReason}
+        />
       </PageContainer>
     );
   }
@@ -625,12 +667,34 @@ export default function Evidence() {
             <Input placeholder="Name this evidence entry" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="bg-card/50 border-border/50" />
           </div>
 
+          {!isAdmin && (
+            <p className="text-[10px] text-center text-muted-foreground font-heading uppercase tracking-wider">
+              {isFree
+                ? `${dailyRemaining}/${dailyCap} daily saves remaining (watch ad to save)`
+                : dailyRemaining > 0
+                  ? `${dailyRemaining}/${dailyCap} free daily saves remaining`
+                  : auraSaveTotal > 0
+                    ? `Using Aura energy (${auraSaveTotal} left)`
+                    : 'No save energy remaining'}
+            </p>
+          )}
           {submitError && <p className="text-[11px] text-red-400/80 text-center">{submitError}</p>}
           <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-primary text-primary-foreground hover:bg-primary/80 font-heading uppercase tracking-wider">
             {submitting ? <BePatient /> : 'Save Evidence'}
           </Button>
         </div>
         <NavBar />
+        <EvidenceSaveAdGate
+          show={adGatePromise}
+          remaining={dailyRemaining}
+          onSuccess={onAdGateSuccess}
+          onClose={onAdGateClose}
+        />
+        <UpgradePrompt
+          show={showUpgrade}
+          onClose={() => setShowUpgrade(false)}
+          reason={gateReason}
+        />
       </PageContainer>
     );
   }
