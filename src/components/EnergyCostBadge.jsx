@@ -6,7 +6,19 @@ import { Sparkles, Volume2 } from 'lucide-react';
  * variant="inline" → just "−N" text (for use inside buttons)
  * variant="badge" → pill with icon + "−N" (for standalone use)
  */
-export default function EnergyCostBadge({ type = 'narration', cost, text, variant = 'inline', className = '' }) {
+export default function EnergyCostBadge({ type = 'narration', cost, text, variant = 'inline', className = '', mode }) {
+  // Device narration mode: free, show "Free" instead of cost
+  if (mode === 'device' && type === 'narration') {
+    if (variant === 'inline') {
+      return <span className={`ml-0.5 text-[8px] font-mono opacity-50 ${className}`}>Free</span>;
+    }
+    return (
+      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold text-primary border-primary/20 bg-primary/5 ${className}`}>
+        Free
+      </span>
+    );
+  }
+
   const isManifestation = type === 'manifestation';
   const estimatedCost = isManifestation
     ? (cost || 1)

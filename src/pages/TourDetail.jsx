@@ -36,8 +36,9 @@ import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
-import { isDeviceNarrationTour } from '@/lib/deviceNarrationTest';
-import DeviceVoicePicker from '@/components/DeviceVoicePicker';
+import NarrationToggle from '@/components/NarrationToggle';
+import { useNarrationMode } from '@/hooks/useNarrationMode';
+import { canUseEnhanced } from '@/lib/narrationMode';
 import { verifyStopLocation } from '@/lib/verifyStop';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
@@ -214,15 +215,16 @@ export default function TourDetail() {
   };
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
+  const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
+  const canEnhance = canUseEnhanced(user);
 
   // Gated narration wrapper — checks for pre-generated offline audio first,
   // then falls back to live TTS generation (which costs narration credits).
   const narrate = async (text, opts = {}) => {
     const cleanText = stripUrlsForNarration(text);
-    // Device-narration test tour: speak via the device's built-in TTS — no
-    // server call, no credit cost, no offline-audio intercept. Revert by
-    // clearing DEVICE_NARRATION_TEST_TOUR_ID in src/lib/deviceNarrationTest.js.
-    if (isDeviceNarrationTour(tour?.id)) {
+    // Device mode: free, client-side TTS — no server call, no energy cost,
+    // no offline-audio intercept.
+    if (narrationMode === 'device') {
       rawNarrate(cleanText, { ...opts, useDeviceVoice: true });
       return;
     }
@@ -1285,7 +1287,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           <div className="flex items-start justify-between gap-3">
             <p className="text-log text-sm text-foreground/80 leading-relaxed">{displayDescription}</p>
             <button onClick={() => narrate(displayDescription, { audioKey: 'description' })} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-              {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={displayDescription} /></>}
+              {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" mode={narrationMode} text={displayDescription} /></>}
             </button>
           </div>
           {tour.best_time && <p className="text-xs text-primary flex items-center gap-1"><Zap className="w-3 h-3" /> Best time: {tour.best_time}</p>}
@@ -1296,7 +1298,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           {hasDrivingStops && <TravelModeSelector value={travelMode} onChange={setTravelMode} />}
         </div>
 
-        {isDeviceNarrationTour(tour?.id) && <DeviceVoicePicker />}
+        <NarrationToggle mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} />
 
         {regeneratingContent && (
           <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 flex items-center gap-2">
@@ -1325,7 +1327,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-primary">Introduction</h3>
               <button onClick={() => narrate(displayIntroduction, { audioKey: 'intro' })} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={displayIntroduction} /></>}
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" mode={narrationMode} text={displayIntroduction} /></>}
               </button>
             </div>
             <p className="text-log text-xs text-foreground/70 leading-relaxed">{displayIntroduction}</p>
@@ -1482,7 +1484,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-dim-purple">Conclusion</h3>
               <button onClick={() => { narrate(displayConclusion, { audioKey: 'conclusion' }); setConclusionRead(true); }} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dim-purple/10 border border-dim-purple/30 text-dim-purple text-[10px] font-heading uppercase tracking-wider hover:bg-dim-purple/20 transition-colors">
-                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" text={displayConclusion} /></>}
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Narrate <EnergyCostBadge type="narration" mode={narrationMode} text={displayConclusion} /></>}
               </button>
             </div>
             <p className="text-log text-xs text-foreground/70 leading-relaxed" onScroll={() => setConclusionRead(true)}>{displayConclusion}</p>

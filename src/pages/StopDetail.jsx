@@ -28,7 +28,9 @@ import { Input } from '@/components/ui/input';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
 import { rewriteForStopFocus } from '@/lib/enrichStops';
 import { stripUrlsForNarration } from '@/lib/urlText';
-import { isDeviceNarrationTour } from '@/lib/deviceNarrationTest';
+import NarrationToggle from '@/components/NarrationToggle';
+import { useNarrationMode } from '@/hooks/useNarrationMode';
+import { canUseEnhanced } from '@/lib/narrationMode';
 import LinkifiedText from '@/components/LinkifiedText';
 import DeleteStopDialog from '@/components/DeleteStopDialog';
 import { Trash2 } from 'lucide-react';
@@ -60,6 +62,8 @@ export default function StopDetail() {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, setGateReason, user, isPaid } = useEnergyGate();
+  const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
+  const canEnhance = canUseEnhanced(user);
   const isAdmin = user?.role === 'admin';
   const [verifying, setVerifying] = useState(false);
   const [showDeleteStop, setShowDeleteStop] = useState(false);
@@ -71,10 +75,9 @@ export default function StopDetail() {
   // then falls back to live TTS generation (which costs narration credits).
   const narrate = async (text, opts = {}) => {
     const cleanText = stripUrlsForNarration(text);
-    // Device-narration test tour: speak via the device's built-in TTS — no
-    // server call, no credit cost, no offline-audio intercept. Revert by
-    // clearing DEVICE_NARRATION_TEST_TOUR_ID in src/lib/deviceNarrationTest.js.
-    if (isDeviceNarrationTour(stop?.tour_id)) {
+    // Device mode: free, client-side TTS — no server call, no energy cost,
+    // no offline-audio intercept.
+    if (narrationMode === 'device') {
       rawNarrate(cleanText, { ...opts, useDeviceVoice: true });
       return;
     }
@@ -702,6 +705,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             {stop.construction_date && <span className="flex items-center gap-1">Est. {stop.construction_date}</span>}
             {stop.travel_method === 'driving' && <span className="flex items-center gap-1 text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded"><Car className="w-3 h-3" /> Driving Stop</span>}
           </div>
+          <div className="mt-3">
+            <NarrationToggle mode={narrationMode} setMode={setNarrationMode} canEnhance={canEnhance} />
+          </div>
           {(stop.hours_of_operation || stop.entry_fee) && (
             <div className="mt-2">
               <button onClick={() => setShowAccessInfo(!showAccessInfo)} className="w-full flex items-center justify-between p-2 rounded-lg bg-amber-500/5 border border-amber-500/15 hover:border-amber-500/30 transition-colors">
@@ -819,7 +825,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Ghost Story</span>
               </div>
               <button onClick={() => narrate(displayNarrationText, { audioKey: `stop:${stop.id}` })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={displayNarrationText} /></>}
+                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" mode={narrationMode} text={displayNarrationText} /></>}
               </button>
             </div>
             <p className="text-log text-xs text-foreground/70 leading-relaxed italic">"<LinkifiedText text={displayNarrationText} />"</p>
@@ -838,7 +844,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Paranormal Findings</span>
                   <button onClick={() => narrate(displayParanormalInfo, { audioKey: `stop:${stop.id}:paranormal` })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                    {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={displayParanormalInfo} /></>}
+                    {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" mode={narrationMode} text={displayParanormalInfo} /></>}
                   </button>
                 </div>
                 <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line">
@@ -862,7 +868,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Historical Background</span>
                 <button onClick={() => narrate(displayHistoricalInfo, { audioKey: `stop:${stop.id}:history` })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                  {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={displayHistoricalInfo} /></>}
+                  {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" mode={narrationMode} text={displayHistoricalInfo} /></>}
                 </button>
               </div>
               <p className="text-log text-sm text-foreground/80 leading-relaxed whitespace-pre-line"><LinkifiedText text={displayHistoricalInfo} /></p>
@@ -879,7 +885,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-heading uppercase tracking-wider text-primary">Investigation Suggestions</h4>
                 <button onClick={() => narrate(truncateText(stop.investigation_suggestions?.join('. ') + '. Estimated investigation time: ' + stop.estimated_investigation_time + '.', narrationLength))} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                  {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" text={truncateText(stop.investigation_suggestions?.join('. ') + '. Estimated investigation time: ' + stop.estimated_investigation_time + '.', narrationLength)} /></>}
+                  {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" mode={narrationMode} text={truncateText(stop.investigation_suggestions?.join('. ') + '. Estimated investigation time: ' + stop.estimated_investigation_time + '.', narrationLength)} /></>}
                 </button>
               </div>
               {stop.investigation_suggestions?.map((suggestion, i) => {

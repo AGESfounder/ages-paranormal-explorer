@@ -381,7 +381,7 @@ export default function useGhostVoice() {
       const effectiveRate = opts.rate != null ? opts.rate : savedSettings.rate;
       const effectivePitch = opts.pitch != null ? opts.pitch : savedSettings.pitch;
       const effectiveVolume = Math.min(1, opts.volume != null ? opts.volume : savedSettings.volume);
-      const echoEnabled = savedSettings.echo === true;
+      const echoEnabled = false; // Ghostly Echo removed from DeviceVoicePicker
       const u = new SpeechSynthesisUtterance(sanitizeText(text));
       if (voice) { u.voice = voice; u.lang = voice.lang; }
       u.rate = effectiveRate;

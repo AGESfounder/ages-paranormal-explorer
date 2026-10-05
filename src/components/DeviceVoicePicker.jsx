@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Volume2, ChevronDown, Play, Square, RotateCcw, Waves } from 'lucide-react';
+import { Volume2, ChevronDown, Play, Square, RotateCcw } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 
-// TEST-TOUR ONLY: Lets the user pick which device speechSynthesis voice the
-// Eisenhower Farm narration uses, plus tune rate/pitch/volume and enable a
-// ghostly echo. All settings are saved to localStorage and read by
-// speakDevice() in useGhostVoice.js. When no voice is selected ("Auto-select"),
-// speakDevice falls back to its quality-scored auto-pick.
+// Device Voice Picker — lets the user pick which device speechSynthesis
+// voice the Device Narration mode uses, plus tune rate/pitch/volume. All
+// settings are saved to localStorage and read by speakDevice() in
+// useGhostVoice.js. When no voice is selected ("Auto-select"), speakDevice
+// falls back to its quality-scored auto-pick.
 const VOICE_KEY = 'ages_device_voice_uri';
 const SETTINGS_KEY = 'ages_device_voice_settings';
 
-const DEFAULT_SETTINGS = { rate: 0.92, pitch: 0.9, volume: 1.0, echo: false };
+const DEFAULT_SETTINGS = { rate: 0.92, pitch: 0.9, volume: 1.0 };
 
 function qualityLabel(name) {
   const n = (name || '').toLowerCase();
@@ -70,25 +69,7 @@ export default function DeviceVoicePicker() {
     u.pitch = settings.pitch;
     u.volume = settings.volume;
     setPreviewing(true);
-    let echoSpoken = false;
-    u.onstart = () => {
-      if (settings.echo && !echoSpoken) {
-        echoSpoken = true;
-        setTimeout(() => {
-          try {
-            const echo = new SpeechSynthesisUtterance(sampleText);
-            if (voice) { echo.voice = voice; echo.lang = voice.lang; }
-            echo.rate = settings.rate * 0.8;
-            echo.pitch = settings.pitch * 0.6;
-            echo.volume = settings.volume * 0.35;
-            echo.onend = () => setPreviewing(false);
-            echo.onerror = () => setPreviewing(false);
-            synth.speak(echo);
-          } catch { setPreviewing(false); }
-        }, 400);
-      }
-    };
-    u.onend = () => { if (!settings.echo) setPreviewing(false); };
+    u.onend = () => setPreviewing(false);
     u.onerror = () => setPreviewing(false);
     synth.speak(u);
   }, [voices, selectedURI, settings, previewing, stopPreview]);
@@ -198,21 +179,6 @@ export default function DeviceVoicePicker() {
               <p className="text-[9px] text-muted-foreground/60">Softer = more distant & whispery</p>
             </div>
 
-            {/* Echo toggle */}
-            <div className="flex items-center justify-between pt-1 border-t border-border/30">
-              <div className="flex items-center gap-1.5">
-                <Waves className="w-3.5 h-3.5 text-primary" />
-                <div>
-                  <label className="text-[11px] text-foreground">Ghostly Echo</label>
-                  <p className="text-[9px] text-muted-foreground/60">Trailing haunted repetition</p>
-                </div>
-              </div>
-              <Switch
-                checked={settings.echo}
-                onCheckedChange={(v) => updateSetting('echo', v)}
-                aria-label="Ghostly echo effect"
-              />
-            </div>
           </div>
 
           <button

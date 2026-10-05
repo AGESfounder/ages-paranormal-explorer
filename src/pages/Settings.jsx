@@ -13,6 +13,7 @@ import AdDiagnosticsPanel from '../components/AdDiagnosticsPanel';
 import { base44 } from '@/api/base44Client';
 import { getBlockedUsers, unblockUser } from '@/lib/userBlocks';
 import { setMusicSettings } from '@/lib/hauntedAudio';
+import DeviceVoicePicker from '@/components/DeviceVoicePicker';
 
 const defaultSettings = {
   backgroundMusic: true,
@@ -148,6 +149,19 @@ export default function Settings() {
           <div className="px-3 pb-3">
             <p className="text-[10px] text-muted-foreground mb-1">Haunted Ambience Volume</p>
             <input type="range" min="0" max="100" value={settings.hauntedMusicVolume} onChange={e => updateSetting('hauntedMusicVolume', Number(e.target.value))} className="w-full accent-primary" />
+          </div>
+        </div>
+
+        {/* Narration */}
+        <div className="rounded-xl border border-border/40 bg-card/40 overflow-hidden">
+          <div className="p-3 border-b border-border/30">
+            <h3 className="text-xs font-heading uppercase tracking-wider text-primary flex items-center gap-2"><Volume2 className="w-3.5 h-3.5" /> Narration</h3>
+          </div>
+          <div className="p-3">
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Configure your device's built-in voice for Device Narration mode (free, no credits). Enhanced narration uses server-generated audio and costs narration energy.
+            </p>
+            <DeviceVoicePicker />
           </div>
         </div>
 
