@@ -4,17 +4,20 @@ import { jsPDF } from 'jspdf';
 import { Navigate, Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { ArrowLeft } from 'lucide-react';
+import StartHere from '@/components/planAnalysis/StartHere';
+import ScenarioPnLTable from '@/components/planAnalysis/ScenarioPnLTable';
+import { th, td, num } from '@/components/planAnalysis/tableStyles';
 
 // ===== DATA (mirrors src/lib/plans.js + base44/shared/plans.js) =====
 const PLANS = [
   { name: 'Observer', price: '$0', billing: 'Free forever', manE: 0, narE: 0,
-    features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; device narration; save favorites; 4-tool toolkit (2 ad-gated: Audio Recorder, Radio Sweeper — 30s ad = 30s use, 300s/day cap); evidence saves 10/day (ad-watched); evidence journal + dashboard' },
+    features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; Device narration (an ad plays before each narration — ~27 ads per fully narrated tour); save favorites; 4-tool toolkit (2 ad-gated: Audio Recorder, Radio Sweeper — 30s ad = 30s use, 300s/day cap); evidence saves 10/day (ad-watched); evidence journal + dashboard' },
   { name: 'Seeker', price: '$3.99', billing: 'Monthly ($39.99/yr)', manE: 0, narE: 0,
-    features: 'Everything in Observer, ad-free; 4-tool toolkit (no ads); community map posting; evidence saves 10/day (no ad); Aura Bundle access (Save Energy only)' },
+    features: 'Everything in Observer, ad-free (no stop, narration, or tool ads); Device narration only (0 credits); 4-tool toolkit (no ads); community map posting; evidence saves 10/day (ad-watched, then Aura Save energy); Aura Bundle access (Save Energy only)' },
   { name: 'Technician', price: '$5.99', billing: 'Monthly ($59.99/yr)', manE: 0, narE: 0,
-    features: 'Everything in Seeker; 10 of 12 toolkit tools; Aura Bundle access (100% Save Energy); evidence saves 20/day, then Aura Save energy' },
+    features: 'Everything in Seeker (ad-free, Device narration only — 0 credits); 10 of 12 toolkit tools; Aura Bundle access (100% Save Energy); evidence saves 20/day, then Aura Save energy' },
   { name: 'Explorer', price: '$7.99', billing: 'Monthly ($79.99/yr)', manE: 5, narE: 500,
-    features: 'Everything in Technician; AI narration (~1 fully narrated tour/mo, all tabs); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 10-tool toolkit; aura bundles (80/20 narration/manifestation)' },
+    features: 'Everything in Technician; Device narration (free) or Enhanced AI narration (~1 fully narrated tour/mo, all tabs); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 10-tool toolkit; aura bundles (80/20 narration/manifestation)' },
   { name: 'Investigator', price: '$11.99', billing: 'Monthly ($119.99/yr)', manE: 15, narE: 1500,
     features: 'Everything in Explorer; AI narration (~3 fully narrated tours/mo, all tabs); custom tours (up to 5/mo); full 12-tool toolkit; evidence dashboard analytics; aura bundles' },
   { name: 'Trailblazer', price: '$239.99', billing: 'One-time, 30 months (6 months free, max 300 slots)', manE: 15, narE: 1500,
@@ -97,6 +100,23 @@ const AD_REWARD_UTILIZATION = 0.7;    // % of granted energy actually consumed
 const AD_REWARD_REV_PER_PAID_USER_MO = ADS_PER_PAID_USER_MO * ADMOB_REWARDED_PER_IMPRESSION;
 const AD_REWARD_COST_PER_PAID_USER_MO = ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION * COST_PER_CREDIT;
 const AD_REWARD_NET_PER_PAID_USER_MO = AD_REWARD_REV_PER_PAID_USER_MO - AD_REWARD_COST_PER_PAID_USER_MO;
+
+// ===== OBSERVER / SEEKER AD MODEL (the app as built) =====
+// Observer Device narration plays one ad before each narration; a fully
+// narrated tour is ~27 narration taps = 27 ads (interstitial rate, same
+// 2 tours/mo assumption as the stop-ad model above).
+const OBSERVER_NARRATION_ADS_PER_TOUR = 27;
+const NARRATION_AD_REV_PER_FREE_USER_MO = OBSERVER_NARRATION_ADS_PER_TOUR * TOURS_PER_FREE_USER_MO * ADMOB_PER_IMPRESSION;
+// Observer toolkit: Audio Recorder + Radio Sweeper, 30s ad = 30s use (rewarded rate).
+const TOOL_USE_ADS_OBSERVER_MO = 10;
+const TOOL_USE_AD_REV_OBSERVER_MO = TOOL_USE_ADS_OBSERVER_MO * ADMOB_REWARDED_PER_IMPRESSION;
+// Evidence saves: Observer AND Seeker watch a rewarded ad per save (10/day cap).
+// Each save uploads a file (~1 integration credit).
+const SAVE_ADS_MO = 3;
+const SAVE_AD_REV_MO = SAVE_ADS_MO * ADMOB_REWARDED_PER_IMPRESSION;
+const SAVE_UPLOAD_CREDITS_MO = SAVE_ADS_MO * 1;
+// Total monthly ad revenue per active free (Observer) user.
+const OBSERVER_AD_REV_MO = AD_REV_PER_FREE_USER_MO + NARRATION_AD_REV_PER_FREE_USER_MO + TOOL_USE_AD_REV_OBSERVER_MO + SAVE_AD_REV_MO;
 
 // ===== FULL NARRATION COST PER TOUR =====
 const NARRATION_PER_STOP = 52;
@@ -280,10 +300,10 @@ const adMobScenarios = [
 
 // AdMob rewarded ad projections at different paid-user counts
 const rewardedAdScenarios = [
-  { label: '50 paid users', users: 50 },
-  { label: '200 paid users', users: 200 },
-  { label: '500 paid users', users: 500 },
-  { label: '1,000 paid users', users: 1000 },
+  { label: '50 Explorer+ users', users: 50 },
+  { label: '200 Explorer+ users', users: 200 },
+  { label: '500 Explorer+ users', users: 500 },
+  { label: '1,000 Explorer+ users', users: 1000 },
 ].map(s => ({
   ...s,
   monthlyAdRev: s.users * AD_REWARD_REV_PER_PAID_USER_MO,
@@ -307,18 +327,25 @@ const scenarios = [
   const investigatorRev = s.mix.investigator * 11.99;
   const trailblazerRev = s.mix.trailblazer * (239.99 / 30);
   const subRev = seekerRev + technicianRev + explorerRev + investigatorRev + trailblazerRev;
-  const totalPaidUsers = s.mix.seeker + s.mix.technician + s.mix.explorer + s.mix.investigator + s.mix.trailblazer;
+  // Only Explorer+ hold energy, so only they take rewarded energy top-ups.
+  const energyUsers = s.mix.explorer + s.mix.investigator + s.mix.trailblazer;
+  // Observer ads: stop interstitials + one ad before every Device narration.
   const interstitialAdRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
-  const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
-  const adRev = interstitialAdRev + rewardedAdRev;
+  const narrationAdRev = s.freeUsers * NARRATION_AD_REV_PER_FREE_USER_MO;
+  // Observer tool-use ads + ad-watched evidence saves (Observer and Seeker).
+  const toolSaveAdRev = s.freeUsers * (TOOL_USE_AD_REV_OBSERVER_MO + SAVE_AD_REV_MO) + s.mix.seeker * SAVE_AD_REV_MO;
+  const rewardedAdRev = energyUsers * AD_REWARD_REV_PER_PAID_USER_MO;
+  const adRev = interstitialAdRev + narrationAdRev + toolSaveAdRev + rewardedAdRev;
   const totalRev = subRev + adRev;
-  const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
+  const rewardedAdCredits = Math.round(energyUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
+  const saveCredits = (s.freeUsers + s.mix.seeker) * SAVE_UPLOAD_CREDITS_MO; // 1 upload credit per ad-watched save
   // Seeker and Technician have 0 AI energy — 0 platform credits
   const totalCredits = Math.round(
     s.mix.explorer * calcCosts(5 * 0.7, 500 * 0.7, 1).credits
     + s.mix.investigator * calcCosts(15 * 0.7, 1500 * 0.7, 1).credits
     + s.mix.trailblazer * calcCosts(15 * 0.7, 1500 * 0.7, 1).credits
     + rewardedAdCredits
+    + saveCredits
   );
   const base44Plan = requiredBase44Plan(totalCredits);
   const platformCosts = base44Plan.cost;
@@ -327,8 +354,60 @@ const scenarios = [
   const fixedCost = fixedOngoingMonthly;
   const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
   const profit = totalRev - totalCost;
-  return { ...s, seekerRev, technicianRev, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, rewardedAdRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, base44Plan };
+  return { ...s, seekerRev, technicianRev, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, narrationAdRev, toolSaveAdRev, rewardedAdRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, saveCredits, base44Plan };
 });
+
+// Per-user monthly economics for every tier (70% utilization of Explorer+ energy, flat $/credit).
+const perUserCreditCost = (manE, narE) =>
+  calcCosts(manE * 0.7, narE * 0.7, 1).platformCost + AD_REWARD_COST_PER_PAID_USER_MO;
+const SAVE_UPLOAD_COST_MO = SAVE_UPLOAD_CREDITS_MO * COST_PER_CREDIT;
+const TIER_ECONOMICS = [
+  { tier: 'Observer', price: 0, narration: `Device only — one ad before each narration (~${OBSERVER_NARRATION_ADS_PER_TOUR} per tour)`, ads: 'Stop ads, narration ads, 2 ad-gated tools, ad-watched saves', adRev: OBSERVER_AD_REV_MO, creditCost: SAVE_UPLOAD_COST_MO },
+  { tier: 'Seeker', price: 3.99, narration: 'Device only, no ads (0 credits)', ads: 'Ad-watched evidence saves only', adRev: SAVE_AD_REV_MO, creditCost: SAVE_UPLOAD_COST_MO },
+  { tier: 'Technician', price: 5.99, narration: 'Device only, no ads (0 credits)', ads: 'None (ad-free)', adRev: 0, creditCost: 0 },
+  { tier: 'Explorer', price: 7.99, narration: 'Device (free) or Enhanced (500 energy)', ads: 'Optional rewarded energy top-ups', adRev: AD_REWARD_REV_PER_PAID_USER_MO, creditCost: perUserCreditCost(5, 500) },
+  { tier: 'Investigator', price: 11.99, narration: 'Device (free) or Enhanced (1,500 energy)', ads: 'Optional rewarded energy top-ups', adRev: AD_REWARD_REV_PER_PAID_USER_MO, creditCost: perUserCreditCost(15, 1500) },
+  { tier: 'Trailblazer', price: 239.99 / 30, priceLabel: '$8.00 ($239.99 ÷ 30)', narration: 'Device (free) or Enhanced (1,500 energy)', ads: 'Optional rewarded energy top-ups', adRev: AD_REWARD_REV_PER_PAID_USER_MO, creditCost: perUserCreditCost(15, 1500) },
+].map(t => {
+  const store = t.price * STORE_FEE_PCT;
+  return { ...t, priceLabel: t.priceLabel || (t.price === 0 ? 'Free' : '$' + t.price.toFixed(2)), store, net: t.price + t.adRev - store - t.creditCost };
+});
+
+// Monthly profit & loss rows (one column per scenario) — shared by the page and the PDF.
+const usd0 = (n) => '$' + Math.round(n).toLocaleString();
+const pnlRows = [
+  { section: 'Users' },
+  { label: 'Observer (free)', val: s => s.freeUsers.toLocaleString() },
+  { label: 'Seeker ($3.99)', val: s => s.mix.seeker.toLocaleString() },
+  { label: 'Technician ($5.99)', val: s => s.mix.technician.toLocaleString() },
+  { label: 'Explorer ($7.99)', val: s => s.mix.explorer.toLocaleString() },
+  { label: 'Investigator ($11.99)', val: s => s.mix.investigator.toLocaleString() },
+  { label: 'Trailblazer ($239.99 / 30 mo)', val: s => s.mix.trailblazer.toLocaleString() },
+  { section: 'Subscription revenue' },
+  { label: 'Seeker', val: s => usd0(s.seekerRev) },
+  { label: 'Technician', val: s => usd0(s.technicianRev) },
+  { label: 'Explorer', val: s => usd0(s.explorerRev) },
+  { label: 'Investigator', val: s => usd0(s.investigatorRev) },
+  { label: 'Trailblazer', val: s => usd0(s.trailblazerRev) },
+  { label: 'Subscription total', val: s => usd0(s.subRev), bold: true },
+  { section: 'Ad revenue' },
+  { label: 'Observer stop ads (paranormal, stops 2+)', val: s => usd0(s.interstitialAdRev) },
+  { label: `Observer narration ads (${OBSERVER_NARRATION_ADS_PER_TOUR} per tour)`, val: s => usd0(s.narrationAdRev) },
+  { label: 'Observer tool ads + Observer/Seeker save ads', val: s => usd0(s.toolSaveAdRev) },
+  { label: 'Explorer+ rewarded energy top-ups', val: s => usd0(s.rewardedAdRev) },
+  { label: 'Ad total', val: s => usd0(s.adRev), bold: true },
+  { label: 'TOTAL REVENUE', val: s => usd0(s.totalRev), bold: true },
+  { section: 'Costs' },
+  { label: 'AI credits used -> Base44 plan needed', val: s => `${s.totalCredits.toLocaleString()} -> ${s.base44Plan.plan}` },
+  { label: 'Base44 plan cost', val: s => usd0(s.platformCosts) },
+  { label: 'Store fees (15% of subscriptions)', val: s => usd0(s.storeCosts) },
+  { label: 'RevenueCat (1% above $2,500)', val: s => usd0(s.revcatCost) },
+  { label: 'Apple developer (fixed)', val: s => usd0(s.fixedCost) },
+  { label: 'TOTAL COST', val: s => usd0(s.totalCost), bold: true },
+  { section: 'Result' },
+  { label: 'PROFIT / MONTH', val: s => usd0(s.profit), bold: true },
+  { label: 'Margin', val: s => s.margin.toFixed(1) + '%' },
+];
 
 const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -362,6 +441,13 @@ function downloadPDF() {
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
   doc.text(`Generated ${today}`, M, y); y += 20;
 
+  heading('Start Here: The App As Built (per user, per month, 70% utilization)');
+  table(['Tier', 'Price/mo', 'Ad Rev', 'Credit Cost', 'Store Fee', 'Net/user'],
+    TIER_ECONOMICS.map(t => [t.tier, t.priceLabel.split(' ')[0], '$' + t.adRev.toFixed(2), '$' + t.creditCost.toFixed(2), '$' + t.store.toFixed(2), '$' + t.net.toFixed(2)]),
+    [90, 70, 70, 80, 70, 70]);
+  TIER_ECONOMICS.forEach(t => para(`${t.tier}: ${t.narration}. Ads: ${t.ads}.`));
+  para('Projections at four user scales (monthly profit and loss) are in section 9.');
+
   heading('1. Subscription Tiers');
   table(['Plan', 'Price', 'Billing', 'Man. E', 'Narr. E'],
     PLANS.map(p => [p.name, p.price, p.billing, p.manE, p.narE]),
@@ -382,6 +468,9 @@ function downloadPDF() {
   para(`Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by total credits consumed. The per-credit rate ($${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4-6.`);
   para(`AdMob Interstitial: $${ADMOB_ECPM}/1k impressions (eCPM). Free users see ads on stops 2+ (~${ADS_PER_TOUR} ads/tour, ~${TOURS_PER_FREE_USER_MO} tours/mo = $${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para(`AdMob Rewarded: $${ADMOB_REWARDED_ECPM}/1k impressions. Paid users watch ~${ADS_PER_PAID_USER_MO} ads/mo for +${AD_REWARD_ENERGY} energy each. Ad rev: $${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Energy cost: ${AD_REWARD_CREDITS_PER_AD} credits/ad × ${Math.round(AD_REWARD_UTILIZATION * 100)}% utilization × $${COST_PER_CREDIT.toFixed(4)} = $${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(3)}/paid user/mo. Net: $${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(3)}/paid user/mo (retention investment, not profit).`);
+  para(`AdMob Observer narration: Device narration plays one ad before each narration; a fully narrated tour is ~${OBSERVER_NARRATION_ADS_PER_TOUR} ads. ${OBSERVER_NARRATION_ADS_PER_TOUR} ads x ${TOURS_PER_FREE_USER_MO} tours/mo x $${ADMOB_PER_IMPRESSION.toFixed(3)} = $${NARRATION_AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo.`);
+  para(`AdMob Observer tools + saves: Audio Recorder / Radio Sweeper (30s ad = 30s use) ~${TOOL_USE_ADS_OBSERVER_MO} ads/mo = $${TOOL_USE_AD_REV_OBSERVER_MO.toFixed(2)}; ad-watched evidence saves (Observer and Seeker) ~${SAVE_ADS_MO}/mo = $${SAVE_AD_REV_MO.toFixed(2)}, each save costs 1 upload credit. Total Observer ad revenue: $${OBSERVER_AD_REV_MO.toFixed(2)}/free user/mo.`);
+  para('Narration modes: Seeker and Technician use Device narration only (0 credits, no ads). Explorer / Investigator / Trailblazer can use Device (free) or Enhanced (spends narration energy). Rewarded energy top-up ads apply to Explorer+ only.');
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
   para(`Two-Pass Stop Enrichment (Sept 2026): Single-site tours (landmark, ship, cold_spot) run a second LLM pass (rewriteForStopFocus). Doubles enrichment cost to ~${ENRICHMENT_CREDITS_SINGLE_SITE} credits for those tours. Blended average: ~${AVG_ENRICHMENT_CREDITS} credits/enrichment. Blended manifestation rate: ~${BLENDED_MANIFESTATION_CREDITS} credits/manifestation energy.`);
 
@@ -448,15 +537,16 @@ function downloadPDF() {
     adMobScenarios.map(s => [s.label, '$' + s.monthlyRev.toFixed(2), '$' + s.annualRev.toFixed(2)]),
     [120, 80, 80]);
 
-  heading('8b. AdMob Rewarded Ad Revenue (Paid Users — Energy Top-Ups)');
-  table(['Paid Users', 'Ad Rev/mo', 'Energy Cost/mo', 'Net/mo', 'Credits/mo'],
+  heading('8b. AdMob Rewarded Ad Revenue (Explorer+ — Energy Top-Ups)');
+  table(['Explorer+ Users', 'Ad Rev/mo', 'Energy Cost/mo', 'Net/mo', 'Credits/mo'],
     rewardedAdScenarios.map(s => [s.label, '$' + s.monthlyAdRev.toFixed(2), '$' + s.monthlyEnergyCost.toFixed(2), '$' + s.monthlyNet.toFixed(2), s.monthlyCredits.toLocaleString()]),
     [90, 70, 70, 60, 60]);
 
-  heading('9. Revenue Scenarios (Monthly, 70% Utilization)');
-  table(['Scenario', 'Sub Rev', 'Interstitial', 'Rewarded', 'Total Rev', 'B44 Plan', 'Store', 'RevCat', 'Fixed', 'Total Cost', 'Profit', 'Margin'],
-    scenarios.map(s => [s.label, '$' + s.subRev.toFixed(0), '$' + s.interstitialAdRev.toFixed(0), '$' + s.rewardedAdRev.toFixed(0), '$' + s.totalRev.toFixed(0), '$' + s.platformCosts, '$' + s.storeCosts.toFixed(0), '$' + s.revcatCost.toFixed(0), '$' + s.fixedCost.toFixed(0), '$' + s.totalCost.toFixed(0), '$' + s.profit.toFixed(0), s.margin.toFixed(1) + '%']),
-    [70, 30, 30, 30, 35, 30, 25, 25, 25, 30, 30, 25]);
+  heading('9. Revenue Scenarios (Monthly Profit & Loss, 70% Utilization)');
+  para('The app as built, at four user scales. Mix: ~30% Seeker, ~20% Technician, ~30% Explorer, ~15% Investigator, ~5% Trailblazer.');
+  table(['Monthly P&L', ...scenarios.map(s => s.label.split(' ')[0])],
+    pnlRows.map(r => r.section ? [r.section.toUpperCase(), '', '', '', ''] : [r.label, ...scenarios.map(s => r.val(s))]),
+    [230, 70, 70, 70, 70]);
 
   heading('9a. Base44 Plan Required Per Scenario');
   para('Total monthly integration credits consumed by paid users (70% utilization) plus credits from consumed ad-reward energy, and the minimum Base44 plan needed. Seeker and Technician have 0 AI energy — 0 credits. Free (Observer) users are gated — 0 credits.');
@@ -467,12 +557,13 @@ function downloadPDF() {
   heading('10. Key Takeaways');
   para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Seeker and Technician users consume 0 AI credits (0 energy) — they do NOT count against credit capacity. Free (Observer) users are gated (0 credits). Must upgrade plans to scale AI features only.');
   para('NEW HIGH-MARGIN TIERS (Oct 2026): Seeker ($3.99/mo) and Technician ($5.99/mo) have 0 AI energy — they consume 0 platform credits. Their only cost is the 15% store fee. Seeker nets ~$3.39/mo, Technician ~$5.09/mo per user. These tiers capture ad-averse users who don\'t need AI features, adding high-margin revenue that subsidizes the credit-consuming Explorer+ tiers.');
+  para(`OBSERVER AD REVENUE (as built): each free user earns ~$${OBSERVER_AD_REV_MO.toFixed(2)}/mo: stop ads $${AD_REV_PER_FREE_USER_MO.toFixed(2)} + narration ads $${NARRATION_AD_REV_PER_FREE_USER_MO.toFixed(2)} (${OBSERVER_NARRATION_ADS_PER_TOUR} ads per fully narrated tour) + tool ads $${TOOL_USE_AD_REV_OBSERVER_MO.toFixed(2)} + save ads $${SAVE_AD_REV_MO.toFixed(2)}. At 5,000 free users that is ~$${Math.round(5000 * OBSERVER_AD_REV_MO).toLocaleString()}/mo. Seeker and Technician use Device narration only: 0 AI credits and no stop or narration ads (Seeker earns only ad-watched evidence saves).`);
   para(`Store fees (15% IAP) are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30). The app publishes natively via Apple/Google IAP.`);
   para(`Full narration cost: ~${FULL_TOUR_NARRATION_CREDITS} credits/tour = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour. Explorer ~${TOURS_PER_ENERGY(500)} tour/mo, Investigator ~${TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~${TOURS_PER_ENERGY(1500)} tours/mo.`);
   para(`Seeker yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin (0 platform credits — only 15% store fee). Technician ~${monthlyAnalysis[1].margin.toFixed(0)}%. Explorer ~${monthlyAnalysis[2].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[3].margin.toFixed(0)}%. Seeker and Technician are the highest-margin tiers (0 AI energy = 0 platform cost).`);
   para(`Trailblazer is profitable at 100% utilization (~${trailblazerAnalysis.margin.toFixed(0)}% margin = $${trailblazerAnalysis.profit.toFixed(0)} profit over 30 months). At 50% realistic usage, margin improves to ~${trailblazer50.margin.toFixed(0)}%. The 300-slot cap protects against credit cost exposure.`);
   para('AdMob interstitial revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
-  para(`Rewarded ads (paid users) generate ~$${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but granted energy costs ~$${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~$${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a retention investment, not a profit center.`);
+  para(`Rewarded ads (Explorer+ users) generate ~$${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but granted energy costs ~$${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~$${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a retention investment, not a profit center.`);
   para('Fixed costs (~$' + fixedOngoingMonthly.toFixed(0) + '/mo ongoing) are negligible at scale but matter for small operations. First-year total: $' + fixedFirstYearTotal + ' (includes $' + DEV_UPFRONT_ONE_TIME + ' CatDoes upfront).');
   para(`RevenueCat 1% above $2,500/mo is minimal vs. store fees — only ~$${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.`);
   para(`RISK: Apple fee jumps to 30% above $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing $${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M.`);
@@ -486,9 +577,7 @@ function downloadPDF() {
   doc.save('AGES-Plan-Analysis.pdf');
 }
 
-const th = 'text-left py-2 px-3 font-heading uppercase text-[11px] tracking-wider text-muted-foreground border-b border-border';
-const td = 'py-2 px-3 text-sm border-b border-border/50';
-const num = 'text-right tabular-nums';
+// Table class names (th / td / num) live in @/components/planAnalysis/tableStyles
 
 export default function PlanAnalysis() {
   const [authState, setAuthState] = useState({ loading: true, isAdmin: false });
@@ -556,6 +645,8 @@ export default function PlanAnalysis() {
           <h1 className="font-heading text-2xl font-bold print-text">AGES Subscription Plan &amp; Profit Analysis</h1>
           <p className="text-sm print-muted mt-1">Generated {today}</p>
         </div>
+
+        <StartHere tiers={TIER_ECONOMICS} scenarios={scenarios} />
 
         {/* 1. Subscription Plans */}
         <section className="mb-8">
@@ -630,6 +721,9 @@ export default function PlanAnalysis() {
             <p className="print-text"><span className="font-semibold">Fixed costs:</span> Apple Developer ${APPLE_DEV_ANNUAL}/yr · Google Play ${GOOGLE_DEV_ONE_TIME} one-time · CatDoes ${DEV_UPFRONT_ONE_TIME} upfront (one-time, no profit share)</p>
             <p className="print-text text-xs italic"><span className="font-semibold">Note:</span> Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (e.g. Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by the total credits consumed. The per-credit rate (${COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4–6.</p>
             <p className="print-text"><span className="font-semibold">AdMob:</span> ${ADMOB_ECPM}/1k interstitial impressions (eCPM). Free users see ads on stops 2+ (~{ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)</p>
+            <p className="print-text"><span className="font-semibold">AdMob (Observer narration):</span> Device narration plays one ad before each narration — a fully narrated tour is ~{OBSERVER_NARRATION_ADS_PER_TOUR} ads. {OBSERVER_NARRATION_ADS_PER_TOUR} ads × {TOURS_PER_FREE_USER_MO} tours/mo × ${ADMOB_PER_IMPRESSION.toFixed(3)} = ${NARRATION_AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo</p>
+            <p className="print-text"><span className="font-semibold">AdMob (Observer tools + saves):</span> Audio Recorder / Radio Sweeper (30s ad = 30s use) ~{TOOL_USE_ADS_OBSERVER_MO} ads/mo = ${TOOL_USE_AD_REV_OBSERVER_MO.toFixed(2)}; ad-watched evidence saves (Observer and Seeker) ~{SAVE_ADS_MO}/mo = ${SAVE_AD_REV_MO.toFixed(2)}, each save costs 1 upload credit. <span className="font-semibold">Total Observer ad revenue: ${OBSERVER_AD_REV_MO.toFixed(2)}/free user/mo.</span></p>
+            <p className="print-text"><span className="font-semibold">Narration modes:</span> Seeker and Technician use Device narration only (0 credits, no ads). Explorer / Investigator / Trailblazer can use Device (free) or Enhanced (spends narration energy). Rewarded energy top-up ads apply to Explorer+ only.</p>
             <p className="print-muted text-xs italic">Note: Credits are charged per action at runtime. Users who don't exhaust their monthly energy allotment cost less. Analysis shows 100% utilization (worst case) and 50–70% (realistic average).</p>
             <p className="print-text text-xs font-semibold text-green-500 mt-2">✓ Energy gating is implemented. All actions below are gated — free (Observer) users are blocked, and paid users are limited by their monthly energy allotment. Costs shown reflect gated usage.</p>
             <p className="print-text text-xs mt-2"><span className="font-semibold text-amber-500">⚠ Two-Pass Stop Enrichment (Sept 2026):</span> Single-site tours (landmark, ship, cold_spot) now run a <span className="font-semibold">second LLM pass</span> (rewriteForStopFocus) to remove general property history and keep stop-specific content. This doubles the enrichment cost to ~{ENRICHMENT_CREDITS_SINGLE_SITE} credits for those tours (was {ENRICHMENT_CREDITS_MULTI_SITE}). Area/road_trip tours are unchanged (1 pass). <span className="font-semibold">The user still pays 1 manifestation energy per stop</span> — the extra cost is borne by the app owner. Blended average: ~{AVG_ENRICHMENT_CREDITS} credits/enrichment. Blended manifestation rate: ~{BLENDED_MANIFESTATION_CREDITS} credits/manifestation energy (was {CREDITS_PER_MANIFESTATION}).</p>
@@ -1088,13 +1182,13 @@ export default function PlanAnalysis() {
           </div>
           <p className="text-xs print-muted mt-2 italic">Model: {ADS_PER_TOUR} ads/tour × {TOURS_PER_FREE_USER_MO} tours/mo × ${ADMOB_PER_IMPRESSION.toFixed(3)}/impression = ${AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo. Stop 1 paranormal history is free; stops 2+ show interstitial ads. Ad revenue is not subject to store fees.</p>
 
-          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">8b. Rewarded Ads (Paid Users — Energy Top-Ups)</h3>
-          <p className="text-xs print-muted mb-3">Paid users who hit an energy gate can watch a rewarded ad for +{AD_REWARD_ENERGY} energy (up to {5}/day). Each ad generates ${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)} in ad revenue, but the granted energy costs {AD_REWARD_CREDITS_PER_AD} credits ({Math.round(AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION)} at {Math.round(AD_REWARD_UTILIZATION * 100)}% utilization) = ${((AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION * COST_PER_CREDIT)).toFixed(3)} in platform costs when consumed. <span className="font-semibold">Net: ${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(3)}/paid user/mo</span> — a small retention cost that prevents churn at energy gates.</p>
+          <h3 className="font-heading text-sm font-semibold text-foreground mb-2 mt-6 print-text">8b. Rewarded Ads (Explorer+ — Energy Top-Ups)</h3>
+          <p className="text-xs print-muted mb-3">Explorer+ users who hit an energy gate can watch a rewarded ad for +{AD_REWARD_ENERGY} energy (up to {5}/day). Each ad generates ${ADMOB_REWARDED_PER_IMPRESSION.toFixed(3)} in ad revenue, but the granted energy costs {AD_REWARD_CREDITS_PER_AD} credits ({Math.round(AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION)} at {Math.round(AD_REWARD_UTILIZATION * 100)}% utilization) = ${((AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION * COST_PER_CREDIT)).toFixed(3)} in platform costs when consumed. <span className="font-semibold">Net: ${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(3)}/paid user/mo</span> — a small retention cost that prevents churn at energy gates.</p>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full min-w-[700px]">
               <thead>
                 <tr>
-                  <th className={th}>Paid Users</th>
+                  <th className={th}>Explorer+ Users</th>
                   <th className={`${th} ${num}`}>Ad Rev/mo</th>
                   <th className={`${th} ${num}`}>Energy Cost/mo</th>
                   <th className={`${th} ${num}`}>Net/mo</th>
@@ -1118,48 +1212,11 @@ export default function PlanAnalysis() {
         </section>
 
         {/* 9. Revenue Scenarios */}
-        <section className="mb-8">
+        <section id="projections" className="mb-8 scroll-mt-4">
           <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">9. Revenue Scenarios (Monthly, 70% Avg Utilization)</h2>
-          <p className="text-xs print-muted mb-3">These are the <span className="font-semibold print-text">actual app projections</span> based on the current 6-tier structure (Observer, Seeker, Technician, Explorer, Investigator, Trailblazer). The mix reflects a realistic distribution: ~30% Seeker, ~20% Technician, ~30% Explorer, ~15% Investigator, ~5% Trailblazer. Seeker and Technician contribute subscription revenue with 0 platform credits (only 15% store fee).</p>
-          <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
-            <table className="w-full min-w-[800px]">
-              <thead>
-                <tr>
-                  <th className={th}>Scenario</th>
-                  <th className={`${th} ${num}`}>Sub Rev</th>
-                  <th className={`${th} ${num}`}>Interstitial</th>
-                  <th className={`${th} ${num}`}>Rewarded</th>
-                  <th className={`${th} ${num}`}>Total Rev</th>
-                  <th className={`${th} ${num}`}>Base44 Plan</th>
-                  <th className={`${th} ${num}`}>Store 15%</th>
-                  <th className={`${th} ${num}`}>RevCat</th>
-                  <th className={`${th} ${num}`}>Fixed</th>
-                  <th className={`${th} ${num}`}>Total Cost</th>
-                  <th className={`${th} ${num}`}>Profit</th>
-                  <th className={`${th} ${num}`}>Margin</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scenarios.map(s => (
-                  <tr key={s.label}>
-                    <td className={`${td} font-semibold print-text whitespace-nowrap`}>{s.label}</td>
-                    <td className={`${td} ${num} print-text`}>${s.subRev.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-muted`}>${s.interstitialAdRev.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-muted`}>${s.rewardedAdRev.toFixed(0)}</td>
-                    <td className={`${td} ${num} font-semibold print-text`}>${s.totalRev.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>${s.platformCosts}</td>
-                    <td className={`${td} ${num} print-text`}>${s.storeCosts.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>${s.revcatCost.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>${s.fixedCost.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>${s.totalCost.toFixed(0)}</td>
-                    <td className={`${td} ${num} font-semibold print-text`}>${s.profit.toFixed(0)}</td>
-                    <td className={`${td} ${num} print-text`}>{s.margin.toFixed(1)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). Ad revenue = interstitial (free users) + rewarded (paid users). Seeker and Technician have 0 AI energy — 0 platform credits. Free (Observer) users are gated — 0 credits. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
+          <p className="text-xs print-muted mb-3">Monthly profit and loss for the <span className="font-semibold print-text">app as built</span>, at four user scales (70% utilization of Explorer+ energy). Mix: ~30% Seeker, ~20% Technician, ~30% Explorer, ~15% Investigator, ~5% Trailblazer. Read down a column: users → subscription revenue → ad revenue → costs → profit.</p>
+          <ScenarioPnLTable scenarios={scenarios} rows={pnlRows} />
+          <p className="text-xs print-muted mt-2 italic">Trailblazer revenue amortized over 30 months. 5:1 free-to-paid ratio assumed. "Base44 Plan" = actual monthly plan tier cost for paid-user credits (from section 9a). Ad revenue = Observer stop ads + Observer narration ads + Observer tool ads + Observer/Seeker save ads + Explorer+ rewarded top-ups. Seeker and Technician use Device narration only and have 0 AI energy — 0 platform credits. Free (Observer) users are gated — 0 AI credits. Store fees apply only to IAP subscription revenue, not AdMob. RevenueCat 1% applies above $2,500/mo in subscription sales.</p>
 
           {/* 9a. Base44 Plan Required Per Scenario */}
           <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
@@ -1223,13 +1280,14 @@ export default function PlanAnalysis() {
             <p>• <span className="font-semibold text-red-500">✓ CREDIT CAPACITY: Base44 Builder plan includes only 10,000 credits/mo.</span> At 100% utilization that supports just ~19 Explorer, ~6 Investigator, or ~6 Trailblazer users. Pro (20k credits) doubles capacity. Free (Observer), Seeker, and Technician users consume 0 AI credits — upgrade plans as you scale Explorer+ users only.</p>
             <p>• <span className="font-semibold text-green-500">✓ Energy gating is deployed.</span> All 27 credit-consuming actions are gated. Free (Observer) users are blocked from creating tours, narrating, enriching stops, and using sweepers. Paid users are limited by their monthly energy allotment.</p>
             <p>• <span className="font-semibold text-green-500">✓ NEW HIGH-MARGIN TIERS (Oct 2026):</span> Seeker ($3.99/mo) and Technician ($5.99/mo) have 0 AI energy — they consume 0 platform credits. Their only cost is the 15% store fee. Seeker nets ~$3.39/mo, Technician ~$5.09/mo per user. These tiers capture ad-averse users without AI features, adding high-margin revenue that subsidizes the credit-consuming Explorer+ tiers.</p>
+            <p>• <span className="font-semibold text-green-500">✓ OBSERVER AD REVENUE (as built):</span> each free user earns ~${OBSERVER_AD_REV_MO.toFixed(2)}/mo — stop ads ${AD_REV_PER_FREE_USER_MO.toFixed(2)} + narration ads ${NARRATION_AD_REV_PER_FREE_USER_MO.toFixed(2)} ({OBSERVER_NARRATION_ADS_PER_TOUR} ads per fully narrated tour) + tool ads ${TOOL_USE_AD_REV_OBSERVER_MO.toFixed(2)} + save ads ${SAVE_AD_REV_MO.toFixed(2)}. At 5,000 free users that is ~${Math.round(5000 * OBSERVER_AD_REV_MO).toLocaleString()}/mo. Seeker and Technician use Device narration only: 0 AI credits and no stop or narration ads (Seeker earns only ad-watched evidence saves).</p>
             <p>• <span className="font-semibold">27 credit-consuming actions identified</span> across 14 manifestation (InvokeLLM) and 13 narration (GenerateSpeech) actions. Full audit in section 3c.</p>
             <p>• <span className="font-semibold">Store fees (15% IAP)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30). The app publishes natively via Apple/Google IAP.</p>
             <p>• <span className="font-semibold">Full narration cost:</span> Each fully narrated tour (all 4 tabs per stop + intro + conclusion) costs ~{FULL_TOUR_NARRATION_CREDITS} credits = ${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Energy budgets support: Explorer ~{TOURS_PER_ENERGY(500)} tour/mo, Investigator ~{TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~{TOURS_PER_ENERGY(1500)} tours/mo.</p>
             <p>• <span className="font-semibold">Per-plan margins at 100% utilization:</span> Seeker ~{monthlyAnalysis[0].margin.toFixed(0)}% (0 credits), Technician ~{monthlyAnalysis[1].margin.toFixed(0)}% (0 credits), Explorer ~{monthlyAnalysis[2].margin.toFixed(0)}%, Investigator ~{monthlyAnalysis[3].margin.toFixed(0)}%. Seeker and Technician are the highest-margin tiers (0 AI energy = 0 platform cost). All tiers are healthier when energy goes unused.</p>
             <p>• <span className="font-semibold text-green-500">✓ Trailblazer is profitable at all utilization levels</span> (~{trailblazerAnalysis.margin.toFixed(0)}% margin at 100% = ${trailblazerAnalysis.profit.toFixed(0)} profit over 30 months; ~{trailblazer50.margin.toFixed(0)}% at 50% realistic usage). The 300-slot cap protects against credit cost exposure.</p>
             <p>• <span className="font-semibold">AdMob revenue</span> from free users (interstitial) meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
-            <p>• <span className="font-semibold">Rewarded ads</span> (paid users) generate ~${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but the granted energy costs ~${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a <span className="font-semibold">retention investment</span>, not a profit center.</p>
+            <p>• <span className="font-semibold">Rewarded ads</span> (Explorer+ users) generate ~${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but the granted energy costs ~${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a <span className="font-semibold">retention investment</span>, not a profit center.</p>
             <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal} (includes ${DEV_UPFRONT_ONE_TIME} CatDoes upfront).</p>
             <p>• <span className="font-semibold">RevenueCat</span> 1% above $2,500/mo is minimal vs. store fees — only ~${revenuecatFee(7104).toFixed(0)}/mo at the Mature scenario.</p>
             <p>• <span className="font-semibold">RISK:</span> Apple's fee jumps to 30% above ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M/yr revenue. At that rate, Trailblazer becomes a small loss at 100% utilization (~-7% margin) but remains profitable at 50% realistic usage (~31% margin). Revisit pricing before crossing ${(STORE_HIGH_THRESHOLD / 1000000).toFixed(0)}M.</p>
