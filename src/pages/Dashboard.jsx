@@ -54,14 +54,14 @@ const PLAN_HIGHLIGHTS = {
   trailblazer: 'EXCLUSIVE 30-MONTH ACCESS... MOST BANG FOR YOUR BUCK!',
 };
 
-// Per-tier label colors — a vibrancy ladder stepping up to gold (Trailblazer).
-// Gray (free) → green → teal → blue → violet → gold (premium standout).
+// Per-tier label colors — a medal ladder for the paid tiers.
+// Slate (free) → green → violet → Bronze → Silver → Gold (premium standout).
 const PLAN_LABEL_COLORS = {
   observer:     'bg-slate-500/20 text-slate-400 border-slate-500/40',
-  seeker:       'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
-  technician:   'bg-teal-500/20 text-teal-400 border-teal-500/40',
-  explorer:     'bg-sky-500/20 text-sky-400 border-sky-500/40',
-  investigator: 'bg-violet-500/25 text-violet-300 border-violet-500/50',
+  seeker:       'bg-green-500/20 text-green-400 border-green-500/40',
+  technician:   'bg-violet-500/20 text-violet-400 border-violet-500/40',
+  explorer:     'bg-orange-700/25 text-orange-500 border-orange-700/50',
+  investigator: 'bg-slate-300/15 text-slate-200 border-slate-300/50',
   trailblazer:  'bg-amber-500/25 text-amber-300 border-amber-500/60',
 };
 
