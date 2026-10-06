@@ -45,6 +45,15 @@ import {
   waitForGoogleTrailblazerGrant,
 } from '@/lib/revenuecat';
 
+// Short, prominent advantage highlight shown next to each subscription name.
+const PLAN_HIGHLIGHTS = {
+  seeker: 'AD-FREE USAGE!',
+  technician: 'MORE TOOL ACCESS!',
+  explorer: 'ENHANCED NARRATION + TOUR CREATION!',
+  investigator: 'FULL TOOLKIT ACCESS + INCREASED ENERGY!',
+  trailblazer: 'EXCLUSIVE 30-MONTH ACCESS... MOST BANG FOR YOUR BUCK!',
+};
+
 export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [purchases, setPurchases] = useState([]);
@@ -581,6 +590,11 @@ export default function Dashboard() {
                       {isTrailblazer && <span className="text-[10px] text-amber-400 font-heading">30-Month Elite · 6 Months Free</span>}
                     </div>
                   </div>
+                  {PLAN_HIGHLIGHTS[planId] && (
+                    <div className="mb-3 px-3 py-2 rounded-lg bg-primary/15 border border-primary/40">
+                      <p className="text-base font-bold text-primary tracking-wide leading-tight">{PLAN_HIGHLIGHTS[planId]}</p>
+                    </div>
+                  )}
                   <div className="flex items-baseline gap-2 mb-3">
                     {isObserver ? (
                       <span className="font-display text-2xl text-muted-foreground">Free</span>
