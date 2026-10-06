@@ -15,6 +15,7 @@ import {
   AdMob,
   AdmobConsentStatus,
   MaxAdContentRating,
+  RewardAdPluginEvents,
 } from '@capacitor-community/admob';
 import { isPaidAccess } from '@/lib/access';
 import { base44 } from '@/api/base44Client';
@@ -452,24 +453,93 @@ export async function showRewardedAd(options) {
           return { rewarded: false, reason: 'no_fill' };
         }
 
-        try {
-          const result = await AdMob.showRewardVideoAd();
-          recordAdDiag('rewarded', 'shown', {
-            ok: true,
-            message: `Rewarded ad presented; reward earned (amount: ${result?.amount || 0}). Unit: ${rewardedAdId}`,
-            data: { adId: rewardedAdId, amount: result?.amount || 0 },
-          });
-          // Only treat a resolved reward callback/promise as rewarded — not dismiss alone.
-          return { rewarded: true, amount: result?.amount || 0 };
-        } catch (showError) {
-          const showDesc = describeAdError(showError);
-          recordAdDiag('rewarded', 'show-failed', {
-            ok: false,
-            message: `Rewarded ad presentation failed. ${showDesc.code ? `[${showDesc.code}] ` : ''}${showDesc.message}`,
-            data: { ...showDesc, adId: rewardedAdId },
-          });
-          return { rewarded: false, reason: 'dismissed' };
-        }
+        // Earned-reward gate: a reward counts ONLY when AdMob's official
+        // Rewarded event (onRewardedVideoAdReward) fires — not when the ad
+        // opens, starts, is dismissed/closed, or the user returns to the app.
+        // We register listeners for Rewarded, Dismissed, and FailedToShow,
+        // then call showRewardVideoAd(). The `rewarded` flag is set only by
+        // the Rewarded event; we settle on Dismissed or FailedToShow so an
+        // incomplete/abandoned ad never grants a reward (and never hangs).
+        let earnedAmount = 0;
+        const earned = await new Promise((resolve) => {
+          let rewarded = false;
+          let settled = false;
+          /** @type {import('@capacitor/core').PluginListenerHandle | null} */
+          let hRewarded = null;
+          let hDismissed = null;
+          let hFailed = null;
+          const cleanup = () => {
+            [hRewarded, hDismissed, hFailed].forEach((h) => {
+              try { h && h.remove(); } catch { /* noop */ }
+            });
+          };
+          const settle = (val) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(val);
+          };
+
+          (async () => {
+            hRewarded = await AdMob.addListener(
+              RewardAdPluginEvents.Rewarded,
+              (item) => {
+                rewarded = true;
+                earnedAmount = item?.amount || 0;
+                recordAdDiag('rewarded', 'earned', {
+                  ok: true,
+                  message: `Rewarded ad earned-reward callback fired (amount: ${earnedAmount}). Unit: ${rewardedAdId}`,
+                  data: { adId: rewardedAdId, amount: earnedAmount },
+                });
+              },
+            );
+            hDismissed = await AdMob.addListener(
+              RewardAdPluginEvents.Dismissed,
+              () => {
+                recordAdDiag('rewarded', 'dismissed', {
+                  message: `Rewarded ad dismissed (earned: ${rewarded}). Unit: ${rewardedAdId}`,
+                  data: { adId: rewardedAdId, earned: rewarded },
+                });
+                settle({ rewarded });
+              },
+            );
+            hFailed = await AdMob.addListener(
+              RewardAdPluginEvents.FailedToShow,
+              (err) => {
+                const failDesc = describeAdError(err);
+                recordAdDiag('rewarded', 'show-failed', {
+                  ok: false,
+                  message: `Rewarded ad failed to show. ${failDesc.code ? `[${failDesc.code}] ` : ''}${failDesc.message}`,
+                  data: { ...failDesc, adId: rewardedAdId },
+                });
+                settle({ rewarded: false, reason: 'dismissed' });
+              },
+            );
+
+            try {
+              // showRewardVideoAd() may resolve on earn (Android) or dismiss
+              // (other platforms). Its resolution is NOT treated as a reward —
+              // only the Rewarded event above is. We rely on Dismissed /
+              // FailedToShow to settle, so an abandoned ad never hangs.
+              await AdMob.showRewardVideoAd();
+            } catch (showError) {
+              const showDesc = describeAdError(showError);
+              recordAdDiag('rewarded', 'show-failed', {
+                ok: false,
+                message: `Rewarded ad presentation failed. ${showDesc.code ? `[${showDesc.code}] ` : ''}${showDesc.message}`,
+                data: { ...showDesc, adId: rewardedAdId },
+              });
+              settle({ rewarded: false, reason: 'dismissed' });
+            }
+          })();
+        });
+
+        recordAdDiag('rewarded', 'shown', {
+          ok: earned.rewarded,
+          message: `Rewarded ad settled (earned: ${earned.rewarded}, amount: ${earnedAmount}). Unit: ${rewardedAdId}`,
+          data: { adId: rewardedAdId, earned: earned.rewarded, amount: earnedAmount },
+        });
+        return { rewarded: earned.rewarded, amount: earnedAmount };
       } catch (e) {
         console.warn('AdMob rewarded ad failed:', e);
         return { rewarded: false };

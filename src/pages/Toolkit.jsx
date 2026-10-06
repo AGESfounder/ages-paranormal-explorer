@@ -1432,14 +1432,13 @@ Best Practices
             </div>
             <ToolAdGate
               toolName={adGateTool.name}
+              remaining={toolAdGate.remaining}
+              earned={toolAdGate.earned}
               watching={toolAdGate.watching}
               granting={toolAdGate.granting}
               adError={toolAdGate.adError}
-              onWatchAd={async () => {
-                const result = await toolAdGate.watchAd(adGateTool.name);
-                if (result) handleAdGranted(adGateTool);
-              }}
-              earned={toolAdGate.earned}
+              onWatchAd={() => toolAdGate.watchAd(adGateTool.name)}
+              onUseNow={() => handleAdGranted(adGateTool)}
             />
           </motion.div>
         ) : activeTool ? (

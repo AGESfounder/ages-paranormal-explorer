@@ -8,6 +8,7 @@ import SectionHeader from '@/components/SectionHeader';
 import EnergyMeter from '@/components/EnergyMeter';
 import TierToolkitAccess from '@/components/TierToolsComparison';
 import { base44 } from '@/api/base44Client';
+import { showRewardedAd } from '@/lib/adService';
 import { PLANS, AURA_BUNDLES, PLAN_ORDER } from '@/lib/plans';
 import AdRewardCard from '@/components/AdRewardCard';
 import {
@@ -70,6 +71,7 @@ export default function Dashboard() {
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(null);
+  const [stockingUp, setStockingUp] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -113,6 +115,27 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Observer stock-up: watch a rewarded ad, then grant 30s of Tool Time for
+  // the given ad-gated tool (server-side, capped at 300s/day). Refreshes the
+  // user record so the tile shows the new balance. The reward is granted only
+  // when AdMob's earned-reward callback fires (see showRewardedAd).
+  const handleStockUp = async (toolName) => {
+    if (stockingUp) return;
+    setStockingUp(toolName);
+    try {
+      const result = await showRewardedAd({ userId: user?.id });
+      if (!result?.rewarded) return; // incomplete/abandoned ad — no grant
+      const res = await base44.functions.invoke('grant-tool-time', { toolName });
+      if (res.data?.success) {
+        await loadData(); // refresh user.tool_banks
+      }
+    } catch (e) {
+      console.error('Stock up failed:', e);
+    } finally {
+      setStockingUp(null);
+    }
+  };
 
   const handlePurchase = async (productId) => {
     setRedirecting(productId);
@@ -505,7 +528,11 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-3">
           <DashboardEvidenceTile user={user} />
           {effectivePlanId === 'observer' && !isAdmin && (
-            <DashboardToolBanksTile user={user} />
+            <DashboardToolBanksTile
+              user={user}
+              onStockUp={handleStockUp}
+              stockingUp={stockingUp}
+            />
           )}
 
         </div>
