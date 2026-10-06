@@ -8,9 +8,13 @@ import { ArrowLeft } from 'lucide-react';
 // ===== DATA (mirrors src/lib/plans.js + base44/shared/plans.js) =====
 const PLANS = [
   { name: 'Observer', price: '$0', billing: 'Free forever', manE: 0, narE: 0,
-    features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; save favorites' },
+    features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; device narration; save favorites; 4-tool toolkit (2 ad-gated: Audio Recorder, Radio Sweeper — 30s ad = 30s use, 300s/day cap); evidence saves 10/day (ad-watched); evidence journal + dashboard' },
+  { name: 'Seeker', price: '$3.99', billing: 'Monthly ($39.99/yr)', manE: 0, narE: 0,
+    features: 'Everything in Observer, ad-free; 4-tool toolkit (no ads); community map posting; evidence saves 10/day (no ad); Aura Bundle access (Save Energy only)' },
+  { name: 'Technician', price: '$5.99', billing: 'Monthly ($59.99/yr)', manE: 0, narE: 0,
+    features: 'Everything in Seeker; 10 of 12 toolkit tools; Aura Bundle access (100% Save Energy); evidence saves 20/day, then Aura Save energy' },
   { name: 'Explorer', price: '$7.99', billing: 'Monthly ($79.99/yr)', manE: 5, narE: 500,
-    features: 'AI narration (~1 fully narrated tour/mo, all tabs); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 8-tool toolkit; aura bundles' },
+    features: 'Everything in Technician; AI narration (~1 fully narrated tour/mo, all tabs); custom tour generation (1-2/mo); ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 10-tool toolkit; aura bundles (80/20 narration/manifestation)' },
   { name: 'Investigator', price: '$11.99', billing: 'Monthly ($119.99/yr)', manE: 15, narE: 1500,
     features: 'Everything in Explorer; AI narration (~3 fully narrated tours/mo, all tabs); custom tours (up to 5/mo); full 12-tool toolkit; evidence dashboard analytics; aura bundles' },
   { name: 'Trailblazer', price: '$239.99', billing: 'One-time, 30 months (6 months free, max 300 slots)', manE: 15, narE: 1500,
@@ -124,8 +128,10 @@ const TOURS_PER_ENERGY = (narE) => Math.floor(narE / FULL_TOUR_NARRATION_CREDITS
 // tools (Term Sweeper, Alphabet Sweeper, Anomaly Camera, Vibration Communicator)
 // to lower-tier users, increasing upgrade motivation.
 const TOOLKIT_TIERS = [
-  { tier: 'Observer (Free)', visible: 12, accessible: 2, locked: 10, accessibleTools: 'Equipment Guide, Safety Protocol', lockedTools: 'Audio Recorder, Radio Sweeper, Term Sweeper, Alphabet Sweeper, Yes/No Sweeper, Vibration Communicator, Anomaly Camera, Weather Monitor, Moon Phase, Paranormal Research' },
-  { tier: 'Explorer ($7.99)', visible: 12, accessible: 8, locked: 4, accessibleTools: 'Audio Recorder, Radio Sweeper, Yes/No Sweeper, Equipment Guide, Weather Monitor, Moon Phase, Paranormal Research, Safety Protocol', lockedTools: 'Term Sweeper, Alphabet Sweeper, Vibration Communicator, Anomaly Camera' },
+  { tier: 'Observer (Free)', visible: 12, accessible: 4, locked: 8, accessibleTools: 'Audio Recorder (ad-gated), Radio Sweeper (ad-gated), Equipment Guide, Safety Protocol', lockedTools: 'Yes/No Sweeper, Vibration Communicator, Alphabet Sweeper, Weather Monitor, Moon Phase, Paranormal Research: Terms, Term Sweeper, Anomaly Camera' },
+  { tier: 'Seeker ($3.99)', visible: 12, accessible: 4, locked: 8, accessibleTools: 'Audio Recorder, Radio Sweeper, Equipment Guide, Safety Protocol (all ad-free)', lockedTools: 'Yes/No Sweeper, Vibration Communicator, Alphabet Sweeper, Weather Monitor, Moon Phase, Paranormal Research: Terms, Term Sweeper, Anomaly Camera' },
+  { tier: 'Technician ($5.99)', visible: 12, accessible: 10, locked: 2, accessibleTools: 'Audio Recorder, Radio Sweeper, Yes/No Sweeper, Vibration Communicator, Alphabet Sweeper, Weather Monitor, Moon Phase, Paranormal Research: Terms, Equipment Guide, Safety Protocol', lockedTools: 'Term Sweeper, Anomaly Camera' },
+  { tier: 'Explorer ($7.99)', visible: 12, accessible: 10, locked: 2, accessibleTools: 'Audio Recorder, Radio Sweeper, Yes/No Sweeper, Vibration Communicator, Alphabet Sweeper, Weather Monitor, Moon Phase, Paranormal Research: Terms, Equipment Guide, Safety Protocol', lockedTools: 'Term Sweeper, Anomaly Camera' },
   { tier: 'Investigator ($11.99)', visible: 12, accessible: 12, locked: 0, accessibleTools: 'All 12 tools', lockedTools: '—' },
   { tier: 'Trailblazer ($239.99)', visible: 12, accessible: 12, locked: 0, accessibleTools: 'All 12 tools', lockedTools: '—' },
 ];
@@ -244,7 +250,10 @@ function requiredBase44Plan(credits) {
 }
 
 // Per-plan monthly profit (1 month, 100% utilization)
+// Seeker and Technician have 0 AI energy — 0 platform credits, only store fee.
 const monthlyAnalysis = [
+  { plan: 'Seeker', price: 3.99, manE: 0, narE: 0 },
+  { plan: 'Technician', price: 5.99, manE: 0, narE: 0 },
   { plan: 'Explorer', price: 7.99, manE: 5, narE: 500 },
   { plan: 'Investigator', price: 11.99, manE: 15, narE: 1500 },
 ].map(p => {
@@ -326,22 +335,29 @@ const rewardedAdScenarios = [
 }));
 
 // Revenue scenarios (monthly, 70% avg utilization, includes ad revenue + all costs)
+// Mix now includes Seeker ($3.99, 0 energy) and Technician ($5.99, 0 energy) —
+// both are high-margin (0 platform credits, only 15% store fee). Realistic
+// distribution: Seeker is the largest paid tier (low price point), Technician
+// is the second largest, Explorer/Investigator/Trailblazer are smaller.
 const scenarios = [
-  { label: 'Small (50 paid / 250 free)', mix: { explorer: 30, investigator: 15, trailblazer: 5 }, freeUsers: 250 },
-  { label: 'Growing (200 paid / 1,000 free)', mix: { explorer: 130, investigator: 55, trailblazer: 15 }, freeUsers: 1000 },
-  { label: 'Scale (500 paid / 2,500 free)', mix: { explorer: 330, investigator: 140, trailblazer: 30 }, freeUsers: 2500 },
-  { label: 'Mature (1,000 paid / 5,000 free)', mix: { explorer: 680, investigator: 270, trailblazer: 50 }, freeUsers: 5000 },
+  { label: 'Small (50 paid / 250 free)', mix: { seeker: 15, technician: 10, explorer: 15, investigator: 7, trailblazer: 3 }, freeUsers: 250 },
+  { label: 'Growing (200 paid / 1,000 free)', mix: { seeker: 60, technician: 40, explorer: 60, investigator: 30, trailblazer: 10 }, freeUsers: 1000 },
+  { label: 'Scale (500 paid / 2,500 free)', mix: { seeker: 150, technician: 100, explorer: 150, investigator: 75, trailblazer: 25 }, freeUsers: 2500 },
+  { label: 'Mature (1,000 paid / 5,000 free)', mix: { seeker: 300, technician: 200, explorer: 300, investigator: 150, trailblazer: 50 }, freeUsers: 5000 },
 ].map(s => {
+  const seekerRev = s.mix.seeker * 3.99;
+  const technicianRev = s.mix.technician * 5.99;
   const explorerRev = s.mix.explorer * 7.99;
   const investigatorRev = s.mix.investigator * 11.99;
   const trailblazerRev = s.mix.trailblazer * (239.99 / 30);
-  const subRev = explorerRev + investigatorRev + trailblazerRev;
-  const totalPaidUsers = s.mix.explorer + s.mix.investigator + s.mix.trailblazer;
+  const subRev = seekerRev + technicianRev + explorerRev + investigatorRev + trailblazerRev;
+  const totalPaidUsers = s.mix.seeker + s.mix.technician + s.mix.explorer + s.mix.investigator + s.mix.trailblazer;
   const interstitialAdRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
   const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
   const adRev = interstitialAdRev + rewardedAdRev;
   const totalRev = subRev + adRev;
   const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
+  // Seeker and Technician have 0 AI energy — 0 platform credits
   const totalCredits = Math.round(
     s.mix.explorer * calcCosts(5 * 0.7, 500 * 0.7, 1).credits
     + s.mix.investigator * calcCosts(15 * 0.7, 1500 * 0.7, 1).credits
@@ -357,7 +373,7 @@ const scenarios = [
   const fixedCost = fixedOngoingMonthly;
   const totalCost = platformCosts + storeCosts + revcatCost + fixedCost;
   const profit = totalRev - totalCost;
-  return { ...s, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, rewardedAdRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, base44Plan };
+  return { ...s, seekerRev, technicianRev, explorerRev, investigatorRev, trailblazerRev, subRev, interstitialAdRev, rewardedAdRev, adRev, totalRev, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100), totalCredits, rewardedAdCredits, base44Plan };
 });
 
 // ===== DEVICE NARRATION HYPOTHETICALS (Oct 2026) =====
@@ -436,19 +452,22 @@ const hypo3Trail = (() => { const c = calcCosts(15, 0, 30); const sf = storeFee(
 // ads modeled here are ADDITIVE — a new revenue stream on top of the
 // rewarded-ad top-up, not a replacement for it.
 function hypoMatureScenario(narCreditsByPlan, observerAdRev, paidAdRevPerUser) {
-  const mix = { explorer: 680, investigator: 270, trailblazer: 50 };
+  const mix = { seeker: 300, technician: 200, explorer: 300, investigator: 150, trailblazer: 50 };
   const freeUsers = 5000;
+  const seekerRev = mix.seeker * 3.99;
+  const technicianRev = mix.technician * 5.99;
   const explorerRev = mix.explorer * 7.99;
   const investigatorRev = mix.investigator * 11.99;
   const trailblazerRev = mix.trailblazer * (239.99 / 30);
-  const subRev = explorerRev + investigatorRev + trailblazerRev;
-  const totalPaidUsers = mix.explorer + mix.investigator + mix.trailblazer;
+  const subRev = seekerRev + technicianRev + explorerRev + investigatorRev + trailblazerRev;
+  const totalPaidUsers = mix.seeker + mix.technician + mix.explorer + mix.investigator + mix.trailblazer;
   const interstitialAdRev = freeUsers * AD_REV_PER_FREE_USER_MO;
   const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
   const narrationAdRev = freeUsers * observerAdRev + totalPaidUsers * paidAdRevPerUser;
   const adRev = interstitialAdRev + rewardedAdRev + narrationAdRev;
   const totalRev = subRev + adRev;
   const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
+  // Seeker and Technician have 0 AI energy — 0 platform credits
   const totalCredits = Math.round(
     mix.explorer * calcCosts(5 * 0.7, narCreditsByPlan.explorer * 0.7, 1).credits
     + mix.investigator * calcCosts(15 * 0.7, narCreditsByPlan.investigator * 0.7, 1).credits
@@ -505,13 +524,15 @@ const hypo2ToolkitPlans = [
 // Same as hypoMatureScenario but adds toolkit ad revenue (use-time + save-gate)
 // and save upload cost. Credits unchanged — device-only tools cost 0 credits.
 function hypoMatureWithToolkit(narCreditsByPlan, observerAdRev, paidAdRevPerUser) {
-  const mix = { explorer: 680, investigator: 270, trailblazer: 50 };
+  const mix = { seeker: 300, technician: 200, explorer: 300, investigator: 150, trailblazer: 50 };
   const freeUsers = 5000;
+  const seekerRev = mix.seeker * 3.99;
+  const technicianRev = mix.technician * 5.99;
   const explorerRev = mix.explorer * 7.99;
   const investigatorRev = mix.investigator * 11.99;
   const trailblazerRev = mix.trailblazer * (239.99 / 30);
-  const subRev = explorerRev + investigatorRev + trailblazerRev;
-  const totalPaidUsers = mix.explorer + mix.investigator + mix.trailblazer;
+  const subRev = seekerRev + technicianRev + explorerRev + investigatorRev + trailblazerRev;
+  const totalPaidUsers = mix.seeker + mix.technician + mix.explorer + mix.investigator + mix.trailblazer;
   const interstitialAdRev = freeUsers * AD_REV_PER_FREE_USER_MO;
   const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
   const narrationAdRev = freeUsers * observerAdRev + totalPaidUsers * paidAdRevPerUser;
@@ -522,6 +543,7 @@ function hypoMatureWithToolkit(narCreditsByPlan, observerAdRev, paidAdRevPerUser
   const adRev = interstitialAdRev + rewardedAdRev + narrationAdRev + toolkitAdRev;
   const totalRev = subRev + adRev;
   const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
+  // Seeker and Technician have 0 AI energy — 0 platform credits
   const totalCredits = Math.round(
     mix.explorer * calcCosts(5 * 0.7, narCreditsByPlan.explorer * 0.7, 1).credits
     + mix.investigator * calcCosts(15 * 0.7, narCreditsByPlan.investigator * 0.7, 1).credits
@@ -547,11 +569,13 @@ const hypo2ToolkitTrail = hypo2Trail;
 // Section 13: HYPO 2 + Toolkit AdGate across all 4 revenue scenarios (mirrors section 9)
 function hypo2ToolkitScenario(mix, freeUsers) {
   const narCreditsByPlan = { explorer: Math.round(500 * (1 - HYPO2_DEVICE_FRACTION)), investigator: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)), trailblazer: Math.round(1500 * (1 - HYPO2_DEVICE_FRACTION)) };
+  const seekerRev = (mix.seeker || 0) * 3.99;
+  const technicianRev = (mix.technician || 0) * 5.99;
   const explorerRev = mix.explorer * 7.99;
   const investigatorRev = mix.investigator * 11.99;
   const trailblazerRev = mix.trailblazer * (239.99 / 30);
-  const subRev = explorerRev + investigatorRev + trailblazerRev;
-  const totalPaidUsers = mix.explorer + mix.investigator + mix.trailblazer;
+  const subRev = seekerRev + technicianRev + explorerRev + investigatorRev + trailblazerRev;
+  const totalPaidUsers = (mix.seeker || 0) + (mix.technician || 0) + mix.explorer + mix.investigator + mix.trailblazer;
   const interstitialAdRev = freeUsers * AD_REV_PER_FREE_USER_MO;
   const rewardedAdRev = totalPaidUsers * AD_REWARD_REV_PER_PAID_USER_MO;
   const narrationAdRev = freeUsers * HYPO1_OBSERVER_ADREV + totalPaidUsers * HYPO2_EXPLORER_ADREV;
@@ -562,6 +586,7 @@ function hypo2ToolkitScenario(mix, freeUsers) {
   const adRev = interstitialAdRev + rewardedAdRev + narrationAdRev + toolkitAdRev;
   const totalRev = subRev + adRev;
   const rewardedAdCredits = Math.round(totalPaidUsers * ADS_PER_PAID_USER_MO * AD_REWARD_CREDITS_PER_AD * AD_REWARD_UTILIZATION);
+  // Seeker and Technician have 0 AI energy — 0 platform credits
   const totalCredits = Math.round(
     mix.explorer * calcCosts(5 * 0.7, narCreditsByPlan.explorer * 0.7, 1).credits
     + mix.investigator * calcCosts(15 * 0.7, narCreditsByPlan.investigator * 0.7, 1).credits
@@ -578,10 +603,10 @@ function hypo2ToolkitScenario(mix, freeUsers) {
   return { subRev, interstitialAdRev, rewardedAdRev, narrationAdRev, toolkitAdRev, toolkitSaveCost, adRev, totalRev, totalCredits, rewardedAdCredits, base44Plan, platformCosts, storeCosts, revcatCost, fixedCost, totalCost, profit, margin: (profit / totalRev * 100) };
 }
 const hypo2ToolkitScenarios = [
-  { label: 'Small (50 paid / 250 free)', mix: { explorer: 30, investigator: 15, trailblazer: 5 }, freeUsers: 250 },
-  { label: 'Growing (200 paid / 1,000 free)', mix: { explorer: 130, investigator: 55, trailblazer: 15 }, freeUsers: 1000 },
-  { label: 'Scale (500 paid / 2,500 free)', mix: { explorer: 330, investigator: 140, trailblazer: 30 }, freeUsers: 2500 },
-  { label: 'Mature (1,000 paid / 5,000 free)', mix: { explorer: 680, investigator: 270, trailblazer: 50 }, freeUsers: 5000 },
+  { label: 'Small (50 paid / 250 free)', mix: { seeker: 15, technician: 10, explorer: 15, investigator: 7, trailblazer: 3 }, freeUsers: 250 },
+  { label: 'Growing (200 paid / 1,000 free)', mix: { seeker: 60, technician: 40, explorer: 60, investigator: 30, trailblazer: 10 }, freeUsers: 1000 },
+  { label: 'Scale (500 paid / 2,500 free)', mix: { seeker: 150, technician: 100, explorer: 150, investigator: 75, trailblazer: 25 }, freeUsers: 2500 },
+  { label: 'Mature (1,000 paid / 5,000 free)', mix: { seeker: 300, technician: 200, explorer: 300, investigator: 150, trailblazer: 50 }, freeUsers: 5000 },
 ].map(s => ({ ...s, ...hypo2ToolkitScenario(s.mix, s.freeUsers) }));
 
 const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -672,8 +697,8 @@ function downloadPDF() {
   const autoLeak = FREE_USER_BREAKDOWN.filter(r => r.trigger.startsWith('Auto'));
   para(`Two "Auto" actions (Stop Enrichment + People Extraction) previously fired without user action — ${autoLeak.reduce((s, r) => s + r.totalCredits, 0)} of ${FREE_USER_BREAKDOWN_TOTAL} credits (${Math.round(autoLeak.reduce((s, r) => s + r.totalCredits, 0) / FREE_USER_BREAKDOWN_TOTAL * 100)}%) per free user. These are now gated — free users silently skip enrichment.`);
 
-  heading('3e. Toolkit Visibility Change (Sept 2026)');
-  para('All 12 toolkit tools are now visible to every user. Previously, Observer saw 2, Explorer saw 8, Investigator+ saw 12. Now all see 12, but tapping a locked tool shows an upgrade prompt. This is a conversion funnel improvement — gating still blocks credit consumption.');
+  heading('3e. Toolkit Visibility & AdGate (Oct 2026)');
+  para('All 12 toolkit tools are visible to every user. Tapping a locked tool shows an upgrade prompt. Observer (free) gets 4 tools — 2 free (Equipment Guide, Safety Protocol) + 2 ad-gated (Audio Recorder, Radio Sweeper: 30s ad = 30s use, 300s/day cap per tool). Seeker gets the same 4 tools ad-free. Technician and Explorer get 10 of 12 tools. Investigator+ get all 12. This is a conversion funnel improvement — gating still blocks credit consumption.');
   table(['Tier', 'Visible', 'Accessible', 'Locked'],
     TOOLKIT_TIERS.map(t => [t.tier, t.visible, t.accessible, t.locked]),
     [120, 40, 40, 40]);
@@ -681,8 +706,8 @@ function downloadPDF() {
   table(['Tool', 'Required Tier', 'Cost Type', 'Credits'],
     NEWLY_VISIBLE_COSTLY_TOOLS.map(t => [t.name, t.tier, t.costType, t.credits]),
     [80, 60, 80, 80]);
-  para('Cost impact: Zero direct change. Gating blocks unauthorized users. Conversion impact: Observer/Explorer users now see Term Sweeper, Alphabet Sweeper, Anomaly Camera, and Vibration Communicator — stronger upgrade incentive. Term Sweeper is the most credit-intensive (3 + 1/trigger). Vibration Communicator and Anomaly Camera are sensor-only (0 credits).');
-  para('Community Map (Sept 2026): Author names resolve via backend function (no credit cost). Stacked markers grouped by coordinate. Sign-in simplified: Google/Apple OAuth removed — email/password only.');
+  para('Cost impact: Zero direct change. Gating blocks unauthorized users. Observer ad-gated tools (Audio Recorder, Radio Sweeper) are device-only — 0 integration credits. Ad revenue from tool-use ads is nearly pure profit. Conversion impact: Observer/Seeker users now see Term Sweeper, Alphabet Sweeper, Anomaly Camera, and Vibration Communicator — stronger upgrade incentive. Term Sweeper is the most credit-intensive (3 + 1/trigger). Vibration Communicator and Anomaly Camera are sensor-only (0 credits).');
+  para('Seeker ($3.99/mo) and Technician ($5.99/mo) are new ad-free tiers with 0 AI energy — they consume 0 platform credits and generate only 15% store fee in costs. High-margin tiers that capture users who want ad-free access without AI features. Community Map (Sept 2026): Author names resolve via backend function (no credit cost). Stacked markers grouped by coordinate.');
 
   heading('4. Per-Plan Profit - Monthly, 100% Utilization');
   table(['Plan', 'Price', 'Credits', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
@@ -814,10 +839,11 @@ function downloadPDF() {
   para('Device-only toolkit tools add 0 credits — the plan tier is driven by narration (halved by HYPO 2) + manifestation + ad-reward energy. HYPO 2 halves narration credits vs baseline, dropping the Base44 plan tier at every scale vs section 9a. The toolkit AdGate adds pure ad revenue without adding any credits.');
 
   heading('10. Key Takeaways');
-  para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Free (Observer) users are gated (0 credits). Must upgrade plans to scale.');
+  para('CREDIT CAPACITY: Builder plan (10k credits) supports only ~19 Explorer / ~6 Investigator / ~6 Trailblazer users at 100% utilization. Pro (20k) doubles that. Seeker and Technician users consume 0 AI credits (0 energy) — they do NOT count against credit capacity. Free (Observer) users are gated (0 credits). Must upgrade plans to scale AI features only.');
+  para('NEW HIGH-MARGIN TIERS (Oct 2026): Seeker ($3.99/mo) and Technician ($5.99/mo) have 0 AI energy — they consume 0 platform credits. Their only cost is the 15% store fee. Seeker nets ~$3.39/mo, Technician ~$5.09/mo per user. These tiers capture ad-averse users who don\'t need AI features, adding high-margin revenue that subsidizes the credit-consuming Explorer+ tiers. Revenue scenarios now model a realistic mix: ~30% Seeker, ~20% Technician, ~30% Explorer, ~15% Investigator, ~5% Trailblazer.');
   para(`Store fees (15% IAP) are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30). The app publishes natively via Apple/Google IAP.`);
   para(`Full narration cost: ~${FULL_TOUR_NARRATION_CREDITS} credits/tour = $${(FULL_TOUR_NARRATION_CREDITS * COST_PER_CREDIT).toFixed(2)}/tour. Explorer ~${TOURS_PER_ENERGY(500)} tour/mo, Investigator ~${TOURS_PER_ENERGY(1500)} tours/mo, Trailblazer ~${TOURS_PER_ENERGY(1500)} tours/mo.`);
-  para(`Explorer yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[1].margin.toFixed(0)}%. Both healthier when energy goes unused.`);
+  para(`Seeker yields ~${monthlyAnalysis[0].margin.toFixed(0)}% margin (0 platform credits — only 15% store fee). Technician ~${monthlyAnalysis[1].margin.toFixed(0)}%. Explorer ~${monthlyAnalysis[2].margin.toFixed(0)}% margin at full utilization; Investigator ~${monthlyAnalysis[3].margin.toFixed(0)}%. Seeker and Technician are the highest-margin tiers (0 AI energy = 0 platform cost). Both healthier when energy goes unused.`);
   para(`Trailblazer is profitable at 100% utilization (~${trailblazerAnalysis.margin.toFixed(0)}% margin = $${trailblazerAnalysis.profit.toFixed(0)} profit over 30 months). At 50% realistic usage, margin improves to ~${trailblazer50.margin.toFixed(0)}%. The 300-slot cap protects against credit cost exposure.`);
   para('AdMob interstitial revenue from free users meaningfully supplements subscription income — 5,000 free users generate ~$' + (5000 * AD_REV_PER_FREE_USER_MO).toFixed(0) + '/mo, offsetting platform and store costs.');
   para(`Rewarded ads (paid users) generate ~$${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but granted energy costs ~$${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~$${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a retention investment, not a profit center — it keeps paid users engaged at energy gates. Ad-reward credits are included in the Base44 plan-tier calculation (section 9a).`);
@@ -1190,8 +1216,8 @@ export default function PlanAnalysis() {
 
         {/* 3e. Toolkit Visibility Change */}
         <section className="mb-8">
-          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3e. Toolkit Visibility — All 12 Tools Now Visible (Sept 2026 Change)</h2>
-          <p className="text-xs print-muted mb-3">Previously, the Toolkit filtered tools by subscription tier — Observer saw only 2 tools, Explorer saw 8, and Investigator+ saw all 12. <span className="font-semibold print-text">Now all 12 tools are visible to every user.</span> Tapping a tool outside the user's tier shows an upgrade prompt instead of opening the tool. This is a <span className="font-semibold text-green-500 print-text">conversion funnel improvement</span>, not a cost increase — energy gating still blocks credit consumption for unauthorized users. But it exposes the more costly tools to lower-tier users, increasing upgrade motivation.</p>
+          <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">3e. Toolkit Visibility & AdGate (Oct 2026)</h2>
+          <p className="text-xs print-muted mb-3">All 12 toolkit tools are visible to every user. <span className="font-semibold print-text">Observer (free)</span> gets 4 tools — 2 free (Equipment Guide, Safety Protocol) + 2 ad-gated (Audio Recorder, Radio Sweeper: 30s ad = 30s use, 300s/day cap per tool). <span className="font-semibold print-text">Seeker</span> gets the same 4 tools ad-free. <span className="font-semibold print-text">Technician & Explorer</span> get 10 of 12 tools. <span className="font-semibold print-text">Investigator+</span> get all 12. Tapping a locked tool shows an upgrade prompt. This is a <span className="font-semibold text-green-500 print-text">conversion funnel improvement</span> — energy gating still blocks credit consumption. Observer's ad-gated tools are device-only (0 integration credits), so the ad revenue is nearly pure profit.</p>
           <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
             <table className="w-full min-w-[700px]">
               <thead>
