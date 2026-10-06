@@ -1,6 +1,27 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { audioAcquire, audioRelease, getMusicSettings } from '@/lib/hauntedAudio';
+import { isNativeToolSpeech, getToolVoices, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+
+// Map a saved Device Voice Picker selection (localStorage
+// 'ages_device_voice_uri') to a toolSpeech adapter role for native playback.
+// The adapter addresses exactly two native voices — the first two English
+// voices in device order (all voices when none are English): role 'female'
+// speaks the first, 'male' the second. A saved selection maps to 'male' only
+// when it IS that second voice; everything else ("Auto-select", or a voice
+// the adapter cannot address) uses the primary 'female' role voice.
+// DeviceVoicePicker previews through this same mapping so the preview
+// matches what narration will speak. Mirrors resolveRoleVoices() in
+// src/lib/toolSpeech.js — keep the pool logic in sync with it.
+export function deviceSpeechRole(voices, voiceURI) {
+  if (!voiceURI || !Array.isArray(voices) || !voices.length) return 'female';
+  const en = voices.filter((v) => typeof v.lang === 'string' && v.lang.toLowerCase().startsWith('en'));
+  const pool = en.length ? en : voices;
+  const female = pool[0];
+  const male = pool[1] || pool[0];
+  if (male && female && male.voiceURI !== female.voiceURI && male.voiceURI === voiceURI) return 'male';
+  return 'female';
+}
 
 export default function useGhostVoice() {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -13,9 +34,16 @@ export default function useGhostVoice() {
   const srcRef = useRef(null);
   const recordDestRef = useRef(null);
   const busyRef = useRef(false);
+  // Invalidation counter for the native device-speech path: bumped by every
+  // new speakDevice() call, by stop(), and on unmount. An async speakDevice
+  // whose counter is stale when its voice lookup resolves must silently bail
+  // (stop() or the newer speak owns state and the busy bus), so speech can
+  // never START after the user already stopped or the page was left.
+  const deviceSpeechGenRef = useRef(0);
 
   useEffect(() => {
     return () => {
+      deviceSpeechGenRef.current += 1; // block a pending native speakDevice
       stopEerieBackground();
       if (audioRef.current) {
         audioRef.current.pause();
@@ -268,9 +296,16 @@ export default function useGhostVoice() {
       audioRef.current = null;
     }
     if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
-    // Halt device-side speechSynthesis (device-voice test path) — the
-    // server path never uses speechSynthesis so this is a no-op there.
-    try { window.speechSynthesis?.cancel(); } catch {}
+    // Halt device-side speech (device-voice narration path): native goes
+    // through the toolSpeech adapter — stopToolSpeech() also bumps its
+    // generation so a pending native speak settles as 'cancelled' instead of
+    // resuming a stopped session. The server path never uses either speech
+    // engine, so this is a no-op there.
+    deviceSpeechGenRef.current += 1;
+    try {
+      if (isNativeToolSpeech()) stopToolSpeech();
+      else window.speechSynthesis?.cancel();
+    } catch {}
     stopEerieBackground();
     releaseNarration();
     setIsSpeaking(false);
@@ -326,15 +361,20 @@ export default function useGhostVoice() {
     }
   }, []);
 
-  // Device-side TTS (browser speechSynthesis). Used only for the one-tour
-  // device-narration test — no server GenerateSpeech call, no credit cost.
-  // Prefers a male British-English voice, falling back to any English voice.
+  // Device-side TTS. Used only for the device-narration mode — no server
+  // GenerateSpeech call, no credit cost. On Capacitor native platforms
+  // (iOS/Android) speech goes through the shared toolSpeech adapter
+  // (AVSpeechSynthesizer / android.speech.tts.TextToSpeech), because the
+  // WebView's window.speechSynthesis is unreliable there (Android WebView
+  // typically enumerates zero voices and speaks nothing). On web, browser
+  // speechSynthesis is kept, preferring a male British-English voice and
+  // falling back to any English voice.
   const speakDevice = useCallback((text, opts = {}) => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     if (srcRef.current) { try { srcRef.current.stop(); } catch {} srcRef.current = null; }
     stopEerieBackground();
     // Acquire the busy bus FIRST so HauntedMusic ducks immediately, before
-    // any voice selection or synth.speak(). The old releaseNarration() here
+    // any voice selection or speech start. The old releaseNarration() here
     // briefly dropped busyCount to 0 — HauntedMusic saw "not busy" and called
     // audio.play(); the async play() promise then resolved AFTER the later
     // acquireNarration() had already run its duck, so the duck's pause()
@@ -342,6 +382,59 @@ export default function useGhostVoice() {
     acquireNarration();
     setIsSpeaking(false);
     setIsGenerating(true);
+    // Read the DeviceVoicePicker's saved tuning (rate/pitch/volume/echo) and
+    // selected voice. Same localStorage keys on web and native; falls back
+    // to defaults when unset.
+    let savedSettings = { rate: 0.92, pitch: 0.9, volume: 1.0, echo: false };
+    try {
+      const raw = localStorage.getItem('ages_device_voice_settings');
+      if (raw) savedSettings = { ...savedSettings, ...JSON.parse(raw) };
+    } catch {}
+    const effectiveRate = opts.rate != null ? opts.rate : savedSettings.rate;
+    const effectivePitch = opts.pitch != null ? opts.pitch : savedSettings.pitch;
+    const effectiveVolume = Math.min(1, opts.volume != null ? opts.volume : savedSettings.volume);
+    const echoEnabled = false; // Ghostly Echo removed from DeviceVoicePicker
+    let savedVoiceURI = null;
+    try { savedVoiceURI = localStorage.getItem('ages_device_voice_uri') || null; } catch {}
+
+    // ── Native path (Capacitor iOS/Android): OS TTS via the toolSpeech
+    // adapter. The native engines have no user-gesture window, so the async
+    // voice lookup here is safe (unlike the web path below). The adapter's
+    // generation guard + QUEUE_FLUSH replace the web path's synth.cancel():
+    // a superseded or stopped speak settles as 'cancelled' and must not
+    // release the busy bus (stop() / the newer speak owns that), which
+    // mirrors the web path's 'canceled'/'interrupted' handling and keeps
+    // stale completions from un-ducking the music.
+    if (isNativeToolSpeech()) {
+      const gen = ++deviceSpeechGenRef.current;
+      (async () => {
+        try {
+          const voices = await getToolVoices();
+          if (gen !== deviceSpeechGenRef.current) return; // stopped/replaced
+          setIsGenerating(false);
+          setIsSpeaking(true);
+          startEerieBackground(); // mirror the server path so chimes play under narration
+          const result = await speakToolText(sanitizeText(text), {
+            role: deviceSpeechRole(voices, savedVoiceURI),
+            rate: effectiveRate,
+            pitch: effectivePitch,
+            volume: effectiveVolume,
+          });
+          if (result === 'cancelled') return; // stale completion — see above
+          setIsSpeaking(false);
+          stopEerieBackground();
+          releaseNarration();
+        } catch {
+          setIsGenerating(false);
+          setIsSpeaking(false);
+          stopEerieBackground();
+          releaseNarration();
+        }
+      })();
+      return;
+    }
+
+    // ── Web path: browser speechSynthesis (unchanged behavior).
     try {
       const synth = window.speechSynthesis;
       if (!synth) { setIsGenerating(false); releaseNarration(); return; }
@@ -353,11 +446,7 @@ export default function useGhostVoice() {
       // speak() in the same tick as the tap.
       const voices = synth.getVoices() || [];
       // 1. User-selected voice from the test-tour voice picker (localStorage)
-      let savedVoice = null;
-      try {
-        const savedURI = localStorage.getItem('ages_device_voice_uri');
-        if (savedURI) savedVoice = voices.find(v => v.voiceURI === savedURI);
-      } catch {}
+      const savedVoice = savedVoiceURI ? voices.find(v => v.voiceURI === savedVoiceURI) : null;
       // 2. Improved auto-selection (1a): score by quality (Enhanced/Premium),
       //    then language (en-GB > any en), then gender (male preferred).
       const voiceScore = (v) => {
@@ -371,17 +460,6 @@ export default function useGhostVoice() {
         return s;
       };
       const voice = savedVoice || [...voices].sort((a, b) => voiceScore(b) - voiceScore(a))[0] || voices[0];
-      // Read user tuning settings (rate/pitch/volume/echo) saved by the
-      // DeviceVoicePicker. Falls back to defaults if not set.
-      let savedSettings = { rate: 0.92, pitch: 0.9, volume: 1.0, echo: false };
-      try {
-        const raw = localStorage.getItem('ages_device_voice_settings');
-        if (raw) savedSettings = { ...savedSettings, ...JSON.parse(raw) };
-      } catch {}
-      const effectiveRate = opts.rate != null ? opts.rate : savedSettings.rate;
-      const effectivePitch = opts.pitch != null ? opts.pitch : savedSettings.pitch;
-      const effectiveVolume = Math.min(1, opts.volume != null ? opts.volume : savedSettings.volume);
-      const echoEnabled = false; // Ghostly Echo removed from DeviceVoicePicker
       const u = new SpeechSynthesisUtterance(sanitizeText(text));
       if (voice) { u.voice = voice; u.lang = voice.lang; }
       u.rate = effectiveRate;

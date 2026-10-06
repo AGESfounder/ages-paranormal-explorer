@@ -1,12 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Volume2, ChevronDown, Play, Square, RotateCcw } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
+import { isNativeToolSpeech, getToolVoices, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+import { deviceSpeechRole } from '@/hooks/useGhostVoice';
 
-// Device Voice Picker — lets the user pick which device speechSynthesis
-// voice the Device Narration mode uses, plus tune rate/pitch/volume. All
-// settings are saved to localStorage and read by speakDevice() in
-// useGhostVoice.js. When no voice is selected ("Auto-select"), speakDevice
-// falls back to its quality-scored auto-pick.
+// Device Voice Picker — lets the user pick which device TTS voice the
+// Device Narration mode uses, plus tune rate/pitch/volume. All settings are
+// saved to localStorage and read by speakDevice() in useGhostVoice.js. When
+// no voice is selected ("Auto-select"), speakDevice falls back to its
+// quality-scored auto-pick on web and the adapter's primary voice on native.
+// On Capacitor native platforms voices are enumerated and spoken through the
+// shared toolSpeech adapter (AVSpeechSynthesizer / Android TTS); on web,
+// browser speechSynthesis is used. Native playback addresses the adapter's
+// two role voices — see deviceSpeechRole() in useGhostVoice.js.
 const VOICE_KEY = 'ages_device_voice_uri';
 const SETTINGS_KEY = 'ages_device_voice_settings';
 
@@ -35,34 +41,80 @@ export default function DeviceVoicePicker() {
   const [open, setOpen] = useState(true);
 
   useEffect(() => {
+    // English voices first, then the rest (device order within each group).
+    const sorted = (list) => {
+      const en = list.filter(v => /^en/i.test(v.lang || ''));
+      const other = list.filter(v => !/^en/i.test(v.lang || ''));
+      return [...en, ...other];
+    };
+    if (isNativeToolSpeech()) {
+      // Native: enumerate OS TTS voices through the toolSpeech adapter
+      // (async — the Android engine initializes lazily; the adapter retries
+      // internally). The normalized { name, lang, voiceURI } shape matches
+      // the fields the web branch reads from SpeechSynthesisVoice objects.
+      let alive = true;
+      let retryTimer = null;
+      const applyVoices = (list) => { if (alive) setVoices(sorted(list || [])); };
+      getToolVoices().then((list) => {
+        applyVoices(list);
+        // If the engine still wasn't ready, give it one delayed refresh.
+        if (!list.length) {
+          retryTimer = setTimeout(() => {
+            getToolVoices({ refresh: true }).then(applyVoices).catch(() => {});
+          }, 1500);
+        }
+      }).catch(() => {});
+      return () => { alive = false; if (retryTimer) clearTimeout(retryTimer); };
+    }
+    // Web: browser voice enumeration (unchanged).
     const loadVoices = () => {
       const synth = window.speechSynthesis;
       if (!synth) return;
-      const all = synth.getVoices() || [];
-      const en = all.filter(v => /^en/i.test(v.lang || ''));
-      const other = all.filter(v => !/^en/i.test(v.lang || ''));
-      setVoices([...en, ...other]);
+      setVoices(sorted(synth.getVoices() || []));
     };
     loadVoices();
     try { window.speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch {}
     return () => { try { window.speechSynthesis.removeEventListener('voiceschanged', loadVoices); } catch {} };
   }, []);
 
+  // Monotonic id identifying the latest preview — a stale preview's settle
+  // (flushed by a newer preview or stopPreview) must not clear state that a
+  // newer preview owns.
+  const previewIdRef = useRef(0);
+
   const stopPreview = useCallback(() => {
-    try { window.speechSynthesis?.cancel(); } catch {}
+    previewIdRef.current += 1;
+    try {
+      if (isNativeToolSpeech()) stopToolSpeech();
+      else window.speechSynthesis?.cancel();
+    } catch {}
     setPreviewing(false);
   }, []);
 
   const previewVoice = useCallback(() => {
+    if (previewing) { stopPreview(); return; }
+    const sampleText = 'The spirits walk among us. Listen closely to their whispers.';
+    if (isNativeToolSpeech()) {
+      // Native: preview through the toolSpeech adapter with the same role
+      // mapping speakDevice() uses, so the preview matches narration.
+      previewIdRef.current += 1;
+      const id = previewIdRef.current;
+      setPreviewing(true);
+      speakToolText(sampleText, {
+        role: deviceSpeechRole(voices, selectedURI),
+        rate: settings.rate,
+        pitch: settings.pitch,
+        volume: settings.volume,
+      }).finally(() => { if (previewIdRef.current === id) setPreviewing(false); });
+      return;
+    }
     const synth = window.speechSynthesis;
     if (!synth) return;
-    if (previewing) { stopPreview(); return; }
     synth.cancel();
     const voice = selectedURI
       ? voices.find(v => v.voiceURI === selectedURI)
       : voices.find(v => /^en/i.test(v.lang || ''));
     if (!voice && !selectedURI) return;
-    const sampleText = 'The spirits walk among us. Listen closely to their whispers.';
     const u = new SpeechSynthesisUtterance(sampleText);
     if (voice) { u.voice = voice; u.lang = voice.lang; }
     u.rate = settings.rate;
