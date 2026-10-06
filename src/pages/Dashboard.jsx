@@ -442,10 +442,7 @@ export default function Dashboard() {
               <div className={`p-2.5 rounded-lg ${currentPlan.badge} border`}>
                 {currentPlan.id === 'trailblazer' ? <Crown className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
               </div>
-              <div>
-                <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Current Plan</p>
-                <h2 className="font-heading text-lg font-bold text-foreground">{currentPlan.name}</h2>
-              </div>
+              <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Current Plan</p>
             </div>
             <div className="flex items-center gap-2">
               {isPaid && (
@@ -455,6 +452,19 @@ export default function Dashboard() {
               )}
               <AdFreeBadge user={user} />
             </div>
+          </div>
+          <div className="flex items-stretch gap-2 mb-3">
+            <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${currentPlan.badge}`}>
+              <span className="font-heading text-lg font-bold uppercase tracking-wider leading-tight text-center">{currentPlan.name}</span>
+              {currentPlan.id === 'trailblazer' && <span className="text-[9px] text-amber-400 font-heading mt-0.5">30-Month Elite · 6 Months Free</span>}
+            </div>
+            {PLAN_HIGHLIGHTS[currentPlan.id] ? (
+              <div className="w-2/3 flex items-center px-3 py-2 rounded-lg bg-primary/15 border border-primary/40">
+                <p className="text-sm font-bold text-primary tracking-wide leading-tight text-center w-full">{PLAN_HIGHLIGHTS[currentPlan.id]}</p>
+              </div>
+            ) : (
+              <div className="w-2/3" />
+            )}
           </div>
 
           {/* Plan features */}
@@ -582,19 +592,19 @@ export default function Dashboard() {
               const isTrailblazer = planId === 'trailblazer';
               return (
                 <div key={planId} className="p-4 rounded-xl border border-border/40 bg-card/30">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-heading uppercase tracking-wider border ${plan.badge}`}>
-                        {plan.name}
-                      </span>
-                      {isTrailblazer && <span className="text-[10px] text-amber-400 font-heading">30-Month Elite · 6 Months Free</span>}
+                  <div className="flex items-stretch gap-2 mb-3">
+                    <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${plan.badge}`}>
+                      <span className="font-heading text-lg font-bold uppercase tracking-wider leading-tight text-center">{plan.name}</span>
+                      {isTrailblazer && <span className="text-[9px] text-amber-400 font-heading mt-0.5">30-Month Elite · 6 Months Free</span>}
                     </div>
+                    {PLAN_HIGHLIGHTS[planId] ? (
+                      <div className="w-2/3 flex items-center px-3 py-2 rounded-lg bg-primary/15 border border-primary/40">
+                        <p className="text-sm font-bold text-primary tracking-wide leading-tight text-center w-full">{PLAN_HIGHLIGHTS[planId]}</p>
+                      </div>
+                    ) : (
+                      <div className="w-2/3" />
+                    )}
                   </div>
-                  {PLAN_HIGHLIGHTS[planId] && (
-                    <div className="mb-3 px-3 py-2 rounded-lg bg-primary/15 border border-primary/40">
-                      <p className="text-base font-bold text-primary tracking-wide leading-tight">{PLAN_HIGHLIGHTS[planId]}</p>
-                    </div>
-                  )}
                   <div className="flex items-baseline gap-2 mb-3">
                     {isObserver ? (
                       <span className="font-display text-2xl text-muted-foreground">Free</span>
