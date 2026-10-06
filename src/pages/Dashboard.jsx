@@ -54,6 +54,17 @@ const PLAN_HIGHLIGHTS = {
   trailblazer: 'EXCLUSIVE 30-MONTH ACCESS... MOST BANG FOR YOUR BUCK!',
 };
 
+// Per-tier label colors — a vibrancy ladder stepping up to gold (Trailblazer).
+// Gray (free) → green → teal → blue → violet → gold (premium standout).
+const PLAN_LABEL_COLORS = {
+  observer:     'bg-slate-500/20 text-slate-400 border-slate-500/40',
+  seeker:       'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+  technician:   'bg-teal-500/20 text-teal-400 border-teal-500/40',
+  explorer:     'bg-sky-500/20 text-sky-400 border-sky-500/40',
+  investigator: 'bg-violet-500/25 text-violet-300 border-violet-500/50',
+  trailblazer:  'bg-amber-500/25 text-amber-300 border-amber-500/60',
+};
+
 export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [purchases, setPurchases] = useState([]);
@@ -454,7 +465,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-stretch gap-2 mb-3">
-            <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${currentPlan.badge}`}>
+            <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${PLAN_LABEL_COLORS[currentPlan.id] || currentPlan.badge}`}>
               <span className="font-heading text-lg font-bold uppercase tracking-wider leading-tight text-center">{currentPlan.name}</span>
               {currentPlan.id === 'trailblazer' && <span className="text-[9px] text-amber-400 font-heading mt-0.5">30-Month Elite · 6 Months Free</span>}
             </div>
@@ -593,7 +604,7 @@ export default function Dashboard() {
               return (
                 <div key={planId} className="p-4 rounded-xl border border-border/40 bg-card/30">
                   <div className="flex items-stretch gap-2 mb-3">
-                    <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${plan.badge}`}>
+                    <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${PLAN_LABEL_COLORS[planId] || plan.badge}`}>
                       <span className="font-heading text-lg font-bold uppercase tracking-wider leading-tight text-center">{plan.name}</span>
                       {isTrailblazer && <span className="text-[9px] text-amber-400 font-heading mt-0.5">30-Month Elite · 6 Months Free</span>}
                     </div>
