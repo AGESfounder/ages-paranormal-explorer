@@ -18,6 +18,7 @@ import EvidenceMiniMap from '@/components/EvidenceMiniMap';
 import LocationPicker from '@/components/LocationPicker';
 import { useEvidenceSaveGate } from '@/hooks/useEvidenceSaveGate';
 import EvidenceSaveAdGate from '@/components/EvidenceSaveAdGate';
+import GpsLocationDialog from '@/components/GpsLocationDialog';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -74,9 +75,9 @@ export default function Evidence() {
   const [initialTime] = useState(cameFromStop ? getNowTime() : '');
   const [initialLocation] = useState(locationName ? decodeURIComponent(locationName) : '');
   // Do NOT pre-fill with the stop's coordinates — the user may be viewing a
-  // tour but standing elsewhere. GPS is auto-captured on mount (below).
-  // Journal saves may proceed without coordinates; Community Map publishing
-  // requires verified current GPS (never the tour/stop location as a substitute).
+  // tour but standing elsewhere. GPS is auto-captured on mount (below). If GPS
+  // fails, the user explicitly chooses: retry, use the tour stop's coordinates
+  // (labeled TOUR_STOP), or save without a location (NONE — private only).
   const [initialLat] = useState('');
   const [initialLng] = useState('');
 
@@ -97,12 +98,15 @@ export default function Evidence() {
     personal_experience: 0,
     latitude: initialLat,
     longitude: initialLng,
+    location_source: '',
     is_private: true,
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [gpsCapturing, setGpsCapturing] = useState(false);
+  const [showGpsDialog, setShowGpsDialog] = useState(false);
+  const [gpsRetrying, setGpsRetrying] = useState(false);
   const [expandedMapId, setExpandedMapId] = useState(null);
 
   // Evidence save gate — tier-aware daily caps + Aura energy + ad-watched saves
@@ -165,13 +169,9 @@ export default function Evidence() {
     setGpsCapturing(true);
     const coords = await captureGPS();
     if (coords) {
-      setForm(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude }));
+      setForm(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude, location_source: 'GPS' }));
     } else if (!silent) {
-      toast({
-        title: 'Location unavailable',
-        description: 'Could not capture your current GPS. You can still save to your Journal, but Community Map publishing requires location access.',
-        variant: 'destructive',
-      });
+      setShowGpsDialog(true);
     }
     setGpsCapturing(false);
   };
@@ -182,6 +182,36 @@ export default function Evidence() {
     if (cameFromStop) captureLocation(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameFromStop]);
+
+  // ── GPS-failed dialog handlers ──
+  // When GPS can't be captured, the user explicitly chooses: retry, use the
+  // tour stop's coordinates (labeled TOUR_STOP, not GPS), or save without a
+  // location (NONE — private only, can't be made public).
+  const hasTourStopCoords = cameFromStop && stopLat && stopLng
+    && !isNaN(parseFloat(stopLat)) && !isNaN(parseFloat(stopLng));
+
+  const onGpsDialogRetry = async () => {
+    setGpsRetrying(true);
+    const coords = await captureGPS();
+    setGpsRetrying(false);
+    if (coords) {
+      setForm(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude, location_source: 'GPS' }));
+      setShowGpsDialog(false);
+    }
+    // If still no coords, keep the dialog open so the user can pick another option.
+  };
+  const onGpsDialogUseTourStop = () => {
+    const lat = parseFloat(stopLat);
+    const lng = parseFloat(stopLng);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      setForm(prev => ({ ...prev, latitude: lat, longitude: lng, location_source: 'TOUR_STOP' }));
+    }
+    setShowGpsDialog(false);
+  };
+  const onGpsDialogSaveWithout = () => {
+    setForm(prev => ({ ...prev, latitude: '', longitude: '', location_source: 'NONE', is_private: true }));
+    setShowGpsDialog(false);
+  };
 
   const resetStopForm = () => {
     setForm({
@@ -201,6 +231,7 @@ export default function Evidence() {
       personal_experience: 0,
       latitude: initialLat,
       longitude: initialLng,
+      location_source: '',
       is_private: true,
     });
     setOtherDeviceText('');
@@ -236,12 +267,16 @@ export default function Evidence() {
     // string values for latitude/longitude (schema type: number).
     if (typeof payload.latitude !== 'number') payload.latitude = null;
     if (typeof payload.longitude !== 'number') payload.longitude = null;
-    // Community Map publishing requires verified current GPS — never substitute
-    // the tour/stop coordinates or a geocoded address. Journal saves may proceed
-    // without coordinates.
-    if (!payload.is_private && (payload.latitude == null || payload.longitude == null)) {
+    // Set location_source for the general form (stop form sets it via GPS/dialog).
+    // GPS = coords present, NONE = no coords. TOUR_STOP is already set by the dialog.
+    if (!payload.location_source) {
+      payload.location_source = (payload.latitude != null && payload.longitude != null) ? 'GPS' : 'NONE';
+    }
+    // Community Map publishing requires a location established at save time
+    // (GPS or TOUR_STOP). NONE cannot be made public. Never re-capture GPS here.
+    if (!payload.is_private && (payload.latitude == null || payload.longitude == null || payload.location_source === 'NONE')) {
       setSubmitting(false);
-      setSubmitError('Your current location could not be determined. Location access is required to place evidence on the Community Map. Tap "Capture My Location" and try again.');
+      setSubmitError('A location is required to share evidence on the Community Map. Tap "Capture My Location" to get your GPS, or choose "Use Current Tour Stop" if GPS is unavailable.');
       return;
     }
     try {
@@ -262,7 +297,7 @@ export default function Evidence() {
         : await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
       setStopEvidences(stopData);
     } else {
-      setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0, latitude: '', longitude: '', is_private: true });
+      setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0, latitude: '', longitude: '', location_source: '', is_private: true });
       setOtherDeviceText('');
       setEquipmentOpen(false);
       setShowForm(false);
@@ -293,12 +328,13 @@ export default function Evidence() {
 
   const handleToggleShare = async (e) => {
     const makingPublic = e.is_private;
-    // Community Map publishing requires verified current GPS — never substitute
-    // the tour/stop coordinates or a geocoded address.
-    if (makingPublic && (e.latitude == null || e.longitude == null)) {
+    // Make Public uses the location established at save time (GPS or TOUR_STOP).
+    // Never re-capture the user's current GPS — they may be far from where the
+    // evidence was captured. NONE (no location) cannot be made public.
+    if (makingPublic && (e.latitude == null || e.longitude == null || e.location_source === 'NONE')) {
       toast({
         title: 'Location required',
-        description: 'Your current location could not be determined. Location access is required to place evidence on the Community Map.',
+        description: 'This evidence has no location associated with it. A location is required to share it on the Community Map.',
         variant: 'destructive',
       });
       return;
@@ -334,20 +370,41 @@ export default function Evidence() {
 
           {/* GPS Location */}
           <div>
-            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1.5">GPS Location</label>
+            <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1.5">
+              {form.location_source === 'TOUR_STOP' ? 'Tour Stop Location' : form.location_source === 'NONE' ? 'No Location' : 'GPS Location'}
+            </label>
             {form.latitude && form.longitude ? (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                <MapPin className="w-4 h-4 text-primary shrink-0" />
-                <span className="text-xs text-primary flex-1">{Number(form.latitude).toFixed(5)}, {Number(form.longitude).toFixed(5)}</span>
-                <button onClick={captureLocation} disabled={gpsCapturing} className="text-[10px] text-muted-foreground hover:text-primary transition-colors">
-                  {gpsCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
+              <div className={`flex items-center gap-2 p-3 rounded-lg border ${form.location_source === 'TOUR_STOP' ? 'bg-accent/10 border-accent/30' : 'bg-primary/10 border-primary/20'}`}>
+                <MapPin className={`w-4 h-4 shrink-0 ${form.location_source === 'TOUR_STOP' ? 'text-accent' : 'text-primary'}`} />
+                <span className={`text-xs flex-1 ${form.location_source === 'TOUR_STOP' ? 'text-accent' : 'text-primary'}`}>
+                  {Number(form.latitude).toFixed(5)}, {Number(form.longitude).toFixed(5)}
+                </span>
+                {form.location_source === 'TOUR_STOP' ? (
+                  <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Tour Stop</span>
+                ) : (
+                  <button onClick={() => captureLocation(false)} disabled={gpsCapturing} className="text-[10px] text-muted-foreground hover:text-primary transition-colors">
+                    {gpsCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
+                  </button>
+                )}
+              </div>
+            ) : form.location_source === 'NONE' ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border border-border/40">
+                <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground flex-1">No location — private only</span>
+                <button onClick={() => captureLocation(false)} disabled={gpsCapturing} className="text-[10px] text-primary hover:text-primary/80 transition-colors">
+                  {gpsCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Capture'}
                 </button>
               </div>
             ) : (
-              <button onClick={captureLocation} disabled={gpsCapturing} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/60 bg-card/30 text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50">
+              <button onClick={() => captureLocation(false)} disabled={gpsCapturing} className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/60 bg-card/30 text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50">
                 {gpsCapturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
                 <span className="text-xs font-heading uppercase tracking-wider">{gpsCapturing ? 'Capturing GPS…' : 'Capture My Location'}</span>
               </button>
+            )}
+            {form.location_source === 'TOUR_STOP' && (
+              <p className="text-[10px] text-muted-foreground/70 mt-1.5">
+                These are the tour stop's coordinates, not your device GPS.
+              </p>
             )}
           </div>
 
@@ -534,6 +591,14 @@ export default function Evidence() {
           )}
         </div>
         <NavBar />
+        <GpsLocationDialog
+          show={showGpsDialog}
+          hasTourStop={hasTourStopCoords}
+          retrying={gpsRetrying}
+          onRetry={onGpsDialogRetry}
+          onUseTourStop={onGpsDialogUseTourStop}
+          onSaveWithout={onGpsDialogSaveWithout}
+        />
         <EvidenceSaveAdGate
           show={adGatePromise}
           remaining={dailyRemaining}

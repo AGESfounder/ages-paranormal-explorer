@@ -59,6 +59,15 @@
     "longitude": {
       "type": "number"
     },
+    "location_source": {
+      "type": "string",
+      "enum": [
+        "GPS",
+        "TOUR_STOP",
+        "NONE"
+      ],
+      "description": "How the evidence location was established at save time. GPS = user's device GPS captured at save. TOUR_STOP = the viewed tour stop's coordinates (user explicitly chose this when GPS was unavailable). NONE = no location (private only, cannot be made public). Make Public uses the original coordinates saved with the evidence \u2014 never re-captures the user's current GPS. Historical records without this field are treated as having a valid location if latitude/longitude exist."
+    },
     "is_private": {
       "type": "boolean",
       "default": false
