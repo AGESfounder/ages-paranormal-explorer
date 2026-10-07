@@ -932,7 +932,12 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         onOpenChange={(o) => { if (!o) setSelectedPerson(null); }}
         isGenerating={isGenerating}
         isSpeaking={isSpeaking}
-        onNarrate={() => selectedPerson && narrate(selectedPerson.story)}
+        onNarrate={() => {
+          if (!selectedPerson) return;
+          const story = selectedPerson.story;
+          setSelectedPerson(null);
+          setTimeout(() => narrate(story), 200);
+        }}
         narrationMode={narrationMode}
       />
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />

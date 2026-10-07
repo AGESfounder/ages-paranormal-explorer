@@ -13,6 +13,7 @@ import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import { getEffectivePlanId } from '@/lib/access';
 import { buildEvidenceContext, primeGPS } from '@/lib/evidenceContext';
+import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import ResearchDatabase from '../components/ResearchDatabase';
 import useGhostVoice from '../hooks/useGhostVoice';
 import useWakeLock from '../hooks/useWakeLock';
@@ -61,6 +62,7 @@ const SWEEP_SPEEDS = {
 };
 
 export default function Toolkit() {
+  const { captureGpsForSave, gpsDialog } = useToolGpsSave();
   const [activeTool, setActiveTool] = useState(null);
   const [adGateTool, setAdGateTool] = useState(null);
   const [user, setUser] = useState(null);
@@ -149,6 +151,7 @@ export default function Toolkit() {
   const [mediaError, setMediaError] = useState('');
   const [weatherData, setWeatherData] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState(null);
   const [weatherLocation, setWeatherLocation] = useState('');
   const [guideDetail, setGuideDetail] = useState(null);
   const [radioActive, setRadioActive] = useState(false);
@@ -548,7 +551,9 @@ export default function Toolkit() {
       let description = (isRadio ? 'Radio Sweeper session — ' : 'Recorded EVP session — ') + formatDuration(recordDuration);
       if (recorderNotes.trim()) description += '\n\nNotes: ' + recorderNotes.trim();
       if (savedWords.length > 0) description += '\n\nWords heard: ' + savedWords.join(', ');
-      const ctx = await buildEvidenceContext();
+      const gpsResult = await captureGpsForSave();
+      if (!gpsResult) { setSavingRec(false); return; }
+      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: (isRadio ? 'Radio Sweeper Session ' : 'EVP Session ') + date,
         type: 'evp',
@@ -557,6 +562,7 @@ export default function Toolkit() {
         date,
         time,
         is_private: isPrivate,
+        ...gpsResult,
         ...ctx,
       });
       setRecordedBlob(null);
@@ -571,12 +577,14 @@ export default function Toolkit() {
 
   const fetchWeatherByCoords = async (lat, lon) => {
     setWeatherLoading(true);
+    setWeatherError(null);
     try {
       const res = await omFetchByCoords(lat, lon);
       setWeatherData(res);
     } catch (err) {
       console.error('Weather fetch failed', err);
       setWeatherData(null);
+      setWeatherError('Weather data unavailable. Try searching by city name.');
     }
     setWeatherLoading(false);
   };
@@ -597,11 +605,18 @@ export default function Toolkit() {
 
   const autoFetchWeather = () => {
     if (weatherData) return;
+    setWeatherError(null);
     getDevicePosition({ enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 })
       .then((result) => {
-        if (result.ok) fetchWeatherByCoords(result.coords.lat, result.coords.lng);
+        if (result.ok) {
+          fetchWeatherByCoords(result.coords.lat, result.coords.lng);
+        } else if (result.error === 'denied') {
+          setWeatherError('Location access denied. Enable location in your device settings or search by city name below.');
+        } else {
+          setWeatherError('Could not determine your location. Try searching by city name below.');
+        }
       })
-      .catch(() => { /* manual entry remains available */ });
+      .catch(() => { setWeatherError('Could not determine your location. Try searching by city name below.'); });
   };
 
   const renderToolContent = () => {
@@ -829,6 +844,9 @@ export default function Toolkit() {
               <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-center space-y-3">
                 <Cloud className="w-8 h-8 text-muted-foreground/40 mx-auto" />
                 <p className="text-xs text-muted-foreground">Press the button below to fetch your local weather</p>
+                {weatherError && (
+                  <p className="text-xs text-amber-400 leading-relaxed">{weatherError}</p>
+                )}
                 <button onClick={autoFetchWeather} disabled={weatherLoading} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-50">
                   {weatherLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <MapPin className="w-3.5 h-3.5" />}
                   {weatherLoading ? 'Fetching...' : 'Get My Location Weather'}
@@ -1530,6 +1548,7 @@ Best Practices
       />
       <UpgradePrompt show={showEvidenceUpgrade} onClose={() => setShowEvidenceUpgrade(false)} reason={evidenceGateReason} />
       {narrationAdGateEl}
+      {gpsDialog}
       <NavBar />
     </PageContainer>
   );

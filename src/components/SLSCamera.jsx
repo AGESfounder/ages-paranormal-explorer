@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Camera, CameraOff, Video, Save, X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
+import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
@@ -9,6 +10,7 @@ import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 
 export default function SLSCamera({ gateSave }) {
+  const { captureGpsForSave, gpsDialog } = useToolGpsSave();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -199,7 +201,9 @@ export default function SLSCamera({ gateSave }) {
       const file = new File([recordedBlob], `anomaly_session.${ext}`, { type: recordedBlob.type });
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
-      const ctx = await buildEvidenceContext();
+      const gpsResult = await captureGpsForSave();
+      if (!gpsResult) { setSaving(false); return; }
+      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Anomaly Camera Session ${now.toISOString().split('T')[0]}`,
         type: 'video',
@@ -208,6 +212,7 @@ export default function SLSCamera({ gateSave }) {
         date: now.toISOString().split('T')[0],
         time: now.toTimeString().slice(0, 5),
         is_private: isPrivate,
+        ...gpsResult,
         ...ctx,
       });
       setRecordedBlob(null);
@@ -284,6 +289,7 @@ export default function SLSCamera({ gateSave }) {
           IR depth analysis maps humanoid shapes invisible to the naked eye. Session is recorded — save to your Evidence Journal when done.
         </p>
       </div>
+      {gpsDialog}
     </div>
   );
 }

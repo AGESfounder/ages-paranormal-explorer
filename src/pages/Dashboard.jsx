@@ -674,7 +674,7 @@ export default function Dashboard() {
                     {plan.features.slice(0, 4).map((f, i) => (
                       <div key={i} className="flex items-start gap-1.5">
                         <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                        <p className="text-xs text-muted-foreground leading-relaxed">{f}</p>
+                        <p className="text-sm text-muted-foreground leading-relaxed">{f}</p>
                       </div>
                     ))}
                   </div>

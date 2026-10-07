@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, Save, X, Video, AlertTriangle, Zap, Activity } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
+import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 
 const SENSITIVITY_THRESHOLDS = {
@@ -32,6 +33,7 @@ function alertHexColor(level) {
 }
 
 export default function PhoneREMDevice({ gateSave }) {
+  const { captureGpsForSave, gpsDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | countdown | active | stopped
   const [countdown, setCountdown] = useState(3);
   const [alertLevel, setAlertLevel] = useState(0);
@@ -426,7 +428,9 @@ export default function PhoneREMDevice({ gateSave }) {
       const now = new Date();
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
-      const ctx = await buildEvidenceContext();
+      const gpsResult = await captureGpsForSave();
+      if (!gpsResult) { setSaving(false); return; }
+      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Vibration Communicator Session ${date}`,
         type: 'video',
@@ -435,6 +439,7 @@ export default function PhoneREMDevice({ gateSave }) {
         date,
         time,
         is_private: isPrivate,
+        ...gpsResult,
         ...ctx,
       });
       setVideoBlob(null);
@@ -665,9 +670,10 @@ export default function PhoneREMDevice({ gateSave }) {
         >
           <X className="w-3.5 h-3.5" /> Discard & Reset
         </button>
+        {gpsDialog}
       </div>
     );
   }
 
-  return null;
+  return gpsDialog;
 }

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Play, Square, Save, Loader2, Zap, Info, X, Activity, Video, AlertTriangle, Type, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
+import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
@@ -34,6 +35,7 @@ function formatDuration(sec) {
 }
 
 export default function AlphabetSweeper({ gateSave }) {
+  const { captureGpsForSave, gpsDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
   const [currentLetter, setCurrentLetter] = useState('A');
   const [lockedLetter, setLockedLetter] = useState(null);
@@ -568,7 +570,9 @@ export default function AlphabetSweeper({ gateSave }) {
       const now = new Date();
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
-      const ctx = await buildEvidenceContext();
+      const gpsResult = await captureGpsForSave();
+      if (!gpsResult) { setSaving(false); return; }
+      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Alphabet Sweeper — ${date}`,
         type: 'video',
@@ -577,6 +581,7 @@ export default function AlphabetSweeper({ gateSave }) {
         date,
         time,
         is_private: isPrivate,
+        ...gpsResult,
         ...ctx,
       });
       setVideoBlob(null);
@@ -734,9 +739,10 @@ export default function AlphabetSweeper({ gateSave }) {
         <button onClick={discard} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
           <X className="w-3.5 h-3.5" /> Discard & Reset
         </button>
+        {gpsDialog}
       </div>
     );
   }
 
-  return null;
+  return gpsDialog;
 }
