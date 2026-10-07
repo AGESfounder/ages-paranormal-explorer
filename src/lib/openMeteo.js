@@ -42,6 +42,24 @@ function windDirName(deg) {
   return dirs[Math.round(deg / 22.5) % 16];
 }
 
+// Reverse-geocode coordinates to a readable place name using BigDataCloud
+// (free, key-less, client-side-friendly). Falls back to coordinates if it fails.
+async function resolveLocationName(lat, lon) {
+  try {
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const d = await resp.json();
+    const locality = d.city || d.locality || d.principalSubdivision;
+    const area = d.principalSubdivision && d.principalSubdivision !== locality ? d.principalSubdivision : null;
+    if (locality && area) return `${locality}, ${area}`;
+    if (locality) return locality;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Fetch weather by coordinates. Returns { temperature, humidity, wind, conditions, weatherCode, location }.
 export async function fetchWeatherByCoords(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph`;
@@ -51,13 +69,14 @@ export async function fetchWeatherByCoords(lat, lon) {
   const c = data.current;
   if (!c) throw new Error('No current weather data');
   const desc = describeWeatherCode(c.weather_code);
+  const placeName = await resolveLocationName(lat, lon);
   return {
     temperature: Math.round(c.temperature_2m),
     humidity: Math.round(c.relative_humidity_2m),
     wind: `${Math.round(c.wind_speed_10m)} mph ${windDirName(c.wind_direction_10m)}`,
     conditions: desc.label,
     weatherCode: c.weather_code,
-    location: 'Current location',
+    location: placeName || `${lat.toFixed(2)}, ${lon.toFixed(2)}`,
   };
 }
 

@@ -166,26 +166,32 @@ export async function geocodeAddress(address) {
   }
 }
 
-export async function buildEvidenceContext(overrides = {}) {
+export async function buildEvidenceContext(overrides = {}, options = {}) {
+  const activeCtx = await getActiveContext();
+  const ctx = {};
+  if (activeCtx.tour_id && !overrides.tour_id) ctx.tour_id = activeCtx.tour_id;
+  if (activeCtx.stop_id && !overrides.stop_id) ctx.stop_id = activeCtx.stop_id;
+  if (activeCtx.location_name && !overrides.location_name) ctx.location_name = activeCtx.location_name;
+
+  // Skip GPS capture when coordinates are already provided (e.g., from the
+  // useToolGpsSave dialog) or when the caller explicitly opts out.
+  if (options.skipGps || (overrides.latitude != null && overrides.longitude != null)) {
+    return ctx;
+  }
+
   // Never let GPS hold up a save forever, but allow enough time for both the
   // high-accuracy (8s) and low-accuracy fallback (15s) attempts to finish.
   // Use the fix tracked while the tool was open (instant); only if there is
   // none, try a fresh capture.
   const cached = lastGps && Date.now() - lastGps.at < 30 * 60 * 1000 ? lastGps : null;
-  const gpsWithCap = cached
-    ? Promise.resolve(cached)
-    : Promise.race([captureGPS(), new Promise((r) => setTimeout(() => r(null), 26000))]);
-  const [gps, activeCtx] = await Promise.all([gpsWithCap, getActiveContext()]);
-  const ctx = {};
-  if (activeCtx.tour_id && !overrides.tour_id) ctx.tour_id = activeCtx.tour_id;
-  if (activeCtx.stop_id && !overrides.stop_id) ctx.stop_id = activeCtx.stop_id;
-  if (activeCtx.location_name && !overrides.location_name) ctx.location_name = activeCtx.location_name;
-  // GPS unavailable (denied, blocked preview, no signal): fall back to the
-  // active stop's coordinates so the evidence still lands on the community map.
+  const gps = cached
+    ? cached
+    : await Promise.race([captureGPS(), new Promise((r) => setTimeout(() => r(null), 26000))]);
 
   if (gps) {
-    if (overrides.latitude == null) ctx.latitude = gps.latitude;
-    if (overrides.longitude == null) ctx.longitude = gps.longitude;
+    ctx.latitude = gps.latitude;
+    ctx.longitude = gps.longitude;
+    ctx.location_source = 'GPS';
     // If no tour/stop context and no explicit location_name, reverse geocode
     // the GPS to a readable place name so the journal shows more than raw coords.
     if (!ctx.location_name && !overrides.location_name) {
