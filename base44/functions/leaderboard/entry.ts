@@ -13,12 +13,16 @@ Deno.serve(async (req) => {
       base44.asServiceRole.entities.User.list(),
     ]);
 
+    console.log('LB investigations:', Array.isArray(investigations) ? investigations.length : 'not-array', 'users:', Array.isArray(users) ? users.length : 'not-array');
+    console.log('LB sample user fields:', JSON.stringify(users?.[2] ? { id: users[2].id, role: users[2].role, plan: users[2].plan, sub: users[2].subscription_status, exp: users[2].plan_expiration_date } : 'none'));
+
     // Count completed investigations per user
     const counts = {};
     for (const inv of investigations) {
       if (!inv.created_by_id) continue;
       counts[inv.created_by_id] = (counts[inv.created_by_id] || 0) + 1;
     }
+    console.log('LB counts:', JSON.stringify(counts));
 
     // Build leaderboard entries — only Explorer/Investigator/Trailblazer
     // (and admins) participate. All tiers can view the leaderboard.
