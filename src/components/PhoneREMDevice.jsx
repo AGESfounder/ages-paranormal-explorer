@@ -31,7 +31,7 @@ function alertHexColor(level) {
   return '#ef4444';
 }
 
-export default function PhoneREMDevice() {
+export default function PhoneREMDevice({ gateSave }) {
   const [phase, setPhase] = useState('idle'); // idle | countdown | active | stopped
   const [countdown, setCountdown] = useState(3);
   const [alertLevel, setAlertLevel] = useState(0);
@@ -417,6 +417,7 @@ export default function PhoneREMDevice() {
   const saveSession = async (isPrivate = true) => {
     const blob = videoBlobRef.current || videoBlob;
     if (!blob) return;
+    if (gateSave && !(await gateSave())) return;
     setSaving(true);
     try {
       const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';

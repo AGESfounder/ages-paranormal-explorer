@@ -854,7 +854,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                   <HighlightPeople
                     text={displayParanormalInfo}
                     people={people}
-                    onPerson={(p) => { setSelectedPerson(p); narrate(p.story); }}
+                    onPerson={(p) => setSelectedPerson(p)}
                   />
                 </p>
                 {peopleLoading && (

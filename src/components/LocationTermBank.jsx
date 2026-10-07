@@ -126,7 +126,7 @@ ${stopText}`,
   return { list, label: stop.name || tour?.title || 'current stop' };
 }
 
-export default function LocationTermBank() {
+export default function LocationTermBank({ gateSave }) {
   const [phase, setPhase] = useState('idle'); // idle | loading | ready | running | stopped
   const [terms, setTerms] = useState([]);
   const [locationLabel, setLocationLabel] = useState('');
@@ -733,6 +733,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
 
   const saveSession = async (isPrivate = true) => {
     if (!videoBlob) return;
+    if (gateSave && !(await gateSave())) return;
     setSaving(true);
     try {
       const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';

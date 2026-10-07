@@ -71,8 +71,12 @@ export default function Evidence() {
   const [initialDate] = useState(cameFromStop ? getTodayDate() : '');
   const [initialTime] = useState(cameFromStop ? getNowTime() : '');
   const [initialLocation] = useState(locationName ? decodeURIComponent(locationName) : '');
-  const [initialLat] = useState(stopLat ? parseFloat(stopLat) : '');
-  const [initialLng] = useState(stopLng ? parseFloat(stopLng) : '');
+  // Do NOT pre-fill with the stop's coordinates — the user may be viewing a
+  // tour but standing elsewhere. GPS is auto-captured on mount (below); if
+  // unavailable, the evidence saves without coordinates rather than using
+  // an unrelated tour/stop location.
+  const [initialLat] = useState('');
+  const [initialLng] = useState('');
 
   const [form, setForm] = useState({
     title: '',
@@ -163,6 +167,13 @@ export default function Evidence() {
     }
     setGpsCapturing(false);
   };
+
+  // Auto-capture the user's current GPS when logging evidence from a stop.
+  // Never substitute the viewed tour/stop location for the user's actual position.
+  useEffect(() => {
+    if (cameFromStop) captureLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameFromStop]);
 
   const resetStopForm = () => {
     setForm({

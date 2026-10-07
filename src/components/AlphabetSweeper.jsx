@@ -33,7 +33,7 @@ function formatDuration(sec) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function AlphabetSweeper() {
+export default function AlphabetSweeper({ gateSave }) {
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
   const [currentLetter, setCurrentLetter] = useState('A');
   const [lockedLetter, setLockedLetter] = useState(null);
@@ -559,6 +559,7 @@ export default function AlphabetSweeper() {
 
   const saveSession = async (isPrivate = true) => {
     if (!videoBlob) return;
+    if (gateSave && !(await gateSave())) return;
     setSaving(true);
     try {
       const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';

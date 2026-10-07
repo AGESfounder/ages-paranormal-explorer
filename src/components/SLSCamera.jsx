@@ -8,7 +8,7 @@ import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 
-export default function SLSCamera() {
+export default function SLSCamera({ gateSave }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -192,6 +192,7 @@ export default function SLSCamera() {
 
   const saveRecording = async (isPrivate = true) => {
     if (!recordedBlob) return;
+    if (gateSave && !(await gateSave())) return;
     setSaving(true);
     try {
       const ext = recordedBlob.type.includes('mp4') ? 'mp4' : 'webm';
