@@ -5,6 +5,7 @@ import { base44, base44ServerUrl } from '@/api/base44Client';
 import { appParams } from '@/lib/app-params';
 import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 import { identifyRevenueCatUser, resetRevenueCatUser } from '@/lib/revenuecat';
+import { setLocationTrackingEnabled } from '@/lib/deviceCapabilities';
 
 const AuthContext = createContext();
 
@@ -235,6 +236,13 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
       setAuthChecked(true);
+      // Initialize the AGES location-tracking flag from the user's saved
+      // settings so getDevicePosition respects it before Settings is visited.
+      try {
+        const s = currentUser?.settings;
+        const parsed = typeof s === 'string' ? JSON.parse(s) : s;
+        setLocationTrackingEnabled(parsed?.locationTracking !== false);
+      } catch { /* default true */ }
       // Link RevenueCat customer to Base44 user id on native (no-op on web)
       if (currentUser?.id) {
         identifyRevenueCatUser(currentUser.id).catch(() => {});

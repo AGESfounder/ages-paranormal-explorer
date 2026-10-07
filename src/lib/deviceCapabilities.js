@@ -9,6 +9,22 @@ export function isNativeApp() {
   }
 }
 
+// ── AGES Location Tracking setting ──
+// Module-level flag controlled by the Settings → "Location Tracking" toggle.
+// When false, getDevicePosition short-circuits with a 'disabled' result so
+// Nearby, Weather, Evidence GPS, and Toolkit GPS all respect the user's
+// choice without each needing their own check. Initialized from user settings
+// by AuthContext on login and updated live by Settings.jsx on toggle.
+let _locationTrackingEnabled = true;
+
+export function setLocationTrackingEnabled(enabled) {
+  _locationTrackingEnabled = enabled !== false;
+}
+
+export function isLocationTrackingEnabled() {
+  return _locationTrackingEnabled;
+}
+
 export function haversineMiles(lat1, lon1, lat2, lon2) {
   const R = 3959;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -34,6 +50,18 @@ export async function getDevicePosition(options = {}) {
     timeout = 10000,
     maximumAge = 60000,
   } = options;
+
+  // Respect the AGES "Location Tracking" setting — when the user turns it off
+  // in Settings, all GPS requests short-circuit here. This is distinct from
+  // the OS-level location permission (which is still checked below when the
+  // setting is enabled).
+  if (!_locationTrackingEnabled) {
+    return {
+      ok: false,
+      error: 'disabled',
+      message: 'Location tracking is turned off in Settings. Enable it to use GPS features.',
+    };
+  }
 
   if (isNativeApp()) {
     try {

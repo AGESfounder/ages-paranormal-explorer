@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+import { getEffectivePlanId } from '../../shared/access.js';
 
 // Server-authoritative evidence save gate.
 //
@@ -38,7 +39,10 @@ export default async function(req) {
       ? (user.evidence_save_count || 0)
       : 0;
 
-    const planId = user.plan || 'observer';
+    // Use getEffectivePlanId so Google Trailblazer (whose access lives in
+    // google_trailblazer_expiration_date, not user.plan) gets the correct
+    // daily cap (20, not 10) and Aura pool access — not Observer treatment.
+    const planId = getEffectivePlanId(user);
     const isFree = planId === 'observer' || planId === 'seeker';
     const isObserver = planId === 'observer';
     const dailyCap = isFree ? FREE_DAILY_CAP : PAID_DAILY_CAP;

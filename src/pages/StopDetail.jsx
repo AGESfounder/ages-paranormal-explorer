@@ -61,7 +61,7 @@ export default function StopDetail() {
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [enrichStatus, setEnrichStatus] = useState(null); // null | { state, reason?, message? }
   const [selectedPerson, setSelectedPerson] = useState(null);
-  const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
+  const { isSpeaking, isGenerating, narrate: rawNarrate, stop: stopNarration } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, setGateReason, user, isPaid } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
   const canEnhance = canUseEnhanced(user);
@@ -934,9 +934,16 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         isSpeaking={isSpeaking}
         onNarrate={() => {
           if (!selectedPerson) return;
-          const story = selectedPerson.story;
-          setSelectedPerson(null);
-          setTimeout(() => narrate(story), 200);
+          // If narration is active, stop it — the button acts as a toggle.
+          if (isSpeaking || isGenerating) {
+            stopNarration();
+            return;
+          }
+          // Keep the dialog open so the Person Summary remains visible while
+          // the narration plays. The NarrationAdGate (portal, z-60) renders
+          // on top for Observer device mode; after the ad or cancel, the
+          // dialog is still here with its Stop button.
+          narrate(selectedPerson.story);
         }}
         narrationMode={narrationMode}
       />

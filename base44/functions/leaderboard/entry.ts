@@ -37,7 +37,13 @@ Deno.serve(async (req) => {
       .filter(u => {
         if (u.role === 'admin') return true;
         const plan = u.plan || 'observer';
-        return plan === 'explorer' || plan === 'investigator' || plan === 'trailblazer';
+        // Google Trailblazer access is stored in google_trailblazer_expiration_date,
+        // NOT in user.plan — so checking plan alone excludes them. Include users
+        // who have ever held a Google Trailblazer grant (field exists, even if
+        // expired) so their investigation history stays on the leaderboard,
+        // matching the "lapsed subscribers stay" intent for Wix/Apple tiers.
+        return plan === 'explorer' || plan === 'investigator' || plan === 'trailblazer'
+          || !!u.google_trailblazer_expiration_date;
       })
       .map(u => ({
         id: u.id,

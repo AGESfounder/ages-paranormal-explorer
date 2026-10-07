@@ -5,6 +5,8 @@
 //   Server-authoritative: consume-tool-time uses server wall clock;
 //   client never writes tool_banks.r directly.
 
+import { getEffectivePlanId } from '@/lib/access';
+
 // Tools that are ad-gated for Observer (free) users. 30s ad = 30s use, 5min/day cap.
 // Seeker+ tiers get these ad-free (no ad gate).
 export const AD_GATED_TOOLS = [
@@ -65,12 +67,14 @@ export function canAccessTool(planId, toolName, isAdmin = false) {
 }
 
 // Check if an Observer user needs to watch an ad for this tool.
-// Returns true only if the tool is ad-gated AND the user is on the Observer plan.
+// Returns true only if the tool is ad-gated AND the user's EFFECTIVE plan is
+// Observer. Uses getEffectivePlanId so Google Trailblazer (whose access lives
+// in google_trailblazer_expiration_date, not user.plan) is NOT gated.
 // Seeker+ and admins never need ads.
 export function needsToolAdGate(user, toolName) {
   if (!user) return false;
   if (user.role === 'admin') return false;
-  const planId = user.plan || 'observer';
+  const planId = getEffectivePlanId(user);
   if (planId !== 'observer') return false;
   return isAdGated(toolName);
 }
