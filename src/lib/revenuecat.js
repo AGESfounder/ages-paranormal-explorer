@@ -1,14 +1,15 @@
 // RevenueCat Capacitor client for AGES Explorer.
 // - Web: no-op (Wix checkout remains the web path)
-// - iOS: purchase Explorer/Investigator subscriptions and Aura Bundle
-//   consumables via StoreKit (Apple product IDs below), plus the one-time
-//   Trailblazer product (non-subscription). Wix remains the web Trailblazer path.
-// - Android: purchase Google Play Explorer/Investigator subscriptions (Play
-//   subscription products explorer / investigator with base plans
-//   monthly / annual), the Google Play one-time product
-//   trailblazer.30month, and the Google Play one-time Aura Bundle products
-//   (bare Play IDs flicker / apparition / haunting / spectral). Web
-//   subscriptions and web Aura bundles stay on the Wix path.
+// - iOS: purchase Explorer/Investigator/Seeker/Technician subscriptions and
+//   Aura Bundle consumables via StoreKit (Apple product IDs below), plus the
+//   one-time Trailblazer product (non-subscription). Wix remains the web
+//   Trailblazer path.
+// - Android: purchase Google Play Explorer/Investigator/Seeker/Technician
+//   subscriptions (Play subscription products explorer / investigator /
+//   seeker / technician with base plans monthly / annual), the Google Play
+//   one-time product trailblazer.30month, and the Google Play one-time Aura
+//   Bundle products (bare Play IDs flicker / apparition / haunting /
+//   spectral). Web subscriptions and web Aura bundles stay on the Wix path.
 //
 // Access is NEVER granted from CustomerInfo entitlements here. Base44 webhook
 // writes the generic plan fields (Apple + Google Play subscriptions) /
@@ -29,15 +30,20 @@ export const APPLE_TRAILBLAZER_PRODUCT_ID = 'com.ages.explorer.trailblazer.30mon
 export const TRAILBLAZER_ENTITLEMENT_ID = 'trailblazer';
 
 /**
- * Apple App Store product IDs (App Store Connect) for iOS Explorer/Investigator
- * subscriptions, keyed by the Dashboard product id. Must match the RevenueCat
- * product catalog. Purchased only on native iOS.
+ * Apple App Store product IDs (App Store Connect) for iOS
+ * Explorer/Investigator/Seeker/Technician subscriptions, keyed by the
+ * Dashboard product id. Must match the RevenueCat product catalog.
+ * Purchased only on native iOS.
  */
 export const APPLE_SUBSCRIPTION_PRODUCT_IDS = {
   explorer_monthly: 'com.ages.explorer.explorer.monthly',
   explorer_annual: 'com.ages.explorer.explorer.annual',
   investigator_monthly: 'com.ages.explorer.investigator.monthly',
   investigator_annual: 'com.ages.explorer.investigator.annual',
+  seeker_monthly: 'com.ages.explorer.seeker.monthly',
+  seeker_annual: 'com.ages.explorer.seeker.annual',
+  technician_monthly: 'com.ages.explorer.technician.monthly',
+  technician_annual: 'com.ages.explorer.technician.annual',
 };
 
 /** Base44 plan granted by the webhook for each iOS subscription product. */
@@ -46,6 +52,10 @@ export const APPLE_SUBSCRIPTION_PLAN_IDS = {
   explorer_annual: 'explorer',
   investigator_monthly: 'investigator',
   investigator_annual: 'investigator',
+  seeker_monthly: 'seeker',
+  seeker_annual: 'seeker',
+  technician_monthly: 'technician',
+  technician_annual: 'technician',
 };
 
 /** True when a Dashboard product id is an iOS App Store subscription. */
@@ -60,11 +70,12 @@ export function getAppleSubscriptionPlanId(productId) {
 
 /**
  * Google Play subscription products (Play Console) for Android
- * Explorer/Investigator subscriptions, keyed by the Dashboard product id.
- * Each Play subscription product (explorer / investigator) carries two Active
- * base plans (monthly / annual); RevenueCat reports the purchased product as
- * '<product>:<basePlan>' (e.g. explorer:monthly) in webhook events. Purchased
- * only on native Android by selecting the exact base plan as a
+ * Explorer/Investigator/Seeker/Technician subscriptions, keyed by the
+ * Dashboard product id. Each Play subscription product (explorer /
+ * investigator / seeker / technician) carries two Active base plans
+ * (monthly / annual); RevenueCat reports the purchased product as
+ * '<product>:<basePlan>' (e.g. explorer:monthly) in webhook events.
+ * Purchased only on native Android by selecting the exact base plan as a
  * SubscriptionOption. Must match Play Console and the RevenueCat catalog.
  */
 export const GOOGLE_SUBSCRIPTION_PRODUCTS = {
@@ -72,6 +83,10 @@ export const GOOGLE_SUBSCRIPTION_PRODUCTS = {
   explorer_annual: { playProductId: 'explorer', basePlanId: 'annual' },
   investigator_monthly: { playProductId: 'investigator', basePlanId: 'monthly' },
   investigator_annual: { playProductId: 'investigator', basePlanId: 'annual' },
+  seeker_monthly: { playProductId: 'seeker', basePlanId: 'monthly' },
+  seeker_annual: { playProductId: 'seeker', basePlanId: 'annual' },
+  technician_monthly: { playProductId: 'technician', basePlanId: 'monthly' },
+  technician_annual: { playProductId: 'technician', basePlanId: 'annual' },
 };
 
 /** Base44 plan granted by the webhook for each Android subscription product. */
@@ -80,6 +95,10 @@ export const GOOGLE_SUBSCRIPTION_PLAN_IDS = {
   explorer_annual: 'explorer',
   investigator_monthly: 'investigator',
   investigator_annual: 'investigator',
+  seeker_monthly: 'seeker',
+  seeker_annual: 'seeker',
+  technician_monthly: 'technician',
+  technician_annual: 'technician',
 };
 
 /** True when a Dashboard product id is an Android Google Play subscription. */
@@ -327,16 +346,16 @@ export async function purchaseGoogleTrailblazer(userId) {
 }
 
 /**
- * Purchase an Android Explorer/Investigator subscription via RevenueCat /
- * Google Play Billing. Native Android only. Fetches the Play subscription
- * product, selects the exact base plan (monthly / annual) as a
- * SubscriptionOption, and purchases it with purchaseSubscriptionOption —
+ * Purchase an Android Explorer/Investigator/Seeker/Technician subscription
+ * via RevenueCat / Google Play Billing. Native Android only. Fetches the
+ * Play subscription product, selects the exact base plan (monthly / annual)
+ * as a SubscriptionOption, and purchases it with purchaseSubscriptionOption —
  * purchaseStoreProduct would buy Google's default base plan instead of the
  * one the user chose. Does NOT grant access locally: the Base44 webhook
  * writes the generic plan fields; the caller must poll base44.auth.me()
  * afterwards.
  *
- * @param {string} productId Dashboard product id (explorer_monthly, explorer_annual, investigator_monthly, investigator_annual)
+ * @param {string} productId Dashboard product id (explorer_monthly, explorer_annual, investigator_monthly, investigator_annual, seeker_monthly, seeker_annual, technician_monthly, technician_annual)
  * @param {string} [userId] Base44 user id used as the RevenueCat appUserID
  * @returns {Promise<{ ok: boolean, cancelled?: boolean, error?: any, reason?: string, purchase?: any, product?: any, subscriptionOption?: any }>}
  */
@@ -508,11 +527,12 @@ export async function waitForGoogleTrailblazerGrant(fetchUser, {
 }
 
 /**
- * Purchase an iOS Explorer/Investigator subscription via RevenueCat/StoreKit.
- * Native iOS only. Does NOT grant access locally — the Base44 webhook writes
- * the plan fields; the caller must poll base44.auth.me() afterwards.
+ * Purchase an iOS Explorer/Investigator/Seeker/Technician subscription via
+ * RevenueCat/StoreKit. Native iOS only. Does NOT grant access locally — the
+ * Base44 webhook writes the plan fields; the caller must poll
+ * base44.auth.me() afterwards.
  *
- * @param {string} productId Dashboard product id (explorer_monthly, explorer_annual, investigator_monthly, investigator_annual)
+ * @param {string} productId Dashboard product id (explorer_monthly, explorer_annual, investigator_monthly, investigator_annual, seeker_monthly, seeker_annual, technician_monthly, technician_annual)
  * @param {string} [userId] Base44 user id used as the RevenueCat appUserID
  * @returns {Promise<{ ok: boolean, cancelled?: boolean, error?: any, reason?: string, purchase?: any, product?: any }>}
  */
@@ -714,10 +734,11 @@ export async function waitForGooglePlanGrant(fetchUser, {
 
 /**
  * Shared plan-grant poll. Waits until base44.auth.me shows the expected plan
- * (explorer / investigator) with a future plan_expiration_date; requiring
- * both avoids matching a pre-existing Wix grant (which has no expiration
- * date). Used by both the Apple and Google Play subscription flows — the
- * Base44 webhook is authoritative in both cases.
+ * (explorer / investigator / seeker / technician) with a future
+ * plan_expiration_date; requiring both avoids matching a pre-existing Wix
+ * grant (which has no expiration date). Used by both the Apple and Google
+ * Play subscription flows — the Base44 webhook is authoritative in both
+ * cases.
  *
  * @param {() => Promise<any>} fetchUser
  * @param {{ expectedPlanId?: string | null, timeoutMs?: number, intervalMs?: number, logLabel: string }} options
