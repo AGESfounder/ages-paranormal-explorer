@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3, MapPin, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
-import { captureGPS, geocodeAddress } from '@/lib/evidenceContext';
+import { captureGPS } from '@/lib/evidenceContext';
 import EquipmentSelectDrawer from '@/components/EquipmentSelectDrawer';
 import DateTimePicker from '@/components/DateTimePicker';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import LocationPicker from '@/components/LocationPicker';
 import { useEvidenceSaveGate } from '@/hooks/useEvidenceSaveGate';
 import EvidenceSaveAdGate from '@/components/EvidenceSaveAdGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
+import { useToast } from '@/components/ui/use-toast';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
@@ -50,6 +51,7 @@ function getNowTime() {
 
 export default function Evidence() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const tourId = searchParams.get('tourId');
   const stopId = searchParams.get('stopId');
@@ -72,9 +74,9 @@ export default function Evidence() {
   const [initialTime] = useState(cameFromStop ? getNowTime() : '');
   const [initialLocation] = useState(locationName ? decodeURIComponent(locationName) : '');
   // Do NOT pre-fill with the stop's coordinates — the user may be viewing a
-  // tour but standing elsewhere. GPS is auto-captured on mount (below); if
-  // unavailable, the evidence saves without coordinates rather than using
-  // an unrelated tour/stop location.
+  // tour but standing elsewhere. GPS is auto-captured on mount (below).
+  // Journal saves may proceed without coordinates; Community Map publishing
+  // requires verified current GPS (never the tour/stop location as a substitute).
   const [initialLat] = useState('');
   const [initialLng] = useState('');
 
@@ -159,11 +161,17 @@ export default function Evidence() {
     setUploading(false);
   };
 
-  const captureLocation = async () => {
+  const captureLocation = async (silent = false) => {
     setGpsCapturing(true);
     const coords = await captureGPS();
     if (coords) {
       setForm(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude }));
+    } else if (!silent) {
+      toast({
+        title: 'Location unavailable',
+        description: 'Could not capture your current GPS. You can still save to your Journal, but Community Map publishing requires location access.',
+        variant: 'destructive',
+      });
     }
     setGpsCapturing(false);
   };
@@ -171,7 +179,7 @@ export default function Evidence() {
   // Auto-capture the user's current GPS when logging evidence from a stop.
   // Never substitute the viewed tour/stop location for the user's actual position.
   useEffect(() => {
-    if (cameFromStop) captureLocation();
+    if (cameFromStop) captureLocation(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameFromStop]);
 
@@ -228,14 +236,13 @@ export default function Evidence() {
     // string values for latitude/longitude (schema type: number).
     if (typeof payload.latitude !== 'number') payload.latitude = null;
     if (typeof payload.longitude !== 'number') payload.longitude = null;
-    // If no coordinates but we have a manual address, geocode it so the
-    // evidence appears on the community map.
-    if (payload.latitude == null && payload.longitude == null && payload.location_name) {
-      const coords = await geocodeAddress(payload.location_name);
-      if (coords) {
-        payload.latitude = coords.latitude;
-        payload.longitude = coords.longitude;
-      }
+    // Community Map publishing requires verified current GPS — never substitute
+    // the tour/stop coordinates or a geocoded address. Journal saves may proceed
+    // without coordinates.
+    if (!payload.is_private && (payload.latitude == null || payload.longitude == null)) {
+      setSubmitting(false);
+      setSubmitError('Your current location could not be determined. Location access is required to place evidence on the Community Map. Tap "Capture My Location" and try again.');
+      return;
     }
     try {
       await base44.entities.Evidence.create(payload);
@@ -286,16 +293,17 @@ export default function Evidence() {
 
   const handleToggleShare = async (e) => {
     const makingPublic = e.is_private;
-    const updates = { is_private: !e.is_private };
-    // When sharing, ensure coordinates so the evidence appears on the
-    // community map — geocode from the location name if needed.
-    if (makingPublic && e.latitude == null && e.longitude == null && e.location_name) {
-      const coords = await geocodeAddress(e.location_name);
-      if (coords) {
-        updates.latitude = coords.latitude;
-        updates.longitude = coords.longitude;
-      }
+    // Community Map publishing requires verified current GPS — never substitute
+    // the tour/stop coordinates or a geocoded address.
+    if (makingPublic && (e.latitude == null || e.longitude == null)) {
+      toast({
+        title: 'Location required',
+        description: 'Your current location could not be determined. Location access is required to place evidence on the Community Map.',
+        variant: 'destructive',
+      });
+      return;
     }
+    const updates = { is_private: !e.is_private };
     await base44.entities.Evidence.update(e.id, updates);
     if (cameFromStop) {
       refreshStopEvidences();
@@ -351,7 +359,7 @@ export default function Evidence() {
             {form.is_private ? <Lock className="w-4 h-4 text-amber-400 shrink-0" /> : <Globe className="w-4 h-4 text-primary shrink-0" />}
             <div className="text-left">
               <p className={`text-xs font-heading uppercase tracking-wider ${form.is_private ? 'text-amber-400' : 'text-primary'}`}>{form.is_private ? 'Private' : 'Public'}</p>
-              <p className="text-[10px] text-muted-foreground">{form.is_private ? 'Only you can see this entry' : 'Visible on the community map'}</p>
+              <p className="text-[10px] text-muted-foreground">{form.is_private ? 'Only you can see this entry' : 'Visible on the community map (requires your location)'}</p>
             </div>
           </button>
 
@@ -576,7 +584,7 @@ export default function Evidence() {
             {form.is_private ? <Lock className="w-4 h-4 text-amber-400 shrink-0" /> : <Globe className="w-4 h-4 text-primary shrink-0" />}
             <div className="text-left">
               <p className={`text-xs font-heading uppercase tracking-wider ${form.is_private ? 'text-amber-400' : 'text-primary'}`}>{form.is_private ? 'Private' : 'Public'}</p>
-              <p className="text-[10px] text-muted-foreground">{form.is_private ? 'Only you can see this entry' : 'Visible on the community map'}</p>
+              <p className="text-[10px] text-muted-foreground">{form.is_private ? 'Only you can see this entry' : 'Visible on the community map (requires your location)'}</p>
             </div>
           </button>
 
