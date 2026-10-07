@@ -1408,18 +1408,18 @@ Best Practices
         );
 
       case 'sls':
-        return <SLSCamera />;
+        return <SLSCamera gateSave={gateEvidenceSave} />;
 
       case 'rem':
-        return <PhoneREMDevice />;
+        return <PhoneREMDevice gateSave={gateEvidenceSave} />;
 
       case 'termbank':
-        return <LocationTermBank />;
+        return <LocationTermBank gateSave={gateEvidenceSave} />;
 
       case 'alphabet':
-        return <AlphabetSweeper />;
+        return <AlphabetSweeper gateSave={gateEvidenceSave} />;
       case 'yesno':
-        return <YesNoSweeper />;
+        return <YesNoSweeper gateSave={gateEvidenceSave} />;
 
       default:
         return null;
