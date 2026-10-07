@@ -23,6 +23,9 @@ import EnergyCostBadge from '@/components/EnergyCostBadge';
 import { useNarrationMode } from '@/hooks/useNarrationMode';
 import { canUseEnhanced } from '@/lib/narrationMode';
 import EvidenceSaveButtons from '@/components/EvidenceSaveButtons';
+import EvidenceSaveAdGate from '@/components/EvidenceSaveAdGate';
+import { useEvidenceSaveGate } from '@/hooks/useEvidenceSaveGate';
+import { useObserverNarrationGate } from '@/hooks/useObserverNarrationGate';
 import ToolAdGate from '@/components/ToolAdGate';
 import { useToolAdGate } from '@/hooks/useToolAdGate';
 import { TIER_TOOLS as SHARED_TIER_TOOLS, needsToolAdGate, getToolRemaining } from '@/lib/toolAccess';
@@ -177,11 +180,29 @@ export default function Toolkit() {
   const { gateNarration, spendNarration, estimateNarrationCost, gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason, setGateReason, user: gateUser } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(gateUser);
   const canEnhance = canUseEnhanced(gateUser);
+  // Observer Device Narration ad gate (Seeker+ bypasses — ad-free).
+  const { requestAccess: requestNarrationAccess, adGateElement: narrationAdGateEl } = useObserverNarrationGate(gateUser);
+  // Authoritative evidence-save gate — Audio Recorder saves count against the
+  // same daily cap / Aura rules as the Evidence page (no separate counter).
+  const {
+    gateSave: gateEvidenceSave,
+    adGatePromise: evidenceAdGateOpen,
+    onAdGateSuccess: onEvidenceAdSuccess,
+    onAdGateClose: onEvidenceAdClose,
+    showUpgrade: showEvidenceUpgrade,
+    setShowUpgrade: setShowEvidenceUpgrade,
+    dailyRemaining: evidenceDailyRemaining,
+    gateReason: evidenceGateReason,
+  } = useEvidenceSaveGate();
 
-  // Gated narration wrapper — Device mode is free client-side TTS; Enhanced
-  // mode checks energy before speaking.
-  const narrate = (text, opts = {}) => {
-    if (narrationMode === 'device') { rawNarrate(text, { ...opts, useDeviceVoice: true }); return; }
+  // Gated narration wrapper — Device mode is free client-side TTS (Observer
+  // watches a rewarded ad first); Enhanced mode checks energy before speaking.
+  const narrate = async (text, opts = {}) => {
+    if (narrationMode === 'device') {
+      if (!(await requestNarrationAccess())) return;
+      rawNarrate(text, { ...opts, useDeviceVoice: true });
+      return;
+    }
     if (narrating || isGenerating) { rawNarrate(text, opts); return; }
     if (!gateNarration(text)) return;
     rawNarrate(text, opts);
@@ -511,6 +532,11 @@ export default function Toolkit() {
 
   const saveRecording = async (isPrivate = true) => {
     if (!recordedBlob) return;
+    // Route through the same authoritative evidence-save gate as the Evidence
+    // page so Audio Recorder saves count against the daily cap (Observer/Seeker
+    // ad-watched, Technician+ free-then-Aura). No separate counter is used.
+    const allowed = await gateEvidenceSave();
+    if (!allowed) return;
     setSavingRec(true);
     try {
       const file = new File([recordedBlob], 'evp_session.webm', { type: 'audio/webm' });
@@ -793,8 +819,8 @@ export default function Toolkit() {
                   </div>
                 </div>
                 <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20">
-                  <p className="text-[10px] font-heading uppercase tracking-wider text-primary mb-1">Investigative Guidance</p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  <p className="text-xs font-heading uppercase tracking-wider text-primary mb-1">Investigative Guidance</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
                     {getWeatherFlavor(weatherData.weatherCode, weatherData.temperature, weatherData.humidity, weatherData.wind)}
                   </p>
                 </div>
@@ -1496,6 +1522,14 @@ Best Practices
         />
       </div>
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
+      <EvidenceSaveAdGate
+        show={evidenceAdGateOpen}
+        remaining={evidenceDailyRemaining}
+        onSuccess={onEvidenceAdSuccess}
+        onClose={onEvidenceAdClose}
+      />
+      <UpgradePrompt show={showEvidenceUpgrade} onClose={() => setShowEvidenceUpgrade(false)} reason={evidenceGateReason} />
+      {narrationAdGateEl}
       <NavBar />
     </PageContainer>
   );

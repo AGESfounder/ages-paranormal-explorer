@@ -30,6 +30,7 @@ import { rewriteForStopFocus } from '@/lib/enrichStops';
 import { stripUrlsForNarration } from '@/lib/urlText';
 import NarrationToggle from '@/components/NarrationToggle';
 import { useNarrationMode } from '@/hooks/useNarrationMode';
+import { useObserverNarrationGate } from '@/hooks/useObserverNarrationGate';
 import { canUseEnhanced } from '@/lib/narrationMode';
 import LinkifiedText from '@/components/LinkifiedText';
 import DeleteStopDialog from '@/components/DeleteStopDialog';
@@ -64,6 +65,7 @@ export default function StopDetail() {
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, setGateReason, user, isPaid } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
   const canEnhance = canUseEnhanced(user);
+  const { requestAccess: requestNarrationAccess, adGateElement: narrationAdGateEl } = useObserverNarrationGate(user);
   const isAdmin = user?.role === 'admin';
   const [verifying, setVerifying] = useState(false);
   const [showDeleteStop, setShowDeleteStop] = useState(false);
@@ -78,6 +80,7 @@ export default function StopDetail() {
     // Device mode: free, client-side TTS — no server call, no energy cost,
     // no offline-audio intercept.
     if (narrationMode === 'device') {
+      if (!(await requestNarrationAccess())) return;
       rawNarrate(cleanText, { ...opts, useDeviceVoice: true });
       return;
     }
@@ -941,6 +944,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         onConfirm={handleDeleteStop}
         deleting={deletingStop}
       />
+      {narrationAdGateEl}
     </PageContainer>
   );
 }

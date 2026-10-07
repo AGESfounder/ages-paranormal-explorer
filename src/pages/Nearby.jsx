@@ -165,21 +165,35 @@ export default function Nearby() {
   }, [coords]);
 
   const loadNearby = async () => {
-    const all = await base44.entities.Tour.list();
-    const withDist = all.map(t => {
-      if (!t.start_latitude || !t.start_longitude) return { ...t, distance: Infinity };
-      const dist = getDistance(coords.lat, coords.lng, t.start_latitude, t.start_longitude);
-      return { ...t, distance: dist };
-    });
-    withDist.sort((a, b) => a.distance - b.distance);
-    setTours(withDist);
-    setLoading(false);
+    try {
+      const all = await base44.entities.Tour.list();
+      const withDist = all.map(t => {
+        if (!t.start_latitude || !t.start_longitude) return { ...t, distance: Infinity };
+        const dist = getDistance(coords.lat, coords.lng, t.start_latitude, t.start_longitude);
+        return { ...t, distance: dist };
+      });
+      withDist.sort((a, b) => a.distance - b.distance);
+      setTours(withDist);
+    } catch (err) {
+      console.error('loadNearby failed:', err);
+      setError('Could not load tours. Pull to refresh or try a zip code.');
+      setTours([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadAllTours = async () => {
-    const all = await base44.entities.Tour.list('-created_date', 10);
-    setTours(all);
-    setLoading(false);
+    try {
+      const all = await base44.entities.Tour.list('-created_date', 10);
+      setTours(all);
+    } catch (err) {
+      console.error('loadAllTours failed:', err);
+      setError('Could not load tours. Pull to refresh or try again.');
+      setTours([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const refreshNearby = async () => {

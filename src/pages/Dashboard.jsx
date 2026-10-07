@@ -8,6 +8,7 @@ import SectionHeader from '@/components/SectionHeader';
 import EnergyMeter from '@/components/EnergyMeter';
 import TierToolkitAccess from '@/components/TierToolsComparison';
 import { base44 } from '@/api/base44Client';
+import { toast } from '@/components/ui/use-toast';
 import { showRewardedAd } from '@/lib/adService';
 import { PLANS, AURA_BUNDLES, PLAN_ORDER } from '@/lib/plans';
 import AdRewardCard from '@/components/AdRewardCard';
@@ -125,7 +126,17 @@ export default function Dashboard() {
     setStockingUp(toolName);
     try {
       const result = await showRewardedAd({ userId: user?.id });
-      if (!result?.rewarded) return; // incomplete/abandoned ad — no grant
+      if (!result?.rewarded) {
+        // No ad available or ad incomplete — no seconds granted. Exit the
+        // loading state (finally) and tell the user clearly.
+        const msg = result?.reason === 'no_fill'
+          ? 'No ad available right now. Try again later.'
+          : result?.reason === 'skipped'
+            ? 'Ads are not ready yet. Try again in a moment.'
+            : 'Ad was not completed. No time granted.';
+        toast({ title: 'Stock Up unavailable', description: msg, variant: 'destructive' });
+        return;
+      }
       const res = await base44.functions.invoke('grant-tool-time', { toolName });
       if (res.data?.success) {
         await loadData(); // refresh user.tool_banks
@@ -505,8 +516,8 @@ export default function Dashboard() {
           <div className="space-y-1.5">
             {currentPlan.features.map((f, i) => (
               <div key={i} className="flex items-start gap-2">
-                <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                <p className="text-xs text-muted-foreground leading-relaxed">{f}</p>
+                <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-sm text-muted-foreground leading-relaxed">{f}</p>
               </div>
             ))}
           </div>
@@ -662,8 +673,8 @@ export default function Dashboard() {
                   <div className="space-y-1 mb-3">
                     {plan.features.slice(0, 4).map((f, i) => (
                       <div key={i} className="flex items-start gap-1.5">
-                        <Check className="w-3 h-3 text-primary shrink-0 mt-0.5" />
-                        <p className="text-[11px] text-muted-foreground leading-relaxed">{f}</p>
+                        <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                        <p className="text-xs text-muted-foreground leading-relaxed">{f}</p>
                       </div>
                     ))}
                   </div>

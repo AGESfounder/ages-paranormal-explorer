@@ -38,6 +38,7 @@ import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
 import NarrationToggle from '@/components/NarrationToggle';
 import { useNarrationMode } from '@/hooks/useNarrationMode';
+import { useObserverNarrationGate } from '@/hooks/useObserverNarrationGate';
 import { canUseEnhanced } from '@/lib/narrationMode';
 import { verifyStopLocation } from '@/lib/verifyStop';
 import { Input } from '@/components/ui/input';
@@ -217,6 +218,7 @@ export default function TourDetail() {
   const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
   const canEnhance = canUseEnhanced(user);
+  const { requestAccess: requestNarrationAccess, adGateElement: narrationAdGateEl } = useObserverNarrationGate(user);
 
   // Gated narration wrapper — checks for pre-generated offline audio first,
   // then falls back to live TTS generation (which costs narration credits).
@@ -225,6 +227,7 @@ export default function TourDetail() {
     // Device mode: free, client-side TTS — no server call, no energy cost,
     // no offline-audio intercept.
     if (narrationMode === 'device') {
+      if (!(await requestNarrationAccess())) return;
       rawNarrate(cleanText, { ...opts, useDeviceVoice: true });
       return;
     }
@@ -1541,6 +1544,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       </div>
 
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
+      {narrationAdGateEl}
       <NavBar />
     </PageContainer>
   );

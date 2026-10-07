@@ -14,6 +14,7 @@ import UpgradePrompt from '@/components/UpgradePrompt';
 import NarrationToggle from '@/components/NarrationToggle';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import { useNarrationMode } from '@/hooks/useNarrationMode';
+import { useObserverNarrationGate } from '@/hooks/useObserverNarrationGate';
 import { canUseEnhanced } from '@/lib/narrationMode';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -149,11 +150,16 @@ export default function HauntedLocations() {
   const { gateManifestation, spendManifestation, gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
   const canEnhance = canUseEnhanced(user);
+  const { requestAccess: requestNarrationAccess, adGateElement: narrationAdGateEl } = useObserverNarrationGate(user);
 
-  // Gated narration wrapper — Device mode is free client-side TTS; Enhanced
-  // mode checks energy before speaking.
-  const narrate = (text, opts = {}) => {
-    if (narrationMode === 'device') { rawNarrate(text, { ...opts, useDeviceVoice: true }); return; }
+  // Gated narration wrapper — Device mode is free client-side TTS (Observer
+  // watches a rewarded ad first); Enhanced mode checks energy before speaking.
+  const narrate = async (text, opts = {}) => {
+    if (narrationMode === 'device') {
+      if (!(await requestNarrationAccess())) return;
+      rawNarrate(text, { ...opts, useDeviceVoice: true });
+      return;
+    }
     if (isSpeaking || isGenerating) { rawNarrate(text, opts); return; }
     if (!gateNarration(text)) return;
     rawNarrate(text, opts);
@@ -725,6 +731,7 @@ export default function HauntedLocations() {
       </div>
       <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
+      {narrationAdGateEl}
     </motion.div>
   );
 }

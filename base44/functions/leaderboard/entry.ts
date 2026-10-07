@@ -1,5 +1,4 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
-import { getEffectivePlanId } from '../../shared/access.js';
 
 Deno.serve(async (req) => {
   try {
@@ -26,19 +25,26 @@ Deno.serve(async (req) => {
 
     // Build leaderboard entries — only Explorer/Investigator/Trailblazer
     // (and admins) participate. All tiers can view the leaderboard.
+    // Filter on the ORIGINAL user objects (which carry role/plan) BEFORE
+    // mapping to the display shape — mapping first strips those fields so the
+    // plan filter would see undefined and exclude everyone. Eligibility uses
+    // the assigned plan (u.plan), not the time-active effective plan, so
+    // completed-investigation history for Investigator/Explorer/Trailblazer
+    // accounts stays on the leaderboard even if their subscription lapsed.
+    // Only genuinely free (observer) users are excluded.
     const leaderboard = users
+      .filter(u => (counts[u.id] || 0) > 0)
+      .filter(u => {
+        if (u.role === 'admin') return true;
+        const plan = u.plan || 'observer';
+        return plan === 'explorer' || plan === 'investigator' || plan === 'trailblazer';
+      })
       .map(u => ({
         id: u.id,
         name: u.display_name || u.full_name || 'Anonymous',
         profile_image_url: u.profile_image_url || null,
         count: counts[u.id] || 0,
       }))
-      .filter(u => u.count > 0)
-      .filter(u => {
-        if (u.role === 'admin') return true;
-        const planId = getEffectivePlanId(u);
-        return planId === 'explorer' || planId === 'investigator' || planId === 'trailblazer';
-      })
       .sort((a, b) => b.count - a.count)
       .slice(0, 20);
 
