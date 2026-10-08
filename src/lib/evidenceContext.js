@@ -1,5 +1,5 @@
 import { base44 } from '@/api/base44Client';
-import { getDevicePosition, isNativeApp } from '@/lib/deviceCapabilities';
+import { getDevicePosition, isNativeApp, isLocationTrackingEnabled } from '@/lib/deviceCapabilities';
 
 /**
  * Captures the current device GPS coordinates.
@@ -48,6 +48,9 @@ export function primeGPS() {
 }
 
 export async function captureGPS() {
+  // When the AGES Location Tracking setting is OFF, return a marker so callers
+  // can show the tracking-off dialog instead of a generic GPS-failure dialog.
+  if (!isLocationTrackingEnabled()) return { disabled: true };
   const fresh = await captureGPSRaw();
   if (fresh) lastGps = { ...fresh, at: Date.now() };
   return fresh;
@@ -188,7 +191,7 @@ export async function buildEvidenceContext(overrides = {}, options = {}) {
     ? cached
     : await Promise.race([captureGPS(), new Promise((r) => setTimeout(() => r(null), 26000))]);
 
-  if (gps) {
+  if (gps && !gps.disabled) {
     ctx.latitude = gps.latitude;
     ctx.longitude = gps.longitude;
     ctx.location_source = 'GPS';

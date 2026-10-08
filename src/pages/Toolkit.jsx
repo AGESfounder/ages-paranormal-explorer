@@ -33,6 +33,7 @@ import { TIER_TOOLS as SHARED_TIER_TOOLS, needsToolAdGate, getToolRemaining } fr
 import { fetchWeatherByCoords as omFetchByCoords, fetchWeatherByLocation as omFetchByLocation } from '@/lib/openMeteo';
 import { getWeatherFlavor } from '@/lib/weatherFlavor';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
+import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 
 // Two-column grid order (fills left→right, row by row):
 //   Col 1: Equipment Guide, Audio Recorder, Anomaly Camera, Vibration Communicator, Weather Monitor, Paranormal Research: Terms
@@ -63,6 +64,7 @@ const SWEEP_SPEEDS = {
 
 export default function Toolkit() {
   const { captureGpsForSave, gpsDialog } = useToolGpsSave();
+  const { requestLocation: requestGps, trackingOffDialog } = useLocationTrackingGate();
   const [activeTool, setActiveTool] = useState(null);
   const [adGateTool, setAdGateTool] = useState(null);
   const [user, setUser] = useState(null);
@@ -606,10 +608,12 @@ export default function Toolkit() {
   const autoFetchWeather = () => {
     if (weatherData) return;
     setWeatherError(null);
-    getDevicePosition({ enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 })
+    requestGps({ enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 })
       .then((result) => {
         if (result.ok) {
           fetchWeatherByCoords(result.coords.lat, result.coords.lng);
+        } else if (result.error === 'disabled') {
+          // User declined to turn tracking back on — don't show a generic error
         } else if (result.error === 'denied') {
           setWeatherError('Location access denied. Enable location in your device settings or search by city name below.');
         } else {
@@ -1549,6 +1553,7 @@ Best Practices
       <UpgradePrompt show={showEvidenceUpgrade} onClose={() => setShowEvidenceUpgrade(false)} reason={evidenceGateReason} />
       {narrationAdGateEl}
       {gpsDialog}
+      {trackingOffDialog}
       <NavBar />
     </PageContainer>
   );

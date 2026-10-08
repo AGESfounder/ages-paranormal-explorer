@@ -14,11 +14,13 @@ import ExistingTourDialog from '@/components/ExistingTourDialog';
 import { generateNewNearbyTour } from '@/lib/nearbyTourGenerator';
 import { getDevicePosition, haversineMiles } from '@/lib/deviceCapabilities';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
+import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function Nearby() {
   const navigate = useNavigate();
   const { gateGeneration, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { requestLocation: requestGps, trackingOffDialog } = useLocationTrackingGate();
   const [tours, setTours] = useState([]);
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(true);
@@ -138,10 +140,13 @@ export default function Nearby() {
     setLocating(true);
     setError('');
     setZipResults(null);
-    getDevicePosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 })
+    requestGps({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 })
       .then((result) => {
         if (result.ok) {
           setCoords(result.coords);
+          setLocating(false);
+        } else if (result.error === 'disabled') {
+          // User declined to turn tracking back on — don't substitute tours
           setLocating(false);
         } else {
           setError(result.message || 'Location access denied');
@@ -363,6 +368,7 @@ export default function Nearby() {
       </PullToRefresh>
       <ExistingTourDialog tour={existingTour} onClose={() => { setExistingTour(null); setDialogMode('exists'); }} mode={dialogMode} />
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
+      {trackingOffDialog}
       <NavBar />
     </PageContainer>
   );

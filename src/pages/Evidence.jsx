@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3, MapPin, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
 import { captureGPS } from '@/lib/evidenceContext';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
+import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 import EquipmentSelectDrawer from '@/components/EquipmentSelectDrawer';
 import DateTimePicker from '@/components/DateTimePicker';
 import { Button } from '@/components/ui/button';
