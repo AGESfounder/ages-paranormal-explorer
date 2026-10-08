@@ -397,16 +397,19 @@ export default function Evidence() {
           });
           return;
         }
-      } else if (result.error === 'denied' || result.error === 'services_off') {
+      } else if (result.error === 'denied') {
         toast({
           title: 'Location access required',
-          description: 'Turn on location services and enable location access for AGES to verify you are near the tour stop before publishing.',
+          description: 'Enable location access in your device settings to verify you are near the tour stop before publishing.',
           variant: 'destructive',
         });
         return;
       }
-      // If GPS is unavailable (timeout/unavailable), allow publishing — we
-      // can't verify proximity, but blocking would prevent legitimate use.
+      // If GPS is unavailable (services_off/timeout/unavailable), allow
+      // publishing — the user deliberately chose "Use Current Tour Stop"
+      // because GPS could not be obtained. Blocking here would defeat that
+      // offline/no-service recovery option. The safeguard only catches the
+      // GPS-working-but-user-not-at-stop case.
     }
     const updates = { is_private: !e.is_private };
     await base44.entities.Evidence.update(e.id, updates);
