@@ -39,7 +39,7 @@ export function classifyLocationError(err) {
   if (match) {
     const n = Number(match[1]);
     if (n === 3 || n === 8) return 'denied';
-    if (n === 7 || n === 9) return 'services_off';
+    if (n === 7 || n === 9 || n === 16) return 'services_off';
     if (n === 10) return 'timeout';
     return 'unavailable';
   }

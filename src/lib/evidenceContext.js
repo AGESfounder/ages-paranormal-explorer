@@ -175,6 +175,12 @@ export async function geocodeAddress(address) {
 }
 
 export async function buildEvidenceContext(overrides = {}, options = {}) {
+  // "Save Without Location": the user declined every location source, so the
+  // record must carry NO location-derived data. Previously the last viewed
+  // tour/stop from the user profile was attached anyway, which made the
+  // journal show an old stop's name as if it were this save's location.
+  if (overrides.location_source === 'NONE') return {};
+
   const activeCtx = await getActiveContext();
   const ctx = {};
   if (activeCtx.tour_id && !overrides.tour_id) ctx.tour_id = activeCtx.tour_id;
