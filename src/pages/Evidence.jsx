@@ -370,49 +370,59 @@ export default function Evidence() {
   };
 
   const handleToggleShare = async (e) => {
-    const makingPublic = e.is_private;
-    // Make Public uses the location established at save time (GPS or TOUR_STOP).
-    // Never re-capture the user's current GPS — they may be far from where the
-    // evidence was captured. NONE (no location) cannot be made public.
-    if (makingPublic && (e.latitude == null || e.longitude == null || e.location_source === 'NONE')) {
-      toast({
-        title: 'Location required',
-        description: 'This evidence has no location associated with it. A location is required to share it on the Community Map.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    // Proximity safeguard for TOUR_STOP evidence: the user must be physically
-    // near the tour stop to publish it on the Community Map. This prevents
-    // publishing evidence with tour-stop coordinates from a different location.
-    if (makingPublic && e.location_source === 'TOUR_STOP') {
-      const result = await getDevicePosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
-      if (result.ok) {
-        const distance = haversineMeters(result.coords.lat, result.coords.lng, e.latitude, e.longitude);
-        if (distance > 1000) {
-          toast({
-            title: 'Too far from tour stop',
-            description: 'You must be within 1 km of the tour stop to publish this evidence on the Community Map. The tour-stop coordinates are not your device GPS.',
-            variant: 'destructive',
-          });
-          return;
-        }
-      } else if (result.error === 'denied') {
+    // The Journal button reflects the evidence's ACTUAL Community Map state,
+    // not is_private alone. Evidence is "on the map" only when is_private is
+    // false AND it has valid coordinates. The toggle action uses the same
+    // logic so the button label and the handler always agree.
+    const hasCoords = e.latitude != null && e.longitude != null;
+    const isOnMap = !e.is_private && hasCoords;
+    const makingPublic = !isOnMap;
+
+    if (makingPublic) {
+      // User wants to put this evidence on the Community Map.
+      // Make Public uses the location established at save time (GPS or
+      // TOUR_STOP). Never re-capture the user's current GPS. NONE / no
+      // coordinates cannot be made public.
+      if (!hasCoords || e.location_source === 'NONE') {
         toast({
-          title: 'Location access required',
-          description: 'Enable location access in your device settings to verify you are near the tour stop before publishing.',
+          title: 'Evidence Cannot Be Made Public',
+          description: 'This evidence does not have a valid location. Evidence must have GPS coordinates or a tour-stop location to be shared on the Community Map.',
           variant: 'destructive',
         });
         return;
       }
-      // If GPS is unavailable (services_off/timeout/unavailable), allow
-      // publishing — the user deliberately chose "Use Current Tour Stop"
-      // because GPS could not be obtained. Blocking here would defeat that
-      // offline/no-service recovery option. The safeguard only catches the
-      // GPS-working-but-user-not-at-stop case.
+      // Proximity safeguard for TOUR_STOP evidence: the user must be
+      // physically near the tour stop to publish it on the Community Map.
+      if (e.location_source === 'TOUR_STOP') {
+        const result = await getDevicePosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+        if (result.ok) {
+          const distance = haversineMeters(result.coords.lat, result.coords.lng, e.latitude, e.longitude);
+          if (distance > 1000) {
+            toast({
+              title: 'Too far from tour stop',
+              description: 'You must be within 1 km of the tour stop to publish this evidence on the Community Map. The tour-stop coordinates are not your device GPS.',
+              variant: 'destructive',
+            });
+            return;
+          }
+        } else if (result.error === 'denied') {
+          toast({
+            title: 'Location access required',
+            description: 'Enable location access in your device settings to verify you are near the tour stop before publishing.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        // If GPS is unavailable (services_off/timeout/unavailable), allow
+        // publishing — the user deliberately chose "Use Current Tour Stop"
+        // because GPS could not be obtained. Blocking here would defeat that
+        // offline/no-service recovery option.
+      }
+      await base44.entities.Evidence.update(e.id, { is_private: false });
+    } else {
+      // User wants to take this evidence off the Community Map.
+      await base44.entities.Evidence.update(e.id, { is_private: true });
     }
-    const updates = { is_private: !e.is_private };
-    await base44.entities.Evidence.update(e.id, updates);
     if (cameFromStop) {
       refreshStopEvidences();
     } else {
@@ -650,10 +660,10 @@ export default function Evidence() {
                       )}
                       <button
                         onClick={() => handleToggleShare(e)}
-                        className={`mt-2 ml-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${e.is_private ? 'border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40' : 'border-primary/30 text-primary bg-primary/5'}`}
+                        className={`mt-2 ml-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${(!e.is_private && e.latitude && e.longitude) ? 'border-primary/30 text-primary bg-primary/5' : 'border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40'}`}
                       >
-                        {e.is_private ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                        {e.is_private ? 'Make Public' : 'Make Private'}
+                        {(!e.is_private && e.latitude && e.longitude) ? <Lock className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
+                        {(!e.is_private && e.latitude && e.longitude) ? 'Make Private' : 'Make Public'}
                       </button>
                     </motion.div>
                   );
@@ -928,10 +938,10 @@ export default function Evidence() {
                 {e.file_url && e.type === 'evp' && <audio src={e.file_url} controls className="mt-2 w-full" />}
                 <button
                   onClick={() => handleToggleShare(e)}
-                  className={`mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${e.is_private ? 'border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40' : 'border-primary/30 text-primary bg-primary/5'}`}
+                  className={`mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${(!e.is_private && e.latitude && e.longitude) ? 'border-primary/30 text-primary bg-primary/5' : 'border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40'}`}
                 >
-                  {e.is_private ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                  {e.is_private ? 'Make Public' : 'Make Private'}
+                  {(!e.is_private && e.latitude && e.longitude) ? <Lock className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
+                  {(!e.is_private && e.latitude && e.longitude) ? 'Make Private' : 'Make Public'}
                 </button>
               </motion.div>
             );
