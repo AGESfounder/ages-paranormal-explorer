@@ -554,9 +554,10 @@ export default function YesNoSweeper({ gateSave }) {
 
   const saveSession = async (isPrivate = true) => {
     if (!videoBlob) return;
-    if (gateSave && !(await gateSave())) return;
     setSaving(true);
     try {
+      // Upload and capture GPS BEFORE gating so a failed upload or cancelled
+      // GPS flow does NOT consume a daily evidence save.
       const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const file = new File([videoBlob], `yes_no_idk_session.${ext}`, { type: videoBlob.type });
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
@@ -565,6 +566,7 @@ export default function YesNoSweeper({ gateSave }) {
       const time = now.toTimeString().slice(0, 5);
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
+      if (gateSave && !(await gateSave())) { setSaving(false); return; }
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Yes/No/IDK Sweeper — ${date}`,

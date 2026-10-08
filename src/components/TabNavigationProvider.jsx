@@ -73,11 +73,19 @@ export default function TabNavigationProvider({ children }) {
       // Switching tabs: jump to the top of the destination tab's stack
       // (preserving its prior sub-route). Pre-set the active tab so any deep
       // route reached there is attributed correctly.
+      // Exception: Home and Profile always reset to their root — the user
+      // expects these primary destinations to show their main page, not a
+      // deep route they previously visited.
       activeTabRef.current = key;
       setActiveTab(key);
-      const stack = stacksRef.current[key];
-      const top = stack[stack.length - 1] || root;
-      navigate(top);
+      if (key === 'home' || key === 'profile') {
+        stacksRef.current[key] = [root];
+        navigate(root);
+      } else {
+        const stack = stacksRef.current[key];
+        const top = stack[stack.length - 1] || root;
+        navigate(top);
+      }
     }
   }, [navigate]);
 

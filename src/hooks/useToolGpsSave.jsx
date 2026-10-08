@@ -7,29 +7,40 @@ import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 /**
  * Shared GPS capture + dialog hook for Toolkit tool evidence saves.
  *
- * When the user saves evidence from a Toolkit tool, this hook:
- *   1. Tries to capture device GPS (high accuracy, then low accuracy fallback)
- *   2. If GPS succeeds → returns { latitude, longitude, location_source: 'GPS' }
- *   3. If GPS fails (any reason) → shows GpsLocationDialog with three choices:
- *      Retry GPS / Use Current Tour Stop / Save Without Location.
- *      For denied permission, an "Open Device Settings" button is also shown.
- *   4. Returns the user's choice or null if cancelled
+ * Accepts an optional external `requestLocation` function (from a parent's
+ * useLocationTrackingGate instance). When provided, the hook uses it instead
+ * of creating its own useLocationTrackingGate, and returns trackingOffDialog
+ * as null — the parent is responsible for rendering its own trackingOffDialog.
+ * This avoids two separate useLocationTrackingGate instances in the same
+ * component (which caused the Location Tracking OFF dialog to never render
+ * in Toolkit.jsx, hanging the save forever).
  *
- * Usage:
- *   const { captureGpsForSave, gpsDialog } = useToolGpsSave();
- *   const gpsResult = await captureGpsForSave();
- *   if (!gpsResult) return; // user cancelled
- *   const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
- *   await base44.entities.Evidence.create({ ...fields, ...gpsResult, ...ctx });
- *   // render {gpsDialog} in JSX
+ * When no external requestLocation is provided (tool components like
+ * SLSCamera, LocationTermBank, etc.), the hook creates its own
+ * useLocationTrackingGate and returns its trackingOffDialog for the component
+ * to render.
+ *
+ * Usage (parent provides requestLocation — e.g. Toolkit.jsx):
+ *   const { requestLocation: requestGps, trackingOffDialog } = useLocationTrackingGate();
+ *   const { captureGpsForSave, gpsDialog } = useToolGpsSave(requestGps);
+ *   // render {trackingOffDialog} (from the parent's useLocationTrackingGate)
+ *
+ * Usage (standalone — e.g. SLSCamera):
+ *   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
+ *   // render {gpsDialog} and {trackingOffDialog}
  */
-export function useToolGpsSave() {
+export function useToolGpsSave(externalRequestLocation) {
   const [showGpsDialog, setShowGpsDialog] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [errorType, setErrorType] = useState(null);
   const [tourStopCoords, setTourStopCoords] = useState(null);
   const [resolver, setResolver] = useState(null);
-  const { requestLocation, trackingOffDialog } = useLocationTrackingGate();
+  // Always call useLocationTrackingGate (Rules of Hooks). When an external
+  // requestLocation is provided, we use it instead and suppress our own
+  // trackingOffDialog (the parent renders its own).
+  const ownGate = useLocationTrackingGate();
+  const requestLocation = externalRequestLocation || ownGate.requestLocation;
+  const trackingOffDialog = externalRequestLocation ? null : ownGate.trackingOffDialog;
 
   const settle = (result) => {
     setShowGpsDialog(false);
@@ -82,7 +93,7 @@ export function useToolGpsSave() {
       setResolver({ resolve });
       setShowGpsDialog(true);
     });
-  }, []);
+  }, [requestLocation]);
 
   const onGpsRetry = useCallback(async () => {
     setRetrying(true);
@@ -95,7 +106,7 @@ export function useToolGpsSave() {
       setErrorType(result.error || null);
     }
     // If still no GPS, keep dialog open
-  }, []);
+  }, [requestLocation]);
 
   const onGpsUseTourStop = useCallback(() => {
     if (tourStopCoords) {

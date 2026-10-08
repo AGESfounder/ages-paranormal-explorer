@@ -63,8 +63,12 @@ const SWEEP_SPEEDS = {
 };
 
 export default function Toolkit() {
-  const { captureGpsForSave, gpsDialog } = useToolGpsSave();
+  // useLocationTrackingGate must be instantiated before useToolGpsSave so
+  // its requestLocation can be shared — otherwise useToolGpsSave creates its
+  // own instance whose trackingOffDialog is never rendered, hanging saves
+  // when Location Tracking is OFF.
   const { requestLocation: requestGps, trackingOffDialog } = useLocationTrackingGate();
+  const { captureGpsForSave, gpsDialog } = useToolGpsSave(requestGps);
   const [activeTool, setActiveTool] = useState(null);
   const [adGateTool, setAdGateTool] = useState(null);
   const [user, setUser] = useState(null);
@@ -537,13 +541,11 @@ export default function Toolkit() {
 
   const saveRecording = async (isPrivate = true) => {
     if (!recordedBlob) return;
-    // Route through the same authoritative evidence-save gate as the Evidence
-    // page so Audio Recorder saves count against the daily cap (Observer/Seeker
-    // ad-watched, Technician+ free-then-Aura). No separate counter is used.
-    const allowed = await gateEvidenceSave();
-    if (!allowed) return;
     setSavingRec(true);
     try {
+      // Upload and capture GPS BEFORE gating so a failed upload or cancelled
+      // GPS flow does NOT consume a daily evidence save. The gate (ad watch +
+      // spend-evidence-save) is only called once the evidence is ready to create.
       const file = new File([recordedBlob], 'evp_session.webm', { type: 'audio/webm' });
       const uploadRes = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
@@ -555,6 +557,10 @@ export default function Toolkit() {
       if (savedWords.length > 0) description += '\n\nWords heard: ' + savedWords.join(', ');
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSavingRec(false); return; }
+      // Gate the save AFTER upload + GPS — the daily counter is only consumed
+      // when the evidence is actually about to be created.
+      const allowed = await gateEvidenceSave();
+      if (!allowed) { setSavingRec(false); return; }
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: (isRadio ? 'Radio Sweeper Session ' : 'EVP Session ') + date,

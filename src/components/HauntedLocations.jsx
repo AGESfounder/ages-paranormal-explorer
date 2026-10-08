@@ -16,6 +16,7 @@ import EnergyCostBadge from '@/components/EnergyCostBadge';
 import { useNarrationMode } from '@/hooks/useNarrationMode';
 import { useObserverNarrationGate } from '@/hooks/useObserverNarrationGate';
 import { canUseEnhanced } from '@/lib/narrationMode';
+import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const R = 3958.8;
@@ -151,6 +152,7 @@ export default function HauntedLocations() {
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
   const canEnhance = canUseEnhanced(user);
   const { requestAccess: requestNarrationAccess, adGateElement: narrationAdGateEl } = useObserverNarrationGate(user);
+  const { requestLocation, trackingOffDialog: hauntedTrackingOffDialog } = useLocationTrackingGate();
 
   // Gated narration wrapper — Device mode is free client-side TTS (Observer
   // watches a rewarded ad first); Enhanced mode checks energy before speaking.
@@ -452,16 +454,19 @@ export default function HauntedLocations() {
 
   const handleNearby = async () => {
     setError(''); setZipMode(false); setResults(null);
-    if (!navigator.geolocation) { setError('Location is not supported on this device. Try Zip Code instead.'); return; }
-    try {
-      const pos = await new Promise((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
-      );
-      await runSearch(pos.coords.latitude, pos.coords.longitude, 'Your location');
-    } catch (e) {
-      setError(e.code === 1 || (e.message || '').includes('denied')
-        ? 'Location permission denied. Try Zip Code instead.'
-        : 'Could not determine your location.');
+    // Use the shared Location Tracking gate so the AGES "Location Tracking is
+    // Off" dialog is shown when the setting is disabled — same protection as
+    // the Nearby page. Previously this used raw navigator.geolocation which
+    // bypassed the setting entirely.
+    const result = await requestLocation({ enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+    if (result.ok) {
+      await runSearch(result.coords.lat, result.coords.lng, 'Your location');
+    } else if (result.error === 'disabled') {
+      // User declined to turn tracking back on — don't substitute a location
+    } else if (result.error === 'denied') {
+      setError('Location permission denied. Try Zip Code instead.');
+    } else {
+      setError('Could not determine your location. Try Zip Code instead.');
     }
   };
 
@@ -731,6 +736,7 @@ export default function HauntedLocations() {
       </div>
       <ExistingTourDialog tour={existingTour} onClose={() => setExistingTour(null)} />
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
+      {hauntedTrackingOffDialog}
       {narrationAdGateEl}
     </motion.div>
   );

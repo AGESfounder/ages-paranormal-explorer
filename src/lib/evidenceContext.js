@@ -179,11 +179,27 @@ export async function buildEvidenceContext(overrides = {}, options = {}) {
   const ctx = {};
   if (activeCtx.tour_id && !overrides.tour_id) ctx.tour_id = activeCtx.tour_id;
   if (activeCtx.stop_id && !overrides.stop_id) ctx.stop_id = activeCtx.stop_id;
-  if (activeCtx.location_name && !overrides.location_name) ctx.location_name = activeCtx.location_name;
+
+  // When GPS coordinates are the location source, the location name MUST come
+  // from reverse-geocoding those coordinates — NOT from the tour stop context.
+  // The tour stop name describes a different physical location than the user's
+  // actual GPS. Using it would label evidence "South Carolina tour stop" while
+  // the coordinates point to the user's actual location hundreds of miles away.
+  const isGpsSource = overrides.location_source === 'GPS';
+  if (activeCtx.location_name && !overrides.location_name && !isGpsSource) {
+    ctx.location_name = activeCtx.location_name;
+  }
 
   // Skip GPS capture when coordinates are already provided (e.g., from the
   // useToolGpsSave dialog) or when the caller explicitly opts out.
   if (options.skipGps || (overrides.latitude != null && overrides.longitude != null)) {
+    // When GPS coordinates are provided with location_source 'GPS', reverse-
+    // geocode them to get the actual location name (unless an explicit
+    // location_name override was provided by the caller, e.g. LocationTermBank).
+    if (isGpsSource && overrides.latitude != null && !overrides.location_name && !ctx.location_name) {
+      const place = await reverseGeocodePlace(overrides.latitude, overrides.longitude);
+      if (place) ctx.location_name = place;
+    }
     return ctx;
   }
 

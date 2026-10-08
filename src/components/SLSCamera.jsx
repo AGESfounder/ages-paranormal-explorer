@@ -194,15 +194,17 @@ export default function SLSCamera({ gateSave }) {
 
   const saveRecording = async (isPrivate = true) => {
     if (!recordedBlob) return;
-    if (gateSave && !(await gateSave())) return;
     setSaving(true);
     try {
+      // Upload and capture GPS BEFORE gating so a failed upload or cancelled
+      // GPS flow does NOT consume a daily evidence save.
       const ext = recordedBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const file = new File([recordedBlob], `anomaly_session.${ext}`, { type: recordedBlob.type });
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
+      if (gateSave && !(await gateSave())) { setSaving(false); return; }
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Anomaly Camera Session ${now.toISOString().split('T')[0]}`,
