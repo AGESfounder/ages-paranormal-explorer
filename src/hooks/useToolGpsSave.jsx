@@ -78,14 +78,11 @@ export function useToolGpsSave(externalRequestLocation) {
       return { latitude: result.coords.lat, longitude: result.coords.lng, location_source: 'GPS' };
     }
 
-    // Location Tracking is OFF and the user dismissed the tracking-off dialog.
-    // Abort the save — don't show the generic GPS-failure dialog.
-    if (result.error === 'disabled') {
-      return null;
-    }
-
-    // GPS failed — show the four-choice dialog for all error types.
-    // errorType drives which optional buttons appear (e.g. Turn On Location Services).
+    // GPS failed OR Location Tracking is OFF and the user dismissed the
+    // tracking-off dialog — show the four-choice dialog for ALL error types
+    // so the user can Retry, Turn On Location Services, Use Current Tour Stop,
+    // or Save Without Location. Previously, 'disabled' returned null here,
+    // causing a silent abort with no dialog for any tool.
     const stopCoords = await fetchTourStopCoords();
     setTourStopCoords(stopCoords);
     setErrorType(result.error || null);

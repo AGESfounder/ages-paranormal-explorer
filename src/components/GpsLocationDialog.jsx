@@ -22,7 +22,8 @@ import { isNativeApp } from '@/lib/deviceCapabilities';
  */
 export default function GpsLocationDialog({ show, onRetry, onUseTourStop, onSaveWithout, onCancel, hasTourStop, retrying, errorType }) {
   const denied = errorType === 'denied';
-  const showLocationServices = ['denied', 'unavailable', 'timeout'].includes(errorType) && isNativeApp();
+  const disabled = errorType === 'disabled';
+  const showLocationServices = ['denied', 'unavailable', 'timeout', 'disabled'].includes(errorType) && isNativeApp();
 
   const handleOpenSettings = async () => {
     if (!isNativeApp()) return;
@@ -70,12 +71,14 @@ export default function GpsLocationDialog({ show, onRetry, onUseTourStop, onSave
               </div>
             </div>
             <h2 className="font-heading text-lg font-bold text-foreground mb-2 text-center">
-              {denied ? 'Location Permission Denied' : 'Location Could Not Be Captured'}
+              {denied ? 'Location Permission Denied' : disabled ? 'Location Tracking Is Off' : 'Location Could Not Be Captured'}
             </h2>
             <p className="text-sm text-muted-foreground mb-5 leading-relaxed text-center">
               {denied
                 ? 'AGES needs location access to tag your evidence. Enable location in your device settings, then retry — or use the tour stop coordinates, or save without a location.'
-                : "We couldn't determine your current GPS location. You can retry, turn on location services, use the current tour stop's coordinates, or save this evidence without a location."}
+                : disabled
+                  ? 'Location Tracking is turned off in AGES Settings. Turn it on and retry, use the current tour stop coordinates, or save without a location.'
+                  : "We couldn't determine your current GPS location. You can retry, turn on location services, use the current tour stop's coordinates, or save this evidence without a location."}
             </p>
             <div className="space-y-2">
               <button

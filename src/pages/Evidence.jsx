@@ -190,8 +190,9 @@ export default function Evidence() {
       if (result?.ok) {
         coords = { latitude: result.coords.lat, longitude: result.coords.lng };
       } else {
-        setGpsCapturing(false);
-        return;
+        // User cancelled the tracking-off dialog — fall through to the
+        // 4-option GpsLocationDialog instead of silently aborting.
+        coords = { error: 'disabled' };
       }
     }
     if (coords?.latitude) {
@@ -225,7 +226,9 @@ export default function Evidence() {
       if (result?.ok) {
         coords = { latitude: result.coords.lat, longitude: result.coords.lng };
       } else {
-        coords = null;
+        // User cancelled the tracking-off dialog — keep the 4-option dialog
+        // open with the 'disabled' error type so all four choices remain visible.
+        coords = { error: 'disabled' };
       }
     }
     setGpsRetrying(false);
