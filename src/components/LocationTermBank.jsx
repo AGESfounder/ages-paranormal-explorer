@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Library, MapPin, Play, Square, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
+import { toast } from '@/components/ui/use-toast';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import useGhostVoice from '../hooks/useGhostVoice';
@@ -748,9 +749,14 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       const time = now.toTimeString().slice(0, 5);
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
+      if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
+        toast({ title: 'Evidence Cannot Be Made Public', description: 'This evidence does not have a valid location. Evidence must have GPS coordinates or a tour-stop location to be shared on the Community Map. The evidence may still be saved privately if appropriate.', variant: 'destructive' });
+        setSaving(false);
+        return;
+      }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
-      const ctx = await buildEvidenceContext({ ...gpsResult, location_name: locationLabel }, { skipGps: true });
+      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Term Sweeper — ${locationLabel} — ${date}`,
         type: 'video',

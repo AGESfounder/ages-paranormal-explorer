@@ -4,6 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
+import { toast } from '@/components/ui/use-toast';
 
 const SENSITIVITY_THRESHOLDS = {
   accel: 0.12,  // m/s² delta from baseline
@@ -432,6 +433,11 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       const time = now.toTimeString().slice(0, 5);
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
+      if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
+        toast({ title: 'Evidence Cannot Be Made Public', description: 'This evidence does not have a valid location. Evidence must have GPS coordinates or a tour-stop location to be shared on the Community Map. The evidence may still be saved privately if appropriate.', variant: 'destructive' });
+        setSaving(false);
+        return;
+      }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });

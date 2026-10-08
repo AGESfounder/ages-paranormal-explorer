@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Trash2, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3, MapPin, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
 import { captureGPS } from '@/lib/evidenceContext';
-import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 import EquipmentSelectDrawer from '@/components/EquipmentSelectDrawer';
 import DateTimePicker from '@/components/DateTimePicker';
@@ -26,16 +25,6 @@ import { useToast } from '@/components/ui/use-toast';
 
 const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
 const typeLabel = { evp: 'Personal Experience', photo: 'Photograph', video: 'Video', note: 'Note' };
-
-// Haversine distance in meters between two lat/lng coordinates.
-function haversineMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const toRad = (d) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 const equipmentOptions = [
   'REM Device',
@@ -390,33 +379,6 @@ export default function Evidence() {
           variant: 'destructive',
         });
         return;
-      }
-      // Proximity safeguard for TOUR_STOP evidence: the user must be
-      // physically near the tour stop to publish it on the Community Map.
-      if (e.location_source === 'TOUR_STOP') {
-        const result = await getDevicePosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
-        if (result.ok) {
-          const distance = haversineMeters(result.coords.lat, result.coords.lng, e.latitude, e.longitude);
-          if (distance > 1000) {
-            toast({
-              title: 'Too far from tour stop',
-              description: 'You must be within 1 km of the tour stop to publish this evidence on the Community Map. The tour-stop coordinates are not your device GPS.',
-              variant: 'destructive',
-            });
-            return;
-          }
-        } else if (result.error === 'denied') {
-          toast({
-            title: 'Location access required',
-            description: 'Enable location access in your device settings to verify you are near the tour stop before publishing.',
-            variant: 'destructive',
-          });
-          return;
-        }
-        // If GPS is unavailable (services_off/timeout/unavailable), allow
-        // publishing — the user deliberately chose "Use Current Tour Stop"
-        // because GPS could not be obtained. Blocking here would defeat that
-        // offline/no-service recovery option.
       }
       await base44.entities.Evidence.update(e.id, { is_private: false });
     } else {

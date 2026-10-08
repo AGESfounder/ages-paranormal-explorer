@@ -13,6 +13,7 @@ import SensitivityControl from './SensitivityControl';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+import { toast } from '@/components/ui/use-toast';
 
 // "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
 // appear once in rotation (4 sec each). If no trigger, the asking phase repeats.
@@ -567,6 +568,11 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
       const time = now.toTimeString().slice(0, 5);
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
+      if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
+        toast({ title: 'Evidence Cannot Be Made Public', description: 'This evidence does not have a valid location. Evidence must have GPS coordinates or a tour-stop location to be shared on the Community Map. The evidence may still be saved privately if appropriate.', variant: 'destructive' });
+        setSaving(false);
+        return;
+      }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });

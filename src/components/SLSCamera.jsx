@@ -8,6 +8,7 @@ import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
+import { toast } from '@/components/ui/use-toast';
 
 export default function SLSCamera({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
@@ -205,6 +206,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
       const now = new Date();
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
+      if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
+        toast({ title: 'Evidence Cannot Be Made Public', description: 'This evidence does not have a valid location. Evidence must have GPS coordinates or a tour-stop location to be shared on the Community Map. The evidence may still be saved privately if appropriate.', variant: 'destructive' });
+        setSaving(false);
+        return;
+      }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });

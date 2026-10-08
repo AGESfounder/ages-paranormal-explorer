@@ -34,6 +34,7 @@ import { fetchWeatherByCoords as omFetchByCoords, fetchWeatherByLocation as omFe
 import { getWeatherFlavor } from '@/lib/weatherFlavor';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
+import { toast } from '@/components/ui/use-toast';
 
 // Two-column grid order (fills left→right, row by row):
 //   Col 1: Equipment Guide, Audio Recorder, Anomaly Camera, Vibration Communicator, Weather Monitor, Paranormal Research: Terms
@@ -558,6 +559,11 @@ export default function Toolkit() {
       if (savedWords.length > 0) description += '\n\nWords heard: ' + savedWords.join(', ');
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSavingRec(false); return; }
+      if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
+        toast({ title: 'Evidence Cannot Be Made Public', description: 'This evidence does not have a valid location. Evidence must have GPS coordinates or a tour-stop location to be shared on the Community Map. The evidence may still be saved privately if appropriate.', variant: 'destructive' });
+        setSavingRec(false);
+        return;
+      }
       // Gate the save AFTER upload + GPS — the daily counter is only consumed
       // when the evidence is actually about to be created.
       const allowed = await gateEvidenceSave();
