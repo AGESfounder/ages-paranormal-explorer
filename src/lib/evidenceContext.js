@@ -164,15 +164,29 @@ export async function reverseGeocodePlace(lat, lon) {
 // The actual GPS coordinates are always preserved — the stop name is a label
 // only, never a coordinate substitution.
 
-// When GPS coordinates are within this distance of the active tour stop's
+// When GPS coordinates are within this distance of a known AGES tour stop's
 // stored coordinates, the evidence location label includes the stop name.
 // 0.3 mi (~480 m) matches the app's existing sameSpot clustering threshold
 // (HauntedLocations.jsx) and comfortably covers phone GPS inaccuracy
 // (10-50 m outdoors) plus moderate stop-coordinate imprecision, while
 // remaining tight enough that a user at a different nearby location does
-// not get mislabeled. Only the active (last-viewed) stop is checked, so
-// there is no risk of matching an unrelated stop on a dense walking tour.
+// not get mislabeled. ALL known stops are checked (across all tours), and
+// the nearest match is used — so the correct stop name is attached even
+// when the user is viewing a different tour.
 const NEARBY_STOP_THRESHOLD_MI = 0.3;
+
+// Bounding-box deltas for the nearby-stop query. 1° latitude ≈ 69 mi, so
+// 0.3 mi ≈ 0.00435°. We use a slightly larger box (0.005° lat ≈ 0.345 mi)
+// and let the exact haversine filter narrow the results to ≤ 0.3 mi.
+// 1° longitude ≈ 69 × cos(lat) mi; 0.008° covers 25°–50° US latitude.
+const BBOX_LAT_DELTA = 0.005;
+const BBOX_LON_DELTA = 0.008;
+
+// Neutral fallback when no locality can be reverse-geocoded AND no known
+// AGES stop is within the proximity threshold. Ensures the evidence record
+// always has a readable location label while never attaching an unrelated
+// or stale stop name.
+const NEUTRAL_FALLBACK = 'GPS location captured';
 
 async function reverseGeocodeLocalityBigDataCloud(lat, lon) {
   try {
@@ -217,31 +231,60 @@ async function reverseGeocodeLocality(lat, lon) {
 }
 
 /**
- * Resolve the best written location label for a GPS evidence save.
- * If the GPS coordinates are within NEARBY_STOP_THRESHOLD_MI of the active
- * tour stop's stored coordinates, returns "Stop Name — Locality".
- * Otherwise returns just the locality. Never attaches an unrelated stop
- * name. The actual GPS coordinates are not modified — this only produces a
- * display label.
+ * Find the nearest known AGES tour stop to the given GPS coordinates.
+ * Queries ALL tour stops (across all tours) within a bounding box, then
+ * filters by exact haversine distance ≤ NEARBY_STOP_THRESHOLD_MI. Returns
+ * the nearest stop record, or null if none are within the threshold.
+ * Only name, latitude and longitude are fetched to minimize data transfer.
  */
-async function resolveGpsLocationName(lat, lon, activeCtx) {
-  const locality = await reverseGeocodeLocality(lat, lon);
-
-  if (activeCtx?.stop_id) {
-    try {
-      const stop = await base44.entities.TourStop.get(activeCtx.stop_id);
-      if (stop?.latitude && stop?.longitude) {
-        const dist = haversineMiles(lat, lon, stop.latitude, stop.longitude);
-        if (dist <= NEARBY_STOP_THRESHOLD_MI) {
-          const stopName = stop.name || activeCtx.location_name;
-          if (stopName && locality) return `${stopName} — ${locality}`;
-          if (stopName) return stopName;
-        }
+async function findNearestStop(lat, lon) {
+  try {
+    const res = await base44.entities.TourStop.filter(
+      {
+        latitude: { $gte: lat - BBOX_LAT_DELTA, $lte: lat + BBOX_LAT_DELTA },
+        longitude: { $gte: lon - BBOX_LON_DELTA, $lte: lon + BBOX_LON_DELTA },
+      },
+      { limit: 100, fields: ['name', 'latitude', 'longitude'] }
+    );
+    const stops = res.items || [];
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const s of stops) {
+      if (s.latitude == null || s.longitude == null) continue;
+      const d = haversineMiles(lat, lon, s.latitude, s.longitude);
+      if (d <= NEARBY_STOP_THRESHOLD_MI && d < nearestDist) {
+        nearest = s;
+        nearestDist = d;
       }
-    } catch { /* stop fetch failed — fall back to locality only */ }
+    }
+    return nearest;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the best written location label for a GPS evidence save.
+ * Checks ALL known AGES tour stops (not just the active one) for a stop
+ * within NEARBY_STOP_THRESHOLD_MI of the GPS coordinates. If found, returns
+ * "Stop Name — Locality" (or just the stop name if the locality is
+ * unavailable). Otherwise returns just the locality, or a neutral fallback
+ * if the locality is also unavailable. Never attaches an unrelated or stale
+ * stop name — proximity is the only criterion. The actual GPS coordinates
+ * are not modified.
+ */
+async function resolveGpsLocationName(lat, lon) {
+  const [locality, nearestStop] = await Promise.all([
+    reverseGeocodeLocality(lat, lon),
+    findNearestStop(lat, lon),
+  ]);
+
+  if (nearestStop?.name) {
+    if (locality) return `${nearestStop.name} — ${locality}`;
+    return nearestStop.name;
   }
 
-  return locality || null;
+  return locality || NEUTRAL_FALLBACK;
 }
 
 /**
@@ -292,7 +335,7 @@ export async function buildEvidenceContext(overrides = {}, options = {}) {
     // geocode them to get the actual location name (unless an explicit
     // location_name override was provided by the caller, e.g. LocationTermBank).
     if (isGpsSource && overrides.latitude != null && !overrides.location_name && !ctx.location_name) {
-      const place = await resolveGpsLocationName(overrides.latitude, overrides.longitude, activeCtx);
+      const place = await resolveGpsLocationName(overrides.latitude, overrides.longitude);
       if (place) ctx.location_name = place;
     }
     return ctx;
@@ -314,7 +357,7 @@ export async function buildEvidenceContext(overrides = {}, options = {}) {
     // If no tour/stop context and no explicit location_name, reverse geocode
     // the GPS to a readable place name so the journal shows more than raw coords.
     if (!ctx.location_name && !overrides.location_name) {
-      const place = await resolveGpsLocationName(gps.latitude, gps.longitude, activeCtx);
+      const place = await resolveGpsLocationName(gps.latitude, gps.longitude);
       if (place) ctx.location_name = place;
     }
   }
