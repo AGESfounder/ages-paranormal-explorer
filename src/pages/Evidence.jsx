@@ -119,6 +119,7 @@ export default function Evidence() {
   const [gpsCapturing, setGpsCapturing] = useState(false);
   const [showGpsDialog, setShowGpsDialog] = useState(false);
   const [gpsRetrying, setGpsRetrying] = useState(false);
+  const [gpsErrorType, setGpsErrorType] = useState(null);
   const [expandedMapId, setExpandedMapId] = useState(null);
   const { requestLocation, trackingOffDialog } = useLocationTrackingGate();
 
@@ -193,9 +194,10 @@ export default function Evidence() {
         return;
       }
     }
-    if (coords) {
+    if (coords?.latitude) {
       setForm(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude, location_source: 'GPS' }));
     } else if (!silent) {
+      setGpsErrorType(coords?.error || null);
       setShowGpsDialog(true);
     }
     setGpsCapturing(false);
@@ -227,9 +229,11 @@ export default function Evidence() {
       }
     }
     setGpsRetrying(false);
-    if (coords) {
+    if (coords?.latitude) {
       setForm(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude, location_source: 'GPS' }));
       setShowGpsDialog(false);
+    } else {
+      setGpsErrorType(coords?.error || null);
     }
     // If still no coords, keep the dialog open so the user can pick another option.
   };
@@ -654,6 +658,7 @@ export default function Evidence() {
           show={showGpsDialog}
           hasTourStop={hasTourStopCoords}
           retrying={gpsRetrying}
+          errorType={gpsErrorType}
           onRetry={onGpsDialogRetry}
           onUseTourStop={onGpsDialogUseTourStop}
           onSaveWithout={onGpsDialogSaveWithout}

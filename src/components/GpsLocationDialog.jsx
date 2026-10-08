@@ -1,17 +1,29 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, Navigation, X, AlertTriangle, Loader2, Settings } from 'lucide-react';
+import { RefreshCw, Navigation, X, AlertTriangle, Loader2, MapPin } from 'lucide-react';
 import { isNativeApp } from '@/lib/deviceCapabilities';
 
 /**
  * GPS-failed dialog — shown when device GPS cannot be captured.
- * Offers three explicit choices:
+ * Offers four explicit choices:
  *   1. Retry GPS — re-attempt capture
- *   2. Use Current Tour Stop — use the tour stop's coordinates (labeled TOUR_STOP, not GPS)
- *   3. Save Without Location — private only, no coordinates, cannot be made public
+ *   2. Turn On Location Services — open device settings to enable location
+ *      (shown only when the error suggests services/permission are off or denied)
+ *   3. Use Current Tour Stop — use the tour stop's coordinates (labeled TOUR_STOP, not GPS)
+ *   4. Save Without Location — private only, no coordinates, cannot be made public
+ *
+ * Props:
+ *   errorType — 'denied' | 'unavailable' | 'timeout' | 'unsupported' | undefined
+ *   When errorType is 'denied', the title/description emphasize permission denial.
+ *   When errorType is 'denied', 'unavailable', or 'timeout', the "Turn On Location
+ *   Services" button is shown (native only) so the user can open device settings,
+ *   enable location, then tap Retry GPS.
  */
-export default function GpsLocationDialog({ show, onRetry, onUseTourStop, onSaveWithout, onCancel, hasTourStop, retrying, denied }) {
+export default function GpsLocationDialog({ show, onRetry, onUseTourStop, onSaveWithout, onCancel, hasTourStop, retrying, errorType }) {
+  const denied = errorType === 'denied';
+  const showLocationServices = ['denied', 'unavailable', 'timeout'].includes(errorType) && isNativeApp();
+
   const handleOpenSettings = async () => {
     if (!isNativeApp()) return;
     try {
@@ -63,7 +75,7 @@ export default function GpsLocationDialog({ show, onRetry, onUseTourStop, onSave
             <p className="text-sm text-muted-foreground mb-5 leading-relaxed text-center">
               {denied
                 ? 'AGES needs location access to tag your evidence. Enable location in your device settings, then retry — or use the tour stop coordinates, or save without a location.'
-                : "We couldn't determine your current GPS location. You can retry, use the current tour stop's coordinates, or save this evidence without a location."}
+                : "We couldn't determine your current GPS location. You can retry, turn on location services, use the current tour stop's coordinates, or save this evidence without a location."}
             </p>
             <div className="space-y-2">
               <button
@@ -77,12 +89,12 @@ export default function GpsLocationDialog({ show, onRetry, onUseTourStop, onSave
                   <><RefreshCw className="w-4 h-4" /> Retry GPS</>
                 )}
               </button>
-              {denied && isNativeApp() && (
+              {showLocationServices && (
                 <button
                   onClick={handleOpenSettings}
                   className="w-full py-3 rounded-lg bg-secondary/50 border border-border text-foreground font-heading text-sm uppercase tracking-wider hover:bg-secondary transition-colors min-h-[44px] flex items-center justify-center gap-2"
                 >
-                  <Settings className="w-4 h-4" /> Open Device Settings
+                  <MapPin className="w-4 h-4" /> Turn On Location Services
                 </button>
               )}
               {hasTourStop && (

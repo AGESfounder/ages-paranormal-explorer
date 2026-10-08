@@ -26,14 +26,14 @@ import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 export function useToolGpsSave() {
   const [showGpsDialog, setShowGpsDialog] = useState(false);
   const [retrying, setRetrying] = useState(false);
-  const [denied, setDenied] = useState(false);
+  const [errorType, setErrorType] = useState(null);
   const [tourStopCoords, setTourStopCoords] = useState(null);
   const [resolver, setResolver] = useState(null);
   const { requestLocation, trackingOffDialog } = useLocationTrackingGate();
 
   const settle = (result) => {
     setShowGpsDialog(false);
-    setDenied(false);
+    setErrorType(null);
     setResolver(prev => {
       prev?.resolve(result);
       return null;
@@ -73,11 +73,11 @@ export function useToolGpsSave() {
       return null;
     }
 
-    // GPS failed — show the three-choice dialog for all error types.
-    // For denied permission, pass denied=true so the Settings button appears.
+    // GPS failed — show the four-choice dialog for all error types.
+    // errorType drives which optional buttons appear (e.g. Turn On Location Services).
     const stopCoords = await fetchTourStopCoords();
     setTourStopCoords(stopCoords);
-    setDenied(result.error === 'denied');
+    setErrorType(result.error || null);
     return new Promise(resolve => {
       setResolver({ resolve });
       setShowGpsDialog(true);
@@ -91,8 +91,8 @@ export function useToolGpsSave() {
     if (result.ok) {
       settle({ latitude: result.coords.lat, longitude: result.coords.lng, location_source: 'GPS' });
     } else {
-      // Still no GPS — update denied flag in case the error type changed
-      setDenied(result.error === 'denied');
+      // Still no GPS — update error type in case it changed
+      setErrorType(result.error || null);
     }
     // If still no GPS, keep dialog open
   }, []);
@@ -116,7 +116,7 @@ export function useToolGpsSave() {
       show={showGpsDialog}
       hasTourStop={!!tourStopCoords}
       retrying={retrying}
-      denied={denied}
+      errorType={errorType}
       onRetry={onGpsRetry}
       onUseTourStop={onGpsUseTourStop}
       onSaveWithout={onGpsSaveWithout}

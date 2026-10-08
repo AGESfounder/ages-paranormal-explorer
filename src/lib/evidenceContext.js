@@ -52,7 +52,12 @@ export async function captureGPS() {
   // can show the tracking-off dialog instead of a generic GPS-failure dialog.
   if (!isLocationTrackingEnabled()) return { disabled: true };
   const fresh = await captureGPSRaw();
-  if (fresh) lastGps = { ...fresh, at: Date.now() };
+  if (fresh?.latitude) {
+    lastGps = { ...fresh, at: Date.now() };
+    return fresh;
+  }
+  // Return the error info (e.g. { error: 'denied' }) so callers can pass it
+  // to GpsLocationDialog for the "Turn On Location Services" option.
   return fresh;
 }
 
@@ -64,7 +69,7 @@ async function captureGPSRaw() {
   if (!result?.ok) {
     result = await getDevicePosition({ enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
   }
-  if (!result?.ok) return null;
+  if (!result?.ok) return { error: result?.error || 'unavailable' };
   return { latitude: result.coords.lat, longitude: result.coords.lng };
 }
 
@@ -191,7 +196,7 @@ export async function buildEvidenceContext(overrides = {}, options = {}) {
     ? cached
     : await Promise.race([captureGPS(), new Promise((r) => setTimeout(() => r(null), 26000))]);
 
-  if (gps && !gps.disabled) {
+  if (gps?.latitude) {
     ctx.latitude = gps.latitude;
     ctx.longitude = gps.longitude;
     ctx.location_source = 'GPS';
