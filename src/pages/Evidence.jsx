@@ -397,10 +397,10 @@ export default function Evidence() {
           });
           return;
         }
-      } else if (result.error === 'denied') {
+      } else if (result.error === 'denied' || result.error === 'services_off') {
         toast({
           title: 'Location access required',
-          description: 'Enable location access in your device settings to verify you are near the tour stop before publishing.',
+          description: 'Turn on location services and enable location access for AGES to verify you are near the tour stop before publishing.',
           variant: 'destructive',
         });
         return;
