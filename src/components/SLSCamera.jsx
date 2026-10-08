@@ -9,7 +9,7 @@ import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 
-export default function SLSCamera({ gateSave }) {
+export default function SLSCamera({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -195,6 +195,7 @@ export default function SLSCamera({ gateSave }) {
   const saveRecording = async (isPrivate = true) => {
     if (!recordedBlob) return;
     setSaving(true);
+    let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
@@ -205,6 +206,7 @@ export default function SLSCamera({ gateSave }) {
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
+      gateSucceeded = true;
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Anomaly Camera Session ${now.toISOString().split('T')[0]}`,
@@ -220,6 +222,7 @@ export default function SLSCamera({ gateSave }) {
       setRecordedBlob(null);
       setRecordDuration(0);
     } catch (e) {
+      if (gateSucceeded && refundSave) await refundSave();
       console.error('Save failed', e);
     }
     setSaving(false);

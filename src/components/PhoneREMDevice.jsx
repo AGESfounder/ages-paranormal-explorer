@@ -32,7 +32,7 @@ function alertHexColor(level) {
   return '#ef4444';
 }
 
-export default function PhoneREMDevice({ gateSave }) {
+export default function PhoneREMDevice({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | countdown | active | stopped
   const [countdown, setCountdown] = useState(3);
@@ -420,6 +420,7 @@ export default function PhoneREMDevice({ gateSave }) {
     const blob = videoBlobRef.current || videoBlob;
     if (!blob) return;
     setSaving(true);
+    let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
@@ -432,6 +433,7 @@ export default function PhoneREMDevice({ gateSave }) {
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
+      gateSucceeded = true;
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Vibration Communicator Session ${date}`,
@@ -450,6 +452,7 @@ export default function PhoneREMDevice({ gateSave }) {
       setEvents([]);
       eventsRef.current = [];
     } catch (e) {
+      if (gateSucceeded && refundSave) await refundSave();
       console.error('Save failed', e);
     }
     setSaving(false);

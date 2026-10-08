@@ -34,7 +34,7 @@ function formatDuration(sec) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function YesNoSweeper({ gateSave }) {
+export default function YesNoSweeper({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -555,6 +555,7 @@ export default function YesNoSweeper({ gateSave }) {
   const saveSession = async (isPrivate = true) => {
     if (!videoBlob) return;
     setSaving(true);
+    let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
@@ -567,6 +568,7 @@ export default function YesNoSweeper({ gateSave }) {
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
+      gateSucceeded = true;
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Yes/No/IDK Sweeper — ${date}`,
@@ -583,6 +585,7 @@ export default function YesNoSweeper({ gateSave }) {
       setCaptured([]);
       setPhase('idle');
     } catch {
+      if (gateSucceeded && refundSave) await refundSave();
       setError('Save failed. Please try again.');
     }
     setSaving(false);

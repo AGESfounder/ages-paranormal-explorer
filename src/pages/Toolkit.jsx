@@ -195,6 +195,7 @@ export default function Toolkit() {
   // same daily cap / Aura rules as the Evidence page (no separate counter).
   const {
     gateSave: gateEvidenceSave,
+    refundSave: refundEvidenceSave,
     adGatePromise: evidenceAdGateOpen,
     onAdGateSuccess: onEvidenceAdSuccess,
     onAdGateClose: onEvidenceAdClose,
@@ -578,6 +579,9 @@ export default function Toolkit() {
       setRecorderNotes('');
       setSavedWords([]);
     } catch (err) {
+      // Evidence.create failed — refund the daily save charge so the user
+      // is not permanently consume an allowance for a record that was never created.
+      await refundEvidenceSave();
       console.error('Save failed', err);
     }
     setSavingRec(false);
@@ -1436,18 +1440,18 @@ Best Practices
         );
 
       case 'sls':
-        return <SLSCamera gateSave={gateEvidenceSave} />;
+        return <SLSCamera gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
 
       case 'rem':
-        return <PhoneREMDevice gateSave={gateEvidenceSave} />;
+        return <PhoneREMDevice gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
 
       case 'termbank':
-        return <LocationTermBank gateSave={gateEvidenceSave} />;
+        return <LocationTermBank gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
 
       case 'alphabet':
-        return <AlphabetSweeper gateSave={gateEvidenceSave} />;
+        return <AlphabetSweeper gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
       case 'yesno':
-        return <YesNoSweeper gateSave={gateEvidenceSave} />;
+        return <YesNoSweeper gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
 
       default:
         return null;

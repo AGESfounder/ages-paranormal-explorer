@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { getEffectivePlanId } from '@/lib/access';
 
@@ -42,6 +42,11 @@ export function useEvidenceSaveGate() {
   const [gateReason, setGateReason] = useState('plan'); // 'plan' | 'energy' | 'daily_cap'
   const [adGatePromise, setAdGatePromise] = useState(null); // { resolve, reject }
 
+  // Tracks the cost type returned by spend-evidence-save for the most recent
+  // successful gate. Used by refundSave to reverse the charge if
+  // Evidence.create fails — "no Evidence record = no charge".
+  const lastChargeCostRef = useRef(null);
+
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
   }, []);
@@ -82,6 +87,8 @@ export function useEvidenceSaveGate() {
    * For Admin: returns true immediately.
    */
   const gateSave = useCallback(async () => {
+    // Clear any stale cost from a previous gate cycle
+    lastChargeCostRef.current = null;
     if (isAdmin) return true;
     if (!user) return false;
 
@@ -113,6 +120,8 @@ export function useEvidenceSaveGate() {
     try {
       const res = await base44.functions.invoke('spend-evidence-save', {});
       if (res.data?.success) {
+        // Track the cost so refundSave can reverse it if Evidence.create fails
+        lastChargeCostRef.current = res.data.cost;
         await refreshUser();
         return true;
       }
@@ -132,6 +141,8 @@ export function useEvidenceSaveGate() {
    * server function call. Resolves the ad gate promise and refreshes user.
    */
   const onAdGateSuccess = useCallback(async () => {
+    // Ad-gate path is always under the daily cap, so the charge is 'free'
+    lastChargeCostRef.current = 'free';
     await refreshUser();
     setAdGatePromise(prev => {
       prev?.resolve(true);
@@ -150,6 +161,26 @@ export function useEvidenceSaveGate() {
     });
   }, []);
 
+  /**
+   * Reverses the charge made by the most recent successful gateSave call.
+   * Call this in the catch block after Evidence.create fails so the user's
+   * daily save allowance or Aura energy is not permanently consumed.
+   *
+   * No-op if gateSave was never called, returned false, or was admin (free).
+   * Clears the tracked cost after calling so it cannot double-refund.
+   */
+  const refundSave = useCallback(async () => {
+    const cost = lastChargeCostRef.current;
+    if (!cost || cost === 'admin') return;
+    lastChargeCostRef.current = null;
+    try {
+      await base44.functions.invoke('refund-evidence-save', { cost });
+      await refreshUser();
+    } catch (e) {
+      console.error('Refund evidence save failed:', e);
+    }
+  }, [refreshUser]);
+
   return {
     user,
     isAdmin,
@@ -163,6 +194,7 @@ export function useEvidenceSaveGate() {
     auraNarEnergy,
     auraManEnergy,
     gateSave,
+    refundSave,
     showUpgrade,
     setShowUpgrade,
     gateReason,

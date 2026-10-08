@@ -126,7 +126,7 @@ export default function Evidence() {
   // Evidence save gate — tier-aware daily caps + Aura energy + ad-watched saves
   const {
     isAdmin, isFree, dailyCount, dailyCap, dailyRemaining, auraSaveTotal,
-    gateSave, showUpgrade, setShowUpgrade, gateReason,
+    gateSave, refundSave, showUpgrade, setShowUpgrade, gateReason,
     adGatePromise, onAdGateSuccess, onAdGateClose,
   } = useEvidenceSaveGate();
 
@@ -319,6 +319,9 @@ export default function Evidence() {
     try {
       await base44.entities.Evidence.create(payload);
     } catch (err) {
+      // Evidence.create failed — refund the daily save charge so the user
+      // is not permanently consume an allowance for a record that was never created.
+      await refundSave();
       setSubmitting(false);
       setSubmitError(err?.response?.data?.detail || err?.message || 'Failed to save evidence. Please try again.');
       return;

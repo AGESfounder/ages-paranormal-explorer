@@ -127,7 +127,7 @@ ${stopText}`,
   return { list, label: stop.name || tour?.title || 'current stop' };
 }
 
-export default function LocationTermBank({ gateSave }) {
+export default function LocationTermBank({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | loading | ready | running | stopped
   const [terms, setTerms] = useState([]);
@@ -736,6 +736,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   const saveSession = async (isPrivate = true) => {
     if (!videoBlob) return;
     setSaving(true);
+    let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
@@ -748,6 +749,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
+      gateSucceeded = true;
       const ctx = await buildEvidenceContext({ ...gpsResult, location_name: locationLabel }, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Term Sweeper — ${locationLabel} — ${date}`,
@@ -764,6 +766,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       setCaptured([]);
       setPhase('idle');
     } catch (e) {
+      if (gateSucceeded && refundSave) await refundSave();
       setError('Save failed. Please try again.');
     }
     setSaving(false);

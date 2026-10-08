@@ -34,7 +34,7 @@ function formatDuration(sec) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function AlphabetSweeper({ gateSave }) {
+export default function AlphabetSweeper({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
   const [currentLetter, setCurrentLetter] = useState('A');
@@ -562,6 +562,7 @@ export default function AlphabetSweeper({ gateSave }) {
   const saveSession = async (isPrivate = true) => {
     if (!videoBlob) return;
     setSaving(true);
+    let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
@@ -574,6 +575,7 @@ export default function AlphabetSweeper({ gateSave }) {
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
+      gateSucceeded = true;
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Alphabet Sweeper — ${date}`,
@@ -590,6 +592,7 @@ export default function AlphabetSweeper({ gateSave }) {
       setCaptured([]);
       setPhase('idle');
     } catch (e) {
+      if (gateSucceeded && refundSave) await refundSave();
       setError('Save failed. Please try again.');
     }
     setSaving(false);
