@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, FileAudio, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3, MapPin, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Image, Video, FileText, Loader2, Archive, Upload, X, Check, ClipboardList, Lock, Globe, BarChart3, MapPin, Crosshair, ChevronUp, ChevronDown } from 'lucide-react';
 import { captureGPS } from '@/lib/evidenceContext';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
@@ -120,6 +120,7 @@ export default function Evidence() {
   const [showGpsDialog, setShowGpsDialog] = useState(false);
   const [gpsRetrying, setGpsRetrying] = useState(false);
   const [expandedMapId, setExpandedMapId] = useState(null);
+  const { requestLocation, trackingOffDialog } = useLocationTrackingGate();
 
   // Evidence save gate — tier-aware daily caps + Aura energy + ad-watched saves
   const {
@@ -179,7 +180,19 @@ export default function Evidence() {
 
   const captureLocation = async (silent = false) => {
     setGpsCapturing(true);
-    const coords = await captureGPS();
+    let coords = await captureGPS();
+    // Location Tracking is OFF — show the tracking-off dialog. If the user
+    // turns it on, requestLocation retries and returns GPS coords. If they
+    // cancel, abort silently (don't show the generic GPS-failure dialog).
+    if (coords?.disabled) {
+      const result = await requestLocation({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+      if (result?.ok) {
+        coords = { latitude: result.coords.lat, longitude: result.coords.lng };
+      } else {
+        setGpsCapturing(false);
+        return;
+      }
+    }
     if (coords) {
       setForm(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude, location_source: 'GPS' }));
     } else if (!silent) {
@@ -204,7 +217,15 @@ export default function Evidence() {
 
   const onGpsDialogRetry = async () => {
     setGpsRetrying(true);
-    const coords = await captureGPS();
+    let coords = await captureGPS();
+    if (coords?.disabled) {
+      const result = await requestLocation({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+      if (result?.ok) {
+        coords = { latitude: result.coords.lat, longitude: result.coords.lng };
+      } else {
+        coords = null;
+      }
+    }
     setGpsRetrying(false);
     if (coords) {
       setForm(prev => ({ ...prev, latitude: coords.latitude, longitude: coords.longitude, location_source: 'GPS' }));
@@ -637,6 +658,7 @@ export default function Evidence() {
           onUseTourStop={onGpsDialogUseTourStop}
           onSaveWithout={onGpsDialogSaveWithout}
         />
+        {trackingOffDialog}
         <EvidenceSaveAdGate
           show={adGatePromise}
           remaining={dailyRemaining}

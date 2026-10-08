@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, Save, X, Video, AlertTriangle, Zap, Activity } from 'lucide-react';
+import { Play, Square, X, Video, AlertTriangle, Zap, Activity } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -33,7 +33,7 @@ function alertHexColor(level) {
 }
 
 export default function PhoneREMDevice({ gateSave }) {
-  const { captureGpsForSave, gpsDialog } = useToolGpsSave();
+  const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | countdown | active | stopped
   const [countdown, setCountdown] = useState(3);
   const [alertLevel, setAlertLevel] = useState(0);
@@ -671,6 +671,7 @@ export default function PhoneREMDevice({ gateSave }) {
           <X className="w-3.5 h-3.5" /> Discard & Reset
         </button>
         {gpsDialog}
+        {trackingOffDialog}
       </div>
     );
   }

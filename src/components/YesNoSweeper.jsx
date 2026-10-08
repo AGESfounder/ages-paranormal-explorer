@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Square, Save, Info, X, Activity, Zap, Video, AlertTriangle, MessageCircle, Camera } from 'lucide-react';
+import { Play, Square, Info, X, Activity, Zap, Video, AlertTriangle, MessageCircle, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -35,7 +35,7 @@ function formatDuration(sec) {
 }
 
 export default function YesNoSweeper({ gateSave }) {
-  const { captureGpsForSave, gpsDialog } = useToolGpsSave();
+  const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
   const [currentIdx, setCurrentIdx] = useState(0);
   const [lockedPhrase, setLockedPhrase] = useState(null);
@@ -730,6 +730,7 @@ export default function YesNoSweeper({ gateSave }) {
           <X className="w-3.5 h-3.5" /> Discard & Reset
         </button>
         {gpsDialog}
+        {trackingOffDialog}
       </div>
     );
   }

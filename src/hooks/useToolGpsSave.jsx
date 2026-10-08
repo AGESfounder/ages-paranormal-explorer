@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
-import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { getActiveContext } from '@/lib/evidenceContext';
 import GpsLocationDialog from '@/components/GpsLocationDialog';
+import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 
 /**
  * Shared GPS capture + dialog hook for Toolkit tool evidence saves.
@@ -29,6 +29,7 @@ export function useToolGpsSave() {
   const [denied, setDenied] = useState(false);
   const [tourStopCoords, setTourStopCoords] = useState(null);
   const [resolver, setResolver] = useState(null);
+  const { requestLocation, trackingOffDialog } = useLocationTrackingGate();
 
   const settle = (result) => {
     setShowGpsDialog(false);
@@ -40,9 +41,9 @@ export function useToolGpsSave() {
   };
 
   const tryGps = async () => {
-    let result = await getDevicePosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
-    if (!result?.ok) {
-      result = await getDevicePosition({ enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+    let result = await requestLocation({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
+    if (!result?.ok && result?.error !== 'disabled') {
+      result = await requestLocation({ enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
     }
     return result;
   };
@@ -64,6 +65,12 @@ export function useToolGpsSave() {
 
     if (result.ok) {
       return { latitude: result.coords.lat, longitude: result.coords.lng, location_source: 'GPS' };
+    }
+
+    // Location Tracking is OFF and the user dismissed the tracking-off dialog.
+    // Abort the save — don't show the generic GPS-failure dialog.
+    if (result.error === 'disabled') {
+      return null;
     }
 
     // GPS failed — show the three-choice dialog for all error types.
@@ -117,5 +124,5 @@ export function useToolGpsSave() {
     />
   );
 
-  return { captureGpsForSave, gpsDialog };
+  return { captureGpsForSave, gpsDialog, trackingOffDialog };
 }

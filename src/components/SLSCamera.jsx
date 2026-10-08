@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Camera, CameraOff, Video, Save, X } from 'lucide-react';
+import { Camera, CameraOff, Video, X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -10,7 +10,7 @@ import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 
 export default function SLSCamera({ gateSave }) {
-  const { captureGpsForSave, gpsDialog } = useToolGpsSave();
+  const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -290,6 +290,7 @@ export default function SLSCamera({ gateSave }) {
         </p>
       </div>
       {gpsDialog}
+      {trackingOffDialog}
     </div>
   );
 }

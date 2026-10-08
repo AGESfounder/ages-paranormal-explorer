@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Library, MapPin, Play, Square, Save, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle, Camera } from 'lucide-react';
+import { Library, MapPin, Play, Square, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -128,7 +128,7 @@ ${stopText}`,
 }
 
 export default function LocationTermBank({ gateSave }) {
-  const { captureGpsForSave, gpsDialog } = useToolGpsSave();
+  const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | loading | ready | running | stopped
   const [terms, setTerms] = useState([]);
   const [locationLabel, setLocationLabel] = useState('');
@@ -945,6 +945,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
           <X className="w-3.5 h-3.5" /> Discard & Reset
         </button>
         {gpsDialog}
+        {trackingOffDialog}
       </div>
     );
   }
