@@ -150,13 +150,13 @@ export default function Nearby() {
         } else {
           setError(result.message || 'Location access denied');
           setLocating(false);
-          loadAllTours();
+          setLoading(false);
         }
       })
       .catch(() => {
         setError('Could not determine your location. Enter a zip code or try again.');
         setLocating(false);
-        loadAllTours();
+        setLoading(false);
       });
   };
 
@@ -187,23 +187,10 @@ export default function Nearby() {
     }
   };
 
-  const loadAllTours = async () => {
-    try {
-      const all = await base44.entities.Tour.list('-created_date', 10);
-      setTours(all);
-    } catch (err) {
-      console.error('loadAllTours failed:', err);
-      setError('Could not load tours. Pull to refresh or try again.');
-      setTours([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const refreshNearby = async () => {
     setZipResults(null);
     if (coords) await loadNearby();
-    else await loadAllTours();
+    else requestLocation();
   };
 
   const handleRefreshTour = async (tourId) => {
@@ -352,7 +339,7 @@ export default function Nearby() {
           <div className="text-center py-16">
             <Navigation className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
             <p className="text-muted-foreground text-sm">{error || `No existing tours within ${selectedRange?.label || 'this range'}.`}</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">Tap “Create New Tour” to generate one.</p>
+            {coords && <p className="text-xs text-muted-foreground/60 mt-1">Tap “Create New Tour” to generate one.</p>}
           </div>
         ) : (
           visibleTours.map((tour, i) => (
