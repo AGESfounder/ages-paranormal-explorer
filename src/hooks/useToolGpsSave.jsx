@@ -35,6 +35,7 @@ export function useToolGpsSave(externalRequestLocation) {
   const [errorType, setErrorType] = useState(null);
   const [tourStopCoords, setTourStopCoords] = useState(null);
   const [resolver, setResolver] = useState(null);
+  const [retryMessage, setRetryMessage] = useState(null);
   // Always call useLocationTrackingGate (Rules of Hooks). When an external
   // requestLocation is provided, we use it instead and suppress our own
   // trackingOffDialog (the parent renders its own).
@@ -45,6 +46,7 @@ export function useToolGpsSave(externalRequestLocation) {
   const settle = (result) => {
     setShowGpsDialog(false);
     setErrorType(null);
+    setRetryMessage(null);
     setResolver(prev => {
       prev?.resolve(result);
       return null;
@@ -53,7 +55,10 @@ export function useToolGpsSave(externalRequestLocation) {
 
   const tryGps = async () => {
     let result = await requestLocation({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
-    if (!result?.ok && result?.error !== 'disabled') {
+    // A weaker-accuracy second try only helps when the GPS fix itself was slow
+    // or missing. For denied / services-off / tracking-off it cannot succeed and
+    // (on Android) could raise a second OS permission prompt.
+    if (!result?.ok && (result?.error === 'timeout' || result?.error === 'unavailable')) {
       result = await requestLocation({ enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
     }
     return result;
@@ -99,8 +104,10 @@ export function useToolGpsSave(externalRequestLocation) {
     if (result.ok) {
       settle({ latitude: result.coords.lat, longitude: result.coords.lng, location_source: 'GPS' });
     } else {
-      // Still no GPS — update error type in case it changed
+      // Still no GPS — update error type in case it changed and tell the user
+      // why, so a failed retry is never silent.
       setErrorType(result.error || null);
+      setRetryMessage(result.message || null);
     }
     // If still no GPS, keep dialog open
   }, [requestLocation]);
@@ -125,6 +132,7 @@ export function useToolGpsSave(externalRequestLocation) {
       hasTourStop={!!tourStopCoords}
       retrying={retrying}
       errorType={errorType}
+      message={retryMessage}
       onRetry={onGpsRetry}
       onUseTourStop={onGpsUseTourStop}
       onSaveWithout={onGpsSaveWithout}

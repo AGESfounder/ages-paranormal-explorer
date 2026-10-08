@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { acquireNativePosition } from '@/lib/nativeLocation';
 
 /** True when running inside a Capacitor native shell (iOS/Android). */
 export function isNativeApp() {
@@ -42,7 +43,7 @@ export function haversineMiles(lat1, lon1, lat2, lon2) {
  * geolocation fallback on web. Always returns a structured result — never
  * throws for permission denial.
  *
- * @returns {Promise<{ ok: true, coords: { lat: number, lng: number } } | { ok: false, error: 'denied'|'unavailable'|'timeout'|'unsupported', message: string }>}
+ * @returns {Promise<{ ok: true, coords: { lat: number, lng: number } } | { ok: false, error: 'disabled'|'denied'|'services_off'|'unavailable'|'timeout'|'unsupported', message: string }>}
  */
 export async function getDevicePosition(options = {}) {
   const {
@@ -64,44 +65,18 @@ export async function getDevicePosition(options = {}) {
   }
 
   if (isNativeApp()) {
+    let Geolocation = null;
     try {
-      const { Geolocation } = await import('@capacitor/geolocation');
-      let perm = await Geolocation.checkPermissions();
-      if (perm.location === 'prompt' || perm.location === 'prompt-with-rationale' ||
-          perm.coarseLocation === 'prompt' || perm.coarseLocation === 'prompt-with-rationale') {
-        perm = await Geolocation.requestPermissions();
-      }
-      const granted =
-        perm.location === 'granted' ||
-        perm.coarseLocation === 'granted';
-      if (!granted) {
-        return {
-          ok: false,
-          error: 'denied',
-          message:
-            'Location permission denied. Enable location access in your device settings to find nearby tours and tag evidence.',
-        };
-      }
-      const pos = await Geolocation.getCurrentPosition({
-        enableHighAccuracy,
-        timeout,
-        maximumAge,
-      });
-      return {
-        ok: true,
-        coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-      };
-    } catch (e) {
-      const msg = String(e?.message || e || '');
-      if (/denied|permission/i.test(msg)) {
-        return {
-          ok: false,
-          error: 'denied',
-          message:
-            'Location permission denied. Enable location access in your device settings to find nearby tours and tag evidence.',
-        };
-      }
-      // Fall through to browser geolocation if the plugin path fails for other reasons.
+      ({ Geolocation } = await import('@capacitor/geolocation'));
+    } catch { /* plugin unavailable — browser geolocation below */ }
+    if (Geolocation) {
+      // One self-contained native attempt (fresh permission read, at most one
+      // OS prompt, bounded wait). A classified native failure is returned as-is:
+      // the WebView geolocation stack is only used when the plugin itself is
+      // unimplemented, because it runs its own permission prompt and timeout
+      // and previously masked the real failure reason.
+      const result = await acquireNativePosition(Geolocation, { enableHighAccuracy, timeout, maximumAge });
+      if (result.ok || result.error !== 'unsupported') return result;
     }
   }
 
