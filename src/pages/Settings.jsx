@@ -13,6 +13,7 @@ import AdDiagnosticsPanel from '../components/AdDiagnosticsPanel';
 import { base44 } from '@/api/base44Client';
 import { getBlockedUsers, unblockUser } from '@/lib/userBlocks';
 import { setMusicSettings } from '@/lib/hauntedAudio';
+import { setLocationTrackingEnabled } from '@/lib/deviceCapabilities';
 import DeviceVoicePicker from '@/components/DeviceVoicePicker';
 import DashboardNarrationIndicator from '@/components/DashboardNarrationIndicator';
 
@@ -45,6 +46,7 @@ export default function Settings() {
       if (me?.settings) {
         const saved = typeof me.settings === 'string' ? JSON.parse(me.settings) : me.settings;
         setSettings({ ...defaultSettings, ...saved, isAdmin });
+        setLocationTrackingEnabled(saved.locationTracking !== false);
         setMusicSettings({
           enabled: saved.backgroundMusic ?? defaultSettings.backgroundMusic,
           volume: saved.musicVolume ?? defaultSettings.musicVolume,
@@ -71,6 +73,7 @@ export default function Settings() {
     if (key === 'musicVolume') setMusicSettings({ volume: value });
     if (key === 'hauntedMusic') setMusicSettings({ hauntedEnabled: value });
     if (key === 'hauntedMusicVolume') setMusicSettings({ hauntedVolume: value });
+    if (key === 'locationTracking') setLocationTrackingEnabled(value);
     try {
       await base44.auth.updateMe({ settings: JSON.stringify(updated) });
     } catch (e) { /* silently fail */ }
