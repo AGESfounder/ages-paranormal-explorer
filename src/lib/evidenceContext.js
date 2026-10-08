@@ -1,5 +1,5 @@
 import { base44 } from '@/api/base44Client';
-import { getDevicePosition, isNativeApp, isLocationTrackingEnabled } from '@/lib/deviceCapabilities';
+import { getDevicePosition, isNativeApp, isLocationTrackingEnabled, haversineMiles } from '@/lib/deviceCapabilities';
 
 /**
  * Captures the current device GPS coordinates.
@@ -155,6 +155,95 @@ export async function reverseGeocodePlace(lat, lon) {
   return (await reverseGeocodeBigDataCloud(lat, lon)) || (await reverseGeocodeNominatim(lat, lon));
 }
 
+// ── GPS evidence location label ──
+// When GPS coordinates are captured for an evidence save, the location label
+// should show the most useful accurate written location: if the investigator
+// is sufficiently close to their active AGES tour stop, the stop name plus the
+// reverse-geocoded locality (e.g. "Sachs Covered Bridge — Gettysburg,
+// Pennsylvania"); otherwise just the locality (e.g. "Gettysburg, Pennsylvania").
+// The actual GPS coordinates are always preserved — the stop name is a label
+// only, never a coordinate substitution.
+
+// When GPS coordinates are within this distance of the active tour stop's
+// stored coordinates, the evidence location label includes the stop name.
+// 0.3 mi (~480 m) matches the app's existing sameSpot clustering threshold
+// (HauntedLocations.jsx) and comfortably covers phone GPS inaccuracy
+// (10-50 m outdoors) plus moderate stop-coordinate imprecision, while
+// remaining tight enough that a user at a different nearby location does
+// not get mislabeled. Only the active (last-viewed) stop is checked, so
+// there is no risk of matching an unrelated stop on a dense walking tour.
+const NEARBY_STOP_THRESHOLD_MI = 0.3;
+
+async function reverseGeocodeLocalityBigDataCloud(lat, lon) {
+  try {
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+    const res = await fetchWithTimeout(url);
+    if (!res.ok) return null;
+    const d = await res.json();
+    const city = d.locality || d.city;
+    const state = d.principalSubdivision;
+    if (city && state && city !== state) return `${city}, ${state}`;
+    if (city) return city;
+    if (state) return state;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function reverseGeocodeLocalityNominatim(lat, lon) {
+  try {
+    // zoom=10 gives a city-level result (city + state) rather than the
+    // street-level result (zoom=14) used by reverseGeocodeNominatim above.
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=10`;
+    const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'en' } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const addr = data.address || {};
+    const city = addr.city || addr.town || addr.village || addr.hamlet;
+    const state = addr.state;
+    if (city && state) return `${city}, ${state}`;
+    if (city) return city;
+    if (state) return state;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Returns "City, State" (e.g. "Gettysburg, Pennsylvania") or null.
+async function reverseGeocodeLocality(lat, lon) {
+  return (await reverseGeocodeLocalityBigDataCloud(lat, lon)) || (await reverseGeocodeLocalityNominatim(lat, lon));
+}
+
+/**
+ * Resolve the best written location label for a GPS evidence save.
+ * If the GPS coordinates are within NEARBY_STOP_THRESHOLD_MI of the active
+ * tour stop's stored coordinates, returns "Stop Name — Locality".
+ * Otherwise returns just the locality. Never attaches an unrelated stop
+ * name. The actual GPS coordinates are not modified — this only produces a
+ * display label.
+ */
+async function resolveGpsLocationName(lat, lon, activeCtx) {
+  const locality = await reverseGeocodeLocality(lat, lon);
+
+  if (activeCtx?.stop_id) {
+    try {
+      const stop = await base44.entities.TourStop.get(activeCtx.stop_id);
+      if (stop?.latitude && stop?.longitude) {
+        const dist = haversineMiles(lat, lon, stop.latitude, stop.longitude);
+        if (dist <= NEARBY_STOP_THRESHOLD_MI) {
+          const stopName = stop.name || activeCtx.location_name;
+          if (stopName && locality) return `${stopName} — ${locality}`;
+          if (stopName) return stopName;
+        }
+      }
+    } catch { /* stop fetch failed — fall back to locality only */ }
+  }
+
+  return locality || null;
+}
+
 /**
  * Forward-geocode a typed address to GPS coordinates using Nominatim.
  * Returns { latitude, longitude } or null if geocoding fails.
@@ -203,7 +292,7 @@ export async function buildEvidenceContext(overrides = {}, options = {}) {
     // geocode them to get the actual location name (unless an explicit
     // location_name override was provided by the caller, e.g. LocationTermBank).
     if (isGpsSource && overrides.latitude != null && !overrides.location_name && !ctx.location_name) {
-      const place = await reverseGeocodePlace(overrides.latitude, overrides.longitude);
+      const place = await resolveGpsLocationName(overrides.latitude, overrides.longitude, activeCtx);
       if (place) ctx.location_name = place;
     }
     return ctx;
@@ -225,7 +314,7 @@ export async function buildEvidenceContext(overrides = {}, options = {}) {
     // If no tour/stop context and no explicit location_name, reverse geocode
     // the GPS to a readable place name so the journal shows more than raw coords.
     if (!ctx.location_name && !overrides.location_name) {
-      const place = await reverseGeocodePlace(gps.latitude, gps.longitude);
+      const place = await resolveGpsLocationName(gps.latitude, gps.longitude, activeCtx);
       if (place) ctx.location_name = place;
     }
   }
