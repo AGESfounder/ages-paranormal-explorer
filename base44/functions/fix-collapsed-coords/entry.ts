@@ -8,7 +8,15 @@ const LARGE_PROPERTY_KEYWORDS = [
   'lake', 'dam', 'reservoir', 'recreation area',
   'wildlife refuge', 'preserve', 'forest', 'woods',
   'greenway', 'trail system', 'cemetery', 'graveyard',
-  'campus', 'grounds', 'estate', 'manor',
+  'campus', 'estate', 'manor',
+  // NOTE: 'grounds' was deliberately removed. It was the only entry that is
+  // not a property TYPE — it is an ordinary prose word for the land around a
+  // building, so a tour description mentioning "the light station's grounds"
+  // or a start location named "Tramway Path & Maritime Grounds" falsely flagged
+  // a compact single-building site as a large property. That pushed its
+  // interior rooms through per-stop web search, which can never confirm a
+  // parlor or a basement, leaving them as scattered pink "Needs Placement"
+  // pins instead of one marker on the building.
 ];
 function isLargeProperty(tour) {
   if (!tour) return false;
@@ -21,6 +29,22 @@ function isLargeProperty(tour) {
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp('\\b' + escaped + '\\b').test(text);
   });
+}
+
+// Build a geocoding query from a stop's stored address. Stored addresses are
+// usually ALREADY complete ("12 S Castillo Dr, St Augustine, FL 32084"), so
+// appending the city and state produced queries like
+// "12 S Castillo Dr, St Augustine, FL 32084, St. Augustine, Florida" — a
+// duplicated city/state that Nominatim frequently returns EMPTY. Every failed
+// lookup pushed a perfectly good address into the street-name fallback, which
+// stamps the stop amber ("Est.") and can collapse two stops on the same street
+// onto one identical point. Only append city/state when the address carries
+// neither a ZIP nor a two-letter state code.
+function addressQuery(address, tour) {
+  const addr = String(address || '').trim();
+  if (!addr) return '';
+  if (/\b\d{5}\b/.test(addr) || /\b[A-Z]{2}\b/.test(addr)) return addr;
+  return [addr, tour?.city || '', tour?.state || ''].filter(Boolean).join(', ');
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -854,7 +878,7 @@ Return a JSON object with:
             // "Waterworks Road" would all merge to one point).
             let addrGeocodeCandidate = null;
             if (stop.address && !sharedAddress) {
-              const geo = await geocode(`${stop.address}, ${tour.city || ''}, ${tour.state || ''}`);
+              const geo = await geocode(addressQuery(stop.address, tour));
               await sleep(1100);
               if (geo) {
                 const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
@@ -905,7 +929,14 @@ Return a JSON object with:
             // Also tries common spelling variants — the LLM often Americanizes
             // British spellings (e.g. "Center St" → "Centre St" in Centralia).
             // SKIP for shared addresses — same collision risk as Step 1.
-            if (!fixed && stop.address && !sharedAddress) {
+            // ALSO SKIP when Step 1 already produced an address candidate:
+            // street-level placement is a downgrade from the exact building the
+            // full address resolved to, and it is stamped geocoded: false (the
+            // amber "Est." badge). Running it first silently discarded good
+            // building coordinates and pinned every affected stop to the
+            // street instead — which is also why two stops on one street ended
+            // up on the identical point.
+            if (!fixed && !addrGeocodeCandidate && stop.address && !sharedAddress) {
               const streetOnly = stop.address.replace(/^\d+\s+/, '').replace(/\s+\d{5}$/, '').trim();
               if (streetOnly && streetOnly !== stop.address) {
                 const variants = [streetOnly];
@@ -937,7 +968,7 @@ Return a JSON object with:
                 }
                 for (const variant of variants) {
                   if (fixed) break;
-                  const geo = await geocode(`${variant}, ${tour.city || ''}, ${tour.state || ''}`);
+                  const geo = await geocode(addressQuery(variant, tour));
                   await sleep(1100);
                   if (geo) {
                     const dist = haversine(tour.start_latitude, tour.start_longitude, geo.lat, geo.lon);
