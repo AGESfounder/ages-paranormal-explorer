@@ -759,7 +759,7 @@ async function pollForPlanGrant(fetchUser, {
       const plan = lastUser?.plan;
       const planMatches = expectedPlanId
         ? plan === expectedPlanId
-        : plan === 'explorer' || plan === 'investigator';
+        : ['seeker', 'technician', 'explorer', 'investigator', 'trailblazer'].includes(plan);
       const expMs = lastUser?.plan_expiration_date
         ? new Date(lastUser.plan_expiration_date).getTime()
         : NaN;
