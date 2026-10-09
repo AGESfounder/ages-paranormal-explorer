@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MapPin, Crosshair, Loader2, ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { captureGPS, reverseGeocodePlace } from '@/lib/evidenceContext';
+import { captureGPS, reverseGeocodePlace, geocodeAddress } from '@/lib/evidenceContext';
 
 /**
  * Dropdown that lets the user choose how to mark where evidence was obtained:
@@ -11,14 +11,15 @@ import { captureGPS, reverseGeocodePlace } from '@/lib/evidenceContext';
  * Props:
  *  - latitude / longitude: current number coords (or null/'' when none)
  *  - locationName: current place-name string
- *  - onChange({ latitude, longitude, location_name }): called with all three
- *    fields whenever the selection changes.
+ *  - onChange({ latitude, longitude, location_name, location_source }): called
+ *    with all four fields whenever the selection changes.
  */
 export default function LocationPicker({ latitude, longitude, locationName, onChange }) {
   const hasGPS = typeof latitude === 'number' && typeof longitude === 'number';
   const [mode, setMode] = useState(hasGPS ? 'gps' : '');
   const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState('');
+  const [resolving, setResolving] = useState(false);
 
   const handleCapture = async () => {
     setCapturing(true);
@@ -31,6 +32,24 @@ export default function LocationPicker({ latitude, longitude, locationName, onCh
       setError('Could not capture GPS. Check location permissions.');
     }
     setCapturing(false);
+  };
+
+  const handleResolve = async () => {
+    const address = (locationName || '').trim();
+    if (!address) {
+      setError('Enter an address or location name first.');
+      return;
+    }
+    setResolving(true);
+    setError('');
+    const coords = await geocodeAddress(address);
+    setResolving(false);
+    if (coords) {
+      onChange({ latitude: coords.latitude, longitude: coords.longitude, location_name: address, location_source: 'MANUAL' });
+    } else {
+      setError('Could not find that address. Check the spelling or try a more specific location.');
+      onChange({ latitude: null, longitude: null, location_name: address, location_source: '' });
+    }
   };
 
   const handleModeChange = (newMode) => {
@@ -86,13 +105,30 @@ export default function LocationPicker({ latitude, longitude, locationName, onCh
       )}
 
       {mode === 'manual' && (
-        <div className="mt-2">
+        <div className="mt-2 space-y-2">
           <Input
             value={locationName || ''}
-            onChange={e => onChange({ latitude: null, longitude: null, location_name: e.target.value })}
+            onChange={e => onChange({ latitude: null, longitude: null, location_name: e.target.value, location_source: '' })}
             placeholder="Enter address or location name"
             className="bg-card/50 border-border/50"
           />
+          {hasGPS && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/10 border border-accent/30">
+              <MapPin className="w-4 h-4 text-accent shrink-0" />
+              <span className="text-xs text-accent flex-1">
+                {Number(latitude).toFixed(5)}, {Number(longitude).toFixed(5)}
+              </span>
+              <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Resolved</span>
+            </div>
+          )}
+          <button
+            onClick={handleResolve}
+            disabled={resolving || !(locationName || '').trim()}
+            className="w-full flex items-center justify-center gap-2 p-2.5 rounded-lg border border-primary/40 bg-primary/10 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors disabled:opacity-50 min-h-[44px]"
+          >
+            {resolving ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
+            <span>{resolving ? 'Resolving…' : 'Resolve Address'}</span>
+          </button>
         </div>
       )}
     </div>

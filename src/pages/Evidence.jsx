@@ -679,11 +679,12 @@ export default function Evidence() {
             latitude={form.latitude}
             longitude={form.longitude}
             locationName={form.location_name}
-            onChange={({ latitude, longitude, location_name }) => setForm(prev => ({
+            onChange={({ latitude, longitude, location_name, location_source }) => setForm(prev => ({
               ...prev,
               latitude,
               longitude,
               location_name,
+              location_source: location_source || '',
             }))}
           />
 
