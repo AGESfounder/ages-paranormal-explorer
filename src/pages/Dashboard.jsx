@@ -25,6 +25,7 @@ import {
 import DashboardEvidenceTile from '@/components/DashboardEvidenceTile';
 import DashboardToolBanksTile from '@/components/DashboardToolBanksTile';
 import AdFreeBadge from '@/components/AdFreeBadge';
+import PlanTierHeader from '@/components/PlanTierHeader';
 import {
   getAppleSubscriptionPlanId,
   getGoogleSubscriptionPlanId,
@@ -554,19 +555,12 @@ export default function Dashboard() {
               <AdFreeBadge user={user} />
             </div>
           </div>
-          <div className="flex items-stretch gap-2 mb-3">
-            <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${PLAN_LABEL_COLORS[currentPlan.id] || currentPlan.badge}`}>
-              <span className="font-heading font-bold uppercase text-sm tracking-wide sm:text-lg sm:tracking-wider leading-tight text-center break-words max-w-full">{currentPlan.name}</span>
-              {currentPlan.id === 'trailblazer' && <span className="text-[9px] text-amber-400 font-heading mt-0.5">30-Month Elite · 6 Months Free</span>}
-            </div>
-            {PLAN_HIGHLIGHTS[currentPlan.id] ? (
-              <div className="w-2/3 flex items-center px-3 py-2 rounded-lg bg-primary/15 border border-primary/40">
-                <p className="text-sm font-bold text-primary tracking-wide leading-tight text-center w-full">{PLAN_HIGHLIGHTS[currentPlan.id]}</p>
-              </div>
-            ) : (
-              <div className="w-2/3" />
-            )}
-          </div>
+          <PlanTierHeader
+            planId={currentPlan.id}
+            name={currentPlan.name}
+            labelClass={PLAN_LABEL_COLORS[currentPlan.id] || currentPlan.badge}
+            highlight={PLAN_HIGHLIGHTS[currentPlan.id]}
+          />
 
           {/* Plan features */}
           <div className="space-y-1.5">
@@ -697,19 +691,12 @@ export default function Dashboard() {
               const isTrailblazer = planId === 'trailblazer';
               return (
                 <div key={planId} className="p-4 rounded-xl border border-border/40 bg-card/30">
-                  <div className="flex items-stretch gap-2 mb-3">
-                    <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${PLAN_LABEL_COLORS[planId] || plan.badge}`}>
-                      <span className="font-heading font-bold uppercase text-sm tracking-wide sm:text-lg sm:tracking-wider leading-tight text-center break-words max-w-full">{plan.name}</span>
-                      {isTrailblazer && <span className="text-[9px] text-amber-400 font-heading mt-0.5">30-Month Elite · 6 Months Free</span>}
-                    </div>
-                    {PLAN_HIGHLIGHTS[planId] ? (
-                      <div className="w-2/3 flex items-center px-3 py-2 rounded-lg bg-primary/15 border border-primary/40">
-                        <p className="text-sm font-bold text-primary tracking-wide leading-tight text-center w-full">{PLAN_HIGHLIGHTS[planId]}</p>
-                      </div>
-                    ) : (
-                      <div className="w-2/3" />
-                    )}
-                  </div>
+                  <PlanTierHeader
+                    planId={planId}
+                    name={plan.name}
+                    labelClass={PLAN_LABEL_COLORS[planId] || plan.badge}
+                    highlight={PLAN_HIGHLIGHTS[planId]}
+                  />
                   <div className="flex items-baseline gap-2 mb-3">
                     {isObserver ? (
                       <span className="font-display text-2xl text-muted-foreground">Free</span>
