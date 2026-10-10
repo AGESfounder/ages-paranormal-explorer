@@ -114,29 +114,50 @@ export default function UpgradePrompt({ show, onClose, reason = 'plan', onReward
                   )}
                 </button>
               )}
-              <Link
-                to="/dashboard"
-                onClick={onClose}
-                className="block w-full py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-heading text-xs uppercase tracking-wider hover:bg-emerald-500/20 transition-colors min-h-[44px] flex flex-col items-center justify-center gap-0.5"
-              >
-                <span>Get Seeker — $3.99/mo</span>
-                <span className="text-[9px] normal-case font-body tracking-normal text-emerald-400/70">Ad-free + 10 saves/day</span>
-              </Link>
-              <Link
-                to="/dashboard"
-                onClick={onClose}
-                className="block w-full py-3 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 font-heading text-xs uppercase tracking-wider hover:bg-sky-500/20 transition-colors min-h-[44px] flex flex-col items-center justify-center gap-0.5"
-              >
-                <span>Get Technician — $5.99/mo</span>
-                <span className="text-[9px] normal-case font-body tracking-normal text-sky-400/70">10 of 12 tools + Aura saves</span>
-              </Link>
-              <Link
-                to="/dashboard"
-                onClick={onClose}
-                className="block w-full py-3 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px] flex items-center justify-center"
-              >
-                View All Plans
-              </Link>
+              {reason === 'energy' && isPaid ? (
+                <>
+                  <Link
+                    to="/dashboard"
+                    onClick={onClose}
+                    className="block w-full py-3 rounded-lg bg-primary/15 border border-primary/40 text-primary font-heading text-sm uppercase tracking-wider hover:bg-primary/25 transition-colors min-h-[44px] flex items-center justify-center"
+                  >
+                    Buy Aura Bundle
+                  </Link>
+                  <Link
+                    to="/dashboard"
+                    onClick={onClose}
+                    className="block w-full py-3 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px] flex items-center justify-center"
+                  >
+                    Upgrade / See All Plans
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/dashboard"
+                    onClick={onClose}
+                    className="block w-full py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-heading text-xs uppercase tracking-wider hover:bg-emerald-500/20 transition-colors min-h-[44px] flex flex-col items-center justify-center gap-0.5"
+                  >
+                    <span>Get Seeker — $3.99/mo</span>
+                    <span className="text-[9px] normal-case font-body tracking-normal text-emerald-400/70">Ad-free + 10 saves/day</span>
+                  </Link>
+                  <Link
+                    to="/dashboard"
+                    onClick={onClose}
+                    className="block w-full py-3 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 font-heading text-xs uppercase tracking-wider hover:bg-sky-500/20 transition-colors min-h-[44px] flex flex-col items-center justify-center gap-0.5"
+                  >
+                    <span>Get Technician — $5.99/mo</span>
+                    <span className="text-[9px] normal-case font-body tracking-normal text-sky-400/70">10 of 12 tools + Aura saves</span>
+                  </Link>
+                  <Link
+                    to="/dashboard"
+                    onClick={onClose}
+                    className="block w-full py-3 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px] flex items-center justify-center"
+                  >
+                    View All Plans
+                  </Link>
+                </>
+              )}
               <button
                 onClick={onClose}
                 className="w-full py-2.5 rounded-lg border border-border text-muted-foreground text-sm hover:bg-secondary/50 transition-colors min-h-[44px]"
