@@ -14,6 +14,7 @@ import SensitivityControl from './SensitivityControl';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
@@ -136,7 +137,6 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   const [lockedWord, setLockedWord] = useState(null);
   const [captured, setCaptured] = useState([]);
   const [sessionDuration, setSessionDuration] = useState(0);
-  const [videoBlob, setVideoBlob] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
@@ -146,7 +146,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { unlock, attachMicToRecording } = useGhostVoice();
+  const { unlock, attachMicToRecording, resumeContext } = useGhostVoice();
   const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const speakNormal = (word) => {
@@ -220,10 +220,14 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   const lockedWordRef = useRef(null);
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
-  const mediaRecorderRef = useRef(null);
-  const videoChunksRef = useRef([]);
-  const audioStreamRef = useRef(null);
   const timerRef = useRef(null);
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
+    canvasRef,
+    attachMicToRecording,
+    resumeAudioContext: resumeContext,
+    setSensorError,
+    componentName: 'TermsSweeper',
+  });
   const cameraStreamRef = useRef(null);
   const camVideoRef = useRef(null);
   const detectCanvasRef = useRef(null);
@@ -256,8 +260,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
     if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
-    if (audioStreamRef.current) { audioStreamRef.current.getTracks().forEach(t => t.stop()); audioStreamRef.current = null; }
+    cleanup();
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
@@ -631,48 +634,6 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
   };
 
-  const startRecording = async () => {
-    try {
-      // Raw mic feed: disable echo cancellation, noise suppression, and AGC
-      // so the speaker's TTS output is captured acoustically instead of being
-      // filtered out — the biggest clarity win on iOS, where the defaults
-      // aggressively squash that bleed and make recordings sound distant.
-      const audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-      audioStreamRef.current = audioStream;
-      await new Promise(r => setTimeout(r, 150));
-      if (!canvasRef.current || typeof canvasRef.current.captureStream !== 'function') {
-        setSensorError('Recording not supported in this browser. The session still runs — you just won\'t get a video file.');
-        return false;
-      }
-      const canvasStream = canvasRef.current.captureStream(30);
-      // Mix the mic + creepy-voice speech (Web Audio) so dictated terms are
-      // captured directly in the recorded video, not just ambient sound.
-      const mixedTrack = attachMicToRecording(audioStream);
-      let audioTrack = mixedTrack || audioStream.getAudioTracks()[0];
-      if (audioTrack) canvasStream.addTrack(audioTrack);
-      const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
-        .find(t => MediaRecorder.isTypeSupported(t)) || '';
-      const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
-      mediaRecorderRef.current = mr;
-      videoChunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        const blob = new Blob(videoChunksRef.current, { type: mimeType || 'video/webm' });
-        setVideoBlob(blob);
-        canvasStream.getVideoTracks().forEach(t => t.stop());
-        audioStream.getTracks().forEach(t => t.stop());
-        audioStreamRef.current = null;
-      };
-      mr.start(1000);
-      return true;
-    } catch (e) {
-      setSensorError('Microphone access denied. Grant permission to record the session.');
-      return false;
-    }
-  };
-
   const startSession = async () => {
     unlock();
     setCaptured([]);
@@ -725,7 +686,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') { try { mediaRecorderRef.current.stop(); } catch {} }
+    stopRecording();
     setCameraActive(false);
     setAnomalyDetected(false);
     setMotionDetected(false);
