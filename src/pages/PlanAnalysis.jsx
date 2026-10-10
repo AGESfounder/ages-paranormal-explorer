@@ -628,18 +628,20 @@ export default function PlanAnalysis() {
             >
               <ArrowLeft className="w-4 h-4" /> Back
             </Link>
-            <button
-              onClick={downloadPDF}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px]"
-            >
-              <Download className="w-4 h-4" /> Cost Analysis A
-            </button>
-            <button
-              onClick={downloadHybridPDF}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-accent-foreground font-heading text-sm uppercase tracking-wider hover:bg-accent/90 transition-colors min-h-[44px]"
-            >
-              <Download className="w-4 h-4" /> Cost Analysis B
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={downloadPDF}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-heading text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors min-h-[44px]"
+              >
+                <Download className="w-4 h-4" /> Cost Analysis A
+              </button>
+              <button
+                onClick={downloadHybridPDF}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-accent-foreground font-heading text-sm uppercase tracking-wider hover:bg-accent/90 transition-colors min-h-[44px]"
+              >
+                <Download className="w-4 h-4" /> Cost Analysis B
+              </button>
+            </div>
             <button
               onClick={() => window.print()}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-card text-foreground font-heading text-sm uppercase tracking-wider hover:bg-card/60 transition-colors min-h-[44px]"
