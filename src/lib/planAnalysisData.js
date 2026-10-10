@@ -20,6 +20,7 @@ import {
   TOOL_USE_ADS_OBSERVER_MO, TOOL_USE_AD_REV_OBSERVER_MO, SAVE_ADS_MO, SAVE_AD_REV_MO,
   SAVE_UPLOAD_CREDITS_MO, SAVE_UPLOAD_COST_MO, OBSERVER_AD_REV_MO,
   FIXED_FIRST_YEAR, FIXED_FIRST_YEAR_TOTAL, FIXED_ONGOING_ANNUAL, FIXED_ONGOING_MONTHLY,
+  TRAILBLAZER_MAX_SLOTS,
 } from '@/lib/costAnalysisModel';
 import { TOOLKIT_TIERS, creditAudit } from '@/lib/costAnalysisStatic';
 
@@ -49,7 +50,7 @@ function buildPlans(option, toursPerEnergy, auraSplit) {
       features: `Everything in Technician; Device narration (free) or Enhanced AI narration (~${toursPerEnergy(explorer.narE)} fully narrated tour/mo, all tabs); custom tour generation; ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 10-tool toolkit; aura bundles (${auraSplit} narration/manifestation)` },
     { name: 'Investigator', price: '$11.99', billing: 'Monthly ($119.99/yr)', ...investigator,
       features: `Everything in Explorer; AI narration (~${toursPerEnergy(investigator.narE)} fully narrated tours/mo, all tabs); custom tours; full 12-tool toolkit; evidence dashboard analytics; aura bundles (${auraSplit})` },
-    { name: 'Trailblazer', price: '$239.99', billing: `One-time, ${tbMonths} months (${tbFree} months free, max 300 slots)`, ...trailblazer,
+    { name: 'Trailblazer', price: '$239.99', billing: `One-time, ${tbMonths} months (${tbFree} months free, max ${TRAILBLAZER_MAX_SLOTS} slots)`, ...trailblazer,
       features: `Everything in Investigator; AI narration (~${toursPerEnergy(trailblazer.narE)} fully narrated tours/mo, all tabs); custom tours; exclusive badge; early access; ${tbMonths}-mo price lock (${tbFree} months free); 20% off aura bundles` },
   ];
 }
@@ -132,5 +133,6 @@ export function buildDisplayData(optionKey) {
     requiredBase44Plan: m.requiredBase44Plan,
     // Option-specific values (A: 30 mo / +10 ad, B: 27 mo / +5 ad)
     trailblazerMonths: option.trailblazerMonths,
+    trailblazerMaxSlots: TRAILBLAZER_MAX_SLOTS,
   };
 }

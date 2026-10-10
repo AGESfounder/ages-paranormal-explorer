@@ -34,6 +34,7 @@ export default function PlanAnalysisView({ data }) {
     AD_REWARD_COST_PER_PAID_USER_MO, AD_REWARD_NET_PER_PAID_USER_MO,
     calcCosts, storeFee, revenuecatFee, requiredBase44Plan,
     trailblazerMonths,
+    trailblazerMaxSlots,
   } = data;
 
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -479,7 +480,7 @@ export default function PlanAnalysisView({ data }) {
             </tbody>
           </table>
         </div>
-        <p className="text-xs print-muted mt-2 italic">With {plans[5].narE.toLocaleString()} narration energy/month over {trailblazerMonths} months, Trailblazer {trailblazerAnalysis.profit >= 0 ? `is profitable at 100% utilization (~${trailblazerAnalysis.margin.toFixed(0)}% margin = $${trailblazerAnalysis.profit.toFixed(0)} profit)` : `loses $${Math.abs(trailblazerAnalysis.profit).toFixed(0)} at 100% utilization (${trailblazerAnalysis.margin.toFixed(0)}% margin)`}. At 50% realistic usage, margin {trailblazer50.profit >= 0 ? `improves to ~${trailblazer50.margin.toFixed(0)}%` : `is ${trailblazer50.margin.toFixed(0)}%`}. The 300-slot cap protects against credit cost exposure.</p>
+        <p className="text-xs print-muted mt-2 italic">With {plans[5].narE.toLocaleString()} narration energy/month over {trailblazerMonths} months, Trailblazer {trailblazerAnalysis.profit >= 0 ? `is profitable at 100% utilization (~${trailblazerAnalysis.margin.toFixed(0)}% margin = $${trailblazerAnalysis.profit.toFixed(0)} profit)` : `loses $${Math.abs(trailblazerAnalysis.profit).toFixed(0)} at 100% utilization (${trailblazerAnalysis.margin.toFixed(0)}% margin)`}. At 50% realistic usage, margin {trailblazer50.profit >= 0 ? `improves to ~${trailblazer50.margin.toFixed(0)}%` : `is ${trailblazer50.margin.toFixed(0)}%`}. The {trailblazerMaxSlots}-slot cap protects against credit cost exposure.</p>
       </section>
 
       {/* 6. Aura Bundle Profit */}
@@ -690,7 +691,7 @@ export default function PlanAnalysisView({ data }) {
           <p>• <span className="font-semibold">Store fees (15% IAP)</span> are the largest non-platform cost — significantly higher than traditional payment processing (2.9% + $0.30). The app publishes natively via Apple/Google IAP.</p>
           <p>• <span className="font-semibold">Full narration cost:</span> Each fully narrated tour (all 4 tabs per stop + intro + conclusion) costs ~{fullTourNarrationCredits} credits = ${(fullTourNarrationCredits * COST_PER_CREDIT).toFixed(2)}/tour in platform costs. Energy budgets support: Explorer ~{toursPerEnergy(plans[3].narE)} tour/mo, Investigator ~{toursPerEnergy(plans[4].narE)} tours/mo, Trailblazer ~{toursPerEnergy(plans[5].narE)} tours/mo.</p>
           <p>• <span className="font-semibold">Per-plan margins at 100% utilization:</span> Seeker ~{monthlyAnalysis[0].margin.toFixed(0)}% (0 credits), Technician ~{monthlyAnalysis[1].margin.toFixed(0)}% (0 credits), Explorer ~{monthlyAnalysis[2].margin.toFixed(0)}%, Investigator ~{monthlyAnalysis[3].margin.toFixed(0)}%. Seeker and Technician are the highest-margin tiers (0 AI energy = 0 platform cost). All tiers are healthier when energy goes unused.</p>
-          <p>• <span className="font-semibold text-green-500">✓ Trailblazer is {trailblazerAnalysis.profit >= 0 ? 'profitable at all utilization levels' : 'profitable at 50% utilization'}</span> (~{trailblazerAnalysis.margin.toFixed(0)}% margin at 100% = ${trailblazerAnalysis.profit.toFixed(0)} profit over {trailblazerMonths} months; ~{trailblazer50.margin.toFixed(0)}% at 50% realistic usage). The 300-slot cap protects against credit cost exposure.</p>
+          <p>• <span className="font-semibold text-green-500">✓ Trailblazer is {trailblazerAnalysis.profit >= 0 ? 'profitable at all utilization levels' : 'profitable at 50% utilization'}</span> (~{trailblazerAnalysis.margin.toFixed(0)}% margin at 100% = ${trailblazerAnalysis.profit.toFixed(0)} profit over {trailblazerMonths} months; ~{trailblazer50.margin.toFixed(0)}% at 50% realistic usage). The {trailblazerMaxSlots}-slot cap protects against credit cost exposure.</p>
           <p>• <span className="font-semibold">AdMob revenue</span> from free users (interstitial) meaningfully supplements subscription income — 5,000 free users generate ~${(5000 * AD_REV_PER_FREE_USER_MO).toFixed(0)}/mo, offsetting platform and store costs.</p>
           <p>• <span className="font-semibold">Rewarded ads</span> (Explorer+ users) generate ~${AD_REWARD_REV_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in ad revenue, but the granted energy costs ~${AD_REWARD_COST_PER_PAID_USER_MO.toFixed(2)}/paid user/mo in platform credits when consumed (net ~${AD_REWARD_NET_PER_PAID_USER_MO.toFixed(2)}/paid user/mo). This is a <span className="font-semibold">retention investment</span>, not a profit center.</p>
           <p>• <span className="font-semibold">Fixed costs</span> (~${fixedOngoingMonthly.toFixed(0)}/mo ongoing) are negligible at scale but matter for small operations. First-year total: ${fixedFirstYearTotal} (includes ${DEV_UPFRONT_ONE_TIME} CatDoes upfront).</p>

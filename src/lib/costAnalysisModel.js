@@ -8,6 +8,10 @@
 
 export const PRICE = { seeker: 3.99, technician: 5.99, explorer: 7.99, investigator: 11.99, trailblazer: 239.99 };
 
+// Maximum Trailblazer lifetime-license slots. Capping the one-time tier
+// protects against credit-cost exposure (every slot is 27 months of energy).
+export const TRAILBLAZER_MAX_SLOTS = 100;
+
 export const AURA_BUNDLES = [
   { name: 'Flicker', energy: 150, price: '$2.99' },
   { name: 'Apparition', energy: 500, price: '$6.49' },
