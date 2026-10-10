@@ -14,6 +14,7 @@ import { PLANS, AURA_BUNDLES, PLAN_ORDER } from '@/lib/plans';
 import AdRewardCard from '@/components/AdRewardCard';
 import { beginIosPurchaseDiagSession } from '@/lib/iosPurchaseDiagnostics';
 import { withAppleLedger } from '@/lib/appleLedger';
+import { useAuth } from '@/lib/AuthContext';
 import {
   getDisplayEnergy,
   getEffectiveExpirationDate,
@@ -77,6 +78,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(null);
   const [stockingUp, setStockingUp] = useState(null);
+  // Refresh the global AuthContext user snapshot after a purchase grant so
+  // every gate reading useAuth() (e.g. the Paranormal Findings AdGate) sees
+  // the new plan in the same session, without a full app reload.
+  const { checkUserAuth } = useAuth();
 
   const loadData = useCallback(async () => {
     try {
@@ -176,6 +181,7 @@ export default function Dashboard() {
         });
         if (grant.ok && grant.user) {
           setUser(grant.user);
+          await checkUserAuth();
           await loadData();
         } else {
           // Purchase succeeded at the store; webhook may still be in flight.
@@ -213,6 +219,7 @@ export default function Dashboard() {
         });
         if (grant.ok && grant.user) {
           setUser(grant.user);
+          await checkUserAuth();
           await loadData();
         } else {
           // Purchase succeeded at the store; webhook may still be in flight.
@@ -300,6 +307,7 @@ export default function Dashboard() {
         });
         if (grant.ok && grant.user) {
           setUser(grant.user);
+          await checkUserAuth();
           await loadData();
         } else {
           // Purchase succeeded at the store; webhook may still be in flight.
@@ -338,6 +346,7 @@ export default function Dashboard() {
         });
         if (grant.ok && grant.user) {
           setUser(grant.user);
+          await checkUserAuth();
           await loadData();
         } else {
           // Purchase succeeded at the store; webhook may still be in flight.
@@ -380,6 +389,7 @@ export default function Dashboard() {
         });
         if (grant.ok && grant.user) {
           setUser(grant.user);
+          await checkUserAuth();
           await loadData();
         } else {
           // Purchase succeeded at the store; webhook may still be in flight.
@@ -424,6 +434,7 @@ export default function Dashboard() {
         });
         if (grant.ok && grant.user) {
           setUser(grant.user);
+          await checkUserAuth();
           await loadData();
         } else {
           // Purchase succeeded at the store; webhook may still be in flight.
@@ -462,6 +473,7 @@ export default function Dashboard() {
       });
       if (grant.ok && grant.user) {
         setUser(grant.user);
+        await checkUserAuth();
       }
       await loadData();
       alert(grant.ok
