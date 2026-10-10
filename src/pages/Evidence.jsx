@@ -282,8 +282,8 @@ export default function Evidence() {
     // ── Evidence save gate ──
     // Admin: free. Observer/Seeker: ad-watched (10/day cap).
     // Technician+: 20 free daily, then Aura energy.
-    const allowed = await gateSave();
-    if (!allowed) {
+    const saveCost = await gateSave();
+    if (!saveCost) {
       setSubmitting(false);
       return;
     }
@@ -320,6 +320,15 @@ export default function Evidence() {
     }
     setSubmitError(null);
     setSubmitting(false);
+
+    // Notify paid users when their saves cross from free daily saves into
+    // Aura energy — so they understand why they need energy in the first place.
+    if (['aura_save', 'aura_narration', 'aura_manifestation'].includes(saveCost)) {
+      toast({
+        title: 'Using Aura Energy',
+        description: "You've used your free daily saves. This save cost 1 Aura energy.",
+      });
+    }
 
     if (cameFromStop) {
       resetStopForm();

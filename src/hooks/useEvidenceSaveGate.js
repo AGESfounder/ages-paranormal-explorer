@@ -91,7 +91,7 @@ export function useEvidenceSaveGate() {
   const gateSave = useCallback(async () => {
     // Clear any stale cost from a previous gate cycle
     lastChargeCostRef.current = null;
-    if (isAdmin) return true;
+    if (isAdmin) return 'admin';
     if (!user) return false;
 
     // Observer: ad-watched saves with daily cap, blocked at cap
@@ -117,7 +117,7 @@ export function useEvidenceSaveGate() {
         // Track the cost so refundSave can reverse it if Evidence.create fails
         lastChargeCostRef.current = res.data.cost;
         await refreshUser();
-        return true;
+        return res.data.cost;
       }
       setGateReason(res.data?.reason === 'energy_empty' ? 'energy' : 'plan');
       setShowUpgrade(true);
@@ -139,7 +139,7 @@ export function useEvidenceSaveGate() {
     lastChargeCostRef.current = 'free';
     await refreshUser();
     setAdGatePromise(prev => {
-      prev?.resolve(true);
+      prev?.resolve('free');
       return null;
     });
   }, [refreshUser]);
