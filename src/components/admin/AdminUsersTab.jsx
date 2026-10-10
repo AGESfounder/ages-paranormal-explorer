@@ -96,9 +96,9 @@ function isDiagBackendMissing(error) {
 function sourceLabel(user) {
   const g = isGoogleTrailblazerActive(user);
   const w = isGenericPlanActive(user);
-  if (g && w) return 'Google + Apple/Wix';
+  if (g && w) return 'Google + Apple';
   if (g) return 'Google Play';
-  if (w) return 'Apple / Wix';
+  if (w) return 'Apple';
   return '—';
 }
 
@@ -129,17 +129,11 @@ export default function AdminUsersTab() {
   const loadHistory = useCallback(async (user) => {
     if (historyCache[user.id]) return;
     try {
-      const [rc, wix] = await Promise.all([
-        base44.entities.RevenueCatPurchase.filter({ user_id: user.id }).catch(() => []),
-        base44.entities.Base44Purchase.filter({ user_id: user.id }).catch(() => []),
-      ]);
+      const rc = await base44.entities.RevenueCatPurchase.filter({ user_id: user.id }).catch(() => []);
       const rcRows = (Array.isArray(rc) ? rc : rc?.items || [])
         .map((r) => ({ ...r, _source: r.store || 'RevenueCat' }))
         .sort((a, b) => new Date(b.purchase_date || b.purchased_at || 0) - new Date(a.purchase_date || a.purchased_at || 0));
-      const wixRows = (Array.isArray(wix) ? wix : wix?.items || [])
-        .map((r) => ({ ...r, _source: 'Wix' }))
-        .sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
-      setHistoryCache((prev) => ({ ...prev, [user.id]: [...rcRows, ...wixRows] }));
+      setHistoryCache((prev) => ({ ...prev, [user.id]: rcRows }));
     } catch (e) {
       console.error('Purchase history load failed:', e);
       setHistoryCache((prev) => ({ ...prev, [user.id]: [] }));

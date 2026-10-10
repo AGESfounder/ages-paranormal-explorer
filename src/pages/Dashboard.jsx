@@ -85,22 +85,13 @@ export default function Dashboard() {
       // (e.g. an active recurring subscription after Trailblazer expires).
       const userData = await withAppleLedger(await base44.auth.me());
       setUser(userData);
-      const [wixHistory, rcHistory] = await Promise.all([
-        base44.entities.Base44Purchase.list('-created_date', 20).catch(() => []),
-        // RevenueCatPurchase may not exist until the entity is deployed — fail soft
-        (base44.entities.RevenueCatPurchase
-          ? base44.entities.RevenueCatPurchase.list('-created_date', 20)
-          : Promise.resolve([])).catch(() => []),
-      ]);
+      // RevenueCatPurchase may not exist until the entity is deployed — fail soft.
+      // (Wix/Base44Purchase ledger removed — purchases are native-only now.)
+      const rcHistory = await (base44.entities.RevenueCatPurchase
+        ? base44.entities.RevenueCatPurchase.list('-created_date', 20)
+        : Promise.resolve([])
+      ).catch(() => []);
       const normalized = [
-        ...(wixHistory || []).map((p) => ({
-          id: p.id,
-          product_name: p.product_name,
-          amount: p.amount,
-          status: p.status,
-          created_date: p.created_date || p.purchase_date,
-          source: 'wix',
-        })),
         ...(rcHistory || []).map((p) => ({
           id: p.id,
           product_name: p.product_name || p.product_id,
@@ -443,13 +434,10 @@ export default function Dashboard() {
         return;
       }
 
-      const response = await base44.functions.invoke('create-subscription', { product_id: productId });
-      if (response.data?.redirectUrl) {
-        window.location.href = response.data.redirectUrl;
-      } else if (response.data?.error) {
-        alert(response.data.error);
-        setRedirecting(null);
-      }
+      // Native-only purchases: Apple (App Store) and Google (Play) handle all
+      // checkout via RevenueCat. Web has no checkout — direct users to the app.
+      alert('Subscriptions and Aura Bundles are available in the AGES mobile app on iOS or Android.');
+      setRedirecting(null);
     } catch (e) {
       console.error('Checkout error:', e);
       const msg = e.response?.data?.error || e.message || 'Checkout failed';

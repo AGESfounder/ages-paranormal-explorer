@@ -316,9 +316,9 @@ await spendNarration(estimateNarrationCost(text));`} />
         {/* ── IAP Migration ── */}
         <Section icon={CreditCard} title="In-App Purchase Migration (RevenueCat)">
           <Info>
-            Apple/Google require digital subscriptions to use native IAP. The current Wix/Base44 Payments
-            checkout works for web but must be replaced with StoreKit (iOS) / Google Play Billing (Android)
-            in the native build. RevenueCat is the recommended cross-platform wrapper.
+            Apple/Google require digital subscriptions to use native IAP. All digital purchases
+            (subscriptions, Trailblazer, Aura Bundles) use StoreKit (iOS) / Google Play Billing (Android)
+            via RevenueCat. There is no web checkout. RevenueCat is the cross-platform wrapper.
           </Info>
           <Info>
             <strong className="text-foreground">Product IDs to create in App Store Connect & Play Console</strong>{' '}
@@ -340,15 +340,12 @@ apparition            $6.49       →  500 energy (aura)
 haunting             $16.99       →  1500 energy (aura)
 spectral             $24.99       →  2500 energy (aura)`} />
           <Info>
-            <strong className="text-foreground">Migration approach:</strong> Replace the{' '}
-            <code className="text-primary">create-subscription</code> /{' '}
-            <code className="text-primary">create-checkout</code> function calls in{' '}
-            <code className="text-primary">Dashboard.jsx</code> (handlePurchase) with RevenueCat
-            <code className="text-primary">purchasePackage()</code> calls. Keep the{' '}
-            <code className="text-primary">payments-webhook</code> grant logic — point RevenueCat webhooks
-            at it instead of Wix, mapping the same <code className="text-primary">product_id</code> values
-            through <code className="text-primary">getGrantForProduct()</code> in{' '}
-            <code className="text-primary">base44/shared/plans.js</code>.
+            <strong className="text-foreground">Implementation:</strong>{' '}
+            <code className="text-primary">Dashboard.jsx</code> (handlePurchase) calls RevenueCat
+            <code className="text-primary">purchasePackage()</code> for native iOS/Android. The{' '}
+            <code className="text-primary">revenuecat-webhook</code> function verifies RevenueCat
+            signatures and grants access, mapping <code className="text-primary">product_id</code> values
+            to plans. Web has no checkout — purchases are native-only.
           </Info>
           <CodeBlock label="RevenueCap capacitor plugin" code={`npm install @revenuecat/purchases-capacitor
 npx cap sync
@@ -359,25 +356,17 @@ await Purchases.configure({ apiKey: 'appl_XXXXX' }); // or 'goog_XXXXX'`} />
         </Section>
 
         {/* ── Payment Webhook ── */}
-        <Section icon={FileCode} title="Payment Webhook Flow">
+        <Section icon={FileCode} title="Payment Webhook Flow (RevenueCat)">
           <Info>
-            <code className="text-primary">base44/functions/payments-webhook/entry.ts</code> handles
-            Wix/Base44 Payments events. It verifies JWT signatures, then grants access via{' '}
-            <code className="text-primary">getGrantForProduct()</code>.
+            <code className="text-primary">base44/functions/revenuecat-webhook/entry.ts</code> handles
+            all purchase lifecycle events from RevenueCat (Apple App Store &amp; Google Play). It verifies
+            the RevenueCat signature, then grants or revokes access per product family.
           </Info>
-          <CodeBlock label="Webhook event handling" code={`// ORDER_APPROVED  → grants plan/energy, marks purchase 'paid', stores subscription_id
-// SUBSCRIPTION_CANCELED → downgrades user to 'observer', resets energy
-// SUBSCRIPTION_ENDED    → downgrades user to 'observer', resets energy
-
-// The webhook is registered via wix_payments_register_webhook with all three
-// event types. If cancellations stop revoking access, re-register with all
-// three (each call replaces the previous registration).`} />
-          <Info>
-            <strong className="text-foreground">For IAP:</strong> RevenueCat sends its own webhooks
-            (initial_purchase, renewal, cancellation). Create a new backend function (e.g.{' '}
-            <code className="text-primary">revenuecat-webhook</code>) that verifies the RC signature and
-            calls the same <code className="text-primary">getGrantForProduct()</code> logic.
-          </Info>
+          <CodeBlock label="Webhook event handling" code={`// INITIAL_PURCHASE / RENEWAL → grants plan + energy, extends expiration
+// CANCELLATION (auto-renew off) → access continues until expiration
+// EXPIRATION → downgrades to observer, resets energy
+// CANCELLATION/EXPIRATION (CUSTOMER_SUPPORT) → refund, revokes access
+// NON_RENEWING_PURCHASE → Trailblazer (30-mo) or Aura Bundle consumables`} />
         </Section>
 
         {/* ── File Reference ── */}
@@ -387,13 +376,13 @@ src/lib/adService.js              // showInterstitial(), showRewardedAd()
 src/lib/adRewards.js              // AD_REWARD_ENERGY, AD_REWARD_DAILY_LIMIT (frontend)
 
 // Backend functions
-base44/functions/grant-ad-reward/entry.ts   // energy grant + daily cap
-base44/functions/payments-webhook/entry.ts  // Wix payment → access grant
-base44/functions/create-checkout/entry.ts    // Wix checkout session
-base44/functions/create-subscription/entry.ts // Wix subscription checkout
+base44/functions/grant-ad-reward/entry.ts      // energy grant + daily cap
+base44/functions/revenuecat-webhook/entry.ts    // RevenueCat → access grant/revoke
+base44/functions/create-checkout/entry.ts       // Stripe merchandise store checkout
 
 // Shared logic
-base44/shared/plans.js             // PLANS, AURA_BUNDLES, WIX_PRODUCTS, getGrantForProduct
+base44/shared/plans.js             // PLANS, AURA_BUNDLES, getGrantForProduct
+base44/shared/revenuecat.js        // Apple/Google product maps + grant helpers
 base44/shared/adRewards.js         // ad reward constants + split logic
 
 // Frontend energy gating
@@ -402,8 +391,9 @@ src/components/UpgradePrompt.jsx  // upgrade/ad-watch modal (energy gate)
 src/components/AdRewardCard.jsx    // dashboard ad-watch card
 src/components/EnergyCostBadge.jsx // shows credit cost on action buttons
 
-// Dashboard (purchase entry points)
-src/pages/Dashboard.jsx            // handlePurchase() → create-subscription`} />
+// Dashboard (purchase entry points — native only)
+src/pages/Dashboard.jsx            // handlePurchase() → RevenueCat purchasePackage()
+src/lib/revenuecat.js              // native purchase + grant-poll helpers`} />
         </Section>
 
       </div>
