@@ -1,4 +1,5 @@
 // RevenueCat webhook — Base44 access uses a service-role-only client (see shared/webhookClient.js).
+// Redeploy trigger: no functional change.
 // This file holds the entry point: Authorization + HMAC verification, the service client,
 // the Google Trailblazer flow and event routing. Store-specific handlers live in base44/shared/webhook*.ts.
 import { createClient } from 'npm:@base44/sdk@0.8.40';
