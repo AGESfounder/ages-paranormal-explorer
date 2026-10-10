@@ -88,19 +88,19 @@ workflows:
         script: |
           # CFBundleVersion comes from CURRENT_PROJECT_VERSION in the checked-out
           # project.pbxproj. The rejected IPA archived a checkout that still had 14;
-          # App Store Connect already holds 14, so the required next value is 15.
-          # Hard-stamp 15 deterministically (no App Store Connect lookup) so the
-          # archived IPA always embeds CFBundleVersion 15 regardless of what the
+          # App Store Connect already holds 15, so the required next value is 16.
+          # Hard-stamp 16 deterministically (no App Store Connect lookup) so the
+          # archived IPA always embeds CFBundleVersion 16 regardless of what the
           # checked-out project file contains. `agvtool new-version` only writes
           # CURRENT_PROJECT_VERSION, so marketing version 1.0 is untouched.
           # For the next release, bump this value by one.
           set -eu
           cd "$CM_BUILD_DIR/ios/App"
-          agvtool new-version -all 15
-          STAMPED="$(grep -c 'CURRENT_PROJECT_VERSION = 15;' App.xcodeproj/project.pbxproj || true)"
-          echo "CURRENT_PROJECT_VERSION = 15 occurrences in project.pbxproj: $STAMPED"
+          agvtool new-version -all 16
+          STAMPED="$(grep -c 'CURRENT_PROJECT_VERSION = 16;' App.xcodeproj/project.pbxproj || true)"
+          echo "CURRENT_PROJECT_VERSION = 16 occurrences in project.pbxproj: $STAMPED"
           test "$STAMPED" -ge 2 || {
-            echo "CFBundleVersion 15 was not stamped into the Xcode project. Failing instead of uploading a stale build number."
+            echo "CFBundleVersion 16 was not stamped into the Xcode project. Failing instead of uploading a stale build number."
             exit 1
           }
       - name: Build the signed App Store IPA
