@@ -19,6 +19,8 @@
 
 import { Capacitor } from '@capacitor/core';
 import { Purchases, PRODUCT_CATEGORY, LOG_LEVEL, PURCHASES_ERROR_CODE } from '@revenuecat/purchases-capacitor';
+import { hashIosDiagId, recordIosPurchaseDiagnostic } from '@/lib/iosPurchaseDiagnostics';
+import { isRecurringPlanGrantReflected } from '@/lib/access';
 
 /** Google Play product ID — must match Play Console + RevenueCat catalog. */
 export const GOOGLE_TRAILBLAZER_PRODUCT_ID = 'trailblazer.30month';
@@ -177,6 +179,102 @@ export function isAndroidNative() {
 
 export function isIosNative() {
   return isNative() && getNativePlatform() === 'ios';
+}
+
+/* ── iOS purchase diagnostics ──────────────────────────────────────────────
+ * Structured, searchable diagnostics for the native iOS RECURRING
+ * SUBSCRIPTION flow only (purchaseAppleSubscription, plus the Dashboard grant
+ * poll). Search console output for the [AGES_IOS_PURCHASE_DIAG] prefix.
+ *
+ * Privacy: raw user ids, RevenueCat customer ids, and transaction ids are
+ * NEVER logged — they pass through hashIosDiagId() first (deterministic
+ * redaction for cross-line correlation). Product and plan ids are public
+ * store/configuration identifiers and are logged in full. Emails, receipts,
+ * tokens, API keys, and raw customerInfo objects are never written. The
+ * emitter is hard-gated on isIosNative() so Android/web paths stay silent,
+ * and diagnostics never alter return values, branching, or purchase behavior.
+ */
+const IOS_PURCHASE_DIAG_PREFIX = '[AGES_IOS_PURCHASE_DIAG]';
+
+// NOTE: hashIosDiagId now lives in src/lib/iosPurchaseDiagnostics.js (same
+// FNV-1a token, shared with the Base44 record function and the Admin
+// dashboard query). It is imported above and used exactly as before —
+// deterministic redaction for cross-line correlation, never a raw id.
+
+/**
+ * Emit one structured iOS purchase diagnostic line. No-ops unless running as
+ * a native iOS app, so these logs can never fire on Android or web.
+ *
+ * Persistence handoff: after the identical console output, the event is also
+ * passed to src/lib/iosPurchaseDiagnostics.js, which sanitizes it to a fixed
+ * allowlist and queues it for durable, best-effort upload to the
+ * record-ios-purchase-diagnostic Base44 function (survives app close;
+ * reviewable in Admin → Users). The handoff is fire-and-forget and fully
+ * fail-safe, so purchase results, branching, and timing are unchanged.
+ *
+ * @param {'info' | 'warn' | 'error'} level info = successful milestone,
+ *   warn = expected cancellation/unavailable case, error = actual failure
+ * @param {string} event stable, searchable event name
+ * @param {Record<string, unknown>} [details] structured, pre-redacted fields
+ */
+export function iosPurchaseDiag(level, event, details) {
+  if (!isIosNative()) return;
+  const line = `${IOS_PURCHASE_DIAG_PREFIX} event=${event}`;
+  const payload = details || {};
+  if (level === 'error') {
+    console.error(line, payload);
+  } else if (level === 'warn') {
+    console.warn(line, payload);
+  } else {
+    console.info(line, payload);
+  }
+  try {
+    // Best-effort durable reporting — never awaited, never throws.
+    recordIosPurchaseDiagnostic(level, event, payload);
+  } catch {
+    // diagnostics must never disturb the purchase flow
+  }
+}
+
+/**
+ * Log a redacted snapshot of the current RevenueCat customer — diagnostic
+ * only, never used to grant or deny anything (the Base44 webhook remains the
+ * entitlement authority). Uses the purchases-capacitor isAnonymous() and
+ * getCustomerInfo() APIs; every call is wrapped so this helper can never
+ * throw into the purchase flow (callers also .catch() defensively).
+ *
+ * @param {string} event diagnostic event name for this snapshot
+ */
+async function logIosCustomerSnapshot(event) {
+  /** @type {boolean | null} */
+  let anonymous = null;
+  try {
+    const anon = await Purchases.isAnonymous();
+    anonymous = anon ? anon.isAnonymous : null;
+  } catch (anonError) {
+    iosPurchaseDiag('warn', `${event}.anonymous_status`, {
+      ok: false,
+      errorMessage: /** @type {any} */ (anonError)?.message || String(anonError),
+    });
+  }
+  try {
+    const { customerInfo } = await Purchases.getCustomerInfo();
+    iosPurchaseDiag('info', event, {
+      ok: true,
+      anonymous,
+      rcCustomerIdHash: hashIosDiagId(customerInfo?.originalAppUserId),
+      activeEntitlementIds: Object.keys(customerInfo?.entitlements?.active || {}),
+    });
+  } catch (customerError) {
+    // Customer-info refresh errors are reported, not swallowed — but only as
+    // diagnostics; the purchase result is unaffected.
+    iosPurchaseDiag('error', event, {
+      ok: false,
+      stage: 'getCustomerInfo',
+      anonymous,
+      errorMessage: /** @type {any} */ (customerError)?.message || String(customerError),
+    });
+  }
 }
 
 function getApiKey() {
@@ -546,27 +644,90 @@ export async function purchaseAppleSubscription(productId, userId) {
     return { ok: false, reason: 'unknown_product' };
   }
 
+  // [DIAG] Before the store product request: which native iOS subscription
+  // path, the logical Dashboard product/plan id, and the exact Apple product
+  // id that will be passed to RevenueCat. (Diagnostic points 1.)
+  iosPurchaseDiag('info', 'subscription.begin', {
+    path: 'ios_native_subscription',
+    dashboardProductId: productId,
+    planId: getAppleSubscriptionPlanId(productId),
+    appleProductId,
+  });
+
   if (userId) {
-    await identifyRevenueCatUser(userId);
+    // Behavior preserved: the identify result does not gate the flow; it is
+    // only observed for diagnostics. (Diagnostic point 3.)
+    const identity = /** @type {{ ok?: boolean, already?: boolean, reason?: string } | undefined} */ (
+      await identifyRevenueCatUser(userId)
+    );
+    iosPurchaseDiag(identity && identity.ok ? 'info' : 'error', 'identity.result', {
+      ok: Boolean(identity && identity.ok),
+      alreadyIdentified: Boolean(identity && identity.already),
+      reason: (identity && identity.reason) || null,
+      userIdHash: hashIosDiagId(userId),
+    });
+    // Safe anonymous / current-customer status via the purchases-capacitor
+    // isAnonymous() + getCustomerInfo() APIs (ids redacted). Defensive
+    // .catch() — diagnostics must never disturb the flow.
+    await logIosCustomerSnapshot('identity.customer').catch(() => {});
   } else {
     const ready = await configureRevenueCat();
-    if (!ready.ok) return { ok: false, reason: ready.reason || 'not_configured' };
+    if (!ready.ok) {
+      iosPurchaseDiag('error', 'identity.result', {
+        ok: false,
+        identified: false,
+        reason: ready.reason || 'not_configured',
+      });
+      return { ok: false, reason: ready.reason || 'not_configured' };
+    }
   }
 
   if (!configured) {
+    iosPurchaseDiag('error', 'identity.result', {
+      ok: false,
+      identified: Boolean(userId),
+      reason: 'not_configured',
+    });
     return { ok: false, reason: 'not_configured' };
   }
 
   try {
-    const { products } = await Purchases.getProducts({
-      productIdentifiers: [appleProductId],
-      type: PRODUCT_CATEGORY.SUBSCRIPTION,
-    });
+    // Diagnostics-only stage wrappers: each inner catch logs at the actual
+    // failure point and rethrows the SAME error, so the outer catch and every
+    // return value/branch behave exactly as before.
+    let products;
+    try {
+      ({ products } = await Purchases.getProducts({
+        productIdentifiers: [appleProductId],
+        type: PRODUCT_CATEGORY.SUBSCRIPTION,
+      }));
+    } catch (getProductsError) {
+      // getProducts failed — actual failure logged at its origin. (Point 2.)
+      iosPurchaseDiag('error', 'products.result', {
+        ok: false,
+        outcome: 'get_failed',
+        appleProductId,
+        errorCode: /** @type {any} */ (getProductsError)?.code ?? null,
+        errorMessage: /** @type {any} */ (getProductsError)?.message || String(getProductsError),
+      });
+      throw getProductsError;
+    }
 
-    const product = (products || []).find((p) => p.identifier === appleProductId)
-      || (products || [])[0];
+    // Exact identifier match only — never fall back to a different product.
+    const product = (products || []).find((p) => p.identifier === appleProductId);
+    const returnedProductIds = (products || []).map((p) => p?.identifier).filter(Boolean);
 
     if (!product) {
+      // Existing product_unavailable outcome, unchanged — the exact-match
+      // contract above is preserved (no products[0] fallback). (Point 2.)
+      iosPurchaseDiag('warn', 'products.result', {
+        ok: true,
+        outcome: 'product_unavailable',
+        appleProductId,
+        returnedCount: returnedProductIds.length,
+        returnedProductIds,
+        exactMatch: false,
+      });
       return {
         ok: false,
         reason: 'product_unavailable',
@@ -576,7 +737,58 @@ export async function purchaseAppleSubscription(productId, userId) {
       };
     }
 
-    const result = await Purchases.purchaseStoreProduct({ product });
+    iosPurchaseDiag('info', 'products.result', {
+      ok: true,
+      outcome: 'matched',
+      appleProductId,
+      returnedCount: returnedProductIds.length,
+      returnedProductIds,
+      exactMatch: true,
+    });
+
+    // [DIAG] StoreKit purchase about to start via RevenueCat
+    // purchaseStoreProduct(). (Diagnostic point 4.)
+    iosPurchaseDiag('info', 'purchase.start', {
+      appleProductId,
+      via: 'purchaseStoreProduct',
+    });
+    let result;
+    try {
+      result = await Purchases.purchaseStoreProduct({ product });
+    } catch (purchaseError) {
+      const cancelled = isUserCancelled(purchaseError);
+      // User cancellation = expected case (warn); anything else = actual
+      // failure (error). The error is rethrown unchanged below.
+      iosPurchaseDiag(cancelled ? 'warn' : 'error', 'purchase.result', {
+        ok: false,
+        outcome: cancelled ? 'cancelled' : 'error',
+        appleProductId,
+        errorCode: /** @type {any} */ (purchaseError)?.code ?? null,
+        errorMessage: /** @type {any} */ (purchaseError)?.message || String(purchaseError),
+      });
+      throw purchaseError;
+    }
+
+    const purchaseActiveEntitlementIds = Object.keys(result?.customerInfo?.entitlements?.active || {});
+    // Success — product identifier in full (public), transaction identifier
+    // redacted, and whether the returned customerInfo carries any active
+    // entitlements (identifiers only; customerInfo itself is never logged).
+    iosPurchaseDiag('info', 'purchase.result', {
+      ok: true,
+      outcome: 'success',
+      appleProductId,
+      returnedProductIdentifier: result?.productIdentifier || null,
+      transactionIdHash: hashIosDiagId(result?.transaction?.transactionIdentifier),
+      customerInfoAvailable: Boolean(result?.customerInfo),
+      activeEntitlementIds: purchaseActiveEntitlementIds,
+      hasActiveEntitlement: purchaseActiveEntitlementIds.length > 0,
+    });
+
+    // [DIAG] Post-purchase customer-info refresh — redacted current customer
+    // id + active entitlement identifiers; refresh errors are logged, never
+    // thrown. Entitlement authority stays with the Base44 webhook. (Point 5.)
+    await logIosCustomerSnapshot('customer.post_purchase').catch(() => {});
+
     // Intentionally ignore result.customerInfo.entitlements — the Base44
     // webhook is authoritative for plan grants.
     return { ok: true, purchase: result, product };
@@ -756,14 +968,9 @@ async function pollForPlanGrant(fetchUser, {
   while (Date.now() - started < timeoutMs) {
     try {
       lastUser = await fetchUser();
-      const plan = lastUser?.plan;
-      const planMatches = expectedPlanId
-        ? plan === expectedPlanId
-        : ['seeker', 'technician', 'explorer', 'investigator', 'trailblazer'].includes(plan);
-      const expMs = lastUser?.plan_expiration_date
-        ? new Date(lastUser.plan_expiration_date).getTime()
-        : NaN;
-      if (planMatches && !Number.isNaN(expMs) && expMs > Date.now()) {
+      // Exact plan match, or higher-rank active plan (Trailblazer) with
+      // subscription_status active after a preserved recurring grant.
+      if (isRecurringPlanGrantReflected(lastUser, expectedPlanId)) {
         return { ok: true, user: lastUser };
       }
     } catch (e) {

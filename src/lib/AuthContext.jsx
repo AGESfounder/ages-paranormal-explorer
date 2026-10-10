@@ -6,6 +6,8 @@ import { appParams } from '@/lib/app-params';
 import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
 import { identifyRevenueCatUser, resetRevenueCatUser } from '@/lib/revenuecat';
 import { setLocationTrackingEnabled } from '@/lib/deviceCapabilities';
+import { flushIosPurchaseDiagOutbox, clearIosPurchaseDiagSession } from '@/lib/iosPurchaseDiagnostics';
+import { withAppleLedger } from '@/lib/appleLedger';
 
 const AuthContext = createContext();
 
@@ -231,7 +233,10 @@ export const AuthProvider = ({ children }) => {
     try {
       // Now check if the user is authenticated
       setIsLoadingAuth(true);
-      const currentUser = await base44.auth.me();
+      // Attach the webhook-written Apple subscription ledger rows so every
+      // access helper consuming this user resolves the same effective plan
+      // as the backend (fail-soft: returns the bare user on any error).
+      const currentUser = await withAppleLedger(await base44.auth.me());
       setUser(currentUser);
       setIsAuthenticated(true);
       setIsLoadingAuth(false);
@@ -247,6 +252,11 @@ export const AuthProvider = ({ children }) => {
       if (currentUser?.id) {
         identifyRevenueCatUser(currentUser.id).catch(() => {});
       }
+      // Upload any queued iOS purchase diagnostics from previous sessions
+      // (fire-and-forget — never awaited, never delays or blocks auth).
+      try {
+        flushIosPurchaseDiagOutbox().catch(() => {});
+      } catch { /* diagnostics must never affect auth */ }
     } catch (error) {
       console.error('User auth check failed:', error);
       setIsLoadingAuth(false);
@@ -268,6 +278,10 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
     // Clear RevenueCat identity on native; ignore failures
     resetRevenueCatUser().catch(() => {});
+    // Clear ONLY in-memory iOS diagnostic session context. The durable
+    // outbox is intentionally kept: the server accepts queued events only
+    // for the matching account, so a stale queue is never mis-attributed.
+    clearIosPurchaseDiagSession();
 
     // Native Capacitor only: the SDK's logout() always ends by pointing
     // window.location at the external Base44 logout page

@@ -12,6 +12,8 @@ import { toast } from '@/components/ui/use-toast';
 import { showRewardedAd } from '@/lib/adService';
 import { PLANS, AURA_BUNDLES, PLAN_ORDER } from '@/lib/plans';
 import AdRewardCard from '@/components/AdRewardCard';
+import { beginIosPurchaseDiagSession } from '@/lib/iosPurchaseDiagnostics';
+import { withAppleLedger } from '@/lib/appleLedger';
 import {
   getDisplayEnergy,
   getEffectiveExpirationDate,
@@ -32,6 +34,7 @@ import {
   isGoogleAuraCheckout,
   isGoogleSubscriptionCheckout,
   isIosNative,
+  iosPurchaseDiag,
   purchaseAppleAuraBundle,
   purchaseAppleSubscription,
   purchaseAppleTrailblazer,
@@ -76,7 +79,10 @@ export default function Dashboard() {
 
   const loadData = useCallback(async () => {
     try {
-      const userData = await base44.auth.me();
+      // Attach the webhook-written Apple subscription ledger rows so the plan
+      // card, gates, and tiles resolve the same effective plan as the backend
+      // (e.g. an active recurring subscription after Trailblazer expires).
+      const userData = await withAppleLedger(await base44.auth.me());
       setUser(userData);
       const [wixHistory, rcHistory] = await Promise.all([
         base44.entities.Base44Purchase.list('-created_date', 20).catch(() => []),
@@ -228,12 +234,37 @@ export default function Dashboard() {
       // Native iOS Explorer/Investigator → RevenueCat / App Store subscription.
       // Web keeps the Wix path below; Android uses the Google Play path below.
       if (isIosNative() && isAppleSubscriptionCheckout(productId)) {
+        // [AGES_IOS_PURCHASE_DIAG] iOS recurring subscription diagnostics.
+        // Observation only — purchase and polling behavior below is unchanged.
+        const expectedApplePlanId = getAppleSubscriptionPlanId(productId);
+        // One opaque diagnostic session per purchase attempt so every event
+        // of this attempt (store result + grant poll) can be correlated in
+        // the persisted Admin report. No-op unless native iOS emits events.
+        beginIosPurchaseDiagSession(user?.id);
+        iosPurchaseDiag('info', 'dashboard.purchase_start', {
+          dashboardProductId: productId,
+          expectedPlanId: expectedApplePlanId,
+        });
         const result = await purchaseAppleSubscription(productId, user?.id);
         if (result.cancelled) {
+          iosPurchaseDiag('warn', 'dashboard.purchase_result', {
+            dashboardProductId: productId,
+            expectedPlanId: expectedApplePlanId,
+            ok: false,
+            outcome: 'cancelled',
+          });
           setRedirecting(null);
           return;
         }
         if (!result.ok) {
+          // product_unavailable is an expected store-state outcome (warn);
+          // any other reason is an actual failure (error).
+          iosPurchaseDiag(result.reason === 'product_unavailable' ? 'warn' : 'error', 'dashboard.purchase_result', {
+            dashboardProductId: productId,
+            expectedPlanId: expectedApplePlanId,
+            ok: false,
+            outcome: result.reason || 'failed',
+          });
           if (result.reason === 'product_unavailable') {
             alert('This subscription is not available on the App Store yet. Please try again later or contact support.');
           } else {
@@ -242,13 +273,38 @@ export default function Dashboard() {
           setRedirecting(null);
           return;
         }
+        iosPurchaseDiag('info', 'dashboard.purchase_result', {
+          dashboardProductId: productId,
+          expectedPlanId: expectedApplePlanId,
+          ok: true,
+          outcome: 'store_success',
+        });
 
         // Wait for the Base44 webhook to write the plan grant.
         // Never grant access from the SDK result alone.
-        const grant = await waitForApplePlanGrant(() => base44.auth.me(), {
-          expectedPlanId: getAppleSubscriptionPlanId(productId),
+        iosPurchaseDiag('info', 'grant.poll_start', {
+          dashboardProductId: productId,
+          expectedPlanId: expectedApplePlanId,
           timeoutMs: 45000,
           intervalMs: 1500,
+        });
+        const grant = await waitForApplePlanGrant(() => base44.auth.me(), {
+          expectedPlanId: expectedApplePlanId,
+          timeoutMs: 45000,
+          intervalMs: 1500,
+        });
+        // What the existing auth.me() polling actually observed after the
+        // purchase: plan, plan expiration, and subscription status (never the
+        // user id). A timeout is an expected in-flight webhook case (warn).
+        iosPurchaseDiag(grant.ok ? 'info' : 'warn', 'grant.poll_result', {
+          dashboardProductId: productId,
+          expectedPlanId: expectedApplePlanId,
+          ok: grant.ok === true,
+          reason: grant.reason || null,
+          observedPlan: grant.user?.plan ?? null,
+          observedPlanExpirationDate: grant.user?.plan_expiration_date ?? null,
+          observedSubscriptionStatus: grant.user?.subscription_status ?? null,
+          planMatches: Boolean(grant.user) && grant.user?.plan === expectedApplePlanId,
         });
         if (grant.ok && grant.user) {
           setUser(grant.user);
@@ -500,7 +556,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-stretch gap-2 mb-3">
             <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${PLAN_LABEL_COLORS[currentPlan.id] || currentPlan.badge}`}>
-              <span className="font-heading text-lg font-bold uppercase tracking-wider leading-tight text-center">{currentPlan.name}</span>
+              <span className="font-heading font-bold uppercase text-sm tracking-wide sm:text-lg sm:tracking-wider leading-tight text-center break-words max-w-full">{currentPlan.name}</span>
               {currentPlan.id === 'trailblazer' && <span className="text-[9px] text-amber-400 font-heading mt-0.5">30-Month Elite · 6 Months Free</span>}
             </div>
             {PLAN_HIGHLIGHTS[currentPlan.id] ? (
@@ -643,7 +699,7 @@ export default function Dashboard() {
                 <div key={planId} className="p-4 rounded-xl border border-border/40 bg-card/30">
                   <div className="flex items-stretch gap-2 mb-3">
                     <div className={`w-1/3 flex flex-col items-center justify-center px-2 py-2 rounded-lg border ${PLAN_LABEL_COLORS[planId] || plan.badge}`}>
-                      <span className="font-heading text-lg font-bold uppercase tracking-wider leading-tight text-center">{plan.name}</span>
+                      <span className="font-heading font-bold uppercase text-sm tracking-wide sm:text-lg sm:tracking-wider leading-tight text-center break-words max-w-full">{plan.name}</span>
                       {isTrailblazer && <span className="text-[9px] text-amber-400 font-heading mt-0.5">30-Month Elite · 6 Months Free</span>}
                     </div>
                     {PLAN_HIGHLIGHTS[planId] ? (

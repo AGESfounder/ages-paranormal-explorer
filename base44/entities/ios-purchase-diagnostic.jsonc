@@ -1,0 +1,90 @@
+{
+  "name": "IosPurchaseDiagnostic",
+  "type": "object",
+  "description": "Append-only diagnostic envelope for the native iOS recurring-subscription purchase flow (AGES_IOS_PURCHASE_DIAG). Strictly redacted: only opaque session/event ids, a hashed user id, and an allow-listed details payload are stored. No email, password, API key, token, receipt, raw user id, raw customer id, or raw transaction id may ever appear in any field. Separate from RevenueCatPurchase/Base44Purchase ledgers and all entitlement/grant data. Written ONLY by the record-ios-purchase-diagnostic function (service role); reads are admin-only.",
+  "properties": {
+    "source": {
+      "type": "string",
+      "maxLength": 32,
+      "description": "Fixed diagnostic source marker: AGES_IOS_PURCHASE_DIAG."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["ios"],
+      "description": "Fixed platform marker. Only native iOS events exist in this phase."
+    },
+    "session_id": {
+      "type": "string",
+      "maxLength": 48,
+      "description": "Opaque random diagnostic session id per app purchase attempt (e.g. s_9f3a2b7c...). Not derived from any user/store identifier."
+    },
+    "event_id": {
+      "type": "string",
+      "maxLength": 48,
+      "description": "Opaque random id per event (e.g. e_1c8d4f...). Server-side idempotency key for outbox retries."
+    },
+    "user_id_hash": {
+      "type": "string",
+      "maxLength": 16,
+      "pattern": "^id_[0-9a-f]{8}$",
+      "description": "Deterministic redaction token of the authenticated Base44 user id (FNV-1a, computed SERVER-side — never client-trusted, never the raw id)."
+    },
+    "event_name": {
+      "type": "string",
+      "maxLength": 48,
+      "description": "Stable iOS purchase milestone, e.g. subscription.begin, identity.result, products.result, purchase.result, customer.post_purchase, dashboard.purchase_start, grant.poll_result."
+    },
+    "level": {
+      "type": "string",
+      "enum": ["info", "warn", "error"],
+      "description": "info = successful milestone, warn = expected cancellation/unavailable case, error = actual failure."
+    },
+    "outcome": {
+      "type": "string",
+      "maxLength": 48,
+      "description": "Normalized outcome for quick scanning: matched, success, cancelled, product_unavailable, timeout, error, ok, etc."
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Client-side event timestamp (device clock). Server ingestion time stays on the built-in created_date field."
+    },
+    "details_json": {
+      "type": "string",
+      "maxLength": 2048,
+      "description": "Bounded JSON string of the allow-listed, scrubbed detail fields only (public product/plan ids, booleans/counts, entitlement identifiers, observed grant fields, error code, short redacted error message, and *_hash tokens). Never the arbitrary client payload."
+    }
+  },
+  "required": [
+    "source",
+    "platform",
+    "session_id",
+    "event_id",
+    "user_id_hash",
+    "event_name",
+    "level",
+    "occurred_at"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

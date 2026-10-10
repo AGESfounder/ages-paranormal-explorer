@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import { base44 } from '@/api/base44Client';
 import { isPaidAccess, getEffectivePlanId } from '@/lib/access';
+import { withAppleLedger } from '@/lib/appleLedger';
 
 export default function ThankYou() {
   const [status, setStatus] = useState('confirming'); // confirming | success | timeout
@@ -17,7 +18,9 @@ export default function ThankYou() {
     const checkStatus = async () => {
       attempts++;
       try {
-        const userData = await base44.auth.me();
+        // Attach Apple ledger rows so a still-active recurring subscription
+        // is recognized even if a higher plan (e.g. Trailblazer) expired.
+        const userData = await withAppleLedger(await base44.auth.me());
         setUser(userData);
         // If the user has a paid plan, payment was confirmed
         // Honors Apple/Wix and isolated Google Trailblazer grants

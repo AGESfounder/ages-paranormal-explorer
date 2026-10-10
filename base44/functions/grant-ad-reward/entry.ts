@@ -5,6 +5,8 @@ import {
   getTodayDateString,
 } from '../../shared/adRewards.js';
 import { isPaidAccess } from '../../shared/access.js';
+import { getEffectivePlanIdWithAppleLedger } from '../../shared/access.js';
+import { APPLE_STORE, getAppleSubscriptionProduct } from '../../shared/revenuecat.js';
 
 // Grants energy to a paid user after they watch a rewarded ad.
 // The daily cap (5/day) is enforced server-side to prevent farming.
@@ -20,8 +22,30 @@ export default async function(req) {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Only paid users (or admins) can earn ad rewards
-    const isPaid = isPaidAccess(user);
+    // Only paid users (or admins) can earn ad rewards.
+    // An ACTIVE App Store recurring subscription on the RevenueCatPurchase
+    // ledger still counts when the generic plan fields hold only an expired
+    // entitlement (e.g. a lapsed Trailblazer that a preserved recurring grant
+    // coexists with). Google/Play rows are ignored by the Apple resolver, so
+    // Android results are unchanged; the ledger lookup only runs (best
+    // effort) when the generic/Google resolution is already not paid.
+    let isPaid = isPaidAccess(user);
+    if (!isPaid) {
+      let appleLedgerRows = [];
+      try {
+        appleLedgerRows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+          user_id: user.id,
+          store: APPLE_STORE,
+        }) || [];
+      } catch {
+        appleLedgerRows = []; // ledger unavailable → generic fields decide
+      }
+      isPaid = getEffectivePlanIdWithAppleLedger(
+        user,
+        appleLedgerRows,
+        getAppleSubscriptionProduct,
+      ) !== 'observer';
+    }
     if (!isPaid) {
       return Response.json(
         { error: 'Ad rewards are available for paid plans only' },

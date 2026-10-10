@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
+import { withAppleLedger } from '@/lib/appleLedger';
 import {
   isPaidAccess,
   canGenerate,
@@ -35,19 +36,26 @@ export function useEnergyGate() {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [gateReason, setGateReason] = useState('plan'); // 'plan' or 'energy'
 
-  useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
+  // Every user refresh goes through withAppleLedger so plan/energy gates
+  // resolve the same ledger-aware effective plan as the backend
+  // (fail-soft: bare user on any ledger fetch error).
+  const refreshUser = useCallback(() => {
+    return base44.auth.me()
+      .then(async (u) => setUser(await withAppleLedger(u)))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    refreshUser();
+  }, [refreshUser]);
 
   // Listen for ad reward events — refresh user state so earned energy is
   // immediately usable without a page reload.
   useEffect(() => {
-    const handleAdReward = () => {
-      base44.auth.me().then(setUser).catch(() => {});
-    };
+    const handleAdReward = () => { refreshUser(); };
     window.addEventListener('ad-reward-granted', handleAdReward);
     return () => window.removeEventListener('ad-reward-granted', handleAdReward);
-  }, []);
+  }, [refreshUser]);
 
   const isAdmin = user?.role === 'admin';
   // Honors generic plan_expiration_date AND isolated Google Trailblazer expiry
@@ -142,7 +150,7 @@ export function useEnergyGate() {
 
 export async function checkManifestationGate() {
   try {
-    const user = await base44.auth.me();
+    const user = await withAppleLedger(await base44.auth.me());
     if (!user) return { allowed: false, reason: 'auth', message: 'Sign in to generate detailed stop content.' };
     if (user?.role === 'admin') return { allowed: true, reason: null };
     if (!isPaidAccess(user)) {

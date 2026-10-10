@@ -1,13 +1,94 @@
 diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift
-index 90444f4..e2aab66 100644
+index 90444f4..ad9841b 100644
 --- a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift
 +++ b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift
-@@ -16,7 +16,7 @@ enum QUEUE_STRATEGY: Int {
+@@ -9,28 +9,63 @@ enum QUEUE_STRATEGY: Int {
+     let synthesizer = AVSpeechSynthesizer()
+     var calls: [CAPPluginCall] = []
+     let queue = DispatchQueue(label: "backgroundAudioSetup", qos: .userInitiated, attributes: [], autoreleaseFrequency: .inherit, target: nil)
++    // Bumped on every speak() so a scheduled idle deactivation cannot fire
++    // once newer narration has started.
++    var sessionSerial = 0
+ 
+     override init() {
+         super.init()
+         self.synthesizer.delegate = self
          // set session in background to avoid UI hangs.
          queue.async {
++            self.configureAudioSession()
++        }
++    }
++
++    // Narration must stay audible on the loud speaker while the sweep tools
++    // hold a live microphone: .playAndRecord is required for speech+capture
++    // coexistence, and without .defaultToSpeaker iOS routes playAndRecord
++    // output to the earpiece receiver, making narration nearly inaudible.
++    // The per-utterance category argument is intentionally not honored: every
++    // native narration path in the host app needs this capture-safe session.
++    // duckOthers keeps the existing music-ducking behavior.
++    private func configureAudioSession() {
++        do {
++            let options: AVAudioSession.CategoryOptions = [.duckOthers, .defaultToSpeaker]
++            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: options)
++            try AVAudioSession.sharedInstance().setActive(true)
++        } catch {
++            print("Error setting up AVAudioSession: \(error)")
++        }
++    }
++
++    // Hand the shared session back once narration has fully drained so other
++    // audio stops being ducked (notifyOthersOnDeactivation) and the app does
++    // not keep the speaker route claimed. The drain window avoids deactivate/
++    // reactivate churn during rapid tool dictation; a newer speak() supersedes
++    // a pending relax via sessionSerial, and the guards re-check idle state.
++    private func relaxAudioSessionWhenIdle() {
++        let serial = sessionSerial
++        queue.asyncAfter(deadline: .now() + 4.0) {
++            guard serial == self.sessionSerial,
++                  !self.synthesizer.isSpeaking,
++                  self.calls.isEmpty else { return }
              do {
 -                let avAudioSessionCategory: AVAudioSession.Category = .playback
-+                let avAudioSessionCategory: AVAudioSession.Category = .playAndRecord
-                 try AVAudioSession.sharedInstance().setCategory(avAudioSessionCategory, mode: .default, options: .duckOthers)
-                 try AVAudioSession.sharedInstance().setActive(true)
+-                try AVAudioSession.sharedInstance().setCategory(avAudioSessionCategory, mode: .default, options: .duckOthers)
+-                try AVAudioSession.sharedInstance().setActive(true)
++                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
              } catch {
+-                print("Error setting up AVAudioSession: \(error)")
++                print("Error relaxing AVAudioSession: \(error)")
+             }
+         }
+     }
+ 
+     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+         self.resolveCurrentCall()
++        self.relaxAudioSessionWhenIdle()
+     }
+ 
+     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+         self.resolveCurrentCall()
++        self.relaxAudioSessionWhenIdle()
+     }
+ 
+     @objc public func speak(_ text: String, _ lang: String, _ rate: Float, _ pitch: Float, _ category: String, _ volume: Float, _ voice: Int, _ queueStrategy: Int, _ call: CAPPluginCall) throws {
+@@ -38,6 +73,13 @@ enum QUEUE_STRATEGY: Int {
+             self.synthesizer.stopSpeaking(at: .immediate)
+         }
+         self.calls.append(call)
++        // Re-assert the session for every utterance: the system can deactivate
++        // it between narrations (calls, Siri, route changes), and the old
++        // activate-once-at-init behavior left later utterances silent.
++        self.sessionSerial += 1
++        queue.async {
++            self.configureAudioSession()
++        }
+ 
+         let utterance = AVSpeechUtterance(string: text)
+         utterance.voice = AVSpeechSynthesisVoice(language: lang)
+@@ -59,6 +101,7 @@ enum QUEUE_STRATEGY: Int {
+ 
+     @objc public func stop() {
+         synthesizer.stopSpeaking(at: .immediate)
++        self.relaxAudioSessionWhenIdle()
+     }
+ 
+     @objc public func getSupportedLanguages() -> [String] {

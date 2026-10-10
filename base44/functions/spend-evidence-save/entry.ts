@@ -1,5 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { getEffectivePlanId } from '../../shared/access.js';
+import { getEffectivePlanIdWithAppleLedger } from '../../shared/access.js';
+import { APPLE_STORE, getAppleSubscriptionProduct } from '../../shared/revenuecat.js';
 
 // Server-authoritative evidence save gate.
 //
@@ -42,7 +44,30 @@ export default async function(req) {
     // Use getEffectivePlanId so Google Trailblazer (whose access lives in
     // google_trailblazer_expiration_date, not user.plan) gets the correct
     // daily cap (20, not 10) and Aura pool access — not Observer treatment.
-    const planId = getEffectivePlanId(user);
+    let planId = getEffectivePlanId(user);
+    if (planId === 'observer') {
+      // The generic fields can hold only an EXPIRED entitlement (e.g. a
+      // lapsed Trailblazer) while an App Store recurring subscription stays
+      // ACTIVE on the RevenueCatPurchase ledger. Honor that ledger row so
+      // the saved-evidence cap/pool matches the plan actually being paid
+      // for. Google/Play rows are ignored by the Apple resolver; the lookup
+      // is best-effort and skipped whenever the generic/Google resolution
+      // is already paid, so Android behavior is unchanged.
+      let appleLedgerRows = [];
+      try {
+        appleLedgerRows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+          user_id: user.id,
+          store: APPLE_STORE,
+        }) || [];
+      } catch {
+        appleLedgerRows = []; // ledger unavailable → generic fields decide
+      }
+      planId = getEffectivePlanIdWithAppleLedger(
+        user,
+        appleLedgerRows,
+        getAppleSubscriptionProduct,
+      );
+    }
     const isFree = planId === 'observer' || planId === 'seeker';
     const isObserver = planId === 'observer';
     const dailyCap = isFree ? FREE_DAILY_CAP : PAID_DAILY_CAP;

@@ -13,6 +13,12 @@ const PLAN_RANK = {
   trailblazer: 5,
 };
 
+/** Public plan rank for grant/poll helpers (higher wins). */
+export function getPlanRank(planId) {
+  if (!planId) return 0;
+  return PLAN_RANK[planId] || 0;
+}
+
 export function isDateActive(isoDate, now = new Date()) {
   if (!isoDate) return false;
   const ms = new Date(isoDate).getTime();
@@ -69,6 +75,86 @@ export function getEffectivePlanId(user, now = new Date()) {
   if (isGoogleTrailblazerActive(user, now)) {
     if ((PLAN_RANK.trailblazer || 0) >= (PLAN_RANK[best] || 0)) {
       best = 'trailblazer';
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Whether auth.me() reflects a successful recurring subscription grant.
+ *
+ * Exact plan match with a future expiration (normal path), OR a higher-rank
+ * active plan (e.g. Trailblazer) with subscription_status === 'active' when
+ * the recurring purchase was recorded without clobbering the higher plan.
+ * Expired plan_expiration_date never counts. PRODUCT_CHANGE alone does not
+ * flip these fields, so it does not satisfy this check.
+ */
+export function isRecurringPlanGrantReflected(user, expectedPlanId, now = new Date()) {
+  if (!user) return false;
+
+  const plan = user.plan || 'observer';
+  const expMs = user.plan_expiration_date
+    ? new Date(user.plan_expiration_date).getTime()
+    : NaN;
+  const expOk = !Number.isNaN(expMs) && expMs > now.getTime();
+  if (!expOk) return false;
+
+  if (!expectedPlanId) {
+    return ['seeker', 'technician', 'explorer', 'investigator', 'trailblazer'].includes(plan);
+  }
+
+  if (plan === expectedPlanId) return true;
+
+  if (
+    user.subscription_status === 'active'
+    && getPlanRank(plan) > getPlanRank(expectedPlanId)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Effective plan including optional Apple subscription ledger rows.
+ * Precedence (highest rank wins among still-active sources):
+ *   1. Active generic plan (Apple/Wix), including Trailblazer on generic fields
+ *   2. Active isolated Google Trailblazer
+ *   3. Active App Store recurring subscription ledger rows
+ * Expired Trailblazer on generic fields does not count; an ACTIVE ledger
+ * subscription can then become effective. Aura is never consulted.
+ *
+ * @param {object} user
+ * @param {Array<object>} [appleLedgerRows]
+ * @param {(productId: string) => ({ plan_id: string } | null | undefined)} [resolveAppleProduct]
+ * @param {Date} [now]
+ */
+export function getEffectivePlanIdWithAppleLedger(
+  user,
+  appleLedgerRows,
+  resolveAppleProduct,
+  now = new Date(),
+) {
+  if (!user) return 'observer';
+  if (user.role === 'admin') {
+    return user.plan && user.plan !== 'observer' ? user.plan : 'trailblazer';
+  }
+
+  let best = getEffectivePlanId(user, now);
+  let bestRank = getPlanRank(best);
+
+  if (typeof resolveAppleProduct !== 'function') return best;
+
+  for (const row of appleLedgerRows || []) {
+    if (!row || row.status !== 'active') continue;
+    const product = resolveAppleProduct(row.product_id);
+    if (!product || !product.plan_id) continue;
+    if (!isDateActive(row.plan_expiration_date, now)) continue;
+    const rank = getPlanRank(product.plan_id);
+    if (rank > bestRank) {
+      best = product.plan_id;
+      bestRank = rank;
     }
   }
 

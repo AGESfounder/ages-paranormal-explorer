@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { getEffectivePlanId } from '@/lib/access';
+import { withAppleLedger } from '@/lib/appleLedger';
 
 // Evidence save daily caps (must match server: spend-evidence-save)
 export const EVIDENCE_FREE_DAILY_CAP = 10;   // Observer / Seeker (ad-watched)
@@ -48,20 +49,22 @@ export function useEvidenceSaveGate() {
   const lastChargeCostRef = useRef(null);
 
   useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
+    // Attach Apple ledger rows so save-tier gating resolves the same
+    // ledger-aware effective plan as the backend (fail-soft: bare user).
+    base44.auth.me().then(async (u) => setUser(await withAppleLedger(u))).catch(() => {});
   }, []);
 
   // Listen for ad reward events — refresh user state
   useEffect(() => {
     const handleAdReward = () => {
-      base44.auth.me().then(setUser).catch(() => {});
+      base44.auth.me().then(async (u) => setUser(await withAppleLedger(u))).catch(() => {});
     };
     window.addEventListener('ad-reward-granted', handleAdReward);
     return () => window.removeEventListener('ad-reward-granted', handleAdReward);
   }, []);
 
   const refreshUser = useCallback(async () => {
-    const updated = await base44.auth.me().catch(() => null);
+    const updated = await base44.auth.me().then(withAppleLedger).catch(() => null);
     if (updated) setUser(updated);
   }, []);
 

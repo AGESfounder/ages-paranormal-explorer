@@ -12,6 +12,7 @@ import {
   computeGoogleTrailblazerExpiration,
   isAppleTrailblazerRefundEvent,
   latestActiveAppleTrailblazerRow,
+  latestActiveAppleSubscription,
   normalizeAppleTrailblazerLedgerFields,
   resolveAppUserId,
 } from './revenuecat.js';
@@ -144,6 +145,37 @@ async function recomputeAppleTrailblazerAfterRefund(
   if (user.plan !== 'trailblazer') {
     // Nothing to revoke on the generic fields.
     return;
+  }
+
+  // Prefer a still-active Apple recurring subscription over a bare observer
+  // downgrade so refunding Trailblazer does not discard paid subscription access
+  // that coexisted on the RevenueCatPurchase ledger.
+  const allAppleRows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+    user_id: user.id,
+    store: APPLE_STORE,
+  });
+  const remainingSub = latestActiveAppleSubscription(allAppleRows || [], new Date());
+  if (remainingSub) {
+    const subPlan = (PLANS as any)[remainingSub.product.plan_id];
+    if (subPlan) {
+      await base44.asServiceRole.entities.User.update(user.id, {
+        plan: subPlan.id,
+        plan_expiration_date: remainingSub.row.plan_expiration_date,
+        subscription_status: 'active',
+        subscription_id:
+          remainingSub.row.original_transaction_id || remainingSub.row.transaction_id,
+        manifestation_energy: subPlan.manifestation_energy,
+        narration_energy: subPlan.narration_energy,
+        energy_reset_date: getNextResetDate(),
+      });
+      console.log(
+        'Apple Trailblazer refund: restored active subscription',
+        remainingSub.row.product_id,
+        'for',
+        user.id,
+      );
+      return;
+    }
   }
 
   await base44.asServiceRole.entities.User.update(user.id, {

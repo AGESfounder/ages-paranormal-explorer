@@ -12,6 +12,7 @@ import {
   resolveAppUserId,
 } from './revenuecat.js';
 import { eventAlreadyApplied, jsonResponse, mergeEventIds } from './webhookCommon.ts';
+import { computeAppleSubscriptionGrantFields } from './appleSubscriptionGrant.js';
 
 /**
  * Locate the ledger row for an Apple subscription. Renewals, cancellations,
@@ -62,6 +63,12 @@ function appleEventOwnsGenericPlan(user: any, event: any, row: any): boolean {
  * Out-of-order deliveries for the same plan can only extend
  * plan_expiration_date (max), never shorten it, and stale events do not
  * refill energy that was already granted for a newer period.
+ *
+ * When a higher-rank plan is still active on the generic fields (typically
+ * an unexpired Trailblazer 30-month entitlement), the recurring grant does
+ * not clobber plan / expiration / monthly energy. The ledger row still
+ * records the ACTIVE subscription, and subscription_status becomes
+ * 'active' so the purchase is reflected under the higher plan.
  */
 async function applyAppleGrant(
   base44: any,
@@ -70,32 +77,35 @@ async function applyAppleGrant(
   expirationIso: string,
   opts: { refillEnergy: boolean; subscriptionId?: string | null },
 ) {
-  const newExp = Date.parse(expirationIso);
-  const existingExp = user.plan_expiration_date ? Date.parse(user.plan_expiration_date) : null;
-  const hasExisting = existingExp !== null && !Number.isNaN(existingExp);
-  const samePlan = (user.plan || 'observer') === plan.id;
+  const { fields, preservedHigherPlan, stale } = computeAppleSubscriptionGrantFields(
+    user,
+    plan,
+    expirationIso,
+    {
+      refillEnergy: opts.refillEnergy,
+      subscriptionId: opts.subscriptionId,
+    },
+  );
 
-  let finalExpiration = expirationIso;
-  if (samePlan && hasExisting && existingExp > newExp) {
-    finalExpiration = user.plan_expiration_date;
-  }
-  // Event for an older period than the one already granted — keep energy as-is.
-  const stale = samePlan && hasExisting && newExp < (existingExp as number);
-
-  const fields: Record<string, unknown> = {
-    plan: plan.id,
-    plan_expiration_date: finalExpiration,
-    subscription_status: 'active',
-    subscription_id: opts.subscriptionId || user.subscription_id || null,
-  };
-
-  if (opts.refillEnergy && !stale) {
-    fields.manifestation_energy = plan.manifestation_energy;
-    fields.narration_energy = plan.narration_energy;
-    fields.energy_reset_date = getNextResetDate();
+  // energy_reset_date is derived at write time so pure field computation stays
+  // deterministic in tests (no hidden Date.now coupling beyond expiration).
+  if (fields.manifestation_energy != null || fields.narration_energy != null) {
+    if (!stale && opts.refillEnergy && !preservedHigherPlan) {
+      fields.energy_reset_date = getNextResetDate();
+    }
   }
 
   await base44.asServiceRole.entities.User.update(user.id, fields);
+  if (preservedHigherPlan) {
+    console.log(
+      'Apple subscription grant preserved higher plan',
+      user.plan,
+      'under active recurring product',
+      plan.id,
+      'for',
+      user.id,
+    );
+  }
 }
 
 /**

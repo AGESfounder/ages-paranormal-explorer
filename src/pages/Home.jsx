@@ -12,6 +12,7 @@ import HauntedLocations from '../components/HauntedLocations';
 import DashboardEnergyPreview from '../components/DashboardEnergyPreview';
 import EnergyCostBadge from '../components/EnergyCostBadge';
 import { base44 } from '@/api/base44Client';
+import { withAppleLedger } from '@/lib/appleLedger';
 // Home page — main dashboard for the AGES paranormal explorer app
 
 const menuItems = [
@@ -33,11 +34,14 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    base44.auth.me().then(u => {
-      setUser(u);
-      setTourInProgress(!!u?.last_stop_id);
-      if (u?.id) {
-        base44.entities.Evidence.filter({ created_by_id: u.id }, '-created_date', 5).then(setEvidences).catch(() => {});
+    base44.auth.me().then(async (u) => {
+      // Attach Apple ledger rows so the energy preview/panel resolves the
+      // same effective plan as the backend (fail-soft: bare user on error).
+      const withLedger = await withAppleLedger(u);
+      setUser(withLedger);
+      setTourInProgress(!!withLedger?.last_stop_id);
+      if (withLedger?.id) {
+        base44.entities.Evidence.filter({ created_by_id: withLedger.id }, '-created_date', 5).then(setEvidences).catch(() => {});
       }
     }).catch(() => {});
   }, []);

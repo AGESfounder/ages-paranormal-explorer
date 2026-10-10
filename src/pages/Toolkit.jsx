@@ -12,6 +12,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import { getEffectivePlanId } from '@/lib/access';
+import { withAppleLedger } from '@/lib/appleLedger';
 import { buildEvidenceContext, primeGPS } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import ResearchDatabase from '../components/ResearchDatabase';
@@ -90,11 +91,14 @@ export default function Toolkit() {
   useEffect(() => primeGPS(), []);
 
   useEffect(() => {
-    base44.auth.me().then(u => {
-      setUser(u);
-      setIsAdmin(u?.role === 'admin');
-      setUserPlan(getEffectivePlanId(u));
-      setTools(applyOrder(DEFAULT_TOOLS, u?.toolkit_order));
+    base44.auth.me().then(async (u) => {
+      // Attach Apple ledger rows so tool tier gating resolves the same
+      // effective plan as the backend (fail-soft: bare user on error).
+      const withLedger = await withAppleLedger(u);
+      setUser(withLedger);
+      setIsAdmin(withLedger?.role === 'admin');
+      setUserPlan(getEffectivePlanId(withLedger));
+      setTools(applyOrder(DEFAULT_TOOLS, withLedger?.toolkit_order));
     }).catch(() => {});
   }, []);
 

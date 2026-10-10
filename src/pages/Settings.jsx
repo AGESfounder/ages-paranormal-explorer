@@ -10,6 +10,7 @@ import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 // TEMP DIAG (iOS Build 11 TestFlight) — remove with src/components/AdDiagnosticsPanel.jsx
 import AdDiagnosticsPanel from '../components/AdDiagnosticsPanel';
+import IosPurchaseDiagnosticsPanel from '@/components/admin/IosPurchaseDiagnosticsPanel';
 import { base44 } from '@/api/base44Client';
 import { getBlockedUsers, unblockUser } from '@/lib/userBlocks';
 import { setMusicSettings } from '@/lib/hauntedAudio';
@@ -219,6 +220,12 @@ export default function Settings() {
             </div>
           </a>
         )}
+
+        {/* Admin — persistent iOS subscription purchase diagnostics. Reads the
+            IosPurchaseDiagnostic entity; admin-only reads are enforced
+            server-side by entity RLS, so the isAdmin check is convenience,
+            not the security boundary. Renders nothing for non-admins. */}
+        {settings.isAdmin && <IosPurchaseDiagnosticsPanel />}
 
         {/* Legal — Privacy Policy & Terms of Service */}
         <div className="rounded-xl border border-border/40 bg-card/40 overflow-hidden">
