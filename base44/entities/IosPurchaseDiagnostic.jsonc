@@ -10,7 +10,9 @@
     },
     "platform": {
       "type": "string",
-      "enum": ["ios"],
+      "enum": [
+        "ios"
+      ],
       "description": "Fixed platform marker. Only native iOS events exist in this phase."
     },
     "session_id": {
@@ -27,7 +29,7 @@
       "type": "string",
       "maxLength": 16,
       "pattern": "^id_[0-9a-f]{8}$",
-      "description": "Deterministic redaction token of the authenticated Base44 user id (FNV-1a, computed SERVER-side — never client-trusted, never the raw id)."
+      "description": "Deterministic redaction token of the authenticated Base44 user id (FNV-1a, computed SERVER-side - never client-trusted, never the raw id)."
     },
     "event_name": {
       "type": "string",
@@ -36,7 +38,11 @@
     },
     "level": {
       "type": "string",
-      "enum": ["info", "warn", "error"],
+      "enum": [
+        "info",
+        "warn",
+        "error"
+      ],
       "description": "info = successful milestone, warn = expected cancellation/unavailable case, error = actual failure."
     },
     "outcome": {
