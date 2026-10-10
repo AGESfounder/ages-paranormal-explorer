@@ -6,7 +6,7 @@ import {
 } from '../../shared/adRewards.js';
 import { isPaidAccess } from '../../shared/access.js';
 import { getEffectivePlanIdWithAppleLedger } from '../../shared/access.js';
-import { APPLE_STORE, getAppleSubscriptionProduct } from '../../shared/revenuecat.js';
+import { APPLE_STORE, getAppleLedgerProduct } from '../../shared/revenuecat.js';
 
 // Grants energy to a paid user after they watch a rewarded ad.
 // The daily cap (5/day) is enforced server-side to prevent farming.
@@ -43,7 +43,7 @@ export default async function(req) {
       isPaid = getEffectivePlanIdWithAppleLedger(
         user,
         appleLedgerRows,
-        getAppleSubscriptionProduct,
+        getAppleLedgerProduct,
       ) !== 'observer';
     }
     if (!isPaid) {

@@ -79,6 +79,24 @@ export function isAppleSubscriptionProduct(productId) {
   return Boolean(getAppleSubscriptionProduct(productId));
 }
 
+/**
+ * Apple ledger product resolver for effective-plan fallback. Maps both the
+ * auto-renewable subscription products AND the Trailblazer one-time product,
+ * so a paid Trailblazer ledger row surfaces as 'trailblazer' even when the
+ * generic user.plan field is observer (grant never persisted, or was
+ * clobbered by a later subscription grant that has since expired). Distinct
+ * from getAppleSubscriptionProduct so event routing
+ * (shouldProcessAppleSubscriptionEvent) never misroutes Trailblazer events.
+ */
+export function getAppleLedgerProduct(productId) {
+  const sub = getAppleSubscriptionProduct(productId);
+  if (sub) return sub;
+  if (isAppleTrailblazerProduct(productId)) {
+    return { plan_id: APPLE_TRAILBLAZER_PLAN_ID };
+  }
+  return null;
+}
+
 export function isAppStore(store) {
   return store === APPLE_STORE;
 }

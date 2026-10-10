@@ -1,0 +1,44 @@
+{
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 */2 * * *",
+      "one_time_date": null,
+      "timezone": "America/New_York",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "description": "Every 2 hours on even hours, if the admin toggle (TesterResetSetting) is ON, clears sandbox (Apple/Google test) purchase ledger rows and resets sandbox-only test users to Observer so purchases can be re-tested. Production purchases are never touched. The reset-tester-access function gates itself on the toggle and does nothing when OFF.",
+  "name": "Tester Access Reset",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "tester_access_reset",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "reset": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "reset-tester-access"
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Reset tester access",
+            "description": "Clear sandbox purchases + reset sandbox-only users to Observer"
+          }
+        }
+      }
+    ]
+  }
+}

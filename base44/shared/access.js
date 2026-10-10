@@ -147,7 +147,9 @@ export function getEffectivePlanIdWithAppleLedger(
   if (typeof resolveAppleProduct !== 'function') return best;
 
   for (const row of appleLedgerRows || []) {
-    if (!row || row.status !== 'active') continue;
+    // 'active' = App Store recurring subscription; 'paid' = Trailblazer
+    // one-time product. Both count when plan_expiration_date is still future.
+    if (!row || (row.status !== 'active' && row.status !== 'paid')) continue;
     const product = resolveAppleProduct(row.product_id);
     if (!product || !product.plan_id) continue;
     if (!isDateActive(row.plan_expiration_date, now)) continue;

@@ -1,0 +1,36 @@
+{
+  "name": "TesterResetSetting",
+  "type": "object",
+  "description": "Admin-only toggle for the scheduled tester-access reset. A single row with enabled=true makes the reset-tester-access workflow clear sandbox (Apple/Google test) purchase ledger rows and reset sandbox-only test users to Observer every 2 hours on even hours, so purchases can be re-tested. Production purchases are never touched. Read by the reset-tester-access backend function via the service role (bypasses RLS).",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "enabled"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

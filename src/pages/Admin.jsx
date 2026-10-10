@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { computeDurationRange } from '@/lib/narrationLength';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
+import TesterResetToggle from '@/components/admin/TesterResetToggle';
 
 export default function Admin() {
   const [user, setUser] = useState(null);
@@ -117,7 +118,10 @@ export default function Admin() {
           </TabsList>
         </Tabs>
         {activeTab === 'users' ? (
-          <AdminUsersTab />
+          <>
+            <TesterResetToggle />
+            <AdminUsersTab />
+          </>
         ) : (
           <>
           <div className="relative mb-4">

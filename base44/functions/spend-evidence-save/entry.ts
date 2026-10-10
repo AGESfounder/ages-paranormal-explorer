@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { getEffectivePlanId } from '../../shared/access.js';
 import { getEffectivePlanIdWithAppleLedger } from '../../shared/access.js';
-import { APPLE_STORE, getAppleSubscriptionProduct } from '../../shared/revenuecat.js';
+import { APPLE_STORE, getAppleLedgerProduct } from '../../shared/revenuecat.js';
 
 // Server-authoritative evidence save gate.
 //
@@ -65,7 +65,7 @@ export default async function(req) {
       planId = getEffectivePlanIdWithAppleLedger(
         user,
         appleLedgerRows,
-        getAppleSubscriptionProduct,
+        getAppleLedgerProduct,
       );
     }
     const isFree = planId === 'observer' || planId === 'seeker';
