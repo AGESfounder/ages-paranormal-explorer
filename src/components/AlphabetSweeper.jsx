@@ -10,8 +10,6 @@ import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
-import { useEnergyGate } from '@/hooks/useEnergyGate';
-import UpgradePrompt from '@/components/UpgradePrompt';
 import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
 import { toast } from '@/components/ui/use-toast';
 
@@ -54,7 +52,6 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
   const { stop: stopVoice, unlock, attachMicToRecording } = useGhostVoice();
-  const { gateNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   // Speak a letter aloud via the shared Tool speech adapter (native TTS on
   // iOS/Android, browser speechSynthesis on web). Uses the lowercase letter
@@ -458,7 +455,6 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   };
 
   const startSession = async () => {
-    if (!gateNarration()) return;
     unlock();
     setCaptured([]);
     setVideoBlob(null);
@@ -630,7 +626,6 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         <button onClick={startSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Play className="w-4 h-4" /> Start Sweep
         </button>
-        {showUpgrade && <UpgradePrompt reason={gateReason} onClose={() => setShowUpgrade(false)} />}
       </div>
     );
   }

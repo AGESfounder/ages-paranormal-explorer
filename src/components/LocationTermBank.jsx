@@ -147,7 +147,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
   const { unlock, attachMicToRecording } = useGhostVoice();
-  const { gateManifestation, spendManifestation, gateNarration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const speakNormal = (word) => {
     femaleBusyRef.current = true;
@@ -674,7 +674,6 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   };
 
   const startSession = async () => {
-    if (!gateNarration()) return;
     unlock();
     setCaptured([]);
     setVideoBlob(null);
@@ -805,7 +804,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Library className="w-4 h-4" /> Build Terms
         </button>
-        {showUpgrade && <UpgradePrompt reason={gateReason} onClose={() => setShowUpgrade(false)} />}
+        {showUpgrade && <UpgradePrompt show={showUpgrade} reason={gateReason} onClose={() => setShowUpgrade(false)} />}
       </div>
     );
   }
@@ -837,7 +836,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         <button onClick={generateBank} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-primary/30 hover:text-primary transition-colors">
           <RefreshCw className="w-3.5 h-3.5" /> Rebuild Terms
         </button>
-        {showUpgrade && <UpgradePrompt reason={gateReason} onClose={() => setShowUpgrade(false)} />}
+        {showUpgrade && <UpgradePrompt show={showUpgrade} reason={gateReason} onClose={() => setShowUpgrade(false)} />}
       </div>
     );
   }
