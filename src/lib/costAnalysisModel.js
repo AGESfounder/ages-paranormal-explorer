@@ -22,15 +22,19 @@ export const OPTION_A = {
   trailblazer: { manE: 15, narE: 1500 },
   enrichStopsPerEnergy: 1, // 1 manifestation energy per stop enriched
   auraNarShare: 0.8, // Aura bundles 80/20 narration/manifestation
+  trailblazerMonths: 30, // 30-month license (6 months free vs 24 paid)
+  adRewardEnergy: 10, adRewardNarration: 8, adRewardManifestation: 2, // +10 energy per rewarded ad
 };
 
 // Option E — Hybrid (the new energy numbers).
 export const OPTION_E = {
-  explorer: { manE: 15, narE: 750 },
-  investigator: { manE: 45, narE: 2250 },
-  trailblazer: { manE: 45, narE: 2250 },
+  explorer: { manE: 15, narE: 800 },
+  investigator: { manE: 45, narE: 2400 },
+  trailblazer: { manE: 45, narE: 2400 },
   enrichStopsPerEnergy: 2, // 1 manifestation energy per 2 stops enriched
   auraNarShare: 0.9, // Aura bundles 90/10 narration/manifestation
+  trailblazerMonths: 27, // 27-month license (3 months free vs 24 paid)
+  adRewardEnergy: 5, adRewardNarration: 4, adRewardManifestation: 1, // +5 energy per rewarded ad
 };
 
 // ===== Cost assumptions (identical to Cost Analysis A) =====
@@ -132,9 +136,9 @@ export function buildModel(P) {
     return { plan: `${n}x Elite`, plans: n, cost: n * 200 };
   };
 
-  // Rewarded-ad energy (10 per ad, 8 narration / 2 manifestation) is unchanged.
+  // Rewarded-ad energy (option-specific: A = +10/ad 8 nar / 2 man, E = +5/ad 4 nar / 1 man).
   const adReward = (() => {
-    const creditsPerAd = AD_REWARD_NARRATION * CREDITS_PER_NARRATION + AD_REWARD_MANIFESTATION * blended;
+    const creditsPerAd = P.adRewardNarration * CREDITS_PER_NARRATION + P.adRewardManifestation * blended;
     const rev = ADS_PER_PAID_USER_MO * ADMOB_REWARDED_PER_IMPRESSION;
     const cost = ADS_PER_PAID_USER_MO * creditsPerAd * AD_REWARD_UTILIZATION * COST_PER_CREDIT;
     return { creditsPerAd, rev, cost, net: rev - cost };
@@ -155,7 +159,7 @@ export function buildModel(P) {
 
   const trailblazerCase = (util, feePct = STORE_FEE_PCT) => {
     const price = PRICE.trailblazer;
-    const { credits, platformCost } = calcCosts(t.manE * util, t.narE * util, 30);
+    const { credits, platformCost } = calcCosts(t.manE * util, t.narE * util, P.trailblazerMonths);
     const sf = price * feePct;
     const totalCost = platformCost + sf;
     const profit = price - totalCost;
@@ -197,7 +201,7 @@ export function buildModel(P) {
     const technicianRev = s.mix.technician * PRICE.technician;
     const explorerRev = s.mix.explorer * PRICE.explorer;
     const investigatorRev = s.mix.investigator * PRICE.investigator;
-    const trailblazerRev = s.mix.trailblazer * (PRICE.trailblazer / 30);
+    const trailblazerRev = s.mix.trailblazer * (PRICE.trailblazer / P.trailblazerMonths);
     const subRev = seekerRev + technicianRev + explorerRev + investigatorRev + trailblazerRev;
     const energyUsers = s.mix.explorer + s.mix.investigator + s.mix.trailblazer;
     const interstitialAdRev = s.freeUsers * AD_REV_PER_FREE_USER_MO;
@@ -230,7 +234,7 @@ export function buildModel(P) {
     { tier: 'Technician', price: PRICE.technician, narration: 'Device only, no ads (0 credits)', ads: 'None (ad-free)', adRev: 0, creditCost: 0 },
     { tier: 'Explorer', price: PRICE.explorer, narration: `Device (free) or Enhanced (${e.narE.toLocaleString()} energy)`, ads: 'Optional rewarded energy top-ups', adRev: adReward.rev, creditCost: perUserCreditCost(e) },
     { tier: 'Investigator', price: PRICE.investigator, narration: `Device (free) or Enhanced (${i.narE.toLocaleString()} energy)`, ads: 'Optional rewarded energy top-ups', adRev: adReward.rev, creditCost: perUserCreditCost(i) },
-    { tier: 'Trailblazer', price: PRICE.trailblazer / 30, priceLabel: '$8.00 ($239.99 / 30)', narration: `Device (free) or Enhanced (${t.narE.toLocaleString()} energy)`, ads: 'Optional rewarded energy top-ups', adRev: adReward.rev, creditCost: perUserCreditCost(t) },
+    { tier: 'Trailblazer', price: PRICE.trailblazer / P.trailblazerMonths, priceLabel: `$${(PRICE.trailblazer / P.trailblazerMonths).toFixed(2)} ($239.99 / ${P.trailblazerMonths})`, narration: `Device (free) or Enhanced (${t.narE.toLocaleString()} energy)`, ads: 'Optional rewarded energy top-ups', adRev: adReward.rev, creditCost: perUserCreditCost(t) },
   ].map((x) => {
     const store = x.price * STORE_FEE_PCT;
     return { ...x, priceLabel: x.priceLabel || (x.price === 0 ? 'Free' : '$' + x.price.toFixed(2)), store, net: x.price + x.adRev - store - x.creditCost };
@@ -243,7 +247,7 @@ export function buildModel(P) {
     { label: 'Technician ($5.99)', val: (s) => s.mix.technician.toLocaleString() },
     { label: 'Explorer ($7.99)', val: (s) => s.mix.explorer.toLocaleString() },
     { label: 'Investigator ($11.99)', val: (s) => s.mix.investigator.toLocaleString() },
-    { label: 'Trailblazer ($239.99 / 30 mo)', val: (s) => s.mix.trailblazer.toLocaleString() },
+    { label: `Trailblazer ($239.99 / ${P.trailblazerMonths} mo)`, val: (s) => s.mix.trailblazer.toLocaleString() },
     { section: 'Subscription revenue' },
     { label: 'Seeker', val: (s) => usd0(s.seekerRev) },
     { label: 'Technician', val: (s) => usd0(s.technicianRev) },
@@ -293,6 +297,7 @@ export function buildModel(P) {
 
   return {
     P, batch, blended, avgEnrichmentCredits, enrichShare, adReward, calcCosts, storeFee, revenuecatFee, requiredBase44Plan,
+    trailblazerMonths: P.trailblazerMonths, adRewardEnergy: P.adRewardEnergy, adRewardNarration: P.adRewardNarration, adRewardManifestation: P.adRewardManifestation,
     monthlyAnalysis, trailblazer100, trailblazer50, trailblazer100HighFee, trailblazer50HighFee, bundleAnalysis, adMobScenarios,
     rewardedAdScenarios, scenarios, tierEconomics, pnlRows, freeUserBreakdown, freeUserTotal, freeUserCost: freeUserTotal * COST_PER_CREDIT,
     ungatedTypical, ungatedTypicalCost: ungatedTypical * COST_PER_CREDIT, ungatedWorst, ungatedWorstCost: ungatedWorst * COST_PER_CREDIT, perUser100,

@@ -5,8 +5,9 @@ import { TOOLKIT_TIERS, creditAudit } from '@/lib/costAnalysisStatic';
 // ===== COST ANALYSIS B — Option E (Hybrid) energy =====
 // Same sections, same plans, same prices, same assumptions as Cost Analysis A.
 // Only the Option E inputs change (see src/lib/costAnalysisModel.js):
-//   Explorer 15 man / 750 nar, Investigator + Trailblazer 45 man / 2,250 nar,
-//   stop enrichment 1 energy per 2 stops, Aura bundles 90/10 narration/manifestation.
+//   Explorer 15 man / 800 nar, Investigator + Trailblazer 45 man / 2,400 nar,
+//   stop enrichment 1 energy per 2 stops, Aura bundles 90/10 narration/manifestation,
+//   Trailblazer 27 months (3 free), rewarded ads +5 energy (4 nar / 1 man).
 
 const usd = (n) => (n < 0 ? '-$' + Math.abs(n).toFixed(2) : '$' + n.toFixed(2));
 const usd0 = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
@@ -62,14 +63,16 @@ export function downloadHybridPDF() {
   doc.text('AGES Subscription Plan & Profit Analysis - Cost Analysis B', L, y); y += 22;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
   doc.text(`Generated ${today}`, L, y); y += 14;
-  doc.text('Option E - Hybrid energy. Same tiers and prices as Cost Analysis A (no new plans); only the energy numbers change.', L, y); y += 20;
+  doc.text('Option E - Hybrid energy. Same tiers and prices as Cost Analysis A (no new plans); energy, Trailblazer duration, and ad reward change.', L, y); y += 20;
 
   heading('What Changed From Cost Analysis A');
   table(['Input', 'Cost Analysis A', 'Cost Analysis B'],
     [
       ['Explorer ($7.99) energy', fmtE(M.OPTION_A.explorer), fmtE(P.explorer)],
       ['Investigator ($11.99) energy', fmtE(M.OPTION_A.investigator), fmtE(P.investigator)],
-      ['Trailblazer ($239.99 / 30 mo) energy', fmtE(M.OPTION_A.trailblazer), fmtE(P.trailblazer)],
+      ['Trailblazer energy', fmtE(M.OPTION_A.trailblazer), fmtE(P.trailblazer)],
+      ['Trailblazer duration', `${M.OPTION_A.trailblazerMonths} months (${M.OPTION_A.trailblazerMonths - 24} free)`, `${P.trailblazerMonths} months (${P.trailblazerMonths - 24} free)`],
+      ['Rewarded ad energy', `+${M.OPTION_A.adRewardEnergy} (${M.OPTION_A.adRewardNarration} nar / ${M.OPTION_A.adRewardManifestation} man)`, `+${P.adRewardEnergy} (${P.adRewardNarration} nar / ${P.adRewardManifestation} man)`],
       ['Stop enrichment (manifestation energy)', '1 energy per stop', `1 energy per ${B.batch} stops`],
       ['Aura bundles (narration/manifestation)', auraSplitA, auraSplit],
       ['Plans and prices', 'Seeker, Technician, Explorer, Investigator, Trailblazer', 'Unchanged - no new plans'],
@@ -98,8 +101,8 @@ export function downloadHybridPDF() {
       features: `Everything in Technician; Device narration (free) or Enhanced AI narration (~${tours(P.explorer.narE).toFixed(1)} fully narrated tour/mo, all tabs); custom tour generation; ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 10-tool toolkit; aura bundles (${auraSplit} narration/manifestation)` },
     { name: 'Investigator', price: '$11.99', billing: 'Monthly ($119.99/yr)', ...P.investigator,
       features: `Everything in Explorer; AI narration (~${tours(P.investigator.narE).toFixed(1)} fully narrated tours/mo, all tabs); custom tours; full 12-tool toolkit; evidence dashboard analytics; aura bundles (${auraSplit})` },
-    { name: 'Trailblazer', price: '$239.99', billing: 'One-time, 30 months (6 months free, max 300 slots)', ...P.trailblazer,
-      features: `Everything in Investigator; AI narration (~${tours(P.trailblazer.narE).toFixed(1)} fully narrated tours/mo, all tabs); custom tours; exclusive badge; early access; 30-mo price lock (6 months free); 20% off aura bundles` },
+    { name: 'Trailblazer', price: '$239.99', billing: `One-time, ${P.trailblazerMonths} months (${P.trailblazerMonths - 24} months free, max 300 slots)`, ...P.trailblazer,
+      features: `Everything in Investigator; AI narration (~${tours(P.trailblazer.narE).toFixed(1)} fully narrated tours/mo, all tabs); custom tours; exclusive badge; early access; ${P.trailblazerMonths}-mo price lock (${P.trailblazerMonths - 24} months free); 20% off aura bundles` },
   ];
   heading('1. Subscription Tiers');
   table(['Plan', 'Price', 'Billing', 'Man. E', 'Narr. E'],
@@ -122,7 +125,7 @@ export function downloadHybridPDF() {
   para(`Apple Developer: $${M.APPLE_DEV_ANNUAL}/yr | Google Play Developer: $${M.GOOGLE_DEV_ONE_TIME} one-time | CatDoes: $${M.DEV_UPFRONT_ONE_TIME} upfront (one-time, no profit share)`);
   para(`Base44 plan costs are shown as actual fixed monthly tier costs in section 9 (Builder $40/mo, Pro $80/mo, Elite $200/mo), determined by total credits consumed. The per-credit rate ($${M.COST_PER_CREDIT.toFixed(4)}/credit) is used only for per-plan and per-bundle profit analysis in sections 4-6.`);
   para(`AdMob Interstitial: $${M.ADMOB_ECPM}/1k impressions (eCPM). Free users see ads on stops 2+ (~${M.ADS_PER_TOUR} ads/tour, ~${M.TOURS_PER_FREE_USER_MO} tours/mo = $${M.AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
-  para(`AdMob Rewarded: $${M.ADMOB_REWARDED_ECPM}/1k impressions. Paid users watch ~${M.ADS_PER_PAID_USER_MO} ads/mo for +${M.AD_REWARD_ENERGY} energy each (${M.AD_REWARD_NARRATION} narration / ${M.AD_REWARD_MANIFESTATION} manifestation, unchanged). Ad rev: $${B.adReward.rev.toFixed(3)}/paid user/mo. Energy cost: ${B.adReward.creditsPerAd.toFixed(2)} credits/ad x ${Math.round(M.AD_REWARD_UTILIZATION * 100)}% utilization x $${M.COST_PER_CREDIT.toFixed(4)} = $${B.adReward.cost.toFixed(3)}/paid user/mo. Net: ${usd(B.adReward.net)}/paid user/mo (retention investment, not profit).`);
+  para(`AdMob Rewarded: $${M.ADMOB_REWARDED_ECPM}/1k impressions. Paid users watch ~${M.ADS_PER_PAID_USER_MO} ads/mo for +${P.adRewardEnergy} energy each (${P.adRewardNarration} narration / ${P.adRewardManifestation} manifestation). Ad rev: $${B.adReward.rev.toFixed(3)}/paid user/mo. Energy cost: ${B.adReward.creditsPerAd.toFixed(2)} credits/ad x ${Math.round(M.AD_REWARD_UTILIZATION * 100)}% utilization x $${M.COST_PER_CREDIT.toFixed(4)} = $${B.adReward.cost.toFixed(3)}/paid user/mo. Net: ${usd(B.adReward.net)}/paid user/mo (retention investment, not profit).`);
   para(`AdMob Observer narration: Device narration plays one ad before each narration; a fully narrated tour is ~${M.OBSERVER_NARRATION_ADS_PER_TOUR} ads. ${M.OBSERVER_NARRATION_ADS_PER_TOUR} ads x ${M.TOURS_PER_FREE_USER_MO} tours/mo x $${M.ADMOB_PER_IMPRESSION.toFixed(3)} = $${M.NARRATION_AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo.`);
   para(`AdMob Observer tools + saves: Audio Recorder / Radio Sweeper (30s ad = 30s use) ~${M.TOOL_USE_ADS_OBSERVER_MO} ads/mo = $${M.TOOL_USE_AD_REV_OBSERVER_MO.toFixed(2)}; ad-watched evidence saves (Observer and Seeker) ~${M.SAVE_ADS_MO}/mo = $${M.SAVE_AD_REV_MO.toFixed(2)}, each save costs 1 upload credit. Total Observer ad revenue: $${M.OBSERVER_AD_REV_MO.toFixed(2)}/free user/mo.`);
   para('Narration modes: Seeker and Technician use Device narration only (0 credits, no ads). Explorer / Investigator / Trailblazer can use Device (free) or Enhanced (spends narration energy). Rewarded energy top-up ads apply to Explorer+ only.');
@@ -186,9 +189,9 @@ export function downloadHybridPDF() {
     [70, 110, 80, 65, 60, 65, 60]);
 
   // ---------- 5 ----------
-  heading('5. Trailblazer - 30-Month ($239.99)');
+  heading(`5. Trailblazer - ${P.trailblazerMonths}-Month ($239.99)`);
   const tbRow = (label, c) => [label, Math.round(c.credits).toLocaleString(), usd(c.platformCost), usd(c.sf), usd(c.totalCost), usd(c.profit), c.margin.toFixed(1) + '%'];
-  table(['Utilization', 'Credits (30 mo)', 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
+  table(['Utilization', `Credits (${P.trailblazerMonths} mo)`, 'Platform', 'Store Fee', 'Cost', 'Profit', 'Margin'],
     [tbRow('100% (max use)', B.trailblazer100), tbRow('50% (realistic)', B.trailblazer50), tbRow('A: 100%', A.trailblazer100), tbRow('A: 50%', A.trailblazer50)],
     [90, 80, 65, 60, 65, 65, 55]);
 
@@ -237,10 +240,10 @@ export function downloadHybridPDF() {
     [50, 60, 50, 80, 60, 50, 80, 60]);
 
   const planLine = (n) => `${n}: ${Math.round(aPlan(n).credits).toLocaleString()} -> ${Math.round(bPlan(n).credits).toLocaleString()} credits/user/mo (${usd(aPlan(n).platformCost)} -> ${usd(bPlan(n).platformCost)}); profit ${usd(aPlan(n).profit)} (${pct0(aPlan(n).margin)}) -> ${usd(bPlan(n).profit)} (${pct0(bPlan(n).margin)}) at 100% utilization.`;
-  para(`NEW ENERGY COST PER PLAN: ${planLine('Explorer')} ${planLine('Investigator')} Trailblazer (30 months): ${Math.round(A.trailblazer100.credits).toLocaleString()} -> ${Math.round(B.trailblazer100.credits).toLocaleString()} credits; profit ${usd(A.trailblazer100.profit)} (${pct0(A.trailblazer100.margin)}) -> ${usd(B.trailblazer100.profit)} (${pct0(B.trailblazer100.margin)}) at 100%, and ${usd(A.trailblazer50.profit)} (${pct0(A.trailblazer50.margin)}) -> ${usd(B.trailblazer50.profit)} (${pct0(B.trailblazer50.margin)}) at 50%.`);
+  para(`NEW ENERGY COST PER PLAN: ${planLine('Explorer')} ${planLine('Investigator')} Trailblazer (A: ${M.OPTION_A.trailblazerMonths} mo -> B: ${P.trailblazerMonths} mo): ${Math.round(A.trailblazer100.credits).toLocaleString()} -> ${Math.round(B.trailblazer100.credits).toLocaleString()} credits; profit ${usd(A.trailblazer100.profit)} (${pct0(A.trailblazer100.margin)}) -> ${usd(B.trailblazer100.profit)} (${pct0(B.trailblazer100.margin)}) at 100%, and ${usd(A.trailblazer50.profit)} (${pct0(A.trailblazer50.margin)}) -> ${usd(B.trailblazer50.profit)} (${pct0(B.trailblazer50.margin)}) at 50%.`);
   // Months of full-energy use the price (after store fee) can pay for.
-  const break100 = (B.trailblazer100.price - B.trailblazer100.sf) / (B.trailblazer100.platformCost / 30);
-  para(`TRAILBLAZER BREAK-EVEN: at 100% utilization each Trailblazer costs ${usd(B.trailblazer100.totalCost)} against $239.99 collected, a loss of ${usd(Math.abs(B.trailblazer100.profit))} per user. The price covers full-energy use for about ${break100.toFixed(0)} of the 30 months. Trailblazer breaks even at about ${Math.round((B.trailblazer100.price - B.trailblazer100.sf) / B.trailblazer100.platformCost * 100)}% average utilization. Worst case if all 300 slots sell and every user maxes energy every month: ${usd0(300 * B.trailblazer100.profit)} total.`);
+  const break100 = (B.trailblazer100.price - B.trailblazer100.sf) / (B.trailblazer100.platformCost / P.trailblazerMonths);
+  para(`TRAILBLAZER BREAK-EVEN: at 100% utilization each Trailblazer costs ${usd(B.trailblazer100.totalCost)} against $239.99 collected, a loss of ${usd(Math.abs(B.trailblazer100.profit))} per user. The price covers full-energy use for about ${break100.toFixed(0)} of the ${P.trailblazerMonths} months. Trailblazer breaks even at about ${Math.round((B.trailblazer100.price - B.trailblazer100.sf) / B.trailblazer100.platformCost * 100)}% average utilization. Worst case if all 300 slots sell and every user maxes energy every month: ${usd0(300 * B.trailblazer100.profit)} total.`);
   const mA = A.scenarios[3], mB = B.scenarios[3];
   para(`CREDIT CAPACITY: Builder plan (10k credits) supports only ~${cap(10000, B.perUser100.explorer)} Explorer, ~${cap(10000, B.perUser100.investigator)} Investigator, or ~${cap(10000, B.perUser100.trailblazer)} Trailblazer users at 100% utilization (A: ~${cap(10000, A.perUser100.explorer)} / ~${cap(10000, A.perUser100.investigator)} / ~${cap(10000, A.perUser100.trailblazer)}). At the Mature scale, credits used rise from ${mA.totalCredits.toLocaleString()} to ${mB.totalCredits.toLocaleString()} per month, taking the Base44 bill from ${mA.base44Plan.plan} ($${mA.base44Plan.cost}/mo) to ${mB.base44Plan.plan} ($${mB.base44Plan.cost}/mo). Free (Observer), Seeker, and Technician users consume 0 AI credits.`);
   para('Energy gating is deployed. All 27 credit-consuming actions are gated. Free (Observer) users are blocked from creating tours, narrating, enriching stops, and using sweepers. Paid users are limited by their monthly energy allotment.');

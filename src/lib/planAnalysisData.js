@@ -36,6 +36,8 @@ const NEWLY_VISIBLE_COSTLY_TOOLS = [
 
 function buildPlans(option, toursPerEnergy, auraSplit) {
   const { explorer, investigator, trailblazer } = option;
+  const tbMonths = option.trailblazerMonths;
+  const tbFree = tbMonths - 24;
   return [
     { name: 'Observer', price: '$0', billing: 'Free forever', manE: 0, narE: 0,
       features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; Device narration (an ad plays before each narration — ~27 ads per fully narrated tour); save favorites; 4-tool toolkit (2 ad-gated: Audio Recorder, Radio Sweeper — 30s ad = 30s use, 300s/day cap); evidence saves 10/day (ad-watched); evidence journal + dashboard' },
@@ -47,8 +49,8 @@ function buildPlans(option, toursPerEnergy, auraSplit) {
       features: `Everything in Technician; Device narration (free) or Enhanced AI narration (~${toursPerEnergy(explorer.narE)} fully narrated tour/mo, all tabs); custom tour generation; ranked tours; nearby + abroad; evidence journal; community map; leaderboard; 10-tool toolkit; aura bundles (${auraSplit} narration/manifestation)` },
     { name: 'Investigator', price: '$11.99', billing: 'Monthly ($119.99/yr)', ...investigator,
       features: `Everything in Explorer; AI narration (~${toursPerEnergy(investigator.narE)} fully narrated tours/mo, all tabs); custom tours; full 12-tool toolkit; evidence dashboard analytics; aura bundles (${auraSplit})` },
-    { name: 'Trailblazer', price: '$239.99', billing: 'One-time, 30 months (6 months free, max 300 slots)', ...trailblazer,
-      features: `Everything in Investigator; AI narration (~${toursPerEnergy(trailblazer.narE)} fully narrated tours/mo, all tabs); custom tours; exclusive badge; early access; 30-mo price lock (6 months free); 20% off aura bundles` },
+    { name: 'Trailblazer', price: '$239.99', billing: `One-time, ${tbMonths} months (${tbFree} months free, max 300 slots)`, ...trailblazer,
+      features: `Everything in Investigator; AI narration (~${toursPerEnergy(trailblazer.narE)} fully narrated tours/mo, all tabs); custom tours; exclusive badge; early access; ${tbMonths}-mo price lock (${tbFree} months free); 20% off aura bundles` },
   ];
 }
 
@@ -118,7 +120,8 @@ export function buildDisplayData(optionKey) {
     APPLE_DEV_ANNUAL, GOOGLE_DEV_ONE_TIME, DEV_UPFRONT_ONE_TIME,
     ADMOB_ECPM, ADMOB_PER_IMPRESSION, ADS_PER_TOUR, TOURS_PER_FREE_USER_MO,
     AD_REV_PER_FREE_USER_MO, ADMOB_REWARDED_ECPM, ADMOB_REWARDED_PER_IMPRESSION,
-    ADS_PER_PAID_USER_MO, AD_REWARD_ENERGY, AD_REWARD_NARRATION, AD_REWARD_MANIFESTATION,
+    ADS_PER_PAID_USER_MO,
+    AD_REWARD_ENERGY: option.adRewardEnergy, AD_REWARD_NARRATION: option.adRewardNarration, AD_REWARD_MANIFESTATION: option.adRewardManifestation,
     AD_REWARD_UTILIZATION, OBSERVER_NARRATION_ADS_PER_TOUR, NARRATION_AD_REV_PER_FREE_USER_MO,
     TOOL_USE_ADS_OBSERVER_MO, TOOL_USE_AD_REV_OBSERVER_MO, SAVE_ADS_MO, SAVE_AD_REV_MO,
     SAVE_UPLOAD_CREDITS_MO, SAVE_UPLOAD_COST_MO, OBSERVER_AD_REV_MO,
@@ -127,5 +130,7 @@ export function buildDisplayData(optionKey) {
     storeFee: m.storeFee,
     revenuecatFee: m.revenuecatFee,
     requiredBase44Plan: m.requiredBase44Plan,
+    // Option-specific values (A: 30 mo / +10 ad, B: 27 mo / +5 ad)
+    trailblazerMonths: option.trailblazerMonths,
   };
 }

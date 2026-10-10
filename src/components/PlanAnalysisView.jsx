@@ -33,6 +33,7 @@ export default function PlanAnalysisView({ data }) {
     AD_REWARD_CREDITS_PER_AD, AD_REWARD_REV_PER_PAID_USER_MO,
     AD_REWARD_COST_PER_PAID_USER_MO, AD_REWARD_NET_PER_PAID_USER_MO,
     calcCosts, storeFee, revenuecatFee, requiredBase44Plan,
+    trailblazerMonths,
   } = data;
 
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -442,13 +443,13 @@ export default function PlanAnalysisView({ data }) {
 
       {/* 5. Trailblazer */}
       <section className="mb-8">
-        <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">5. Trailblazer — 30-Month Lifetime ($239.99)</h2>
+        <h2 className="font-heading text-lg font-semibold text-foreground mb-3 print-text">5. Trailblazer — {trailblazerMonths}-Month Lifetime ($239.99)</h2>
         <div className="rounded-lg border border-border bg-card/40 print-block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr>
                 <th className={th}>Utilization</th>
-                <th className={`${th} ${num}`}>Credits (30 mo)</th>
+                <th className={`${th} ${num}`}>Credits ({trailblazerMonths} mo)</th>
                 <th className={`${th} ${num}`}>Platform Cost</th>
                 <th className={`${th} ${num}`}>Store Fee (15%)</th>
                 <th className={`${th} ${num}`}>Total Cost</th>
