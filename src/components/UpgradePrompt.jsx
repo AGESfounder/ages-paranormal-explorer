@@ -6,11 +6,17 @@ import { Sparkles, Zap, X, Play, Loader2, Check } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { showRewardedAd } from '@/lib/adService';
 import { AD_REWARD_ENERGY } from '@/lib/adRewards';
+import { useAuth } from '@/lib/AuthContext';
+import { getEffectivePlanId } from '@/lib/access';
 
 export default function UpgradePrompt({ show, onClose, reason = 'plan', onRewardGranted }) {
   const [watching, setWatching] = useState(false);
   const [granting, setGranting] = useState(false);
   const [adError, setAdError] = useState(null);
+
+  // Ad-free (paid) tiers never see the "watch an ad" option — only Observer does.
+  const { user } = useAuth();
+  const isPaid = !!(user && getEffectivePlanId(user) !== 'observer');
 
   const handleWatchAd = async () => {
     if (watching || granting) return;
@@ -84,14 +90,16 @@ export default function UpgradePrompt({ show, onClose, reason = 'plan', onReward
             </h2>
             <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
               {reason === 'energy'
-                ? "You've used all your monthly energy. Watch a quick ad for a free boost, buy an Aura Bundle, or upgrade your plan."
+                ? (isPaid
+                    ? "You've used all your energy. Buy an Aura Bundle or upgrade your plan for more."
+                    : "You've used all your monthly energy. Watch a quick ad for a free boost, buy an Aura Bundle, or upgrade your plan.")
                 : "This feature requires a paid plan. Upgrade to unlock AI narration, custom tour generation, and the full investigation toolkit."}
             </p>
 
             {adError && <p className="text-[11px] text-destructive mb-3">{adError}</p>}
 
             <div className="space-y-2">
-              {reason === 'energy' && (
+              {reason === 'energy' && !isPaid && (
                 <button
                   onClick={handleWatchAd}
                   disabled={watching || granting}

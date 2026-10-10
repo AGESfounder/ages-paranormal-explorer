@@ -25,9 +25,8 @@ function getDailySaveCount(user) {
  *   Admin          → allowed immediately (free, unlimited)
  *   Observer       → if count < 10: show ad gate modal (promise-based);
  *                    if count >= 10: show UpgradePrompt (daily_cap)
- *   Seeker         → if count < 10: show ad gate modal (promise-based);
- *                    if count >= 10: call spend-evidence-save (aura_save_energy);
- *                    on energy_empty: show UpgradePrompt
+ *   Seeker         → ad-free: call spend-evidence-save (cost 'free' under cap,
+ *                    aura_save_energy over cap); on energy_empty: show UpgradePrompt
  *   Technician+    → call spend-evidence-save server function;
  *                    on energy_empty: show UpgradePrompt
  *
@@ -108,18 +107,10 @@ export function useEvidenceSaveGate() {
       });
     }
 
-    // Seeker: ad-watched saves under cap, then Aura Save Energy over cap
-    if (planId === 'seeker') {
-      if (dailyCount < dailyCap) {
-        // Under cap: show ad gate modal — wait for ad completion + server call
-        return new Promise((resolve) => {
-          setAdGatePromise({ resolve });
-        });
-      }
-      // Over cap: fall through to server-authoritative spend (Aura Save Energy)
-    }
-
-    // Seeker (over cap) / Technician+: server-authoritative spend
+    // Seeker / Technician+: server-authoritative spend.
+    // Seeker is ad-free — under-cap saves go straight through the server
+    // (cost 'free', counter increment), no ad gate. Over cap, the server
+    // spends aura_save_energy or returns energy_empty.
     try {
       const res = await base44.functions.invoke('spend-evidence-save', {});
       if (res.data?.success) {
