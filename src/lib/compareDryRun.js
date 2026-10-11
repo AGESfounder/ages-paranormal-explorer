@@ -91,11 +91,36 @@ export async function runBatchedComparison(tour, stops, { pairLimit, onPair } = 
     if (onPair) onPair(p + 1, chosen.length);
   }
 
+  // What the same stops cost each way. One "call-set" = the content call, plus
+  // the focus-rewrite call that single-site tours run. The old way paid one
+  // call-set per stop; the batcher pays one per pair.
+  const entries = results.flatMap((r) => r.entries);
+  const perCallSet = creditsPerPair(tour.tour_category);
+  const fallbackStops = entries.filter((e) => e.status !== 'accepted').length;
+  const oldCredits = entries.length * perCallSet;
+  const batchCredits = chosen.length * perCallSet;
+  const fallbackCredits = fallbackStops * perCallSet;
+  const newCredits = batchCredits + fallbackCredits;
+
   return {
     pairs: results,
     enrichableCount: enrichable.length,
     pairCount: pairs.length,
     ranPairs: chosen.length,
-    credits: chosen.length * creditsPerPair(tour.tour_category),
+    cost: {
+      stops: entries.length,
+      pairs: chosen.length,
+      perCallSet,
+      oldCredits,
+      batchCredits,
+      fallbackStops,
+      fallbackCredits,
+      newCredits,
+      savedCredits: oldCredits - newCredits,
+      savedPercent: oldCredits > 0 ? Math.round(((oldCredits - newCredits) / oldCredits) * 100) : 0,
+      // The user pays one manifestation unit per pair instead of one per stop.
+      oldEnergy: entries.length,
+      newEnergy: chosen.length,
+    },
   };
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import { RotateCcw, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import StopComparison from '@/components/contentCompare/StopComparison';
+import CreditsComparison from '@/components/contentCompare/CreditsComparison';
 
 // Admin-only side-by-side of a live tour's saved stop content against what the
 // batched enrichment produces for the same stops. Read-only preview.
@@ -45,10 +46,10 @@ export default function ComparisonReport({ tour, report, onReset }) {
             ? 'Every stop passed the free cross-check, so the batched content beside it is what the app would save.'
             : `${fellBack.length} stop${fellBack.length === 1 ? '' : 's'} would be written one at a time instead, producing exactly the content you get today. The app still charges one energy per pair, so a rejected pair costs it extra calls but never a quality drop.`}
         </p>
-        <p className="text-xs text-muted-foreground">
-          Model credits spent: <span className="text-foreground font-semibold">~{report.credits}</span>. Nothing was saved to this tour.
-        </p>
+        <p className="text-xs text-muted-foreground">Nothing was saved to this tour.</p>
       </div>
+
+      <CreditsComparison cost={report.cost} category={tour.tour_category} />
 
       <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/5 p-3">
         <ShieldCheck className="w-4 h-4 text-green-500 shrink-0" />
