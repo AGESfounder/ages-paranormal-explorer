@@ -14,6 +14,8 @@ import SensitivityControl from './SensitivityControl';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
+import { CUE_GONG } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
@@ -146,7 +148,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { unlock, attachMicToRecording, resumeContext } = useGhostVoice();
+  const { unlock, attachMicToRecording, resumeContext, playCue } = useGhostVoice();
   const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const speakNormal = (word) => {
@@ -165,37 +167,24 @@ export default function LocationTermBank({ gateSave, refundSave }) {
       // guard can short-circuit — instead of hanging on the 3s safety and
       // then computing wait = max(0, ROTATION_MS - 3000) = 0, which fires
       // the next word back-to-back (the "racing after a trigger" bug).
-      const safety = setTimeout(releaseBusy, 3000);
-      speakToolText(formatForSpeech(word), { role: 'female', rate: 1.15, pitch: 2.0 }).then(() => {
+      const spoken = formatForSpeech(word);
+      // Backstop scales with the term so a slow read-out cannot release the
+      // queue early and let the gong land on top of the word being spoken.
+      const safety = setTimeout(releaseBusy, Math.max(3000, spoken.length * 180 + 800));
+      speakToolText(spoken, getDeviceVoiceOptions()).then(() => {
         clearTimeout(safety);
         releaseBusy();
       });
     });
   };
 
-  // Speak the triggered (locked) word in a male voice via the shared Tool
-  // speech adapter (native TTS on iOS/Android, browser speechSynthesis on
-  // web) — same local, on-device mechanism as the female dictation voice.
-  // This avoids the server-side GenerateSpeech round-trip that hung on iOS
-  // (network latency + AudioContext suspended by getUserMedia + autoplay
-  // policy blocking audio.play() from a sensor event). onDone fires when the
-  // word finishes speaking so the lock can release; a timer fallback covers
-  // the web iOS WKWebView case where the completion event occasionally never
-  // fires.
-  const speakMaleVoice = (word, onDone) => {
-    try { stopToolSpeech(); } catch {}
-    let done = false;
-    const finish = () => { if (done) return; done = true; onDone?.(); };
-    // Fallback: if the completion callback never fires, release after an
-    // estimate based on word length (~300ms per syllable, ~2 syllables per
-    // word) + buffer.
-    const estMs = Math.max(3000, formatForSpeech(word).length * 180 + 800);
-    const timer = setTimeout(finish, estMs);
-    speakToolText(formatForSpeech(word), { role: 'male', rate: 0.65, pitch: 0.1 }).then((result) => {
-      clearTimeout(timer);
-      if (result === 'cancelled') return; // stopped/superseded — never restart a stopped session
-      finish();
-    });
+  // Announce the locked term with a gong instead of a second voice. The term
+  // has already finished speaking, so nothing is stopped or switched — the gong
+  // occupies the gap before the scan resumes with a new word. playCue resolves
+  // when the gong has finished sounding, and routes it into the session
+  // recording as well.
+  const playLockedCue = (onDone) => {
+    playCue(CUE_GONG).then(() => onDone?.());
   };
 
   const stopNormalVoice = () => {
@@ -245,10 +234,9 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
   useEffect(() => { motionDetectedRef.current = motionDetected; }, [motionDetected]);
 
-  // The lock is now released directly from speakMaleVoice's onDone callback
-  // (called when the male speechSynthesis voice finishes or the timer fallback
-  // fires). No isGenerating/isSpeaking effect needed — those tracked the
-  // server-side GenerateSpeech call that we've replaced with browser TTS.
+  // The lock is released directly from the gong cue's completion callback
+  // (playCue resolves when the rings have finished sounding). No
+  // isGenerating/isSpeaking effect is needed — nothing speaks the locked term.
 
   useEffect(() => () => stopEverything(), []);
 
@@ -432,26 +420,33 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     currentWordRef.current = word;
     setCaptured(prev => { const updated = [...prev, { word, at: new Date().toLocaleTimeString() }]; capturedRef.current = updated; return updated; });
     speechStartedRef.current = false;
-    // Cancel the female dictation voice immediately (cutting it off mid-word
-    // is the desired "lock" effect) and speak the triggered word in the male
-    // voice. Both use the shared Tool speech adapter (native TTS on device,
-    // browser speechSynthesis on web) — no server round-trip, no credits, no
-    // iOS autoplay block. The lock releases when the male voice finishes
-    // (onDone), with a timer fallback for the web iOS WKWebView case where
-    // the completion event occasionally never fires.
+    // The word in flight finishes first, then the gong announces it, then the
+    // scan resumes. Letting the word finish is what removes the lag: the voice
+    // is never stopped, flushed, or switched.
     if (rotRef.current) { clearTimeout(rotRef.current); rotRef.current = null; }
-    stopNormalVoice();
-    speakMaleVoice(word, () => {
-      lockedRef.current = false;
-      lockedWordRef.current = null;
-      setLockedWord(null);
-      // Restart the rotation after the triggered word finishes — the
-      // self-pacing chain broke when the lock was set, so without this the
-      // sweeper would freeze. Bumping the epoch first invalidates any stale
-      // scheduleNextWord callback still pending from the cancelled word.
-      epochRef.current++;
-      scheduleNextWord();
-    });
+    const myEpoch = epochRef.current;
+    const announce = () => {
+      // A stop bumps the epoch — never resume a session the user ended.
+      if (myEpoch !== epochRef.current) return;
+      playLockedCue(() => {
+        if (myEpoch !== epochRef.current) return;
+        lockedRef.current = false;
+        lockedWordRef.current = null;
+        setLockedWord(null);
+        // Restart the rotation after the gong — the self-pacing chain broke
+        // when the lock was set, so without this the sweeper would freeze.
+        // Bumping the epoch first invalidates any stale scheduleNextWord
+        // callback still pending from the finished word.
+        epochRef.current++;
+        scheduleNextWord();
+      });
+    };
+    // A word in flight is allowed to finish; its release runs the queued gong.
+    if (femaleBusyRef.current) {
+      pendingMaleRef.current = announce;
+    } else {
+      announce();
+    }
   }, []);
 
   const flashMotion = useCallback(() => {
@@ -754,9 +749,9 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Build Terms</span> — if you're on a tour stop, AGES extracts terms from that stop's history (names, nouns, verbs, phrases, time words); otherwise it gathers words tied to your area's history & hauntings.</li>
-            <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 3 seconds each, each spoken aloud in voice 1; the session records.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright and is spoken aloud in voice 2. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
-            <li>After each word is dictated, the scan resumes automatically with a new random word every 3 seconds.</li>
+            <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 3 seconds each, each spoken aloud in your device's narration voice; the session records.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright, the word finishes speaking, and a gong announces it. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
+            <li>After each word is locked and the gong sounds, the scan resumes automatically with a new random word every 3 seconds.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
           <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>

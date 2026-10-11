@@ -11,12 +11,14 @@ import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
+import { CUE_CHIME } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import { toast } from '@/components/ui/use-toast';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 // Phonetic spellings so TTS pronounces each letter as a clear letter name
-// (e.g. "A" → "ay", not "uh") in both the female and male voices.
+// (e.g. "A" → "ay", not "uh") in the device narration voice.
 const LETTER_TEXT = {
   A: 'ay', B: 'bee', C: 'see', D: 'dee', E: 'ee', F: 'eff', G: 'jee',
   H: 'aitch', I: 'eye', J: 'jay', K: 'kay', L: 'ell', M: 'em', N: 'en',
@@ -51,12 +53,13 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { stop: stopVoice, unlock, attachMicToRecording, resumeContext } = useGhostVoice();
+  const { stop: stopVoice, unlock, attachMicToRecording, resumeContext, playCue } = useGhostVoice();
 
   // Speak a letter aloud via the shared Tool speech adapter (native TTS on
-  // iOS/Android, browser speechSynthesis on web). Uses the lowercase letter
-  // so the voice doesn't announce "Capital" before it. Sets femaleBusyRef so
-  // the male trigger voice waits for the current letter.
+  // iOS/Android, browser speechSynthesis on web), in the user's own device
+  // narration voice. Speaks the letter NAME (LETTER_TEXT) so no "Capital" is
+  // announced and the letter is unmistakable. Sets femaleBusyRef so the
+  // trigger cue waits for the current letter to finish.
   const speakNormal = (letter) => {
     femaleBusyRef.current = true;
     const releaseBusy = () => {
@@ -65,8 +68,11 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     };
     // Backstop: if the completion callback never arrives (e.g. web iOS
     // speechSynthesis stalls), release the male voice after 1.5s anyway.
-    const busyTimeout = setTimeout(releaseBusy, 1500);
-    return speakToolText(letter.toLowerCase(), { role: 'female', rate: 1.15, pitch: 2.0 }).then((result) => {
+    const spoken = LETTER_TEXT[letter] || letter.toLowerCase();
+    // Backstop scales with the spoken letter so a slow read-out cannot release
+    // the queue early and let the chime land on top of it.
+    const busyTimeout = setTimeout(releaseBusy, Math.max(1500, spoken.length * 180 + 800));
+    return speakToolText(spoken, getDeviceVoiceOptions()).then((result) => {
       if (result === 'cancelled') return result; // stopped/superseded — keep the backstop timer
       clearTimeout(busyTimeout);
       releaseBusy();
@@ -81,22 +87,13 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     try { stopVoice(); } catch {}
   };
 
-  // Speak the triggered (locked) letter in a male voice via the shared Tool
-  // speech adapter — same local, on-device mechanism as the Term Sweeper,
-  // avoiding the server-side GenerateSpeech round-trip that hung on iOS.
-  // onDone fires when the voice finishes; a timer fallback covers the web iOS
-  // WKWebView case where the completion event occasionally never fires.
-  const speakMaleVoice = (text, onDone) => {
-    try { stopToolSpeech(); } catch {}
-    let done = false;
-    const finish = () => { if (done) return; done = true; onDone?.(); };
-    const estMs = Math.max(3000, text.length * 180 + 800);
-    const timer = setTimeout(finish, estMs);
-    speakToolText(text, { role: 'male', rate: 0.65, pitch: 0.1 }).then((result) => {
-      clearTimeout(timer);
-      if (result === 'cancelled') return; // stopped/superseded — never restart a stopped session
-      finish();
-    });
+  // Announce the locked letter with a brief chime instead of a second voice.
+  // The letter has already finished speaking, so nothing is stopped or
+  // switched — the chimes occupy the gap before the alphabet restarts at A.
+  // playCue resolves when the chimes have finished, and routes them into the
+  // session recording as well.
+  const playLockedCue = (onDone) => {
+    playCue(CUE_CHIME).then(() => onDone?.());
   };
 
   const stepRef = useRef(null);
@@ -223,21 +220,22 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     setLockedLetter(letter);
     setCaptured(prev => { const updated = [...prev, letter]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
-    // Speak the locked letter in a deep male voice via the shared Tool speech
-    // adapter (same reliable mechanism as the Term Sweeper). The lock releases
-    // and the alphabet restarts from A when the voice finishes (onDone), with
-    // a timer fallback for the web iOS WKWebView case where the completion
-    // event never fires.
-    const speakMale = () => {
-      speakMaleVoice(LETTER_TEXT[letter] || letter.toLowerCase(), () => {
+    // The locked letter finishes speaking first, then the chimes announce it,
+    // then the alphabet restarts from A. Letting the letter finish is what
+    // removes the lag: the voice is never stopped, flushed, or switched.
+    const announce = () => {
+      if (!sessionActiveRef.current) return;
+      playLockedCue(() => {
+        if (!sessionActiveRef.current) return; // session ended while chiming
         if (resumeDelayRef.current) clearTimeout(resumeDelayRef.current);
         resumeDelayRef.current = setTimeout(() => { resumeDelayRef.current = null; resumeFromLock(); }, 1000);
       });
     };
+    // A letter in flight is allowed to finish; its release runs the queued chime.
     if (femaleBusyRef.current) {
-      pendingMaleRef.current = speakMale;
+      pendingMaleRef.current = announce;
     } else {
-      speakMale();
+      announce();
     }
   }, [resumeFromLock]);
 
@@ -445,7 +443,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     // before the mic prompt, camera, or alphabet.
     pausedRef.current = true;
     setPaused(true);
-    const directions = 'Spell words you want to say to us. I am going to repeat the alphabet. You can choose letters by moving my device and standing in front of it when you hear or see the letter you need next.';
+    const directions = 'Spell words you want to say to us. I am going to repeat the alphabet. You can choose letters by moving my device and standing in front of it when you hear or see the letter you need next. A short chime tells you which letter was chosen.';
     let begun = false;
     const beginAfterPause = async () => {
       if (begun) return;
@@ -474,11 +472,12 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         setSessionDuration(elapsed);
       }, 1000);
     };
-    // Speak the directions in the female voice via the shared Tool speech
-    // adapter (primed within the user gesture above so web iOS plays them).
+    // Speak the directions in the user's device narration voice via the shared
+    // Tool speech adapter (primed within the user gesture above so web iOS
+    // plays them).
     // A cancelled directions utterance (session stopped) must not start the
     // sweep; if the completion callback never fires, start anyway after 25s.
-    speakToolText(directions, { role: 'female', rate: 0.92, pitch: 1.0 }).then((result) => {
+    speakToolText(directions, getDeviceVoiceOptions()).then((result) => {
       if (result !== 'cancelled') beginAfterPause();
     });
     startDelayRef.current = setTimeout(() => beginAfterPause(), 25000);
@@ -578,9 +577,9 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
-            <li>Tap <span className="text-primary font-medium">Start Sweep</span>. Letters cycle A → Z, one every 2 seconds, each spoken aloud in voice 1, while the session records.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current letter — it glows bright and is spoken aloud in voice 2. The IR camera also watches for anomalies: a detected figure locks the current letter the same way.</li>
-            <li>After each letter is dictated, the alphabet restarts from A.</li>
+            <li>Tap <span className="text-primary font-medium">Start Sweep</span>. Letters cycle A → Z, one every 2 seconds, each spoken aloud in your device's narration voice, while the session records.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current letter — it glows bright, the letter finishes speaking, and a brief chime announces it. The IR camera also watches for anomalies: a detected figure locks the current letter the same way.</li>
+            <li>After each letter is locked and the chime sounds, the alphabet restarts from A.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
           <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>

@@ -11,17 +11,20 @@ import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
+import { CUE_BELL } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import { toast } from '@/components/ui/use-toast';
 
 // "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
 // appear once in rotation (4 sec each). If no trigger, the asking phase repeats.
-// A trigger locks the current phrase, speaks it in the male voice, then a 5-second
-// delay precedes the next asking phase.
+// A trigger locks the current phrase, lets it finish speaking, then announces it
+// with the bell code — 1 ring YES, 2 rings NO, 3 rings I DON'T KNOW — before the
+// asking phase starts again.
 const PHRASES = [
-  { display: 'YES', speech: 'Yes' },
-  { display: 'NO', speech: 'No' },
-  { display: "I DON'T KNOW", speech: "I don't know" },
+  { display: 'YES', speech: 'Yes', rings: 1 },
+  { display: 'NO', speech: 'No', rings: 2 },
+  { display: "I DON'T KNOW", speech: "I don't know", rings: 3 },
 ];
 const PHRASE_MS = 4000;
 const TRIGGER_COOLDOWN_MS = 3500;
@@ -54,12 +57,12 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   // Web Audio–based voice (unlocked on the Start tap) so the spoken answer
   // plays reliably on iOS even though it's triggered by a sensor event. Called
   // WITHOUT the creepy flag → normal-speed delivery.
-  const { stop: stopVoice, unlock, attachMicToRecording, resumeContext } = useGhostVoice();
+  const { stop: stopVoice, unlock, attachMicToRecording, resumeContext, playCue } = useGhostVoice();
 
-  // Local on-device TTS announces each phrase as it cycles (instant, female
-  // voice role) via the shared Tool speech adapter — native TTS on
-  // iOS/Android, browser speechSynthesis on web. The locked phrase is then
-  // spoken in the deep male voice role.
+  // Local on-device TTS announces each phrase as it cycles in the user's own
+  // device narration voice via the shared Tool speech adapter — native TTS on
+  // iOS/Android, browser speechSynthesis on web. A locked phrase is announced
+  // with the bell code instead of a second voice.
   const speakNormal = (phrase) => {
     femaleBusyRef.current = true;
     return new Promise((resolve) => {
@@ -75,8 +78,10 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
       // `.then` runs immediately and its lockedRef guard can short-circuit,
       // instead of hanging on the 3s safety and then computing a too-short
       // wait that fires the next phrase back-to-back.
-      const safety = setTimeout(releaseBusy, 3000);
-      speakToolText(phrase, { role: 'female', rate: 1.15, pitch: 2.0 }).then(() => {
+      // Backstop scales with the phrase so a slow read-out cannot release the
+      // queue early and let the bell land on top of the phrase being spoken.
+      const safety = setTimeout(releaseBusy, Math.max(3000, phrase.length * 180 + 800));
+      speakToolText(phrase, getDeviceVoiceOptions()).then(() => {
         clearTimeout(safety);
         releaseBusy();
       });
@@ -89,22 +94,13 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     try { stopToolSpeech(); } catch {}
   };
 
-  // Speak the triggered (locked) phrase in a male voice via the shared Tool
-  // speech adapter — same local, on-device mechanism as the Term Sweeper.
-  // This avoids the server-side GenerateSpeech round-trip that hung on iOS.
-  // onDone fires when the voice finishes; a timer fallback covers the web iOS
-  // WKWebView case where the completion event occasionally never fires.
-  const speakMaleVoice = (text, onDone) => {
-    try { stopToolSpeech(); } catch {}
-    let done = false;
-    const finish = () => { if (done) return; done = true; onDone?.(); };
-    const estMs = Math.max(3000, text.length * 180 + 800);
-    const timer = setTimeout(finish, estMs);
-    speakToolText(text, { role: 'male', rate: 0.65, pitch: 0.1 }).then((result) => {
-      clearTimeout(timer);
-      if (result === 'cancelled') return; // stopped/superseded — never restart a stopped session
-      finish();
-    });
+  // Announce the locked phrase with the bell code instead of a second voice.
+  // The phrase has already finished speaking, so nothing is stopped or
+  // switched — the rings simply occupy the gap before the next asking phase.
+  // playCue resolves when the rings have finished, and routes them into the
+  // session recording as well.
+  const playLockedCue = (rings, onDone) => {
+    playCue(CUE_BELL, { rings }).then(() => onDone?.());
   };
 
   const stepRef = useRef(null);
@@ -142,6 +138,9 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
   const sweepingRef = useRef(false);
+  // True only while a session is running — a bell that finishes after the user
+  // tapped Stop must not restart the asking phase.
+  const sessionActiveRef = useRef(false);
   const resumeDelayRef = useRef(null);
   const anomalyDetectedRef = useRef(false);
   const motionDetectedRef = useRef(false);
@@ -152,6 +151,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   useEffect(() => () => stopEverything(), []);
 
   const stopEverything = () => {
+    sessionActiveRef.current = false;
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -241,13 +241,13 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     setCaptured(prev => { const updated = [...prev, phrase.display]; capturedRef.current = updated; return updated; });
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     sweepingRef.current = false;
-    // Speak the locked phrase in a deep male voice via the shared Tool speech
-    // adapter (same reliable mechanism as the Term Sweeper). The lock releases
-    // and the asking phase restarts when the voice finishes (onDone), with a
-    // timer fallback for the web iOS WKWebView case where the completion
-    // event never fires.
-    const speakMale = () => {
-      speakMaleVoice(phrase.speech, () => {
+    // The locked phrase finishes speaking first, then the bell code announces
+    // it, then the asking phase starts again. Letting the phrase finish is what
+    // removes the lag: the voice is never stopped, flushed, or switched.
+    const announce = () => {
+      if (!sessionActiveRef.current) return;
+      playLockedCue(phrase.rings, () => {
+        if (!sessionActiveRef.current) return; // session ended while ringing
         setLockedPhrase(null);
         lockedIdxRef.current = null;
         lockedRef.current = false;
@@ -256,10 +256,11 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
         startAskingPhase();
       });
     };
+    // A phrase in flight is allowed to finish; its release runs the queued cue.
     if (femaleBusyRef.current) {
-      pendingMaleRef.current = speakMale;
+      pendingMaleRef.current = announce;
     } else {
-      speakMale();
+      announce();
     }
   }, []);
 
@@ -465,8 +466,9 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     setPhase('running');
+    sessionActiveRef.current = true;
     // Unlock Web Audio inside the tap gesture so the later sensor-triggered
-    // spoken answer plays on iOS.
+    // bell cue plays on iOS.
     unlock();
     // Prime the speech engine within the user gesture so later calls from
     // timeouts work on web iOS (first speakNormal is 10s after this tap); on
@@ -487,6 +489,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   };
 
   const stopSession = () => {
+    sessionActiveRef.current = false;
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
@@ -570,9 +573,9 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
         <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
-            <li>Tap <span className="text-primary font-medium">Start</span>. "Asking Next Question…" appears for 10 seconds (no dictation) — THIS IS WHEN YOU ASK A QUESTION — then the phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> appear once, one every 4 seconds, each spoken aloud in voice 1, while the session records.</li>
-            <li>If no trigger occurs during the rotation, "Asking Next Question…" appears again for 10 seconds and the cycle repeats. If the device is triggered, voice 2 will repeat the word triggered. After a phrase is dictated by voice 2, a 5-second delay occurs before "Asking Next Question…" starts the cycle over.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and is spoken aloud in voice 2. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
+            <li>Tap <span className="text-primary font-medium">Start</span>. "Asking Next Question…" appears for 10 seconds (no dictation) — THIS IS WHEN YOU ASK A QUESTION — then the phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> appear once, one every 4 seconds, each spoken aloud in your device's narration voice, while the session records.</li>
+            <li>If no trigger occurs during the rotation, "Asking Next Question…" appears again for 10 seconds and the cycle repeats. If the device is triggered, the phrase on screen finishes speaking, then a bell announces the answer: <span className="text-foreground">1 ring = YES</span>, <span className="text-foreground">2 rings = NO</span>, <span className="text-foreground">3 rings = I DON'T KNOW</span>. The phrase stays lit on screen and in the recording.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and the bell rings the answer. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
           <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>

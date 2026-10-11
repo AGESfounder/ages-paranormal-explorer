@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { audioAcquire, audioRelease, getMusicSettings } from '@/lib/hauntedAudio';
 import { isNativeToolSpeech, getToolVoices, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+import { synthesizeCue } from '@/lib/toolCues';
 
 // Map a saved Device Voice Picker selection (localStorage
 // 'ages_device_voice_uri') to a toolSpeech adapter role for native playback.
@@ -637,5 +638,26 @@ export default function useGhostVoice() {
     } catch { return false; }
   }, []);
 
-  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop, unlock, attachMicToRecording };
+  // Play a Sweeper trigger cue (bell/gong/chime) through the same Web Audio
+  // context the Tools unlock on their Start tap, connected to the recording
+  // destination as well so the cue is captured in the saved evidence video. The
+  // speech engine is untouched — the cue sounds in the gap after the current
+  // item has finished speaking, which is why a trigger no longer restarts the
+  // voice. Resolves once the cue has finished sounding.
+  const playCue = useCallback(async (kind, opts = {}) => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state !== 'running') { try { await ctx.resume(); } catch {} }
+      if (ctx.state !== 'running') return;
+      const nodes = [ctx.destination];
+      if (recordDestRef.current) nodes.push(recordDestRef.current);
+      const ms = synthesizeCue(ctx, nodes, kind, opts);
+      if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms));
+    } catch {}
+  }, []);
+
+  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop, unlock, attachMicToRecording, playCue };
 }

@@ -7,9 +7,10 @@
 //   - iOS (native):     same plugin over AVSpeechSynthesizer.
 //   - Web:              the browser's window.speechSynthesis (previous path).
 //
-// Use the device's reported voice order, with no gender or locale search.
-// White/rotation words use voice 1; blue/trigger words use voice 2.
-// If only one voice exists, both roles use it with their different pitches.
+// Tools now speak in a single voice: callers pass the user's saved device
+// narration voiceURI (see deviceVoicePrefs.js) to address that exact voice.
+// The older 'female'/'male' role labels remain as a fallback (first two English
+// voices in device order) for callers that only pass a role.
 
 import { Capacitor } from '@capacitor/core';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
@@ -128,6 +129,20 @@ async function resolveRoleVoices() {
   return roleVoiceCache;
 }
 
+// The user's saved device-narration voice, addressed by its voiceURI. This is
+// what lets the Tools use the voice the user actually chose instead of one of
+// the two role slots. Native voices are addressed by their index into
+// getSupportedVoices(); web voices carry the SpeechSynthesisVoice object.
+async function resolveSavedVoice(voiceURI) {
+  if (!voiceURI) return null;
+  try {
+    const voices = await getToolVoices();
+    return voices.find((v) => v.voiceURI === voiceURI) || null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Speak / stop with a generation guard ───────────────────────────────────
 // `generation` bumps on every stopToolSpeech(). A speak promise that settles
 // after its generation was invalidated reports 'cancelled' — never 'ended' —
@@ -146,7 +161,10 @@ async function speakNative(text, opts, gen, settle) {
   try {
     const { male, female } = await resolveRoleVoices();
     if (gen !== generation) { settle('cancelled'); return; }
-    const voice = opts.role === 'male' ? male : female;
+    // A saved voiceURI addresses that exact voice; the role pair is the fallback.
+    const saved = await resolveSavedVoice(opts.voiceURI);
+    if (gen !== generation) { settle('cancelled'); return; }
+    const voice = saved || (opts.role === 'male' ? male : female);
     const speakOpts = {
       text,
       lang: voice?.lang || 'en-US',
@@ -171,7 +189,9 @@ async function speakWeb(text, opts, gen, settle) {
     const synth = window.speechSynthesis;
     const { male, female } = await resolveRoleVoices();
     if (gen !== generation) { settle('cancelled'); return; }
-    const voice = opts.role === 'male' ? male : female;
+    const saved = await resolveSavedVoice(opts.voiceURI);
+    if (gen !== generation) { settle('cancelled'); return; }
+    const voice = saved || (opts.role === 'male' ? male : female);
     const u = new SpeechSynthesisUtterance(text);
     u.lang = voice?.lang || 'en-US';
     u.rate = opts.rate;
@@ -190,9 +210,11 @@ async function speakWeb(text, opts, gen, settle) {
  * Speak text for a Tool.
  *
  * @param {string} text
- * @param {{ role?: 'female' | 'male', rate?: number, pitch?: number, volume?: number }} [opts]
- *   role selects voice 1 ('female', white/dictation) or voice 2 ('male',
- *   blue/trigger), in device order; callers set the high/low pitch.
+ * @param {{ voiceURI?: string | null, role?: 'female' | 'male', rate?: number, pitch?: number, volume?: number }} [opts]
+ *   voiceURI addresses the user's saved device narration voice directly (the
+ *   Sweeper tools pass it, via getDeviceVoiceOptions(), so every item is read
+ *   in the voice the user set up). role is the fallback when no voiceURI
+ *   matches: 'female' = first English voice in device order, 'male' = second.
  * @returns {Promise<'ended' | 'cancelled' | 'error'>} Always settles:
  *   'ended'     — speech finished naturally;
  *   'error'     — engine/playback failure (treat like 'ended' for flow);
