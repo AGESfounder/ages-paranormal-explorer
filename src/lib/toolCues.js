@@ -29,11 +29,17 @@ export const CUE_CHIME = 'chime';
 
 const BUS_GAIN = 0.95;
 
-const XYLO_NOTES = [1047, 1319, 1568, 2093, 2637]; // C6 · E6 · G6 · C7 · E7
-const XYLO_GAP = 0.24;     // seconds between notes — must stay countable
-const XYLO_DECAY = 0.4;
+const XYLO_NOTES = [2093, 2637, 3136, 4186, 5274]; // C7 · E7 · G7 · C8 · E8
+const XYLO_GAP = 0.32;     // seconds between notes — must stay countable
+const XYLO_DECAY = 1.0;
+const XYLO_FLOOR = 0.03;   // level (vs. peak) the note fades to — keeps the ring audible
 
-const CRASH_DECAY = 1.6;
+const CRASH_DECAY = 2.6;
+const CRASH_FLOOR = 0.03;  // a crash fades to this level, then trails off, instead of dying in a blink
+
+// Cymbal is run harder than the other cues: more drive into a near brick-wall
+// limiter raises the average loudness of the noise without letting it clip.
+const CRASH_DRIVE = 1.8;
 
 const CHIME_STEP = 0.17;
 const CHIME_DECAY = 0.5;
@@ -46,7 +52,12 @@ function connect(nodes, node) {
 // One struck tone: a sine fundamental plus partials, each with a short attack
 // and an exponential decay. Partial levels are absolute gains — the bright ones
 // are what make a cue cut through on a phone speaker.
-function strike(ctx, dest, { freq, gain, decay, attack = 0.004, at = 0, partials = [] }) {
+//
+// `floor` (optional) is the fraction of the peak the tone fades to over `decay`.
+// An exponential fade all the way to silence is mostly inaudible after the first
+// quarter of its length, so cues that must ring on fade only to `floor` and then
+// ease out. Omitted, the tone decays to silence as before.
+function strike(ctx, dest, { freq, gain, decay, attack = 0.004, at = 0, partials = [], floor }) {
   const start = ctx.currentTime + at;
 
   const voice = (f, g, d) => {
@@ -57,11 +68,12 @@ function strike(ctx, dest, { freq, gain, decay, attack = 0.004, at = 0, partials
     const env = ctx.createGain();
     env.gain.setValueAtTime(0, start);
     env.gain.linearRampToValueAtTime(g, start + attack);
-    env.gain.exponentialRampToValueAtTime(0.0001, start + d);
+    env.gain.exponentialRampToValueAtTime(floor ? g * floor : 0.0001, start + d);
+    if (floor) env.gain.linearRampToValueAtTime(0, start + d + 0.08);
     osc.connect(env);
     env.connect(dest);
     osc.start(start);
-    osc.stop(start + d + 0.05);
+    osc.stop(start + d + 0.12);
   };
 
   voice(freq, gain, decay);
@@ -71,9 +83,9 @@ function strike(ctx, dest, { freq, gain, decay, attack = 0.004, at = 0, partials
 // A burst of filtered white noise with a short attack and exponential decay.
 // `filter` is { type, freq, q } — highpass for the cymbal wash, bandpass for the
 // sizzle and the mallet click.
-function noiseBurst(ctx, dest, { gain, decay, attack = 0.002, at = 0, filter }) {
+function noiseBurst(ctx, dest, { gain, decay, attack = 0.002, at = 0, filter, floor }) {
   const start = ctx.currentTime + at;
-  const length = Math.max(1, Math.floor(ctx.sampleRate * (decay + 0.1)));
+  const length = Math.max(1, Math.floor(ctx.sampleRate * (decay + 0.2)));
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
@@ -89,13 +101,14 @@ function noiseBurst(ctx, dest, { gain, decay, attack = 0.002, at = 0, filter }) 
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, start);
   env.gain.linearRampToValueAtTime(gain, start + attack);
-  env.gain.exponentialRampToValueAtTime(0.0001, start + decay);
+  env.gain.exponentialRampToValueAtTime(floor ? gain * floor : 0.0001, start + decay);
+  if (floor) env.gain.linearRampToValueAtTime(0, start + decay + 0.08);
 
   src.connect(biquad);
   biquad.connect(env);
   env.connect(dest);
   src.start(start);
-  src.stop(start + decay + 0.05);
+  src.stop(start + decay + 0.12);
 }
 
 // Schedules a cue on the given context and returns how long it lasts in
@@ -106,17 +119,19 @@ export function synthesizeCue(ctx, nodes, kind, { rings = 1 } = {}) {
   if (!ctx || !dests.length) return 0;
 
   try {
+    const crash = kind === CUE_CYMBAL;
     const bus = ctx.createGain();
-    bus.gain.value = BUS_GAIN;
+    bus.gain.value = crash ? CRASH_DRIVE : BUS_GAIN;
     let out = bus;
 
     // Limiter: stacked notes/layers would otherwise sum past full scale and clip
-    // harshly on a small speaker. A single strike stays untouched.
+    // harshly on a small speaker. A single strike stays untouched. The crash
+    // runs a tighter, harder limiter so its extra drive reads as loudness.
     if (typeof ctx.createDynamicsCompressor === 'function') {
       const limiter = ctx.createDynamicsCompressor();
-      limiter.threshold.value = -2;
+      limiter.threshold.value = crash ? -1 : -2;
       limiter.knee.value = 0;
-      limiter.ratio.value = 8;
+      limiter.ratio.value = crash ? 20 : 8;
       limiter.attack.value = 0.002;
       limiter.release.value = 0.15;
       bus.connect(limiter);
@@ -129,17 +144,18 @@ export function synthesizeCue(ctx, nodes, kind, { rings = 1 } = {}) {
       // inharmonic metal partials. All of it lives between 2 and 8 kHz — the
       // range a phone speaker plays at full volume — so it is far louder on a
       // device than any low gong could be.
-      noiseBurst(ctx, bus, { gain: 0.8, decay: CRASH_DECAY, filter: { type: 'highpass', freq: 2800, q: 0.7 } });
-      noiseBurst(ctx, bus, { gain: 0.6, decay: 1.1, filter: { type: 'bandpass', freq: 4500, q: 0.9 } });
-      noiseBurst(ctx, bus, { gain: 0.5, decay: 0.8, filter: { type: 'bandpass', freq: 7000, q: 0.8 } });
+      noiseBurst(ctx, bus, { gain: 0.9, decay: CRASH_DECAY, floor: CRASH_FLOOR, filter: { type: 'highpass', freq: 2800, q: 0.7 } });
+      noiseBurst(ctx, bus, { gain: 0.7, decay: CRASH_DECAY * 0.75, floor: CRASH_FLOOR, filter: { type: 'bandpass', freq: 4500, q: 0.9 } });
+      noiseBurst(ctx, bus, { gain: 0.6, decay: CRASH_DECAY * 0.55, floor: CRASH_FLOOR, filter: { type: 'bandpass', freq: 7000, q: 0.8 } });
       strike(ctx, bus, {
         freq: 3150,
-        gain: 0.2,
-        decay: 1.2,
+        gain: 0.25,
+        decay: CRASH_DECAY * 0.85,
         attack: 0.002,
-        partials: [[1.35, 0.18, 0.9], [1.82, 0.16, 0.8], [2.4, 0.1, 0.7]],
+        floor: CRASH_FLOOR,
+        partials: [[1.35, 0.22, 0.9], [1.82, 0.2, 0.8], [2.4, 0.14, 0.7]],
       });
-      return Math.round((CRASH_DECAY + 0.15) * 1000);
+      return Math.round((CRASH_DECAY + 0.2) * 1000);
     }
 
     if (kind === CUE_CHIME) {
@@ -161,11 +177,12 @@ export function synthesizeCue(ctx, nodes, kind, { rings = 1 } = {}) {
         decay: XYLO_DECAY,
         attack: 0.002,
         at,
-        partials: [[3.0, 0.42, 0.35], [6.1, 0.1, 0.12]],
+        floor: XYLO_FLOOR,
+        partials: [[2.0, 0.3, 0.6], [3.0, 0.3, 0.35]],
       });
       noiseBurst(ctx, bus, { gain: 0.3, decay: 0.025, attack: 0.001, at, filter: { type: 'bandpass', freq: 3500, q: 1 } });
     }
-    return Math.round(((count - 1) * XYLO_GAP + XYLO_DECAY + 0.15) * 1000);
+    return Math.round(((count - 1) * XYLO_GAP + XYLO_DECAY + 0.2) * 1000);
   } catch {
     return 0;
   }
