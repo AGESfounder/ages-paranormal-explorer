@@ -18,9 +18,10 @@ import { toast } from '@/components/ui/use-toast';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 // Phonetic spellings so TTS pronounces each letter as a clear letter name
-// (e.g. "A" → "ay", not "uh") in the device narration voice.
+// (e.g. "B" → "bee") in the device narration voice. A stays the plain letter:
+// written as "ay" most voices read it as "I", which corrupts the sweep.
 const LETTER_TEXT = {
-  A: 'ay', B: 'bee', C: 'see', D: 'dee', E: 'ee', F: 'eff', G: 'jee',
+  A: 'A', B: 'bee', C: 'see', D: 'dee', E: 'ee', F: 'eff', G: 'jee',
   H: 'aitch', I: 'eye', J: 'jay', K: 'kay', L: 'ell', M: 'em', N: 'en',
   O: 'oh', P: 'pee', Q: 'cue', R: 'are', S: 'ess', T: 'tee', U: 'you',
   V: 'vee', W: 'double you', X: 'eks', Y: 'why', Z: 'zee',

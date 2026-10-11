@@ -650,15 +650,16 @@ export default function useGhostVoice() {
         audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
       }
       const ctx = audioCtxRef.current;
-      // iOS can leave the context suspended once the mic opens, and the recorder
-      // heartbeat only resumes it every 3s — so retry briefly here rather than
-      // let a trigger pass silently.
+      // iOS can leave the context suspended once the mic opens, and resume() can
+      // hang forever when the audio session is interrupted. The wait is bounded
+      // on purpose: the Sweeper tools release their trigger lock when the cue
+      // reports completion, so a cue that never settled would leave the tool
+      // locked with nothing speaking.
       if (ctx.state !== 'running') {
-        try { await ctx.resume(); } catch {}
-        if (ctx.state !== 'running') {
-          await new Promise((resolve) => setTimeout(resolve, 120));
-          try { await ctx.resume(); } catch {}
-        }
+        await Promise.race([
+          (async () => { try { await ctx.resume(); } catch {} })(),
+          new Promise((resolve) => setTimeout(resolve, 250)),
+        ]);
         if (ctx.state !== 'running') return;
       }
       const nodes = [ctx.destination];

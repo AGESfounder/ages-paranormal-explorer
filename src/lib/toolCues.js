@@ -27,7 +27,7 @@ export const CUE_CHIME = 'chime';
 
 const BUS_GAIN = 0.95;
 const RING_GAP = 0.6;      // seconds between bell rings — must stay countable
-const BELL_DECAY = 0.8;
+const BELL_DECAY = 0.6;
 const GONG_DECAY = 1.8;
 const CHIME_STEP = 0.17;
 const CHIME_DECAY = 0.5;
@@ -109,16 +109,18 @@ export function synthesizeCue(ctx, nodes, kind, { rings = 1 } = {}) {
       return Math.round(((CHIME_NOTES.length - 1) * CHIME_STEP + CHIME_DECAY + 0.1) * 1000);
     }
 
-    // bell — one full ring per answer, loudest of the three
+    // bell — one ring per answer, voiced like the counter bell you press to get
+    // someone's attention: a bright, high strike with a crisp metallic ring and
+    // a short tail, so one, two, and three rings stay countable by ear.
     const count = Math.max(1, Math.min(5, Math.round(rings) || 1));
     for (let i = 0; i < count; i++) {
       strike(ctx, bus, {
-        freq: 988,
-        gain: 0.62,
+        freq: 1318,
+        gain: 0.6,
         decay: BELL_DECAY,
-        attack: 0.003,
+        attack: 0.002,
         at: i * RING_GAP,
-        partials: [[1.5, 0.16, 0.9], [2.76, 0.2, 0.75], [5.4, 0.07, 0.4]],
+        partials: [[1.5, 0.1, 0.85], [2.0, 0.22, 0.7], [2.76, 0.16, 0.5]],
       });
     }
     return Math.round(((count - 1) * RING_GAP + BELL_DECAY + 0.15) * 1000);
