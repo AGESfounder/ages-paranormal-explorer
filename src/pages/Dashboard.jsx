@@ -58,7 +58,7 @@ const PLAN_HIGHLIGHTS = {
   technician: 'MORE TOOL ACCESS!',
   explorer: 'ENHANCED NARRATION + TOUR CREATION!',
   investigator: 'FULL TOOLKIT ACCESS + INCREASED ENERGY!',
-  trailblazer: 'EXCLUSIVE 30-MONTH ACCESS... MOST BANG FOR YOUR BUCK!',
+  trailblazer: 'EXCLUSIVE 27-MONTH ACCESS... MOST BANG FOR YOUR BUCK!',
 };
 
 // Per-tier label colors — a medal ladder for the paid tiers.
@@ -703,7 +703,7 @@ export default function Dashboard() {
                     ) : isTrailblazer ? (
                       <>
                         <span className="font-display text-2xl text-amber-400">${plan.one_time_price}</span>
-                        <span className="text-xs text-muted-foreground">one-time / 30 months</span>
+                        <span className="text-xs text-muted-foreground">one-time / 27 months</span>
                       </>
                     ) : (
                       <>
@@ -774,7 +774,7 @@ export default function Dashboard() {
             <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
               <Gift className="w-4 h-4 text-amber-400" /> Aura Bundles
             </h3>
-            <p className="text-xs text-muted-foreground mb-3">Top-up energy that rolls over to the next month. 80% Narration + 20% Manifestation.</p>
+            <p className="text-xs text-muted-foreground mb-3">Top-up energy that rolls over to the next month. 90% Narration + 10% Manifestation.</p>
             <div className="grid grid-cols-2 gap-2.5">
               {Object.values(AURA_BUNDLES).map(bundle => (
                 <div key={bundle.id} className="p-3 rounded-xl border border-border/40 bg-card/30">
