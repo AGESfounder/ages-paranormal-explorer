@@ -15,7 +15,7 @@ import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
 import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
-import { CUE_GONG } from '@/lib/toolCues';
+import { CUE_CYMBAL } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
@@ -184,7 +184,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   // when the gong has finished sounding, and routes it into the session
   // recording as well.
   const playLockedCue = (onDone) => {
-    playCue(CUE_GONG).then(() => onDone?.());
+    playCue(CUE_CYMBAL).then(() => onDone?.());
   };
 
   const stopNormalVoice = () => {
@@ -750,8 +750,8 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Build Terms</span> — if you're on a tour stop, AGES extracts terms from that stop's history (names, nouns, verbs, phrases, time words); otherwise it gathers words tied to your area's history & hauntings.</li>
             <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 3 seconds each, each spoken aloud in your device's narration voice; the session records.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright, the word finishes speaking, and a gong announces it. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
-            <li>After each word is locked and the gong sounds, the scan resumes automatically with a new random word every 3 seconds.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright, the word finishes speaking, and a cymbal crash announces it. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
+            <li>After each word is locked and the cymbal crashes, the scan resumes automatically with a new random word every 3 seconds.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
           <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>

@@ -10,36 +10,42 @@
 // saved evidence recording.
 //
 // Tuned for a PHONE SPEAKER, which is the only way these are ever heard on a
-// real session: every component sits in the mid/upper band a small speaker can
-// actually reproduce (a true ~130 Hz gong is inaudible there — it simply does
-// not move the driver), the bus runs hot so a trigger is unmistakable, and a
-// limiter keeps stacked rings clean instead of clipping harshly.
+// real session: everything sits in the 1-8 kHz band a small speaker reproduces
+// loudest (and the ear is most sensitive to). Low tones such as a true gong
+// barely move a phone driver, so loud cues are bright and percussive instead.
+// The bus runs hot so a trigger is unmistakable, and a limiter keeps stacked
+// layers clean instead of clipping harshly.
 //
 // Cue code:
-//   bell  — Yes/No/IDK Sweeper: 1 ring = YES, 2 rings = NO, 3 rings = I DON'T
-//           KNOW. Rings are deliberately spaced so they stay countable by ear.
-//   gong  — Term Sweeper: any triggered term.
-//   chime — Alphabet Sweeper: any triggered letter.
+//   xylophone — Yes/No/IDK Sweeper: 1 note = YES, 2 notes = NO, 3 notes = I DON'T
+//               KNOW. Notes climb the scale and are spaced so they stay
+//               countable by ear.
+//   cymbal    — Term Sweeper: any triggered term (a full crash).
+//   chime     — Alphabet Sweeper: any triggered letter.
 
-export const CUE_BELL = 'bell';
-export const CUE_GONG = 'gong';
+export const CUE_XYLOPHONE = 'xylophone';
+export const CUE_CYMBAL = 'cymbal';
 export const CUE_CHIME = 'chime';
 
 const BUS_GAIN = 0.95;
-const RING_GAP = 0.6;      // seconds between bell rings — must stay countable
-const BELL_DECAY = 0.6;
-const GONG_DECAY = 1.8;
+
+const XYLO_NOTES = [1047, 1319, 1568, 2093, 2637]; // C6 · E6 · G6 · C7 · E7
+const XYLO_GAP = 0.24;     // seconds between notes — must stay countable
+const XYLO_DECAY = 0.4;
+
+const CRASH_DECAY = 1.6;
+
 const CHIME_STEP = 0.17;
 const CHIME_DECAY = 0.5;
 const CHIME_NOTES = [1568, 2094, 2637]; // G6 · C7 · E7
 
-function connect(ctx, nodes, node) {
+function connect(nodes, node) {
   nodes.forEach((dest) => { try { node.connect(dest); } catch {} });
 }
 
-// One struck tone: a sine fundamental plus inharmonic partials, each with a
-// short attack and an exponential decay. Partial levels are absolute gains — the
-// bright ones are what make a cue cut through on a phone speaker.
+// One struck tone: a sine fundamental plus partials, each with a short attack
+// and an exponential decay. Partial levels are absolute gains — the bright ones
+// are what make a cue cut through on a phone speaker.
 function strike(ctx, dest, { freq, gain, decay, attack = 0.004, at = 0, partials = [] }) {
   const start = ctx.currentTime + at;
 
@@ -62,6 +68,36 @@ function strike(ctx, dest, { freq, gain, decay, attack = 0.004, at = 0, partials
   partials.forEach(([mult, g, decayFactor]) => voice(freq * mult, g, decay * decayFactor));
 }
 
+// A burst of filtered white noise with a short attack and exponential decay.
+// `filter` is { type, freq, q } — highpass for the cymbal wash, bandpass for the
+// sizzle and the mallet click.
+function noiseBurst(ctx, dest, { gain, decay, attack = 0.002, at = 0, filter }) {
+  const start = ctx.currentTime + at;
+  const length = Math.max(1, Math.floor(ctx.sampleRate * (decay + 0.1)));
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+
+  const biquad = ctx.createBiquadFilter();
+  biquad.type = filter.type;
+  biquad.frequency.value = filter.freq;
+  biquad.Q.value = filter.q ?? 0.7;
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, start);
+  env.gain.linearRampToValueAtTime(gain, start + attack);
+  env.gain.exponentialRampToValueAtTime(0.0001, start + decay);
+
+  src.connect(biquad);
+  biquad.connect(env);
+  env.connect(dest);
+  src.start(start);
+  src.stop(start + decay + 0.05);
+}
+
 // Schedules a cue on the given context and returns how long it lasts in
 // milliseconds, so callers can resume the rotation when it has finished.
 // Never throws — a cue that cannot play must not break a running session.
@@ -74,7 +110,7 @@ export function synthesizeCue(ctx, nodes, kind, { rings = 1 } = {}) {
     bus.gain.value = BUS_GAIN;
     let out = bus;
 
-    // Limiter: stacked rings/notes would otherwise sum past full scale and clip
+    // Limiter: stacked notes/layers would otherwise sum past full scale and clip
     // harshly on a small speaker. A single strike stays untouched.
     if (typeof ctx.createDynamicsCompressor === 'function') {
       const limiter = ctx.createDynamicsCompressor();
@@ -86,20 +122,24 @@ export function synthesizeCue(ctx, nodes, kind, { rings = 1 } = {}) {
       bus.connect(limiter);
       out = limiter;
     }
-    connect(ctx, dests, out);
+    connect(dests, out);
 
-    if (kind === CUE_GONG) {
-      // Gong character held in the mid band (C4 fundamental with inharmonic
-      // partials): the slow swell and the long metallic tail read as a gong
-      // while every partial stays inside what a phone speaker reproduces.
+    if (kind === CUE_CYMBAL) {
+      // Cymbal crash: a long bright noise wash, two bands of sizzle, and a few
+      // inharmonic metal partials. All of it lives between 2 and 8 kHz — the
+      // range a phone speaker plays at full volume — so it is far louder on a
+      // device than any low gong could be.
+      noiseBurst(ctx, bus, { gain: 0.8, decay: CRASH_DECAY, filter: { type: 'highpass', freq: 2800, q: 0.7 } });
+      noiseBurst(ctx, bus, { gain: 0.6, decay: 1.1, filter: { type: 'bandpass', freq: 4500, q: 0.9 } });
+      noiseBurst(ctx, bus, { gain: 0.5, decay: 0.8, filter: { type: 'bandpass', freq: 7000, q: 0.8 } });
       strike(ctx, bus, {
-        freq: 262,
-        gain: 0.55,
-        decay: GONG_DECAY,
-        attack: 0.03,
-        partials: [[1.5, 0.3, 0.85], [2.2, 0.22, 0.65], [3.4, 0.14, 0.5], [5.1, 0.08, 0.3]],
+        freq: 3150,
+        gain: 0.2,
+        decay: 1.2,
+        attack: 0.002,
+        partials: [[1.35, 0.18, 0.9], [1.82, 0.16, 0.8], [2.4, 0.1, 0.7]],
       });
-      return Math.round((GONG_DECAY + 0.15) * 1000);
+      return Math.round((CRASH_DECAY + 0.15) * 1000);
     }
 
     if (kind === CUE_CHIME) {
@@ -109,21 +149,23 @@ export function synthesizeCue(ctx, nodes, kind, { rings = 1 } = {}) {
       return Math.round(((CHIME_NOTES.length - 1) * CHIME_STEP + CHIME_DECAY + 0.1) * 1000);
     }
 
-    // bell — one ring per answer, voiced like the counter bell you press to get
-    // someone's attention: a bright, high strike with a crisp metallic ring and
-    // a short tail, so one, two, and three rings stay countable by ear.
-    const count = Math.max(1, Math.min(5, Math.round(rings) || 1));
+    // xylophone — one wooden mallet note per count, climbing the scale. Each
+    // note is a bright, quick-dying tone with the 3x overtone that gives a
+    // xylophone bar its "tock", plus a tiny noise click for the mallet hit.
+    const count = Math.max(1, Math.min(XYLO_NOTES.length, Math.round(rings) || 1));
     for (let i = 0; i < count; i++) {
+      const at = i * XYLO_GAP;
       strike(ctx, bus, {
-        freq: 1318,
-        gain: 0.6,
-        decay: BELL_DECAY,
+        freq: XYLO_NOTES[i],
+        gain: 0.75,
+        decay: XYLO_DECAY,
         attack: 0.002,
-        at: i * RING_GAP,
-        partials: [[1.5, 0.1, 0.85], [2.0, 0.22, 0.7], [2.76, 0.16, 0.5]],
+        at,
+        partials: [[3.0, 0.42, 0.35], [6.1, 0.1, 0.12]],
       });
+      noiseBurst(ctx, bus, { gain: 0.3, decay: 0.025, attack: 0.001, at, filter: { type: 'bandpass', freq: 3500, q: 1 } });
     }
-    return Math.round(((count - 1) * RING_GAP + BELL_DECAY + 0.15) * 1000);
+    return Math.round(((count - 1) * XYLO_GAP + XYLO_DECAY + 0.15) * 1000);
   } catch {
     return 0;
   }

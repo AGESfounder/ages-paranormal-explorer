@@ -12,14 +12,14 @@ import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
 import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
-import { CUE_BELL } from '@/lib/toolCues';
+import { CUE_XYLOPHONE } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import { toast } from '@/components/ui/use-toast';
 
 // "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
 // appear once in rotation (4 sec each). If no trigger, the asking phase repeats.
 // A trigger locks the current phrase, lets it finish speaking, then announces it
-// with the bell code — 1 ring YES, 2 rings NO, 3 rings I DON'T KNOW — before the
+// with xylophone notes — 1 note YES, 2 notes NO, 3 notes I DON'T KNOW — before the
 // asking phase starts again.
 const PHRASES = [
   { display: 'YES', speech: 'Yes', rings: 1 },
@@ -100,7 +100,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   // playCue resolves when the rings have finished, and routes them into the
   // session recording as well.
   const playLockedCue = (rings, onDone) => {
-    playCue(CUE_BELL, { rings }).then(() => onDone?.());
+    playCue(CUE_XYLOPHONE, { rings }).then(() => onDone?.());
   };
 
   const stepRef = useRef(null);
@@ -574,8 +574,8 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Start</span>. "Asking Next Question…" appears for 10 seconds (no dictation) — THIS IS WHEN YOU ASK A QUESTION — then the phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> appear once, one every 4 seconds, each spoken aloud in your device's narration voice, while the session records.</li>
-            <li>If no trigger occurs during the rotation, "Asking Next Question…" appears again for 10 seconds and the cycle repeats. If the device is triggered, the phrase on screen finishes speaking, then a bell announces the answer: <span className="text-foreground">1 ring = YES</span>, <span className="text-foreground">2 rings = NO</span>, <span className="text-foreground">3 rings = I DON'T KNOW</span>. The phrase stays lit on screen and in the recording.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and the bell rings the answer. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
+            <li>If no trigger occurs during the rotation, "Asking Next Question…" appears again for 10 seconds and the cycle repeats. If the device is triggered, the phrase on screen finishes speaking, then xylophone notes announce the answer: <span className="text-foreground">1 note = YES</span>, <span className="text-foreground">2 notes = NO</span>, <span className="text-foreground">3 notes = I DON'T KNOW</span>. The phrase stays lit on screen and in the recording.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and the xylophone plays the answer. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
           <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>
