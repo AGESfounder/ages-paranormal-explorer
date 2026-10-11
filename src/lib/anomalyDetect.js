@@ -2,11 +2,11 @@
 // Yes/No/IDK, Alphabet, and Term Sweepers' camera triggers. Detects
 // humanoid-shaped skin-tone regions in a frame and returns bounding boxes.
 //
-// Sensitivity levels (1–4) adjust detection strictness for different lighting:
-//   1 = Daylight (least sensitive — bright/outdoor use)
-//   2 = Indoor
-//   3 = Dim
-//   4 = Dark   (most sensitive — night investigations; the original default)
+// Brightness scale (shared with useSensitivity): 0 = bright Daylight, 100 =
+// complete darkness. The five original presets are anchored at marks along that
+// scale — 0 Daylight, 25 Indoor, 50 Dim, 75 Dark (the original default), 100
+// Torch — and any value between the marks interpolates between them. Sitting
+// exactly on a mark therefore reproduces the previous behaviour unchanged.
 
 export const JOINT_CONNECTIONS = [
   [0, 1], [1, 2], [2, 3],
@@ -32,13 +32,47 @@ const PRESETS = {
   2: { skinThreshold: 1250, minBoxH: 50, minBoxW: 28, minR: 85, minG: 55, minB: 32, rMinusB: 38, rMinusG: 30, maxR: 242, maxG: 215 },
   3: { skinThreshold: 550,  minBoxH: 32, minBoxW: 18, minR: 38, minG: 24, minB: 15, rMinusB: 16, rMinusG: 12, maxR: 250, maxG: 235 },
   4: { skinThreshold: 150, minBoxH: 15, minBoxW: 8,  minR: 12, minG: 8,  minB: 5,  rMinusB: 2,  rMinusG: 0,  maxR: 255, maxG: 245 },
-  // Level 5 (Torch): torch illuminates the scene like daylight, so reuse
-  // the Daylight preset (least sensitive — avoids false positives from glare).
+  // Level 5 (Torch): the torch lights the scene like daylight but with glare,
+  // so it is tuned mid-way between Indoor and Dim rather than at the dark end.
   5: { skinThreshold: 800, minBoxH: 40, minBoxW: 22, minR: 80, minG: 50, minB: 30, rMinusB: 25, rMinusG: 18, maxR: 245, maxG: 220 },
 };
 
-export function detectFigures(imageData, width, height, sensitivity = 4) {
-  const p = PRESETS[sensitivity] || PRESETS[4];
+// Marks on the brightness scale, in the same Daylight → Torch order as the
+// presets above. Exported so the shared setting and its buttons are built from
+// one list rather than repeating the numbers.
+export const BRIGHTNESS_MARKS = [0, 25, 50, 75, 100];
+export const DEFAULT_BRIGHTNESS = 75; // the Dark mark — the original default
+
+const ANCHORS = BRIGHTNESS_MARKS.map((mark, i) => ({ mark, preset: PRESETS[i + 1] }));
+
+// Detector tuning for any point on the scale, interpolating between the two
+// marks it sits between. Memoized on the last value because the detection loop
+// calls this on every frame.
+let lastBrightness = null;
+let lastPreset = null;
+
+function resolvePreset(brightness) {
+  const v = Math.max(0, Math.min(100, Number(brightness)));
+  if (!Number.isFinite(v)) return PRESETS[4];
+  if (v === lastBrightness) return lastPreset;
+  let lo = ANCHORS[0];
+  let hi = ANCHORS[ANCHORS.length - 1];
+  for (const a of ANCHORS) {
+    if (a.mark <= v) lo = a;
+    if (a.mark >= v) { hi = a; break; }
+  }
+  const t = hi.mark === lo.mark ? 0 : (v - lo.mark) / (hi.mark - lo.mark);
+  const preset = {};
+  for (const key of Object.keys(lo.preset)) {
+    preset[key] = lo.preset[key] + (hi.preset[key] - lo.preset[key]) * t;
+  }
+  lastBrightness = v;
+  lastPreset = preset;
+  return preset;
+}
+
+export function detectFigures(imageData, width, height, brightness = DEFAULT_BRIGHTNESS) {
+  const p = resolvePreset(brightness);
   const isSkin = (r, g, b) =>
     r > p.minR && g > p.minG && b > p.minB && r >= g && r > b &&
     (r - b) > p.rMinusB && (r - g) > p.rMinusG && r < p.maxR && g < p.maxG;

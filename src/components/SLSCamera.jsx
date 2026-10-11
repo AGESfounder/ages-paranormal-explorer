@@ -5,7 +5,7 @@ import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import { detectFigures } from '@/lib/anomalyDetect';
-import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
+import useSensitivity, { isTorchActive } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import { toast } from '@/components/ui/use-toast';
@@ -70,7 +70,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       await videoRef.current.play();
 
       // Torch mode: turn on the phone's torch for the duration of the session.
-      if (sensitivityRef.current === TORCH_LEVEL) {
+      if (isTorchActive(sensitivityRef.current)) {
         const ok = await enableTorch(stream);
         if (!ok) setError('Torch not supported on this device — using Dark mode detection instead.');
       }

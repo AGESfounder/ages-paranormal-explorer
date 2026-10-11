@@ -8,7 +8,7 @@ import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import useGhostVoice from '../hooks/useGhostVoice';
 import { detectFigures } from '@/lib/anomalyDetect';
-import useSensitivity, { TORCH_LEVEL } from '../hooks/useSensitivity';
+import useSensitivity, { isTorchActive } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
@@ -508,7 +508,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       setCameraActive(true);
       // Torch mode: turn on the phone's torch so the light is captured in the
       // recording.
-      if (sensitivityRef.current === TORCH_LEVEL) {
+      if (isTorchActive(sensitivityRef.current)) {
         const ok = await enableTorch(stream);
         if (!ok) setSensorError(prev => (prev ? prev + ' ' : '') + 'Torch not supported on this device — anomaly trigger still works without it.');
       }
