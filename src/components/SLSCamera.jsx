@@ -167,6 +167,30 @@ export default function SLSCamera({ gateSave, refundSave }) {
     for (let x = 0; x < w; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
     for (let y = 0; y < h; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
 
+    // Bright blue outline tracing the edge of each detected shape. Every lit
+    // pixel is drawn as a 4x4 block on a 4px grid, so a side is an outline edge
+    // when the neighbouring grid block is not part of the shape. Stroked twice —
+    // a wide soft halo under a solid bright line — so the outline stays visible
+    // against the dim IR image. Drawn on the canvas, so it records too.
+    figures.forEach(({ pixels }) => {
+      if (!pixels || !pixels.size) return;
+      ctx.beginPath();
+      for (const vi of pixels) {
+        const cx = vi % w;
+        const cy = Math.floor(vi / w);
+        if (cx + 4 >= w || !pixels.has(vi + 4)) { ctx.moveTo(cx + 4, cy); ctx.lineTo(cx + 4, cy + 4); }
+        if (cx - 4 < 0 || !pixels.has(vi - 4)) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + 4); }
+        if (cy - 4 < 0 || !pixels.has(vi - 4 * w)) { ctx.moveTo(cx, cy); ctx.lineTo(cx + 4, cy); }
+        if (cy + 4 >= h || !pixels.has(vi + 4 * w)) { ctx.moveTo(cx, cy + 4); ctx.lineTo(cx + 4, cy + 4); }
+      }
+      ctx.strokeStyle = 'rgba(51, 224, 255, 0.28)';
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ctx.strokeStyle = '#33e0ff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    });
+
     setFigureCount(figures.length);
     if (figures.length > 0 && !anomalyDetected) {
       setAnomalyDetected(true);
