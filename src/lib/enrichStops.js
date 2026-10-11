@@ -182,7 +182,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
 // Turn a batch result into TourStop updates. Mirrors the post-processing the
 // single-stop path applies: conclusion scrub on both text fields, people
 // filter, and a fresh investigation-time estimate.
-function updatesFromContent(stop, content, mode) {
+export function updatesFromContent(stop, content, mode) {
   const updates = {};
   if (mode === 'full') {
     if (content.historical_info) updates.historical_info = stripConclusionOpeners(content.historical_info, false);

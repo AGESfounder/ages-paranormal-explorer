@@ -14,6 +14,7 @@ import { computeDurationRange } from '@/lib/narrationLength';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
 import TesterResetToggle from '@/components/admin/TesterResetToggle';
+import ContentCompareTab from '@/components/admin/ContentCompareTab';
 
 export default function Admin() {
   const [user, setUser] = useState(null);
@@ -112,9 +113,10 @@ export default function Admin() {
       <SectionHeader title="Admin Panel" showBack />
       <div className="px-4 pb-28 pt-3">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-4">
-          <TabsList className="grid grid-cols-2 w-full">
+          <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="tours">Tours</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="compare">Quality Test</TabsTrigger>
           </TabsList>
         </Tabs>
         {activeTab === 'users' ? (
@@ -122,6 +124,8 @@ export default function Admin() {
             <TesterResetToggle />
             <AdminUsersTab />
           </>
+        ) : activeTab === 'compare' ? (
+          <ContentCompareTab />
         ) : (
           <>
           <div className="relative mb-4">
