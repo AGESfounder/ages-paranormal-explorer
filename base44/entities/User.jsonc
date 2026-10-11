@@ -35,7 +35,7 @@
         "trailblazer"
       ],
       "default": "observer",
-      "description": "Current access level. observer = free, seeker = ad-free basic, technician = ad-free + 10 tools + aura save, explorer = standard (narration + generation), investigator = premium (full toolkit + more energy), trailblazer = 30-month elite"
+      "description": "Current access level. observer = free, seeker = ad-free basic, technician = ad-free + 10 tools + aura save, explorer = standard (narration + generation), investigator = premium (full toolkit + more energy), trailblazer = 27-month elite"
     },
     "manifestation_energy": {
       "type": "number",
@@ -55,12 +55,12 @@
     "aura_manifestation_energy": {
       "type": "number",
       "default": 0,
-      "description": "Rollover Manifestation Energy from Aura Bundle purchases (Explorer/Investigator/Trailblazer 20% share). Does not reset monthly. Can be spent on evidence saves after the daily free limit."
+      "description": "Rollover Manifestation Energy from Aura Bundle purchases (Explorer/Investigator/Trailblazer 10% share). Does not reset monthly. Can be spent on evidence saves after the daily free limit."
     },
     "aura_narration_energy": {
       "type": "number",
       "default": 0,
-      "description": "Rollover Narration Energy from Aura Bundle purchases (Explorer/Investigator/Trailblazer 80% share). Does not reset monthly. Can be spent on evidence saves after the daily free limit."
+      "description": "Rollover Narration Energy from Aura Bundle purchases (Explorer/Investigator/Trailblazer 90% share). Does not reset monthly. Can be spent on evidence saves after the daily free limit."
     },
     "aura_save_energy": {
       "type": "number",
@@ -103,7 +103,7 @@
     "plan_expiration_date": {
       "type": "string",
       "format": "date-time",
-      "description": "When the current plan expires. For Trailblazer (30-month), this is 30 months from purchase. For subscriptions, updated on renewal."
+      "description": "When the current plan expires. For Trailblazer (27-month), this is 27 months from purchase. For subscriptions, updated on renewal."
     },
     "ad_rewards_count": {
       "type": "number",
@@ -118,7 +118,7 @@
     "google_trailblazer_expiration_date": {
       "type": "string",
       "format": "date-time",
-      "description": "Isolated Google Play Trailblazer expiry (purchase_date + 30 calendar months). Independent of Apple/Wix plan_expiration_date."
+      "description": "Isolated Google Play Trailblazer expiry (purchase_date + 27 calendar months). Independent of Apple/Wix plan_expiration_date."
     },
     "google_trailblazer_manifestation_energy": {
       "type": "number",

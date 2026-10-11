@@ -1,8 +1,8 @@
 // Apple App Store Trailblazer one-time purchase (RevenueCat webhook).
-// Non-renewing 30-month product bought only on native iOS. The grant mirrors
+// Non-renewing 27-month product bought only on native iOS. The grant mirrors
 // the Wix payments-webhook Trailblazer path on the EXISTING generic
 // entitlement fields: plan 'trailblazer', plan_expiration_date = purchase +
-// 30 calendar months UTC, energy pools, subscription_status 'none'. Android
+// 27 calendar months UTC, energy pools, subscription_status 'none'. Android
 // keeps the isolated google_trailblazer_* flow.
 import { PLANS, getNextResetDate } from './plans.js';
 import {
@@ -304,7 +304,7 @@ export async function handleAppleTrailblazerEvent(base44: any, event: any) {
   const purchasedAtMs = event.purchased_at_ms || event.event_timestamp_ms || Date.now();
   let expiration: Date;
   try {
-    // purchase timestamp + 30 calendar months (UTC) — same window as Wix/Play.
+    // purchase timestamp + 27 calendar months (UTC) — same window as Wix/Play.
     expiration = computeGoogleTrailblazerExpiration(purchasedAtMs);
   } catch (e) {
     console.error('Apple Trailblazer expiry calculation failed:', (e as Error).message);

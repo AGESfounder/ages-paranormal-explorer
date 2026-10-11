@@ -213,9 +213,9 @@ window.dispatchEvent(new CustomEvent('ad-reward-granted'));`} />
           <CodeBlock label="grant-ad-reward/entry.ts — what it does" code={`// - Reads the authenticated user via base44.auth.me()
 // - Only paid users (or admins) can earn rewards (403 otherwise)
 // - Enforces a 5/day cap using ad_rewards_count + ad_rewards_date
-// - Grants 10 energy to the aura (rollover) pool:
-//     80% narration  → aura_narration_energy  (+8)
-//     20% manifestation → aura_manifestation_energy (+2)
+// - Grants 5 energy to the aura (rollover) pool:
+//     80% narration  → aura_narration_energy  (+4)
+//     20% manifestation → aura_manifestation_energy (+1)
 // - Updates the User record as service role
 // - Returns { success, granted, remaining, aura_narration_energy, aura_manifestation_energy }`} />
           <Info>
@@ -223,7 +223,7 @@ window.dispatchEvent(new CustomEvent('ad-reward-granted'));`} />
             <code className="text-primary">base44/shared/adRewards.js</code> (backend) and{' '}
             <code className="text-primary">src/lib/adRewards.js</code> (frontend display copy):
           </Info>
-          <CodeBlock label="base44/shared/adRewards.js" code={`export const AD_REWARD_ENERGY = 10;        // energy per ad
+          <CodeBlock label="base44/shared/adRewards.js" code={`export const AD_REWARD_ENERGY = 5;         // energy per ad
 export const AD_REWARD_DAILY_LIMIT = 5;     // max ads/day
 export const AD_REWARD_NARRATION_PCT = 0.8; // 80% → narration
 export const AD_REWARD_MANIFESTATION_PCT = 0.2; // 20% → manifestation`} />
@@ -331,8 +331,8 @@ explorer_annual     $79.99/yr    →  plan: 'explorer'
 investigator_monthly $11.99/mo   →  plan: 'investigator'
 investigator_annual $119.99/yr   →  plan: 'investigator'
 
-// Non-consumable (one-time, 30-month access)
-trailblazer        $239.99       →  plan: 'trailblazer' (30 months)
+// Non-consumable (one-time, 27-month access)
+trailblazer        $239.99       →  plan: 'trailblazer' (27 months)
 
 // Consumable (energy bundles — buy repeatedly)
 flicker              $2.99       →  150 energy (aura)
@@ -366,7 +366,7 @@ await Purchases.configure({ apiKey: 'appl_XXXXX' }); // or 'goog_XXXXX'`} />
 // CANCELLATION (auto-renew off) → access continues until expiration
 // EXPIRATION → downgrades to observer, resets energy
 // CANCELLATION/EXPIRATION (CUSTOMER_SUPPORT) → refund, revokes access
-// NON_RENEWING_PURCHASE → Trailblazer (30-mo) or Aura Bundle consumables`} />
+// NON_RENEWING_PURCHASE → Trailblazer (27-mo) or Aura Bundle consumables`} />
         </Section>
 
         {/* ── File Reference ── */}

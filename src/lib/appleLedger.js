@@ -2,7 +2,7 @@
 // resolution.
 //
 // Why this exists: the generic User plan fields hold only one plan id at a
-// time. When a higher plan (e.g. Trailblazer 30-month) expires while an Apple
+// time. When a higher plan (e.g. Trailblazer 27-month) expires while an Apple
 // recurring subscription is still active, the webhook-written
 // RevenueCatPurchase ledger is the source of truth for the remaining
 // recurring entitlement. The backend already escalates with

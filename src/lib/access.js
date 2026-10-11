@@ -1,6 +1,6 @@
 // Client effective plan / paid-access helpers.
 // Mirrors base44/shared/access.js so gates honor Apple/Wix expiry and the
-// isolated Google Trailblazer 30-month grant. Source of truth for grants is
+// isolated Google Trailblazer 27-month grant. Source of truth for grants is
 // the Base44 user record (webhook-written); never grant from RevenueCat SDK.
 
 import { PLANS } from '@/lib/plans';

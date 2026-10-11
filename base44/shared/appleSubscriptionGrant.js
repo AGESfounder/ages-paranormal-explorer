@@ -2,7 +2,7 @@
 // Used by the RevenueCat Apple subscription webhook and focused tests.
 //
 // Generic User fields can only hold one plan string at a time. Apple/Wix
-// Trailblazer (30-month one-time) and Apple recurring subscriptions both use
+// Trailblazer (27-month one-time) and Apple recurring subscriptions both use
 // those fields. When a higher-rank plan is still active (typically
 // Trailblazer), a lower recurring grant must NOT clobber it — the
 // RevenueCatPurchase ledger remains the source of truth for the subscription
@@ -84,7 +84,7 @@ export function computeAppleSubscriptionGrantFields(user, plan, expirationIso, o
   const newRank = getPlanRank(plan && plan.id);
   const currentActive = isGenericPlanCurrentlyActive(user, now);
 
-  // ── Preserve active higher-rank entitlement (Trailblazer 30-month, etc.) ──
+  // ── Preserve active higher-rank entitlement (Trailblazer 27-month, etc.) ──
   // An active App Store subscription may coexist on the RevenueCatPurchase
   // ledger while the generic plan fields continue to show Trailblazer.
   // Do not shorten Trailblazer expiry, swap plan id, refill lower-tier energy,

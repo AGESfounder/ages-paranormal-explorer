@@ -65,7 +65,7 @@ function appleEventOwnsGenericPlan(user: any, event: any, row: any): boolean {
  * refill energy that was already granted for a newer period.
  *
  * When a higher-rank plan is still active on the generic fields (typically
- * an unexpired Trailblazer 30-month entitlement), the recurring grant does
+ * an unexpired Trailblazer 27-month entitlement), the recurring grant does
  * not clobber plan / expiration / monthly energy. The ledger row still
  * records the ACTIVE subscription, and subscription_status becomes
  * 'active' so the purchase is reflected under the higher plan.

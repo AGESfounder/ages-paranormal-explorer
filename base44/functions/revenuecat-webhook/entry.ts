@@ -271,7 +271,7 @@ export default async function (req: Request) {
       return await handleAppleAuraEvent(createBase44Client(req), event);
     }
 
-    // Apple App Store Trailblazer one-time purchase (30-month non-renewing
+    // Apple App Store Trailblazer one-time purchase (27-month non-renewing
     // product, native iOS only). Grants the existing generic Trailblazer
     // entitlement fields with Wix semantics — never the google_trailblazer_*
     // fields, which stay exclusive to the Android Play product below.

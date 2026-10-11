@@ -1,18 +1,18 @@
 // RevenueCat shared helpers — product constants and grant helpers.
 // - Google Play Trailblazer: unmapped one-time Play product with app-owned
-//   30-month expiry, isolated in google_trailblazer_* user fields.
+//   27-month expiry, isolated in google_trailblazer_* user fields.
 // - Apple App Store Explorer/Investigator: auto-renewable subscriptions that
 //   reuse the generic Base44 entitlement fields (plan, plan_expiration_date,
 //   subscription_status, subscription_id, energy) — the same fields the Wix
 //   payments-webhook writes.
 // - Apple App Store Trailblazer: one-time non-renewing product that grants the
 //   existing generic Trailblazer entitlement fields with the Wix grant
-//   semantics (plan 'trailblazer', purchase + 30 calendar months expiry).
+//   semantics (plan 'trailblazer', purchase + 27 calendar months expiry).
 
 export const GOOGLE_TRAILBLAZER_PRODUCT_ID = 'trailblazer.30month';
 export const APPLE_TRAILBLAZER_PRODUCT_ID = 'com.ages.explorer.trailblazer.30month';
 export const TRAILBLAZER_ENTITLEMENT_ID = 'trailblazer';
-export const GOOGLE_TRAILBLAZER_DURATION_MONTHS = 30;
+export const GOOGLE_TRAILBLAZER_DURATION_MONTHS = 27;
 export const GOOGLE_TRAILBLAZER_STORE = 'PLAY_STORE';
 export const GOOGLE_TRAILBLAZER_PRICE = 239.99;
 export const GOOGLE_TRAILBLAZER_CURRENCY = 'USD';
@@ -285,7 +285,7 @@ export function shouldProcessAppleAuraEvent(event) {
 // Non-renewing one-time product com.ages.explorer.trailblazer.30month, bought
 // only on native iOS. The grant reuses the EXISTING generic Base44 Trailblazer
 // entitlement fields (plan 'trailblazer', plan_expiration_date = purchase +
-// 30 calendar months UTC, energy pools, subscription_status 'none') with the
+// 27 calendar months UTC, energy pools, subscription_status 'none') with the
 // same semantics as the Wix payments-webhook one-time grant — no parallel
 // entitlement model is introduced. Android stays on the Google Play product
 // trailblazer.30month with its isolated google_trailblazer_* fields.
@@ -472,7 +472,7 @@ export function addCalendarMonthsUTC(dateInput, months) {
   ));
 }
 
-/** Compute Trailblazer expiry: purchase timestamp + 30 calendar months (UTC). */
+/** Compute Trailblazer expiry: purchase timestamp + 27 calendar months (UTC). */
 export function computeGoogleTrailblazerExpiration(purchasedAtMs) {
   const purchaseDate = new Date(Number(purchasedAtMs));
   if (Number.isNaN(purchaseDate.getTime())) {

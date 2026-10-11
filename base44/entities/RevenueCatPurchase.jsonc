@@ -63,7 +63,7 @@
     "plan_expiration_date": {
       "type": "string",
       "format": "date-time",
-      "description": "App-owned expiry: purchase_date + 30 calendar months (UTC clamp)"
+      "description": "App-owned expiry: purchase_date + 27 calendar months (UTC clamp)"
     },
     "expiration_at": {
       "type": "string",
