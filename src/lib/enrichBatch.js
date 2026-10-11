@@ -65,10 +65,20 @@ You are writing for ${stops.length} DIFFERENT stops on the same tour. Each entry
 SELF-CHECK before returning: re-read each entry on its own. If a sentence could sit unchanged in the other entry, delete it and write something specific to this entry's stop.
 `;
 
+  const structureRule = `
+STRUCTURE RULE — FOLLOW EXACTLY (CRITICAL):
+Sharing a call must not shorten or flatten the writing. Write each stop exactly as fully as you would write it on its own.
+- Every historical_info and paranormal_info MUST be 3-4 SEPARATE paragraphs of 4-6 sentences each.
+- Separate the paragraphs with a blank line (two newlines, written as "\\n\\n"). NEVER return a field as one single block of text.
+- Each field must total at least 1,200 characters. Comparable single-stop fields run 1,100-1,900 characters.
+- Do NOT compress to fit both stops, and do NOT merge sentences into one run-on paragraph to save room.
+SELF-CHECK before returning: count the blank lines ("\\n\\n") inside each of the four fields. Every field needs 2-3 of them. If any field has none, split it into paragraphs before returning.
+`;
+
   return `Generate rich, detailed content for ${stops.length} separate paranormal investigation stops on the same tour. Write each stop completely independently — they are shown to visitors on separate stop pages.
 
 Tour: ${tourContext.title || ''}
-${introText}${siblingText}${focusRule}${separationRule}
+${introText}${siblingText}${focusRule}${separationRule}${structureRule}
 STOPS TO WRITE:
 ${stopList}
 
@@ -130,6 +140,7 @@ REWRITE INSTRUCTIONS — FOLLOW EXACTLY, FOR EACH STOP INDEPENDENTLY:
 3. Each entry's historical_info must start with a sentence about that stop, not about the property.
 4. If most of a stop's content is general property history with little stop-specific detail, keep whatever stop-specific details exist and expand on them to fill 3-4 paragraphs.
 5. Do not add new historical facts, and do not move content between stops.
+6. Keep the paragraph structure: each field stays 3-4 SEPARATE paragraphs separated by a blank line (two newlines). Never collapse a field into one block of text, and keep each field at least as long as the stop-specific content it started with.
 
 Return ONE JSON object with one entry per stop, in the same order, "index" matching the STOP number above:
 { "stops": [ { "index": 0, "historical_info": "...", "paranormal_info": "..." } ] }
@@ -208,10 +219,19 @@ function countOccurrences(haystack, needle) {
   return count;
 }
 
+// Paragraphs are separated by a line break. Content written one stop at a time
+// lands as 2-3 paragraphs per field; batched writing tends to flatten a field
+// into one block, which is the quality drop this counts.
+function paragraphCount(text) {
+  const t = (text || '').trim();
+  return t ? t.split(/\n+/).length : 0;
+}
+
 // Local, zero-cost validation of a batch response. Flags a stop that is
-// missing, came back too thin to be real, or carries its neighbour's
-// distinctive wording without any of its own — the signature of content
-// landing on the wrong stop. Makes no model call, so it is free to run.
+// missing, came back too thin to be real, carries its neighbour's distinctive
+// wording without any of its own — the signature of content landing on the
+// wrong stop — or came back flattened into one paragraph. Makes no model call,
+// so it is free to run.
 export function crossCheckBatch(contents, stops, { mode = 'full' } = {}) {
   const issues = [];
   const tokenSets = stops.map((s) => distinctiveTokens(s.name));
@@ -227,6 +247,12 @@ export function crossCheckBatch(contents, stops, { mode = 'full' } = {}) {
     const para = content.paranormal_info || '';
     if (mode === 'full' && (hist.trim().length < THIN_THRESHOLD || para.trim().length < THIN_THRESHOLD)) {
       issues.push({ index: i, stop: stop.name, reason: 'thin' });
+      return;
+    }
+
+    // A single flat block where the per-stop path writes 2-3 paragraphs.
+    if (mode === 'full' && (paragraphCount(hist) < 2 || paragraphCount(para) < 2)) {
+      issues.push({ index: i, stop: stop.name, reason: 'flat' });
       return;
     }
 
