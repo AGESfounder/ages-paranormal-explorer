@@ -356,12 +356,14 @@
   background-position: 100% 0;
 }
 
-/* Radio Sweeper — speaker grille + amber tuning dial */
-.tkd-audio { --td-accent: #f59e0b; --td-light: #3b3226; --td-body: #26201a; --td-dark: #13100b; }
+/* Radio Sweeper — graphite receiver: speaker grille + lime tuning display.
+   Deliberately cool and lime-lit: it sits beside the leather-and-bone
+   Equipment Guide, so a warm body/amber dial there read as the same device. */
+.tkd-audio { --td-accent: #a3e635; --td-light: #39424a; --td-body: #252b31; --td-dark: #11151a; }
 .tkd-audio .tkd-face::before {
   background-image:
-    repeating-linear-gradient(0deg, rgba(245, 158, 11, 0.38) 0 1px, rgba(0, 0, 0, 0) 1px 5px),
-    radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.85) 0 16%, rgba(245, 158, 11, 0.20) 17%, rgba(0, 0, 0, 0) 22%);
+    repeating-linear-gradient(0deg, rgba(163, 230, 53, 0.40) 0 1px, rgba(0, 0, 0, 0) 1px 5px),
+    radial-gradient(circle at 50% 50%, rgba(163, 230, 53, 0.85) 0 16%, rgba(163, 230, 53, 0.20) 17%, rgba(0, 0, 0, 0) 22%);
   background-size: 62% 100%, 30% 100%;
   background-position: 0 0, 100% 50%;
 }
