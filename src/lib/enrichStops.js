@@ -6,6 +6,7 @@ import { callJson } from '@/lib/llmJson';
 import { stripConclusionOpeners, BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, STOP_CONTENT_VERSION } from '@/lib/stopContent';
 import { checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
 import { estimateStopTime, estimateTourDuration } from '@/lib/estimateTimes';
+import { ENRICH_BATCH_SIZE, enrichStopBatch } from '@/lib/enrichBatch';
 
 const THIN_THRESHOLD = 600;
 
@@ -75,6 +76,13 @@ export function countThinStops(stops) {
         !s.people ||
         s.people.length === 0)
   ).length;
+}
+
+// Manifestation energy the tour's thin stops will cost: one unit per batch of
+// ENRICH_BATCH_SIZE stops, matching how runEnrichment charges. Stops that are
+// already rich (or have no thin content and already have people) are free.
+export function countEnrichmentEnergy(stops) {
+  return Math.ceil(countThinStops(stops) / ENRICH_BATCH_SIZE);
 }
 
 // Enrich a single stop with full historical/paranormal detail and notable people.
@@ -171,10 +179,43 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
   return { updates, generatedPeople };
 }
 
-// Enrich all thin stops in a tour. Persists enriched content to the database
-// and spends manifestation energy per stop. Returns { enrichedStops, energySpent }.
-// Calls onProgress(completed, total, stopName) as each stop is processed.
-export async function enrichTourStops(tour, stops, onProgress) {
+// Turn a batch result into TourStop updates. Mirrors the post-processing the
+// single-stop path applies: conclusion scrub on both text fields, people
+// filter, and a fresh investigation-time estimate.
+function updatesFromContent(stop, content, mode) {
+  const updates = {};
+  if (mode === 'full') {
+    if (content.historical_info) updates.historical_info = stripConclusionOpeners(content.historical_info, false);
+    if (content.paranormal_info) updates.paranormal_info = stripConclusionOpeners(content.paranormal_info, false);
+  }
+  if (content.people && content.people.length) updates.people = content.people;
+  if (updates.historical_info || updates.paranormal_info) {
+    updates.estimated_investigation_time = estimateStopTime({ ...stop, ...updates });
+  }
+  return updates;
+}
+
+// 'full' writes history + paranormal + people; 'people' only extracts the
+// notable figures from content that is already rich.
+function workMode(stop, force) {
+  return force || isThinContent(stop.historical_info) || isThinContent(stop.paranormal_info) ? 'full' : 'people';
+}
+
+function needsEnrichment(stop) {
+  return (
+    isThinContent(stop.historical_info) ||
+    isThinContent(stop.paranormal_info) ||
+    !stop.people ||
+    stop.people.length === 0
+  );
+}
+
+// Shared enrichment pass. Stops are grouped into batches of ENRICH_BATCH_SIZE
+// so one LLM call can cover two of them, and the user is charged one
+// manifestation energy per batch. A batch that fails the local cross-check is
+// discarded and those stops run one at a time instead, so a bad batch costs
+// extra calls but never bad content.
+async function runEnrichment(tour, stops, { force }, onProgress) {
   const gate = await checkManifestationGate();
   if (!gate.allowed) {
     throw new Error(gate.message || 'Cannot enrich stops — plan or energy issue.');
@@ -191,54 +232,78 @@ export async function enrichTourStops(tour, stops, onProgress) {
   };
 
   const enrichedStops = [...stops];
-  const toEnrich = enrichedStops.filter(
-    (s) =>
-      s.stop_type !== 'parking' &&
-      s.stop_type !== 'shuttle' &&
-      (isThinContent(s.historical_info) ||
-        isThinContent(s.paranormal_info) ||
-        !s.people ||
-        s.people.length === 0)
-  );
-  const total = toEnrich.length;
+  // Indices of the stops that actually need work, in tour order.
+  const targets = [];
+  enrichedStops.forEach((s, i) => {
+    if (s.stop_type === 'parking' || s.stop_type === 'shuttle') return;
+    if (force || needsEnrichment(s)) targets.push(i);
+  });
+  const total = targets.length;
   let completed = 0;
   let energySpent = 0;
 
-  let isFirstTourStop = true;
-  for (let i = 0; i < enrichedStops.length; i++) {
-    const s = enrichedStops[i];
-    if (s.stop_type === 'parking' || s.stop_type === 'shuttle') continue;
-    const stopIsFirst = isFirstTourStop;
-    isFirstTourStop = false;
-    const needsEnrichment =
-      isThinContent(s.historical_info) ||
-      isThinContent(s.paranormal_info) ||
-      !s.people ||
-      s.people.length === 0;
-    if (!needsEnrichment) continue;
+  for (let p = 0; p < targets.length; p += ENRICH_BATCH_SIZE) {
+    const batchIndices = targets.slice(p, p + ENRICH_BATCH_SIZE);
+    const batchStops = batchIndices.map(i => enrichedStops[i]);
+    const modes = batchStops.map(s => workMode(s, force));
+    // Batch only a full group that needs the same kind of work; a mixed or
+    // short group takes the single-stop path below.
+    const batchable = batchStops.length === ENRICH_BATCH_SIZE && modes.every(m => m === modes[0]);
+    const batchNames = batchStops.map(s => s.name);
 
-    try {
-      const siblingStopNames = siblingNames.filter(n => n !== s.name);
-      const { updates, generatedPeople } = await enrichStop(s, { ...tourContext, siblingStopNames }, { force: false, isFirstStop: stopIsFirst });
+    let batchResults = null;
+    if (batchable) {
+      try {
+        batchResults = await enrichStopBatch(
+          batchStops,
+          { ...tourContext, siblingStopNames: siblingNames.filter(n => !batchNames.includes(n)) },
+          { mode: modes[0], force }
+        );
+      } catch (e) {
+        console.error('Batched enrichment failed:', e);
+      }
+    }
+
+    let produced = false;
+    for (let k = 0; k < batchStops.length; k++) {
+      const s = batchStops[k];
+      const i = batchIndices[k];
+      let updates = {};
+      const content = batchResults ? batchResults[k] : null;
+
+      if (content) {
+        updates = updatesFromContent(s, content, modes[k]);
+      } else {
+        // Not batchable, or the batch failed the cross-check — run this one alone.
+        try {
+          const siblingStopNames = siblingNames.filter(n => n !== s.name);
+          const single = await enrichStop(s, { ...tourContext, siblingStopNames }, { force });
+          updates = single.updates;
+        } catch (e) {
+          console.error(`Enrichment failed for ${s.name}:`, e);
+        }
+      }
+
       if (Object.keys(updates).length > 0) {
         try {
           await base44.entities.TourStop.update(s.id, updates);
-          enrichedStops[i] = { ...s, ...updates };
-          if (generatedPeople.length) enrichedStops[i].people = generatedPeople;
-          await spendManifestationEnergy();
-          energySpent++;
         } catch (e) {
-          console.error(`Failed to persist enrichment for ${s.name}:`, e);
           // Still use the enriched data for the offline save even if DB persist failed
-          enrichedStops[i] = { ...s, ...updates };
-          if (generatedPeople.length) enrichedStops[i].people = generatedPeople;
+          console.error(`Failed to persist enrichment for ${s.name}:`, e);
         }
+        enrichedStops[i] = { ...s, ...updates };
+        produced = true;
       }
-    } catch (e) {
-      console.error(`Enrichment failed for ${s.name}:`, e);
+
+      completed++;
+      if (onProgress) onProgress(completed, total, s.name || `Stop ${s.stop_number}`);
     }
-    completed++;
-    if (onProgress) onProgress(completed, total, s.name || `Stop ${s.stop_number}`);
+
+    // One unit covers the whole batch, so the user pays per pair of stops.
+    if (produced) {
+      await spendManifestationEnergy();
+      energySpent++;
+    }
   }
 
   // Recalculate tour duration based on updated stop times
@@ -254,74 +319,31 @@ export async function enrichTourStops(tour, stops, onProgress) {
   return { enrichedStops, energySpent };
 }
 
+// Enrich all thin stops in a tour. Persists enriched content to the database
+// and spends manifestation energy once per batch of ENRICH_BATCH_SIZE stops.
+// Returns { enrichedStops, energySpent }.
+// Calls onProgress(completed, total, stopName) as each stop is processed.
+export async function enrichTourStops(tour, stops, onProgress) {
+  return runEnrichment(tour, stops, { force: false }, onProgress);
+}
+
 // Force-regenerate ALL stop content for a tour using the current enrichment
 // prompt. Used to upgrade old tours whose content_version is below
 // STOP_CONTENT_VERSION — the "Cashtown Inn problem" where every stop repeated
 // the general property history instead of focusing on the specific room/area.
 //
 // Checks the manifestation gate (paid/admin only) and spends manifestation
-// energy per stop. Stamps the tour with the current content_version so it
+// energy per batch. Stamps the tour with the current content_version so it
 // never regenerates again. Only touches text fields (historical_info,
 // paranormal_info, people) — coordinates, addresses, and stop order are
 // preserved. Calls onProgress(completed, total, stopName) as each stop is
 // processed. Returns { enrichedStops, energySpent }.
 export async function regenerateTourContent(tour, stops, onProgress) {
-  const gate = await checkManifestationGate();
-  if (!gate.allowed) {
-    throw new Error(gate.message || 'Cannot regenerate stops — plan or energy issue.');
-  }
+  const { enrichedStops, energySpent } = await runEnrichment(tour, stops, { force: true }, onProgress);
 
-  const tourStops = (stops || []).filter(
-    (s) => s.stop_type !== 'parking' && s.stop_type !== 'shuttle'
-  );
-  const siblingNames = tourStops.map(s => s.name).filter(Boolean);
-  const tourContext = {
-    title: tour.title,
-    category: tour.tour_category,
-    introduction: tour.introduction,
-  };
-
-  const enrichedStops = [...stops];
-  const total = tourStops.length;
-  let completed = 0;
-  let energySpent = 0;
-
-  let isFirstTourStop = true;
-  for (let i = 0; i < enrichedStops.length; i++) {
-    const s = enrichedStops[i];
-    if (s.stop_type === 'parking' || s.stop_type === 'shuttle') continue;
-    const stopIsFirst = isFirstTourStop;
-    isFirstTourStop = false;
-
-    try {
-      const siblingStopNames = siblingNames.filter(n => n !== s.name);
-      const { updates, generatedPeople } = await enrichStop(s, { ...tourContext, siblingStopNames }, { force: true, isFirstStop: stopIsFirst });
-      if (Object.keys(updates).length > 0) {
-        try {
-          await base44.entities.TourStop.update(s.id, updates);
-          enrichedStops[i] = { ...s, ...updates };
-          if (generatedPeople.length) enrichedStops[i].people = generatedPeople;
-          await spendManifestationEnergy();
-          energySpent++;
-        } catch (e) {
-          console.error(`Failed to persist regeneration for ${s.name}:`, e);
-          enrichedStops[i] = { ...s, ...updates };
-          if (generatedPeople.length) enrichedStops[i].people = generatedPeople;
-        }
-      }
-    } catch (e) {
-      console.error(`Regeneration failed for ${s.name}:`, e);
-    }
-    completed++;
-    if (onProgress) onProgress(completed, total, s.name || `Stop ${s.stop_number}`);
-  }
-
-  // Stamp the tour with the current content version and recalculate duration
-  const newDuration = estimateTourDuration(enrichedStops, tour.tour_type);
+  // Stamp the tour with the current content version.
   try {
-    const tourUpdates = { content_version: STOP_CONTENT_VERSION };
-    if (newDuration) tourUpdates.estimated_duration = newDuration;
-    await base44.entities.Tour.update(tour.id, tourUpdates);
+    await base44.entities.Tour.update(tour.id, { content_version: STOP_CONTENT_VERSION });
   } catch (e) {
     console.error('Failed to stamp content_version:', e);
   }

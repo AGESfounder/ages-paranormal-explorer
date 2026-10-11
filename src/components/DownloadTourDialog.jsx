@@ -4,7 +4,7 @@ import { Download, Map, Volume2, X, Loader2, Check, AlertTriangle, Zap, ScrollTe
 import { saveTourOffline, getOfflineTour } from '@/lib/offlineTours';
 import { prefetchTourTiles } from '@/lib/offlineTiles';
 import { generateTourAudio, estimateTourNarrationCredits, clearTourAudio } from '@/lib/offlineAudio';
-import { enrichTourStops, countThinStops } from '@/lib/enrichStops';
+import { enrichTourStops, countThinStops, countEnrichmentEnergy } from '@/lib/enrichStops';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import { toast } from '@/components/ui/use-toast';
 import UpgradePrompt from '@/components/UpgradePrompt';
@@ -31,7 +31,8 @@ export default function DownloadTourDialog({ tour, stops, open, onClose, onDownl
   const creditEstimates = useMemo(() => {
     const estimates = {};
     for (const level of PAID_LEVELS) {
-      const enrichmentCost = thinStopsCount;
+      // Enrichment batches two stops per manifestation energy.
+      const enrichmentCost = countEnrichmentEnergy(stops);
       const condensationCost = level.value !== 'manifestation' ? 1 : 0;
       const narrationCost = estimateTourNarrationCredits(tour, stops, level.value);
       estimates[level.value] = {
