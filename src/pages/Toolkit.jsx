@@ -7,6 +7,7 @@ import LocationTermBank from '../components/LocationTermBank';
 import AlphabetSweeper from '../components/AlphabetSweeper';
 import YesNoSweeper from '../components/YesNoSweeper';
 import ToolkitGrid from '../components/ToolkitGrid';
+import ToolDevice from '../components/toolkit/ToolDevice';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -1486,9 +1487,7 @@ Best Practices
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <adGateTool.icon className="w-5 h-5 text-primary" />
-                </div>
+                <ToolDevice type={adGateTool.type} icon={adGateTool.icon} size="sm" />
                 <div>
                   <h3 className="font-heading text-sm font-semibold text-foreground">{adGateTool.name}</h3>
                   <p className="text-[10px] text-muted-foreground">{adGateTool.desc}</p>
@@ -1517,9 +1516,7 @@ Best Practices
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <activeTool.icon className="w-5 h-5 text-primary" />
-                </div>
+                <ToolDevice type={activeTool.type} icon={activeTool.icon} size="sm" />
                 <div>
                   <h3 className="font-heading text-sm font-semibold text-foreground">{activeTool.name}</h3>
                   <p className="text-[10px] text-muted-foreground">{activeTool.desc}</p>

@@ -259,3 +259,201 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Toolkit device tiles ────────────────────────────────────────────────
+   Every toolkit tool is drawn as a small instrument: one shared chassis
+   (bevelled body lit from the top-left, recessed instrument face, contact
+   shadow under it) skinned per tool with its own body tone, accent hue and
+   face pattern, so no two tools read alike. Pure CSS — no assets, no 3D
+   engine, nothing extra to download, and the same depth rules on every tile.
+   Skins are keyed by the tool's `type` (tkd-<type>). */
+.tkd {
+  --td-accent: hsl(var(--primary));
+  --td-body: #22303c;
+  --td-light: #33465a;
+  --td-dark: #0f1720;
+  position: relative;
+  height: 96px;
+  border-radius: 11px;
+  overflow: hidden;
+  background: linear-gradient(155deg, var(--td-light) 0%, var(--td-body) 48%, var(--td-dark) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    inset 0 -3px 5px rgba(0, 0, 0, 0.60),
+    inset 3px 0 7px rgba(255, 255, 255, 0.04),
+    inset -3px 0 7px rgba(0, 0, 0, 0.38),
+    0 7px 12px -5px rgba(0, 0, 0, 0.75),
+    0 2px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* Top-lit sheen across the whole body */
+.tkd::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 44%);
+  pointer-events: none;
+}
+
+/* Recessed instrument face */
+.tkd-face {
+  position: absolute;
+  inset: 11% 9%;
+  border-radius: 7px;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 130% at 28% 18%, rgba(255, 255, 255, 0.10), rgba(0, 0, 0, 0.62) 72%),
+    linear-gradient(160deg, #0d1420, #04060b);
+  box-shadow: inset 0 2px 7px rgba(0, 0, 0, 0.85), inset 0 -1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Per-tool face pattern (set by each skin below) */
+.tkd-face::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.85;
+  background-repeat: no-repeat;
+}
+
+/* Glowing control emblem — the tool's own icon */
+.tkd-emblem {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tkd-emblem svg {
+  width: 26px;
+  height: 26px;
+  color: var(--td-accent);
+  filter: drop-shadow(0 0 6px var(--td-accent));
+}
+
+/* Compact badge — the opened tool's header */
+.tkd-sm {
+  height: 52px;
+  width: 52px;
+  border-radius: 9px;
+}
+.tkd-sm .tkd-emblem svg {
+  width: 19px;
+  height: 19px;
+}
+.tkd-sm .tkd-face::before {
+  opacity: 0.32;
+}
+
+/* ── Per-tool skins: body tone, accent hue, face pattern ── */
+
+/* Equipment Guide — leather field manual, page edges */
+.tkd-guide { --td-accent: #ded8c4; --td-light: #5a4430; --td-body: #3a2b1d; --td-dark: #1f1509; }
+.tkd-guide .tkd-face::before {
+  background-image: repeating-linear-gradient(90deg, rgba(222, 216, 196, 0.45) 0 1px, rgba(0, 0, 0, 0) 1px 5px);
+  background-size: 46% 100%;
+  background-position: 100% 0;
+}
+
+/* Radio Sweeper — speaker grille + amber tuning dial */
+.tkd-audio { --td-accent: #f59e0b; --td-light: #3b3226; --td-body: #26201a; --td-dark: #13100b; }
+.tkd-audio .tkd-face::before {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(245, 158, 11, 0.38) 0 1px, rgba(0, 0, 0, 0) 1px 5px),
+    radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.85) 0 16%, rgba(245, 158, 11, 0.20) 17%, rgba(0, 0, 0, 0) 22%);
+  background-size: 62% 100%, 30% 100%;
+  background-position: 0 0, 100% 50%;
+}
+
+/* Audio Recorder — twin tape reels + record lamp */
+.tkd-recorder { --td-accent: #ef4444; --td-light: #333a43; --td-body: #23282f; --td-dark: #101318; }
+.tkd-recorder .tkd-face::before {
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.85) 0 22%, rgba(0, 0, 0, 0) 23%),
+    radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.85) 0 22%, rgba(0, 0, 0, 0) 23%),
+    radial-gradient(circle at 50% 50%, #ef4444 0 40%, rgba(0, 0, 0, 0) 41%);
+  background-size: 26% 62%, 26% 62%, 6% 12%;
+  background-position: 22% 50%, 62% 50%, 48% 92%;
+}
+
+/* Terms Sweeper — ribbed dictionary spine + gold label */
+.tkd-termbank { --td-accent: #e0b463; --td-light: #4a2a2c; --td-body: #331d1f; --td-dark: #1b0f11; }
+.tkd-termbank .tkd-face::before {
+  background-image:
+    radial-gradient(ellipse at 50% 50%, rgba(224, 180, 99, 0.55) 0 44%, rgba(0, 0, 0, 0) 46%),
+    repeating-linear-gradient(0deg, rgba(224, 180, 99, 0.30) 0 1px, rgba(0, 0, 0, 0) 1px 6px);
+  background-size: 54% 34%, 100% 100%;
+  background-position: 50% 50%, 0 0;
+  background-repeat: no-repeat, repeat;
+}
+
+/* Anomaly Camera — lens barrel rings */
+.tkd-sls { --td-accent: #22d3ee; --td-light: #2b3c48; --td-body: #1c2830; --td-dark: #0c141a; }
+.tkd-sls .tkd-face::before {
+  background-image: repeating-radial-gradient(circle at 50% 50%, rgba(34, 211, 238, 0.42) 0 2px, rgba(0, 0, 0, 0) 2px 8px);
+  background-size: 72% 100%;
+  background-position: 50% 50%;
+}
+
+/* Alphabet Sweeper — spirit board letters inside a planchette arc */
+.tkd-alphabet { --td-accent: #a855f7; --td-light: #43294d; --td-body: #2c1a33; --td-dark: #170d1c; }
+.tkd-alphabet .tkd-face::before {
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.75) 0 1px, rgba(0, 0, 0, 0) 1.6px),
+    repeating-radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.20) 0 1px, rgba(0, 0, 0, 0) 1px 9px);
+  background-size: 13px 13px, 86% 100%;
+  background-position: 50% 50%, 50% 50%;
+  background-repeat: repeat, no-repeat;
+}
+
+/* Yes/No/IDK Sweeper — three-position brass dial */
+.tkd-yesno { --td-accent: #f472b6; --td-light: #4a2a3c; --td-body: #331d2a; --td-dark: #1c0f17; }
+.tkd-yesno .tkd-face::before {
+  background-image: conic-gradient(from 210deg at 50% 50%, rgba(244, 114, 182, 0.55) 0 33%, rgba(244, 114, 182, 0.12) 33% 66%, rgba(244, 114, 182, 0.55) 66% 100%);
+  background-size: 42% 76%;
+  background-position: 50% 50%;
+}
+
+/* Vibration Communicator — needle gauge over scale ticks */
+.tkd-rem { --td-accent: #4ade80; --td-light: #1e3d36; --td-body: #142a25; --td-dark: #091613; }
+.tkd-rem .tkd-face::before {
+  background-image:
+    repeating-linear-gradient(90deg, rgba(74, 222, 128, 0.45) 0 1px, rgba(0, 0, 0, 0) 1px 6px),
+    linear-gradient(74deg, rgba(0, 0, 0, 0) 47%, rgba(74, 222, 128, 0.95) 48% 51%, rgba(0, 0, 0, 0) 52%);
+  background-size: 100% 22%, 66% 66%;
+  background-position: 50% 100%, 50% 54%;
+}
+
+/* Weather Monitor — barometer tick ring */
+.tkd-weather { --td-accent: #60a5fa; --td-light: #26374f; --td-body: #182338; --td-dark: #0b1220; }
+.tkd-weather .tkd-face::before {
+  background-image: repeating-conic-gradient(from -90deg at 50% 58%, rgba(96, 165, 250, 0.50) 0 1deg, rgba(0, 0, 0, 0) 1deg 11deg);
+  background-position: 50% 50%;
+}
+
+/* Moon Phase — cratered disc with a phase shadow */
+.tkd-moon { --td-accent: #cbd5e1; --td-light: #333a4a; --td-body: #222835; --td-dark: #101420; }
+.tkd-moon .tkd-face::before {
+  background-image:
+    radial-gradient(circle at 32% 36%, rgba(203, 213, 225, 0.55) 0 9%, rgba(0, 0, 0, 0) 10%),
+    radial-gradient(circle at 64% 28%, rgba(203, 213, 225, 0.40) 0 7%, rgba(0, 0, 0, 0) 8%),
+    radial-gradient(circle at 54% 68%, rgba(203, 213, 225, 0.45) 0 11%, rgba(0, 0, 0, 0) 12%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0) 56%, rgba(0, 0, 0, 0.85) 58%);
+}
+
+/* Paranormal Research: Terms — card-catalog index tabs */
+.tkd-research { --td-accent: #8b9cf7; --td-light: #2a3255; --td-body: #1c2140; --td-dark: #0d1022; }
+.tkd-research .tkd-face::before {
+  background-image: repeating-linear-gradient(90deg, rgba(139, 156, 247, 0.60) 0 12px, rgba(0, 0, 0, 0) 12px 17px);
+  background-size: 100% 24%;
+  background-position: 0 10%;
+}
+
+/* Safety Protocol — hazard stripe band */
+.tkd-safety { --td-accent: #facc15; --td-light: #464636; --td-body: #30302a; --td-dark: #191914; }
+.tkd-safety .tkd-face::before {
+  background-image: repeating-linear-gradient(45deg, rgba(250, 204, 21, 0.50) 0 6px, rgba(0, 0, 0, 0) 6px 12px);
+  background-size: 100% 32%;
+  background-position: 0 100%;
+}
