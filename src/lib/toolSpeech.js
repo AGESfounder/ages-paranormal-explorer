@@ -222,7 +222,7 @@ async function speakWeb(text, opts, gen, settle) {
  *   Callers must NOT treat 'cancelled' as completion (prevents stale session
  *   restarts).
  */
-export function speakToolText(text, { role = 'female', rate = 1, pitch = 1, volume = 1 } = {}) {
+export function speakToolText(text, { voiceURI = null, role = 'female', rate = 1, pitch = 1, volume = 1 } = {}) {
   const gen = generation;
   const spoken = String(text ?? '');
   return new Promise((resolve) => {
@@ -239,10 +239,10 @@ export function speakToolText(text, { role = 'female', rate = 1, pitch = 1, volu
       // any previous pending speak as cancelled before starting this one.
       for (const prev of [...pending]) settleEntry(prev, 'cancelled');
       pending.add(entry);
-      speakNative(spoken, { role, rate, pitch, volume }, gen, settle);
+      speakNative(spoken, { voiceURI, role, rate, pitch, volume }, gen, settle);
     } else {
       pending.add(entry);
-      speakWeb(spoken, { role, rate, pitch, volume }, gen, settle);
+      speakWeb(spoken, { voiceURI, role, rate, pitch, volume }, gen, settle);
     }
   });
 }

@@ -2,17 +2,16 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Volume2, ChevronDown, Play, Square, RotateCcw } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { isNativeToolSpeech, getToolVoices, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
-import { deviceSpeechRole } from '@/hooks/useGhostVoice';
 
 // Device Voice Picker — lets the user pick which device TTS voice the
 // Device Narration mode uses, plus tune rate/pitch/volume. All settings are
-// saved to localStorage and read by speakDevice() in useGhostVoice.js. When
-// no voice is selected ("Auto-select"), speakDevice falls back to its
-// quality-scored auto-pick on web and the adapter's primary voice on native.
-// On Capacitor native platforms voices are enumerated and spoken through the
-// shared toolSpeech adapter (AVSpeechSynthesizer / Android TTS); on web,
-// browser speechSynthesis is used. Native playback addresses the adapter's
-// two role voices — see deviceSpeechRole() in useGhostVoice.js.
+// saved to localStorage and read by speakDevice() in useGhostVoice.js, which
+// addresses the chosen voice directly by its voiceURI. When no voice is
+// selected ("Auto-select"), narration falls back to its quality-scored
+// auto-pick on web and the adapter's primary voice on native. On Capacitor
+// native platforms voices are enumerated and spoken through the shared
+// toolSpeech adapter (AVSpeechSynthesizer / Android TTS); on web, browser
+// speechSynthesis is used.
 const VOICE_KEY = 'ages_device_voice_uri';
 const SETTINGS_KEY = 'ages_device_voice_settings';
 
@@ -95,13 +94,13 @@ export default function DeviceVoicePicker() {
     if (previewing) { stopPreview(); return; }
     const sampleText = 'The spirits walk among us. Listen closely to their whispers.';
     if (isNativeToolSpeech()) {
-      // Native: preview through the toolSpeech adapter with the same role
-      // mapping speakDevice() uses, so the preview matches narration.
+      // Native: preview through the toolSpeech adapter with the same voiceURI
+      // speakDevice() uses, so the preview matches narration.
       previewIdRef.current += 1;
       const id = previewIdRef.current;
       setPreviewing(true);
       speakToolText(sampleText, {
-        role: deviceSpeechRole(voices, selectedURI),
+        voiceURI: selectedURI || null,
         rate: settings.rate,
         pitch: settings.pitch,
         volume: settings.volume,
@@ -243,6 +242,11 @@ export default function DeviceVoicePicker() {
           {selectedVoice && (
             <p className="text-[10px] text-muted-foreground">
               Selected: {selectedVoice.name} ({selectedVoice.lang})
+            </p>
+          )}
+          {selectedURI && !selectedVoice && voices.length > 0 && (
+            <p className="text-[10px] text-amber-400">
+              That voice is not on this device, so narration is using the default voice. Pick a voice from the list above.
             </p>
           )}
           <p className="text-[10px] text-orange-400/80">

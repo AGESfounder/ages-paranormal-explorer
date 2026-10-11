@@ -4,25 +4,14 @@ import { audioAcquire, audioRelease, getMusicSettings } from '@/lib/hauntedAudio
 import { isNativeToolSpeech, getToolVoices, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
 import { synthesizeCue } from '@/lib/toolCues';
 
-// Map a saved Device Voice Picker selection (localStorage
-// 'ages_device_voice_uri') to a toolSpeech adapter role for native playback.
-// The adapter addresses exactly two native voices — the first two English
-// voices in device order (all voices when none are English): role 'female'
-// speaks the first, 'male' the second. A saved selection maps to 'male' only
-// when it IS that second voice; everything else ("Auto-select", or a voice
-// the adapter cannot address) uses the primary 'female' role voice.
-// DeviceVoicePicker previews through this same mapping so the preview
-// matches what narration will speak. Mirrors resolveRoleVoices() in
-// src/lib/toolSpeech.js — keep the pool logic in sync with it.
-export function deviceSpeechRole(voices, voiceURI) {
-  if (!voiceURI || !Array.isArray(voices) || !voices.length) return 'female';
-  const en = voices.filter((v) => typeof v.lang === 'string' && v.lang.toLowerCase().startsWith('en'));
-  const pool = en.length ? en : voices;
-  const female = pool[0];
-  const male = pool[1] || pool[0];
-  if (male && female && male.voiceURI !== female.voiceURI && male.voiceURI === voiceURI) return 'male';
-  return 'female';
-}
+// A saved Device Voice Picker selection (localStorage
+// 'ages_device_voice_uri') is addressed directly by its voiceURI: the
+// toolSpeech adapter resolves that exact voice (native: its index into
+// getSupportedVoices(); web: the SpeechSynthesisVoice object) and only falls
+// back to its role voices — the first two English voices in device order —
+// for "Auto-select" or when the saved voice is not present on this device.
+// DeviceVoicePicker previews that same voiceURI, so the preview matches
+// narration.
 
 export default function useGhostVoice() {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -410,13 +399,13 @@ export default function useGhostVoice() {
       const gen = ++deviceSpeechGenRef.current;
       (async () => {
         try {
-          const voices = await getToolVoices();
+          await getToolVoices(); // warm the voice list before resolving the saved voice
           if (gen !== deviceSpeechGenRef.current) return; // stopped/replaced
           setIsGenerating(false);
           setIsSpeaking(true);
           startEerieBackground(); // mirror the server path so chimes play under narration
           const result = await speakToolText(sanitizeText(text), {
-            role: deviceSpeechRole(voices, savedVoiceURI),
+            voiceURI: savedVoiceURI,
             rate: effectiveRate,
             pitch: effectivePitch,
             volume: effectiveVolume,
