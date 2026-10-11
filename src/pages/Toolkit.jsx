@@ -1483,7 +1483,7 @@ Best Practices
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-4 rounded-xl border border-primary/30 bg-card/40 mb-4"
+            className={`tkd-frame tkd-${adGateTool.type} p-4 bg-card/40 mb-4`}
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
@@ -1512,7 +1512,7 @@ Best Practices
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-4 rounded-xl border border-primary/30 bg-card/40 mb-4"
+            className={`tkd-frame tkd-${activeTool.type} p-4 bg-card/40 mb-4`}
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">

@@ -457,3 +457,20 @@
   background-size: 100% 32%;
   background-position: 0 100%;
 }
+
+/* ── Opened tool panel ───────────────────────────────────────────────────
+   The panel a tool opens into wears that tool's skin: a thick rounded bezel
+   in its accent hue, a halo of the same colour outside and a faint accent
+   wash inside, so an open tool still reads as the same device as its tile.
+   Pair with the tool's own skin class (tkd-<type>) for the accent value. */
+.tkd-frame {
+  border-style: solid;
+  border-width: 3px;
+  border-radius: 16px;
+  border-color: var(--td-accent);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 8px 22px -14px var(--td-accent),
+    inset 0 0 46px -22px var(--td-accent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
