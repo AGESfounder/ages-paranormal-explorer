@@ -65,8 +65,8 @@ export const PLANS = {
     features: [
       'Everything in Observer',
       'Ad-Free tours',
-      'AI narration (~1 fully narrated tour/month)',
-      'Custom tour generation (up to 5/month)',
+      'AI narration (1-3 narrated tours/month)',
+      'Custom tour generation (1-3/month)',
       'All ranked tours unlocked',
       'Nearby + Abroad tours',
       'Toolkit: 10 of 12 tools',

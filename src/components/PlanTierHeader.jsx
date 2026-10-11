@@ -17,9 +17,6 @@ export default function PlanTierHeader({ planId, name, labelClass = '', highligh
         <span className="font-heading font-bold uppercase text-sm tracking-wide sm:text-lg sm:tracking-wider leading-tight text-center break-words max-w-full">
           {name}
         </span>
-        {planId === 'trailblazer' && (
-          <span className="text-[9px] text-amber-400 font-heading mt-0.5">30-Month Elite · 6 Months Free</span>
-        )}
       </div>
       {highlight && (
         <p className="px-1 text-xs sm:text-sm font-bold text-primary tracking-wide leading-tight text-center">{highlight}</p>
