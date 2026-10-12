@@ -277,6 +277,19 @@ export function stopToolSpeech() {
 }
 
 /**
+ * Hand the phone's audio session back at the END of a tool session, once the
+ * session's speech has been stopped. iOS keeps the session configured for
+ * speech + microphone and — without this — it stayed that way for the rest of
+ * the app run, which left the app's own background ambience (and everything
+ * else) quiet after a Sweeper session until the app was restarted. Called at
+ * session end only, never between utterances. No-op on web.
+ */
+export function releaseToolSpeech() {
+  if (!isNativeToolSpeech()) return;
+  try { TextToSpeech.releaseAudioSession().catch(() => {}); } catch {}
+}
+
+/**
  * Call inside the session-start tap gesture. Web: primes speechSynthesis
  * (iOS WKWebView requires speech to start within a user gesture) and warms
  * the voice list. Native: pre-loads the voice list so the first speak does

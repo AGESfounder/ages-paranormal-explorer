@@ -13,7 +13,7 @@ import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import { useEnergyGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
-import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+import { primeToolSpeech, speakToolText, stopToolSpeech, releaseToolSpeech } from '@/lib/toolSpeech';
 import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
 import { CUE_CYMBAL } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
@@ -683,6 +683,9 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     stopRecording();
+    // End of session, speech stopped: hand the phone's audio session back so the
+    // app's music and every other sound return to full volume.
+    releaseToolSpeech();
     setCameraActive(false);
     setAnomalyDetected(false);
     setMotionDetected(false);

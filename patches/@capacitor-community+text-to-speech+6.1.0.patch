@@ -39,7 +39,7 @@ diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextTo
 +    // every item after the first one silent.
 +    private func configureAudioSession() {
 +        do {
-+            let options: AVAudioSession.CategoryOptions = [.duckOthers, .defaultToSpeaker]
++            let options: AVAudioSession.CategoryOptions = [.defaultToSpeaker]
 +            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: options)
 +            try AVAudioSession.sharedInstance().setActive(true)
 +        } catch {
@@ -60,10 +60,28 @@ diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextTo
 +    private func drainCalls() {
 +        while !calls.isEmpty {
 +            calls.removeFirst().resolve()
-         }
-     }
- 
-@@ -36,8 +68,18 @@
++        }
++    }
++
++    // Hand the phone's audio session back once a tool session has ended. The
++    // session is held for the life of a session on purpose (see
++    // configureAudioSession) and nothing else released it, so the whole app
++    // stayed quiet after a Sweeper session until it was restarted. This runs at
++    // session end with speech already stopped, and drops the session back to
++    // normal loud playback, so the background ambience and every other sound
++    // come back to full volume on their own. (The session no longer ducks other
++    // audio either: the app's own music is paused in JS while a tool runs, so
++    // the duck only ever left the app quiet afterwards.)
++    @objc public func releaseAudioSession() {
++        synthesizer.stopSpeaking(at: .immediate)
++        do {
++            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
++            try AVAudioSession.sharedInstance().setActive(true)
++        } catch {
++            print("Error releasing AVAudioSession: \(error)")
++        }
++    }
++
      @objc public func speak(_ text: String, _ lang: String, _ rate: Float, _ pitch: Float, _ category: String, _ volume: Float, _ voice: Int, _ queueStrategy: Int, _ call: CAPPluginCall) throws {
          if queueStrategy == QUEUE_STRATEGY.QUEUE_FLUSH.rawValue {
              self.synthesizer.stopSpeaking(at: .immediate)
@@ -93,3 +111,27 @@ diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextTo
      }
  
      @objc public func getSupportedLanguages() -> [String] {
+diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeechPlugin.swift b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeechPlugin.swift
+--- a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeechPlugin.swift
++++ b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeechPlugin.swift
+@@ -14,6 +14,7 @@
+         CAPPluginMethod(name: "speak", returnType: CAPPluginReturnPromise),
+         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
++        CAPPluginMethod(name: "releaseAudioSession", returnType: CAPPluginReturnPromise),
+         CAPPluginMethod(name: "openInstall", returnType: CAPPluginReturnPromise),
+         CAPPluginMethod(name: "getSupportedLanguages", returnType: CAPPluginReturnPromise),
+         CAPPluginMethod(name: "getSupportedVoices", returnType: CAPPluginReturnPromise),
+@@ -48,6 +49,11 @@
+     @objc public func stop(_ call: CAPPluginCall) {
+         implementation.stop()
+         call.resolve()
+     }
+ 
++    @objc public func releaseAudioSession(_ call: CAPPluginCall) {
++        implementation.releaseAudioSession()
++        call.resolve()
++    }
++
+     @objc public func openInstall(_ call: CAPPluginCall) {
+         call.resolve()
+     }

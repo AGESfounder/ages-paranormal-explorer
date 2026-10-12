@@ -10,7 +10,7 @@ import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { isTorchActive } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
-import { primeToolSpeech, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
+import { primeToolSpeech, speakToolText, stopToolSpeech, releaseToolSpeech } from '@/lib/toolSpeech';
 import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
 import { CUE_XYLOPHONE } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
@@ -513,6 +513,9 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     lockedRef.current = false;
     stopNormalVoice();
     try { stopVoice(); } catch {}
+    // End of session, speech stopped: hand the phone's audio session back so the
+    // app's music and every other sound return to full volume.
+    releaseToolSpeech();
     setPhase('stopped');
   };
 

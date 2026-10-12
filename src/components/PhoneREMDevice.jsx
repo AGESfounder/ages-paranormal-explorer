@@ -57,6 +57,10 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   const sensorDataReceivedRef = useRef(false);
 
   const timerRef = useRef(null);
+  // Wall-clock start of the session. The session clock is read from real time
+  // rather than counted in interval ticks: a tick is not a second, so counting
+  // them ran the on-screen REC clock (and the saved duration) several times fast.
+  const sessionStartRef = useRef(0);
   const beepCtxRef = useRef(null);
   const beepIntervalRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -447,10 +451,10 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     await startAudioEngine();
     await startRecording();
 
-    let elapsed = 0;
+    sessionStartRef.current = Date.now();
     timerRef.current = setInterval(() => {
-      elapsed++;
-      setSessionDuration(elapsed);
+      const elapsed = Math.round((Date.now() - sessionStartRef.current) / 1000);
+      setSessionDuration((prev) => (prev === elapsed ? prev : elapsed));
       sessionDurationRef.current = elapsed;
       calibrateBaseline();
 
