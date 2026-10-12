@@ -945,6 +945,44 @@ export async function waitForGooglePlanGrant(fetchUser, {
 }
 
 /**
+ * Wait for a same-tier billing-term switch (Seeker Monthly → Seeker Annual) to
+ * show up on the user record.
+ *
+ * A term switch keeps the same plan id, so the normal grant poll cannot tell
+ * whether anything happened. What distinguishes the two store outcomes is
+ * plan_expiration_date: a switch applied immediately (a store upgrade, charged
+ * through with proration) extends it, while a switch scheduled for the end of
+ * the current period leaves it exactly as it was.
+ *
+ * @param {() => Promise<any>} fetchUser
+ * @param {string | null} expirationBefore plan_expiration_date captured before the purchase
+ * @param {{ timeoutMs?: number, intervalMs?: number }} [options]
+ * @returns {Promise<{ ok: boolean, reason?: string, user?: any }>} ok: true when
+ *   the new term is already reflected; ok: false when it is still scheduled.
+ */
+export async function waitForTermSwitchReflection(fetchUser, expirationBefore, {
+  timeoutMs = 20000,
+  intervalMs = 1500,
+} = {}) {
+  const started = Date.now();
+  let lastUser = null;
+
+  while (Date.now() - started < timeoutMs) {
+    try {
+      lastUser = await fetchUser();
+      if (lastUser && lastUser.plan_expiration_date && lastUser.plan_expiration_date !== expirationBefore) {
+        return { ok: true, user: lastUser };
+      }
+    } catch (e) {
+      console.warn('[revenuecat] term switch poll error:', e);
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  return { ok: false, reason: 'scheduled', user: lastUser };
+}
+
+/**
  * Shared plan-grant poll. Waits until base44.auth.me shows the expected plan
  * (explorer / investigator / seeker / technician) with a future
  * plan_expiration_date; requiring both avoids matching a pre-existing Wix

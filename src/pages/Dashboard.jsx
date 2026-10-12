@@ -50,6 +50,7 @@ import {
   waitForGoogleAuraGrant,
   waitForGooglePlanGrant,
   waitForGoogleTrailblazerGrant,
+  waitForTermSwitchReflection,
 } from '@/lib/revenuecat';
 
 // Short, prominent advantage highlight shown next to each subscription name.
@@ -71,6 +72,19 @@ const PLAN_LABEL_COLORS = {
   investigator: 'bg-slate-300/15 text-slate-200 border-slate-300/50',
   trailblazer:  'bg-amber-500/25 text-amber-300 border-amber-500/60',
 };
+
+// Tiers sold as both a monthly and an annual subscription. Observer is free and
+// Trailblazer is a one-time 27-month product, so neither has a term to switch.
+const TERM_SWITCH_TIERS = ['seeker', 'technician', 'explorer', 'investigator'];
+
+// Billing term encoded in a purchase-ledger product id: Apple writes
+// 'com.ages.explorer.seeker.monthly', Google Play writes 'seeker:monthly'.
+function ledgerTerm(productId) {
+  const id = String(productId || '');
+  if (/annual/i.test(id)) return 'annual';
+  if (/monthly/i.test(id)) return 'monthly';
+  return null;
+}
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -99,6 +113,11 @@ export default function Dashboard() {
       const normalized = [
         ...(rcHistory || []).map((p) => ({
           id: p.id,
+          // product_id / store / plan_expiration_date are what identify the
+          // user's current billing term (monthly vs annual) further down.
+          product_id: p.product_id,
+          store: p.store,
+          plan_expiration_date: p.plan_expiration_date,
           product_name: p.product_name || p.product_id,
           amount: p.amount,
           status: p.status,
@@ -236,6 +255,12 @@ export default function Dashboard() {
         // [AGES_IOS_PURCHASE_DIAG] iOS recurring subscription diagnostics.
         // Observation only — purchase and polling behavior below is unchanged.
         const expectedApplePlanId = getAppleSubscriptionPlanId(productId);
+        // Same-tier term switch: the plan id does not change, so there is no NEW
+        // grant to wait for. What differs is when the annual term starts — at the
+        // end of the current monthly period (Apple's same-level crossgrade) or
+        // immediately with proration — and plan_expiration_date shows which.
+        const isTermSwitch = Boolean(switchTierId) && expectedApplePlanId === switchTierId;
+        const expirationBefore = user?.plan_expiration_date || null;
         // One opaque diagnostic session per purchase attempt so every event
         // of this attempt (store result + grant poll) can be correlated in
         // the persisted Admin report. No-op unless native iOS emits events.
@@ -278,6 +303,31 @@ export default function Dashboard() {
           ok: true,
           outcome: 'store_success',
         });
+
+        // Term switch: report what the store actually did instead of polling for
+        // a grant that never changes the plan id. An unchanged expiration means
+        // the annual term is scheduled for the end of the current period.
+        if (isTermSwitch) {
+          const reflected = await waitForTermSwitchReflection(() => base44.auth.me(), expirationBefore);
+          iosPurchaseDiag(reflected.ok ? 'info' : 'warn', 'dashboard.term_switch', {
+            dashboardProductId: productId,
+            planId: switchTierId,
+            outcome: reflected.ok ? 'started_now' : 'scheduled_at_period_end',
+            expirationBefore,
+            expirationAfter: reflected.user?.plan_expiration_date ?? null,
+          });
+          if (reflected.ok) {
+            setUser(reflected.user);
+            await checkUserAuth();
+            await loadData();
+            alert('Your annual term is active.');
+          } else {
+            alert(`Annual plan set. It begins when your current monthly period ends${currentPeriodEnd ? ` on ${currentPeriodEnd}` : ''}.`);
+            await loadData();
+          }
+          setRedirecting(null);
+          return;
+        }
 
         // Wait for the Base44 webhook to write the plan grant.
         // Never grant access from the SDK result alone.
@@ -322,6 +372,12 @@ export default function Dashboard() {
       // with an explicit base plan (explorer / investigator × monthly / annual).
       // Web keeps the Wix path below; iOS uses the App Store path above.
       if (isAndroidNative() && isGoogleSubscriptionCheckout(productId)) {
+        // Same-tier term switch (monthly → annual): the plan id is unchanged, so
+        // there is no NEW grant to wait for — read the resulting expiration
+        // instead. Google Play applies a plan change either immediately
+        // (prorated) or at the next renewal, so the user is told which happened.
+        const isTermSwitch = Boolean(switchTierId) && getGoogleSubscriptionPlanId(productId) === switchTierId;
+        const expirationBefore = user?.plan_expiration_date || null;
         const result = await purchaseGoogleSubscription(productId, user?.id);
         if (result.cancelled) {
           setRedirecting(null);
@@ -332,6 +388,21 @@ export default function Dashboard() {
             alert('This subscription is not available on Google Play yet. Please try again later or contact support.');
           } else {
             alert(result.error?.message || result.reason || 'Purchase failed');
+          }
+          setRedirecting(null);
+          return;
+        }
+
+        if (isTermSwitch) {
+          const reflected = await waitForTermSwitchReflection(() => base44.auth.me(), expirationBefore);
+          if (reflected.ok) {
+            setUser(reflected.user);
+            await checkUserAuth();
+            await loadData();
+            alert('Your annual term is active.');
+          } else {
+            alert(`Annual plan set. It begins when your current monthly period ends${currentPeriodEnd ? ` on ${currentPeriodEnd}` : ''}.`);
+            await loadData();
           }
           setRedirecting(null);
           return;
@@ -500,6 +571,25 @@ export default function Dashboard() {
   const currentPlan = getEffectivePlan(user);
   const effectivePlanId = getEffectivePlanId(user);
   const isPaid = isPaidAccess(user);
+
+  // Billing term of the active subscription, read from the webhook-written
+  // purchase ledger — the only place the store's period is recorded. Null for
+  // free and one-time plans.
+  const activeLedgerRow = purchases.find((p) =>
+    p.plan_expiration_date
+    && new Date(p.plan_expiration_date).getTime() > Date.now()
+    && p.status !== 'refunded'
+    && p.status !== 'expired');
+  const currentTerm = activeLedgerRow ? ledgerTerm(activeLedgerRow.product_id) : null;
+
+  // Monthly subscriber on a tier that also sells annual: that tier's card stays
+  // in the upgrade list, offering only the annual term of the SAME tier.
+  const switchTierId = currentTerm === 'monthly' && TERM_SWITCH_TIERS.includes(effectivePlanId)
+    ? effectivePlanId
+    : null;
+  const currentPeriodEnd = user?.plan_expiration_date
+    ? new Date(user.plan_expiration_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : null;
   const displayEnergy = getDisplayEnergy(user);
   const isAdmin = user?.role === 'admin';
 
@@ -685,10 +775,11 @@ export default function Dashboard() {
             <TrendingUp className="w-4 h-4 text-primary" /> Upgrade Your Access
           </h3>
           <div className="space-y-3">
-            {PLAN_ORDER.filter(id => id !== effectivePlanId).map(planId => {
+            {PLAN_ORDER.filter(id => id !== effectivePlanId || id === switchTierId).map(planId => {
               const plan = PLANS[planId];
               const isObserver = planId === 'observer';
               const isTrailblazer = planId === 'trailblazer';
+              const isTermSwitch = planId === switchTierId;
               return (
                 <div key={planId} className="p-4 rounded-xl border border-border/40 bg-card/30">
                   <PlanTierHeader
@@ -704,6 +795,11 @@ export default function Dashboard() {
                       <>
                         <span className="font-display text-2xl text-amber-400">${plan.one_time_price}</span>
                         <span className="text-xs text-muted-foreground">one-time / 27 months</span>
+                      </>
+                    ) : isTermSwitch ? (
+                      <>
+                        <span className="font-display text-2xl text-primary">${plan.annual_price}</span>
+                        <span className="text-xs text-muted-foreground">/year</span>
                       </>
                     ) : (
                       <>
@@ -722,7 +818,20 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <TierToolkitAccess planId={planId} />
-                  {!isObserver && (
+                  {isTermSwitch ? (
+                    <div className="mt-3">
+                      <p className="text-[11px] text-muted-foreground/70 mb-2 leading-relaxed">
+                        Your {plan.name} access runs as it is now. The annual term starts when your current monthly period ends{currentPeriodEnd ? ` (${currentPeriodEnd})` : ''}.
+                      </p>
+                      <button
+                        onClick={() => handlePurchase(`${planId}_annual`)}
+                        disabled={redirecting === `${planId}_annual`}
+                        className="w-full py-2.5 rounded-lg bg-primary/20 border border-primary/40 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/30 transition-colors disabled:opacity-50 min-h-[44px] flex items-center justify-center"
+                      >
+                        {redirecting === `${planId}_annual` ? <Loader2 className="w-4 h-4 animate-spin" /> : `Switch to Annual $${plan.annual_price}`}
+                      </button>
+                    </div>
+                  ) : !isObserver && (
                     <div className="flex gap-2 mt-3">
                       {!isTrailblazer && (
                         <>
