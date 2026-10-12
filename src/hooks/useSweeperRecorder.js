@@ -51,6 +51,7 @@ function diag(level, msg, data) {
 export default function useSweeperRecorder({
   canvasRef,
   attachMicToRecording,
+  boostMicStream,
   resumeAudioContext,
   setSensorError,
   componentName = 'Sweeper',
@@ -99,22 +100,38 @@ export default function useSweeperRecorder({
     }
   }, []);
 
+  // Auto-restart teardown: the session's microphone stream stays alive (see
+  // spinup) so the phone is not asked to re-negotiate its input mid-session.
+  const stopCanvasTracks = useCallback(() => {
+    if (canvasStreamRef.current) {
+      try { canvasStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
+      canvasStreamRef.current = null;
+    }
+  }, []);
+
   // Spin up a fresh MediaRecorder on a new canvas stream + mic. Used for both
   // the initial recording and auto-restarts. Chunks always accumulate into
   // the same videoChunksRef so the final blob spans the whole session.
   const spinup = useCallback(async () => {
     try {
-      // Mic capture matches the standalone Audio Recorder (which records the
-      // phone's default feed and is loud): automatic gain ON so the
-      // investigator's own voice and the room come through at a usable level,
-      // while echo cancellation and noise suppression stay OFF — with those on,
-      // iOS cancels the phone's own speaker output out of the mic, which is
-      // exactly the dictated letters/words that have to survive in the
-      // recording.
-      const audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
-      });
-      audioStreamRef.current = audioStream;
+      // Mic capture is the phone's plain feed, deliberately WITHOUT echo
+      // cancellation or noise suppression: both remove exactly what these
+      // recordings are for — the dictated items leave through the phone's own
+      // speaker, and room tone is evidence. Automatic gain stays ON so a voice
+      // across the room arrives at a usable level.
+      //
+      // The microphone is opened once per session and reused across
+      // auto-restarts: re-opening it mid-session makes the phone re-negotiate
+      // its input mode, which is both what the iOS recorder flakiness feeds on
+      // and a chance for the phone to switch the mic into a speech-only mode.
+      let audioStream = audioStreamRef.current;
+      const liveMicTrack = audioStream?.getAudioTracks?.()[0];
+      if (!audioStream || !liveMicTrack || liveMicTrack.readyState === 'ended') {
+        audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+        });
+        audioStreamRef.current = audioStream;
+      }
       await new Promise((r) => setTimeout(r, 150));
       // The device's web view may have no canvas recording at all (every iPhone):
       // a session there used to run and save nothing. Record the session audio
@@ -126,19 +143,42 @@ export default function useSweeperRecorder({
       if (!canvasCapture) {
         diag('warn', `${componentName} canvas capture unavailable — recording session audio only`);
       }
+      // Record what the phone ACTUALLY applied to the microphone — the plain
+      // feed we ask for can be ignored. If echo cancellation or noise
+      // suppression come back true, the phone is processing the input and room
+      // tone will be filtered out no matter what the app does.
+      try {
+        const applied = audioStream.getAudioTracks?.()[0]?.getSettings?.() || {};
+        diag('info', `${componentName} mic settings applied`, {
+          capturePath: canvasCapture ? 'canvas+mix' : 'audio-only',
+          echoCancellation: applied.echoCancellation ?? 'unknown',
+          noiseSuppression: applied.noiseSuppression ?? 'unknown',
+          autoGainControl: applied.autoGainControl ?? 'unknown',
+        });
+      } catch {}
       const canvasStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
       canvasStreamRef.current = canvasStream;
       // Prefer the Web Audio mixed track (mic + dictated speech) when it is
       // still live; on a restart after the AudioContext suspended the mixed
       // track is ended, so fall back to the raw mic track (the TTS is still
       // captured acoustically — see the echo-cancellation disable comment).
-      // The audio-only path takes the raw mic track: it is the track the phone's
-      // own recorder handles most reliably.
+      // The audio-only path takes the boosted mic-only track (micRecordChain),
+      // which is the same microphone with the same lift, without the tools' own
+      // audio added electrically.
       let audioTrack = null;
       if (canvasCapture) {
         try {
           const mixed = attachMicToRecording ? attachMicToRecording(audioStream) : null;
           if (mixed && mixed.readyState !== 'ended') audioTrack = mixed;
+        } catch {}
+      } else {
+        // Audio-only session: the microphone is the recording's only input, so
+        // it goes through the same lift and limiter as the mixed path. Without
+        // it the saved file was the phone's plain feed, with the speaker right
+        // beside the mic drowning the room and the investigator's own voice.
+        try {
+          const boosted = boostMicStream ? boostMicStream(audioStream) : null;
+          if (boosted && boosted.readyState !== 'ended') audioTrack = boosted;
         } catch {}
       }
       if (!audioTrack) audioTrack = audioStream.getAudioTracks()[0] || null;
@@ -193,7 +233,9 @@ export default function useSweeperRecorder({
           chunks: videoChunksRef.current.length,
           restart: restartCountRef.current + 1,
         });
-        stopTracks();
+        // Keep the microphone stream alive across the restart — only the canvas
+        // stream is torn down (see spinup).
+        stopCanvasTracks();
         restartCountRef.current += 1;
         // Spin up asynchronously; failure is non-fatal (session continues).
         spinup().catch((e) => diag('error', `${componentName} restart spinup failed`, { msg: e?.message }));
@@ -206,7 +248,7 @@ export default function useSweeperRecorder({
       diag('error', `${componentName} spinup failed`, { msg: e?.message });
       return false;
     }
-  }, [canvasRef, attachMicToRecording, setSensorError, componentName, stopTracks]);
+  }, [canvasRef, attachMicToRecording, boostMicStream, setSensorError, componentName, stopTracks, stopCanvasTracks]);
 
   const startRecording = useCallback(async () => {
     userStoppedRef.current = false;

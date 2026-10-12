@@ -148,7 +148,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
-  const { unlock, attachMicToRecording, resumeContext, playCue } = useGhostVoice();
+  const { unlock, attachMicToRecording, boostMicStream, resumeContext, playCue } = useGhostVoice();
   const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const speakNormal = (word) => {
@@ -213,6 +213,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
     canvasRef,
     attachMicToRecording,
+    boostMicStream,
     resumeAudioContext: resumeContext,
     setSensorError,
     componentName: 'TermsSweeper',

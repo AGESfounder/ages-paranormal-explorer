@@ -57,7 +57,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   // Web Audio–based voice (unlocked on the Start tap) so the spoken answer
   // plays reliably on iOS even though it's triggered by a sensor event. Called
   // WITHOUT the creepy flag → normal-speed delivery.
-  const { stop: stopVoice, unlock, attachMicToRecording, resumeContext, playCue } = useGhostVoice();
+  const { stop: stopVoice, unlock, attachMicToRecording, boostMicStream, resumeContext, playCue } = useGhostVoice();
 
   // Local on-device TTS announces each phrase as it cycles in the user's own
   // device narration voice via the shared Tool speech adapter — native TTS on
@@ -122,6 +122,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
     canvasRef,
     attachMicToRecording,
+    boostMicStream,
     resumeAudioContext: resumeContext,
     setSensorError,
     componentName: 'YesNoSweeper',

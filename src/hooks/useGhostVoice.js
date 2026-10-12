@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { audioAcquire, audioRelease, getMusicSettings } from '@/lib/hauntedAudio';
 import { isNativeToolSpeech, getToolVoices, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
 import { synthesizeCue } from '@/lib/toolCues';
+import { buildMicChain } from '@/lib/micRecordChain';
 
 // A saved Device Voice Picker selection (localStorage
 // 'ages_device_voice_uri') is addressed directly by its voiceURI: the
@@ -23,6 +24,9 @@ export default function useGhostVoice() {
   const audioCtxRef = useRef(null);
   const srcRef = useRef(null);
   const recordDestRef = useRef(null);
+  // Destination for the mic-only recording path (devices that cannot record a
+  // canvas at all) — see boostMicStream.
+  const micOnlyDestRef = useRef(null);
   const busyRef = useRef(false);
   // Invalidation counter for the native device-speech path: bumped by every
   // new speakDevice() call, by stop(), and on unmount. An async speakDevice
@@ -564,29 +568,28 @@ export default function useGhostVoice() {
       if (!ctx) return null;
       if (!recordDestRef.current) recordDestRef.current = ctx.createMediaStreamDestination();
       if (micStream) {
-        const micSrc = ctx.createMediaStreamSource(micStream);
-        // Boost the mic into the recording destination so the saved mix
-        // (the investigator's own voice, room sound, and the tools' spoken
-        // items leaving the speaker) sits at the level the standalone Audio
-        // Recorder achieves. A limiter follows the boost so a loud room or a
-        // voice right at the mic cannot clip the saved audio.
-        const micGain = ctx.createGain();
-        micGain.gain.value = 4.0;
-        micSrc.connect(micGain);
-        let micOut = micGain;
-        if (typeof ctx.createDynamicsCompressor === 'function') {
-          const limiter = ctx.createDynamicsCompressor();
-          limiter.threshold.value = -6;
-          limiter.knee.value = 4;
-          limiter.ratio.value = 12;
-          limiter.attack.value = 0.003;
-          limiter.release.value = 0.25;
-          micGain.connect(limiter);
-          micOut = limiter;
-        }
-        micOut.connect(recordDestRef.current);
+        // Mic -> gain -> limiter (shared with the mic-only path below), into the
+        // destination that also carries the tools' own audio.
+        buildMicChain(ctx, micStream).connect(recordDestRef.current);
       }
       return recordDestRef.current.stream.getAudioTracks()[0] || null;
+    } catch { return null; }
+  }, []);
+
+  // Mic-only recording chain, for the devices whose web view cannot record a
+  // canvas at all: those sessions save the session audio, and the microphone is
+  // the recording's only input — so it gets the same lift and the same limiter
+  // as the mixed path. Without it that recording was the phone's plain feed,
+  // with the speaker a centimetre away drowning everything in the room.
+  // Returns the boosted track, or null when the audio engine is not up yet (the
+  // caller then keeps the phone's plain feed).
+  const boostMicStream = useCallback((micStream) => {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !micStream) return null;
+      if (!micOnlyDestRef.current) micOnlyDestRef.current = ctx.createMediaStreamDestination();
+      buildMicChain(ctx, micStream).connect(micOnlyDestRef.current);
+      return micOnlyDestRef.current.stream.getAudioTracks()[0] || null;
     } catch { return null; }
   }, []);
 
@@ -645,6 +648,7 @@ export default function useGhostVoice() {
         ctx = new (window.AudioContext || window.webkitAudioContext)();
         audioCtxRef.current = ctx;
         try { recordDestRef.current = ctx.createMediaStreamDestination(); } catch {}
+        try { micOnlyDestRef.current = ctx.createMediaStreamDestination(); } catch {}
       }
       if (ctx.state !== 'running') {
         await Promise.race([
@@ -686,5 +690,5 @@ export default function useGhostVoice() {
     } catch {}
   }, []);
 
-  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop, unlock, attachMicToRecording, playCue };
+  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop, unlock, attachMicToRecording, boostMicStream, playCue };
 }
