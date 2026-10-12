@@ -297,8 +297,9 @@ export default function Settings() {
         </div>
 
         {/* TEMP DIAG — temporary AdMob TestFlight diagnostics (native iOS only).
-            Renders nothing on web/Android. Remove before release. */}
-        <AdDiagnosticsPanel />
+            Renders nothing on web/Android. Admin-only: testers at any other level
+            must never see ad diagnostics in Settings. Remove before release. */}
+        {settings.isAdmin && <AdDiagnosticsPanel />}
 
         {/* Danger Zone */}
         <div className="rounded-xl border border-destructive/40 bg-destructive/5 overflow-hidden">
