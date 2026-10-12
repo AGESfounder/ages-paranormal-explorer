@@ -714,7 +714,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Term Sweeper — ${locationLabel} — ${date}`,
-        type: 'video',
+        type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         description: `Term Sweeper session at ${locationLabel} — ${formatDuration(sessionDuration)} — ${captured.length} term(s) captured via environment trigger: ${captured.map(c => c.word).join(', ') || 'none'}.`,
         file_url,
         date,

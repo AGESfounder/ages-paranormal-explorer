@@ -540,7 +540,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Yes/No/IDK Sweeper — ${date}`,
-        type: 'video',
+        type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         description: `Yes/No/IDK Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} answer(s) captured via environment trigger: ${captured.join(', ') || 'none'}.`,
         file_url,
         date,

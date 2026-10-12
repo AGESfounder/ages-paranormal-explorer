@@ -545,7 +545,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Alphabet Sweeper — ${date}`,
-        type: 'video',
+        type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.join('') || 'none'}.`,
         file_url,
         date,

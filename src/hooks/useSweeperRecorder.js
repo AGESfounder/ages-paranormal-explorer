@@ -32,6 +32,14 @@ const MIME_CANDIDATES = [
   'video/mp4',
 ];
 
+// iPhone's web view cannot record a canvas, so the sweepers there record the
+// session audio instead of a video (see spinup).
+const AUDIO_MIME_CANDIDATES = [
+  'audio/mp4',
+  'audio/webm;codecs=opus',
+  'audio/webm',
+];
+
 function diag(level, msg, data) {
   try {
     const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
@@ -52,6 +60,7 @@ export default function useSweeperRecorder({
   const audioStreamRef = useRef(null);
   const canvasStreamRef = useRef(null);
   const mimeTypeRef = useRef('');
+  const audioOnlyRef = useRef(false);
   const userStoppedRef = useRef(false);
   const heartbeatRef = useRef(null);
   const restartCountRef = useRef(0);
@@ -100,25 +109,36 @@ export default function useSweeperRecorder({
       });
       audioStreamRef.current = audioStream;
       await new Promise((r) => setTimeout(r, 150));
-      if (!canvasRef.current || typeof canvasRef.current.captureStream !== 'function') {
-        setSensorError?.('Recording not supported in this browser. The session still runs — you just won\'t get a video file.');
-        return false;
+      // The device's web view may have no canvas recording at all (every iPhone):
+      // a session there used to run and save nothing. Record the session audio
+      // instead — the dictated items and the trigger cues leave the phone's own
+      // speaker right beside the mic, so they are captured acoustically — and the
+      // tools save it as audio evidence (they read the blob type at save time).
+      const canvasCapture = !!canvasRef.current && typeof canvasRef.current.captureStream === 'function';
+      audioOnlyRef.current = !canvasCapture;
+      if (!canvasCapture) {
+        diag('warn', `${componentName} canvas capture unavailable — recording session audio only`);
       }
-      const canvasStream = canvasRef.current.captureStream(30);
+      const canvasStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
       canvasStreamRef.current = canvasStream;
       // Prefer the Web Audio mixed track (mic + dictated speech) when it is
       // still live; on a restart after the AudioContext suspended the mixed
       // track is ended, so fall back to the raw mic track (the TTS is still
       // captured acoustically — see the echo-cancellation disable comment).
+      // The audio-only path takes the raw mic track: it is the track the phone's
+      // own recorder handles most reliably.
       let audioTrack = null;
-      try {
-        const mixed = attachMicToRecording ? attachMicToRecording(audioStream) : null;
-        if (mixed && mixed.readyState !== 'ended') audioTrack = mixed;
-      } catch {}
+      if (canvasCapture) {
+        try {
+          const mixed = attachMicToRecording ? attachMicToRecording(audioStream) : null;
+          if (mixed && mixed.readyState !== 'ended') audioTrack = mixed;
+        } catch {}
+      }
       if (!audioTrack) audioTrack = audioStream.getAudioTracks()[0] || null;
       if (audioTrack) canvasStream.addTrack(audioTrack);
 
-      const mimeType = MIME_CANDIDATES.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+      const candidates = canvasCapture ? MIME_CANDIDATES : AUDIO_MIME_CANDIDATES;
+      const mimeType = candidates.find((t) => MediaRecorder.isTypeSupported(t)) || '';
       mimeTypeRef.current = mimeType;
       const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = mr;
@@ -146,7 +166,9 @@ export default function useSweeperRecorder({
         if (userStoppedRef.current) {
           // User-initiated stop — assemble the final blob from every chunk
           // collected across the whole session (including restarts).
-          const blob = new Blob(videoChunksRef.current, { type: mimeTypeRef.current || 'video/webm' });
+          const blob = new Blob(videoChunksRef.current, {
+            type: mimeTypeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm'),
+          });
           diag('info', `${componentName} recorder stopped (user)`, {
             elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
             chunks: videoChunksRef.current.length,

@@ -24,6 +24,15 @@ export function isNativeToolSpeech() {
   }
 }
 
+/** True only in the native iOS shell — the engine that needs Add-queue speech. */
+export function isIosNative() {
+  try {
+    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
+  } catch {
+    return false;
+  }
+}
+
 // ── Async voice enumeration ────────────────────────────────────────────────
 /** @type {Array<{name: string, lang: string, local: boolean, voiceURI: string, index: number, webVoice: any}> | null} */
 let voicesCache = null;
@@ -172,6 +181,11 @@ async function speakNative(text, opts, gen, settle) {
       pitch: opts.pitch,
       volume: opts.volume,
     };
+    // iOS only: QUEUE_ADD (1). Every tool item is awaited before the next one is
+    // queued, so nothing ever needs interrupting — and asking the iOS engine to
+    // flush before each utterance is what silenced every item after the first.
+    // Android keeps the default flush strategy, which its cadence relies on.
+    if (isIosNative()) speakOpts.queueStrategy = 1;
     // The plugin selects voices by index into getSupportedVoices().
     if (voice && Number.isInteger(voice.index)) speakOpts.voice = voice.index;
     // Resolves when the utterance finishes (iOS also resolves on cancel;

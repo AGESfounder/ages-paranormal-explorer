@@ -78,22 +78,27 @@ export default function SLSCamera({ gateSave, refundSave }) {
       setActive(true);
       processFrame();
 
-      // Record from canvas (what's shown on screen) + audio from camera
+      // Record from canvas (what's shown on screen) + audio from camera. On a
+      // device whose web view cannot record a canvas (every iPhone) record the
+      // live camera feed itself instead: this tool's evidence IS the camera view,
+      // and a session there previously saved no file at all.
       await new Promise(r => setTimeout(r, 300));
-      const canvasStream = canvasRef.current.captureStream(30);
+      const canvasCapture = !!canvasRef.current && typeof canvasRef.current.captureStream === 'function';
+      const recordStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
+      if (!canvasCapture) stream.getVideoTracks().forEach((t) => recordStream.addTrack(t));
       const audioTrack = stream.getAudioTracks()[0];
-      if (audioTrack) canvasStream.addTrack(audioTrack);
+      if (audioTrack) recordStream.addTrack(audioTrack);
 
       const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
         .find(t => MediaRecorder.isTypeSupported(t)) || '';
-      const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
+      const mr = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
         setRecordedBlob(blob);
-        canvasStream.getTracks().forEach(t => t.stop());
+        recordStream.getTracks().forEach(t => t.stop());
         stream.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       };
@@ -240,7 +245,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Anomaly Camera Session ${now.toISOString().split('T')[0]}`,
-        type: 'video',
+        type: recordedBlob.type.startsWith('audio') ? 'evp' : 'video',
         description: `Anomaly Camera session — ${formatDuration(recordDuration)} recorded.`,
         file_url,
         date: now.toISOString().split('T')[0],

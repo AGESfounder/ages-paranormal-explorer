@@ -267,29 +267,38 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       // Wait for canvas to be ready
       await new Promise(r => setTimeout(r, 200));
 
-      if (!canvasRef.current || typeof canvasRef.current.captureStream !== 'function') {
-        setSensorError('Recording not supported in this browser. Sensor detection still works — you just won\'t get a video file.');
-        return false;
+      // iPhone's web view cannot record a canvas, so this tool used to run a
+      // session there and save nothing. Record the session audio instead: the
+      // beeps leave the phone's own speaker right beside the mic, so they are
+      // captured acoustically, and the session saves as audio evidence.
+      const canvasCapture = !!canvasRef.current && typeof canvasRef.current.captureStream === 'function';
+      if (!canvasCapture) {
+        setSensorError('Recording the session audio — this device cannot record the on-screen display.');
       }
 
-      const canvasStream = canvasRef.current.captureStream(30);
+      const canvasStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
       // Prefer the engine's mixed track (beeps + ambient mic) so the vibration
       // noise is always in the saved video; the mic is fed only into the
       // recording, never to the speaker, so there is no feedback. Falls back to
-      // the raw mic track when the beep engine is unavailable.
+      // the raw mic track when the beep engine is unavailable. The audio-only
+      // path takes the raw mic track, which the phone records most reliably.
       let audioTrack = null;
-      try {
-        const dest = recordDestRef.current;
-        if (dest && beepCtxRef.current) {
-          const micSrc = beepCtxRef.current.createMediaStreamSource(audioStream);
-          micSrc.connect(dest);
-          audioTrack = dest.stream.getAudioTracks()[0] || null;
-        }
-      } catch {}
+      if (canvasCapture) {
+        try {
+          const dest = recordDestRef.current;
+          if (dest && beepCtxRef.current) {
+            const micSrc = beepCtxRef.current.createMediaStreamSource(audioStream);
+            micSrc.connect(dest);
+            audioTrack = dest.stream.getAudioTracks()[0] || null;
+          }
+        } catch {}
+      }
       if (!audioTrack) audioTrack = audioStream.getAudioTracks()[0] || null;
       if (audioTrack) canvasStream.addTrack(audioTrack);
 
-      const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+      const mimeType = (canvasCapture
+        ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+        : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'])
         .find(t => MediaRecorder.isTypeSupported(t)) || '';
 
       const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
@@ -297,7 +306,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       videoChunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(videoChunksRef.current, { type: mimeType || 'video/webm' });
+        const blob = new Blob(videoChunksRef.current, { type: mimeType || (canvasCapture ? 'video/webm' : 'audio/mp4') });
         videoBlobRef.current = blob;
         setVideoBlob(blob);
         canvasStream.getTracks().forEach(t => t.stop());
@@ -472,7 +481,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Vibration Communicator Session ${date}`,
-        type: 'video',
+        type: blob.type.startsWith('audio') ? 'evp' : 'video',
         description: `Vibration Communicator session — ${formatDuration(sessionDuration)} — ${events.length} disturbance event(s) detected.`,
         file_url,
         date,
