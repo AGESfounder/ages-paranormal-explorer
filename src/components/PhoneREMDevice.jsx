@@ -5,6 +5,7 @@ import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import { toast } from '@/components/ui/use-toast';
+import { buildMicChain } from '@/lib/micRecordChain';
 
 const SENSITIVITY_THRESHOLDS = {
   accel: 0.12,  // m/s² delta from baseline
@@ -69,6 +70,10 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   // acoustically — the tool is meant to lie face-down on a surface, which
   // muffles the mic and is why the beeps were only sometimes in the saved video.
   const recordDestRef = useRef(null);
+  // Mic-only recording destination for the devices whose web view cannot record
+  // the on-screen display (every iPhone): the microphone is that recording's
+  // only input, so it needs its own destination (see startRecording).
+  const micOnlyDestRef = useRef(null);
 
   // Sensor handlers
   const handleMotion = (e) => {
@@ -162,12 +167,14 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     beepCtxRef.current = ctx;
     // Mixing point for the recording: beeps + ambient mic.
     try { recordDestRef.current = ctx.createMediaStreamDestination(); } catch { recordDestRef.current = null; }
+    try { micOnlyDestRef.current = ctx.createMediaStreamDestination(); } catch { micOnlyDestRef.current = null; }
   };
 
   const stopAudioEngine = () => {
     if (beepIntervalRef.current) { clearInterval(beepIntervalRef.current); beepIntervalRef.current = null; }
     if (beepCtxRef.current) { beepCtxRef.current.close(); beepCtxRef.current = null; }
     recordDestRef.current = null;
+    micOnlyDestRef.current = null;
   };
 
   // Canvas drawing — renders the REM device visualization for recording
@@ -260,9 +267,26 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   // Record from canvas (what's shown on screen) + audio from mic
   const startRecording = async () => {
     try {
-      // Request audio only — video comes from the canvas
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request audio only — video comes from the canvas. Echo cancellation and
+      // noise suppression stay OFF: both remove exactly what this recording is
+      // for (the beeps leave through the phone's own speaker, and room tone is
+      // the evidence). Automatic gain stays ON so a voice across the room
+      // arrives at a usable level.
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+      });
       audioStreamRef.current = audioStream;
+      // Log what the phone ACTUALLY applied — the plain feed we ask for can be
+      // ignored, and if cancellation comes back on, room tone is being filtered
+      // out no matter what the app does.
+      try {
+        const applied = audioStream.getAudioTracks?.()[0]?.getSettings?.() || {};
+        console.log(`[REMRec] mic settings applied ${JSON.stringify({
+          echoCancellation: applied.echoCancellation ?? 'unknown',
+          noiseSuppression: applied.noiseSuppression ?? 'unknown',
+          autoGainControl: applied.autoGainControl ?? 'unknown',
+        })}`);
+      } catch {}
 
       // Wait for canvas to be ready
       await new Promise(r => setTimeout(r, 200));
@@ -277,19 +301,34 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       }
 
       const canvasStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
-      // Prefer the engine's mixed track (beeps + ambient mic) so the vibration
-      // noise is always in the saved video; the mic is fed only into the
-      // recording, never to the speaker, so there is no feedback. Falls back to
-      // the raw mic track when the beep engine is unavailable. The audio-only
-      // path takes the raw mic track, which the phone records most reliably.
+      // The microphone goes into the recording through the shared lift and
+      // limiter (micRecordChain), never raw: the phone's speaker sits about a
+      // centimetre from its mic, so the beeps arrive enormously louder than the
+      // room. The limiter caps those peaks, which is what lets a voice and the
+      // room sit at a usable level beside them. The mic is fed only into the
+      // recording, never to the speaker, so there is no feedback. Devices that
+      // cannot record the canvas take the mic-only destination, since their
+      // recording has no other input.
       let audioTrack = null;
       if (canvasCapture) {
         try {
           const dest = recordDestRef.current;
           if (dest && beepCtxRef.current) {
-            const micSrc = beepCtxRef.current.createMediaStreamSource(audioStream);
-            micSrc.connect(dest);
+            buildMicChain(beepCtxRef.current, audioStream).connect(dest);
             audioTrack = dest.stream.getAudioTracks()[0] || null;
+          }
+        } catch {}
+      } else {
+        try {
+          const ctx = beepCtxRef.current;
+          const dest = micOnlyDestRef.current;
+          // That destination only carries sound while the engine is actually
+          // running, so it is used only then — otherwise the phone's plain mic
+          // track is recorded instead of a silent one.
+          if (ctx && ctx.state === 'running' && dest) {
+            buildMicChain(ctx, audioStream).connect(dest);
+            const t = dest.stream.getAudioTracks()[0];
+            if (t && t.readyState === 'live') audioTrack = t;
           }
         } catch {}
       }
@@ -418,6 +457,12 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       if (elapsed === 5 && !sensorDataReceivedRef.current) {
         setSensorError('No motion sensor data detected. This tool requires a mobile device with accelerometer/gyroscope sensors.');
       }
+
+      // Keep the beep engine alive: the phone can suspend it mid-session, and a
+      // suspended engine takes the recording's microphone destination down with
+      // it (the saved session then loses the room, and the beeps go quiet).
+      const beepCtx = beepCtxRef.current;
+      if (beepCtx && beepCtx.state !== 'running') { try { beepCtx.resume(); } catch {} }
 
       const level = computeAlertLevel();
       setAlertLevel(level);
