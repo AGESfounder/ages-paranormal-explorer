@@ -116,4 +116,9 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
+        # Disabled: automatic TestFlight beta review submission fails with HTTP 422
+        # because export-compliance information has not been answered in App Store
+        # Connect for the uploaded builds. The signed IPA is still uploaded to App
+        # Store Connect; submit the build to TestFlight beta review manually after
+        # answering the export compliance question there.
+        submit_to_testflight: false
