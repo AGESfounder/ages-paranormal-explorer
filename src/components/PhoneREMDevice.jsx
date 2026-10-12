@@ -64,6 +64,11 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   const canvasRef = useRef(null);
   const canvasIntervalRef = useRef(null);
   const audioStreamRef = useRef(null);
+  // Recording destination on the beep engine. The vibration beeps are routed
+  // into the recording here instead of relying on the mic picking them up
+  // acoustically — the tool is meant to lie face-down on a surface, which
+  // muffles the mic and is why the beeps were only sometimes in the saved video.
+  const recordDestRef = useRef(null);
 
   // Sensor handlers
   const handleMotion = (e) => {
@@ -109,6 +114,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   const playBeep = (frequency, duration) => {
     if (!beepCtxRef.current) return;
     const ctx = beepCtxRef.current;
+    // The phone's speech/mic session can suspend this engine; a beep fired
+    // into a suspended context is silent. Nudge it back before scheduling.
+    if (ctx.state !== 'running') { try { ctx.resume(); } catch {} }
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     const osc2 = ctx.createOscillator();
@@ -128,6 +136,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
 
     osc.connect(gain); gain.connect(ctx.destination);
     osc2.connect(gain2); gain2.connect(ctx.destination);
+    if (recordDestRef.current) {
+      try { gain.connect(recordDestRef.current); gain2.connect(recordDestRef.current); } catch {}
+    }
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + duration);
     osc2.start(ctx.currentTime);
@@ -149,11 +160,14 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (ctx.state === 'suspended') await ctx.resume();
     beepCtxRef.current = ctx;
+    // Mixing point for the recording: beeps + ambient mic.
+    try { recordDestRef.current = ctx.createMediaStreamDestination(); } catch { recordDestRef.current = null; }
   };
 
   const stopAudioEngine = () => {
     if (beepIntervalRef.current) { clearInterval(beepIntervalRef.current); beepIntervalRef.current = null; }
     if (beepCtxRef.current) { beepCtxRef.current.close(); beepCtxRef.current = null; }
+    recordDestRef.current = null;
   };
 
   // Canvas drawing — renders the REM device visualization for recording
@@ -259,7 +273,20 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       }
 
       const canvasStream = canvasRef.current.captureStream(30);
-      const audioTrack = audioStream.getAudioTracks()[0];
+      // Prefer the engine's mixed track (beeps + ambient mic) so the vibration
+      // noise is always in the saved video; the mic is fed only into the
+      // recording, never to the speaker, so there is no feedback. Falls back to
+      // the raw mic track when the beep engine is unavailable.
+      let audioTrack = null;
+      try {
+        const dest = recordDestRef.current;
+        if (dest && beepCtxRef.current) {
+          const micSrc = beepCtxRef.current.createMediaStreamSource(audioStream);
+          micSrc.connect(dest);
+          audioTrack = dest.stream.getAudioTracks()[0] || null;
+        }
+      } catch {}
+      if (!audioTrack) audioTrack = audioStream.getAudioTracks()[0] || null;
       if (audioTrack) canvasStream.addTrack(audioTrack);
 
       const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
@@ -367,8 +394,10 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     await new Promise(r => setTimeout(r, 100));
 
     startCanvasDrawing();
-    await startRecording();
+    // Engine first: the recorder mixes the beeps through this engine's
+    // destination, so it must exist before the recorder is built.
     await startAudioEngine();
+    await startRecording();
 
     let elapsed = 0;
     timerRef.current = setInterval(() => {

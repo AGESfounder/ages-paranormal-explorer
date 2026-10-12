@@ -12,7 +12,7 @@ import { useCallback, useRef, useState } from 'react';
 //   1. Hidden diagnostics — onerror, per-track onended, and onstop timing are
 //      logged to the console with a [SweeperRec] prefix so a TestFlight run
 //      shows exactly when/why the recorder stopped vs. the session timer.
-//   2. AudioContext heartbeat — resumes the Web Audio context every 3s while
+//   2. AudioContext heartbeat — resumes the Web Audio context every 1.5s while
 //      recording so the mixed-audio destination track does not end (the
 //      primary suspected cause on iOS).
 //   3. Auto-restart — if onstop fires without a user-initiated stop, a fresh
@@ -73,7 +73,10 @@ export default function useSweeperRecorder({
         chunks: videoChunksRef.current.length,
         recorderState: mediaRecorderRef.current?.state ?? 'none',
       });
-    }, 3000);
+      // 1.5s (not 3s): the phone's speech session can suspend the engine in the
+      // gap between spoken items, and a suspension left standing for seconds
+      // drops the recording's audio mix down to thin mic-only sound.
+    }, 1500);
   }, [resumeAudioContext, componentName, stopHeartbeat]);
 
   const stopTracks = useCallback(() => {

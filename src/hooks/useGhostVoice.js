@@ -615,15 +615,28 @@ export default function useGhostVoice() {
   }, []);
 
   // Resume the AudioContext (e.g. after getUserMedia suspended it on iOS).
+  // This is also the app audio engine's recovery path: the phone's speech/mic
+  // session can suspend — or fully close — the context between spoken items,
+  // which silenced the trigger cues, the recording's audio mix and the
+  // background ambience at the same moment. A closed context is replaced (its
+  // recording destination with it, so the next recording attach gets a live
+  // mix), and the resume() wait is bounded because iOS can leave a resume
+  // hanging forever on an interrupted session.
   const resumeContext = useCallback(async () => {
     try {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      let ctx = audioCtxRef.current;
+      if (!ctx || ctx.state === 'closed') {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtxRef.current = ctx;
+        try { recordDestRef.current = ctx.createMediaStreamDestination(); } catch {}
       }
-      if (audioCtxRef.current.state !== 'running') {
-        await audioCtxRef.current.resume();
+      if (ctx.state !== 'running') {
+        await Promise.race([
+          (async () => { try { await ctx.resume(); } catch {} })(),
+          new Promise((resolve) => setTimeout(resolve, 1200)),
+        ]);
       }
-      return audioCtxRef.current.state === 'running';
+      return ctx.state === 'running';
     } catch { return false; }
   }, []);
 
@@ -635,22 +648,21 @@ export default function useGhostVoice() {
   // voice. Resolves once the cue has finished sounding.
   const playCue = useCallback(async (kind, opts = {}) => {
     try {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      // Hold the cue until the engine is actually alive. The phone's speech/mic
+      // session can suspend the context between spoken items, and a cue
+      // synthesized into a suspended context is silently lost — which is why the
+      // trigger symbol played once or twice and then went quiet. Two bounded
+      // attempts cover the moment right after an utterance, and the loop always
+      // settles: the Sweeper tools release their trigger lock only when this
+      // resolves, so it must never hang.
+      let ctx = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await resumeContext();
+        ctx = audioCtxRef.current;
+        if (ctx && ctx.state === 'running') break;
+        await new Promise((resolve) => setTimeout(resolve, 150));
       }
-      const ctx = audioCtxRef.current;
-      // iOS can leave the context suspended once the mic opens, and resume() can
-      // hang forever when the audio session is interrupted. The wait is bounded
-      // on purpose: the Sweeper tools release their trigger lock when the cue
-      // reports completion, so a cue that never settled would leave the tool
-      // locked with nothing speaking.
-      if (ctx.state !== 'running') {
-        await Promise.race([
-          (async () => { try { await ctx.resume(); } catch {} })(),
-          new Promise((resolve) => setTimeout(resolve, 250)),
-        ]);
-        if (ctx.state !== 'running') return;
-      }
+      if (!ctx || ctx.state !== 'running') return;
       const nodes = [ctx.destination];
       if (recordDestRef.current) nodes.push(recordDestRef.current);
       const ms = synthesizeCue(ctx, nodes, kind, opts);

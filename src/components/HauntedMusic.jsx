@@ -180,6 +180,13 @@ export default function HauntedMusic() {
     const applyVolume = () => {
       const a = audioRef.current || window.__hauntedAudioEl;
       if (!a) return;
+      // The phone's speech/mic session can leave this engine suspended while the
+      // element still reports "playing" — that was the silent ambience that only
+      // a trip out of the app used to clear. Re-check the engine on the existing
+      // poll so the music comes back on its own once a tool stops using audio.
+      if (audioCtx && audioCtx.state !== 'running' && !document.hidden) {
+        audioCtx.resume().catch(() => {});
+      }
       const { hauntedEnabled, hauntedVolume } = getMusicSettings();
       const shouldPlay = hauntedEnabled && !isAudioBusy() && !document.hidden;
       const vol = shouldPlay ? hauntedVolume / 100 : 0;
