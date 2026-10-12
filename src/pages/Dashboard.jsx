@@ -50,7 +50,6 @@ import {
   waitForGoogleAuraGrant,
   waitForGooglePlanGrant,
   waitForGoogleTrailblazerGrant,
-  waitForTermSwitchReflection,
 } from '@/lib/revenuecat';
 
 // Short, prominent advantage highlight shown next to each subscription name.
@@ -256,11 +255,8 @@ export default function Dashboard() {
         // Observation only — purchase and polling behavior below is unchanged.
         const expectedApplePlanId = getAppleSubscriptionPlanId(productId);
         // Same-tier term switch: the plan id does not change, so there is no NEW
-        // grant to wait for. What differs is when the annual term starts — at the
-        // end of the current monthly period (Apple's same-level crossgrade) or
-        // immediately with proration — and plan_expiration_date shows which.
+        // grant to wait for.
         const isTermSwitch = Boolean(switchTierId) && expectedApplePlanId === switchTierId;
-        const expirationBefore = user?.plan_expiration_date || null;
         // One opaque diagnostic session per purchase attempt so every event
         // of this attempt (store result + grant poll) can be correlated in
         // the persisted Admin report. No-op unless native iOS emits events.
@@ -304,27 +300,18 @@ export default function Dashboard() {
           outcome: 'store_success',
         });
 
-        // Term switch: report what the store actually did instead of polling for
-        // a grant that never changes the plan id. An unchanged expiration means
-        // the annual term is scheduled for the end of the current period.
+        // Term switch: nothing to poll for, since the plan id is unchanged, and
+        // nothing to promise about when the new term starts — the account simply
+        // refreshes to whatever the store and its webhook settle on.
         if (isTermSwitch) {
-          const reflected = await waitForTermSwitchReflection(() => base44.auth.me(), expirationBefore);
-          iosPurchaseDiag(reflected.ok ? 'info' : 'warn', 'dashboard.term_switch', {
+          iosPurchaseDiag('info', 'dashboard.term_switch', {
             dashboardProductId: productId,
             planId: switchTierId,
-            outcome: reflected.ok ? 'started_now' : 'scheduled_at_period_end',
-            expirationBefore,
-            expirationAfter: reflected.user?.plan_expiration_date ?? null,
+            outcome: 'submitted',
           });
-          if (reflected.ok) {
-            setUser(reflected.user);
-            await checkUserAuth();
-            await loadData();
-            alert('Your annual term is active.');
-          } else {
-            alert(`Annual plan set. It begins when your current monthly period ends${currentPeriodEnd ? ` on ${currentPeriodEnd}` : ''}.`);
-            await loadData();
-          }
+          await checkUserAuth();
+          await loadData();
+          alert('Your annual plan is set.');
           setRedirecting(null);
           return;
         }
@@ -373,11 +360,8 @@ export default function Dashboard() {
       // Web keeps the Wix path below; iOS uses the App Store path above.
       if (isAndroidNative() && isGoogleSubscriptionCheckout(productId)) {
         // Same-tier term switch (monthly → annual): the plan id is unchanged, so
-        // there is no NEW grant to wait for — read the resulting expiration
-        // instead. Google Play applies a plan change either immediately
-        // (prorated) or at the next renewal, so the user is told which happened.
+        // there is no NEW grant to wait for.
         const isTermSwitch = Boolean(switchTierId) && getGoogleSubscriptionPlanId(productId) === switchTierId;
-        const expirationBefore = user?.plan_expiration_date || null;
         const result = await purchaseGoogleSubscription(productId, user?.id);
         if (result.cancelled) {
           setRedirecting(null);
@@ -394,16 +378,9 @@ export default function Dashboard() {
         }
 
         if (isTermSwitch) {
-          const reflected = await waitForTermSwitchReflection(() => base44.auth.me(), expirationBefore);
-          if (reflected.ok) {
-            setUser(reflected.user);
-            await checkUserAuth();
-            await loadData();
-            alert('Your annual term is active.');
-          } else {
-            alert(`Annual plan set. It begins when your current monthly period ends${currentPeriodEnd ? ` on ${currentPeriodEnd}` : ''}.`);
-            await loadData();
-          }
+          await checkUserAuth();
+          await loadData();
+          alert('Your annual plan is set.');
           setRedirecting(null);
           return;
         }
@@ -586,9 +563,6 @@ export default function Dashboard() {
   // in the upgrade list, offering only the annual term of the SAME tier.
   const switchTierId = currentTerm === 'monthly' && TERM_SWITCH_TIERS.includes(effectivePlanId)
     ? effectivePlanId
-    : null;
-  const currentPeriodEnd = user?.plan_expiration_date
-    ? new Date(user.plan_expiration_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
     : null;
   const displayEnergy = getDisplayEnergy(user);
   const isAdmin = user?.role === 'admin';
@@ -820,9 +794,6 @@ export default function Dashboard() {
                   <TierToolkitAccess planId={planId} />
                   {isTermSwitch ? (
                     <div className="mt-3">
-                      <p className="text-[11px] text-muted-foreground/70 mb-2 leading-relaxed">
-                        Your {plan.name} access runs as it is now. The annual term starts when your current monthly period ends{currentPeriodEnd ? ` (${currentPeriodEnd})` : ''}.
-                      </p>
                       <button
                         onClick={() => handlePurchase(`${planId}_annual`)}
                         disabled={redirecting === `${planId}_annual`}
