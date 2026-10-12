@@ -290,14 +290,22 @@ export function releaseToolSpeech() {
 }
 
 /**
- * Call inside the session-start tap gesture. Web: primes speechSynthesis
- * (iOS WKWebView requires speech to start within a user gesture) and warms
- * the voice list. Native: pre-loads the voice list so the first speak does
- * not wait on enumeration.
+ * Call inside the session-start tap gesture.
+ * Web: primes speechSynthesis (iOS WKWebView requires speech to start within a
+ * user gesture) and warms the voice list.
+ * Native: pre-loads the voice list so the first speak does not wait on
+ * enumeration, and re-activates the phone's audio session once, here, before the
+ * session's microphone opens. The session is never touched again until the
+ * session ends (releaseToolSpeech): a session call made while the microphone is
+ * recording tears the audio graph down and leaves the rest of the recording
+ * silent, which is what broke the Sweeper recordings.
  */
 export function primeToolSpeech() {
   try { getToolVoices(); } catch {}
-  if (isNativeToolSpeech()) return;
+  if (isNativeToolSpeech()) {
+    try { TextToSpeech.prepareAudioSession().catch(() => {}); } catch {}
+    return;
+  }
   try {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       const u = new SpeechSynthesisUtterance(' ');

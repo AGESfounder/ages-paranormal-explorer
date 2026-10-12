@@ -174,6 +174,9 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     sweepingRef.current = false;
     stopNormalVoice();
     try { stopVoice(); } catch {}
+    // Leaving the tool is an implicit session end: hand the phone's audio session
+    // back here too, or leaving mid-session leaves the app's own sound quiet.
+    releaseToolSpeech();
   };
 
   // ── Asking phase: "Asking Next Question…" for 10 seconds, no dictation ──

@@ -182,6 +182,9 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (resumeIntervalRef.current) { clearInterval(resumeIntervalRef.current); resumeIntervalRef.current = null; }
     if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
+    // Leaving the tool is an implicit session end: hand the phone's audio session
+    // back here too, or leaving mid-session leaves the app's own sound quiet.
+    releaseToolSpeech();
     setMotionDetected(false);
   };
 

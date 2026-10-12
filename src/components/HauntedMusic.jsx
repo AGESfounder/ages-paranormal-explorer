@@ -7,6 +7,7 @@ import {
   setMusicSettings,
   isAudioBusy,
   reconcileAudioBusy,
+  syncLiveMediaBusy,
   setHauntedPlaybackState,
 } from '@/lib/hauntedAudio';
 
@@ -214,17 +215,29 @@ export default function HauntedMusic() {
       }
     };
 
-    // Browsers require a user gesture to start audio — play on first tap.
+    // Browsers require a user gesture to start audio. This runs on the first tap
+    // (and on any later tap while the player is stopped, so a blocked start can
+    // still be recovered) — but it is deliberately NOT an unconditional play():
+    // restarting the player on every tap brought the ambience back underneath a
+    // recording that was playing back, and competed with it.
+    let unlocked = false;
     const unlock = () => {
-      if (!audioRef.current) return;
+      const a = audioRef.current;
+      if (!a) return;
       setupWebAudio();
       if (audioCtx && audioCtx.state === 'suspended') {
         audioCtx.resume()
           .then(() => setHauntedPlaybackState({ status: 'ready', error: null }))
           .catch((err) => setHauntedPlaybackState({ status: 'error', error: err?.message || 'AudioContext resume failed' }));
       }
-      audioRef.current.play()
-        .then(() => { applyVolume(); setHauntedPlaybackState({ status: 'playing', error: null }); })
+      // Once the gesture has been used, a tap only recovers a stopped player, and
+      // never while something else is being played or recorded.
+      if (unlocked && (isAudioBusy() || !a.paused)) return;
+      // The first play still happens inside the gesture (autoplay policy), so
+      // later automatic starts are allowed; applyVolume settles the level in the
+      // same tick, leaving it silent whenever it should not be heard.
+      a.play()
+        .then(() => { unlocked = true; applyVolume(); })
         .catch((err) => {
           setHauntedPlaybackState({
             status: 'blocked',
@@ -271,6 +284,10 @@ export default function HauntedMusic() {
     // owner has gone (a recorder that never fired stop, a clip removed while
     // playing), so the ambience always comes back on its own.
     const poll = setInterval(() => {
+      // Re-derive the media holds from what is actually playing before deciding,
+      // so a video that is playing keeps the music off even if its own events
+      // were missed or misreported.
+      syncLiveMediaBusy();
       reconcileAudioBusy();
       applyVolume();
     }, 400);

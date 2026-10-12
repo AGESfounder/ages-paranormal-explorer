@@ -14,7 +14,7 @@ diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextTo
      var calls: [CAPPluginCall] = []
      let queue = DispatchQueue(label: "backgroundAudioSetup", qos: .userInitiated, attributes: [], autoreleaseFrequency: .inherit, target: nil)
  
-@@ -15,16 +19,63 @@
+@@ -15,16 +19,74 @@
          self.synthesizer.delegate = self
          // set session in background to avoid UI hangs.
          queue.async {
@@ -29,21 +29,35 @@ diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextTo
          }
      }
  
-+    // Narration must stay audible on the loud speaker while the sweep tools hold
-+    // a live microphone: .playAndRecord is required for speech + capture
-+    // coexistence, and without .defaultToSpeaker iOS routes playAndRecord output
-+    // to the earpiece receiver, making narration nearly inaudible.
-+    // The session is configured once and deliberately never deactivated:
-+    // re-configuring the category (or deactivating the session) between
-+    // utterances tore the audio graph down under the queued utterance and left
-+    // every item after the first one silent.
++    // The tools speak through the phone's loud speaker while their session is
++    // recording the room with the microphone, so the session has to be shared:
++    // .mixWithOthers lets the recording's microphone and the app's own
++    // background music keep working beside the speech, and, unlike the
++    // .duckOthers option this plugin shipped with, it never leaves anything
++    // quiet after a tool stops.
++    // Configured once, here, before any microphone opens. Nothing reconfigures
++    // it while a session runs: a session call made while the web view is
++    // capturing tears the audio graph down under the live microphone and
++    // silences the recording.
 +    private func configureAudioSession() {
 +        do {
-+            let options: AVAudioSession.CategoryOptions = [.defaultToSpeaker]
-+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default, options: options)
++            let options: AVAudioSession.CategoryOptions = [.mixWithOthers]
++            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: options)
 +            try AVAudioSession.sharedInstance().setActive(true)
 +        } catch {
 +            print("Error setting up AVAudioSession: \(error)")
++        }
++    }
++
++    // One re-activation at the start of a tool session, inside the user's tap
++    // and before the recording's microphone opens (a call or Siri can deactivate
++    // the session between sessions). Deliberately not per utterance: a session
++    // call while the microphone is live is what silenced the recordings.
++    @objc public func prepareAudioSession() {
++        do {
++            try AVAudioSession.sharedInstance().setActive(true)
++        } catch {
++            print("Error preparing AVAudioSession: \(error)")
 +        }
 +    }
 +
@@ -63,19 +77,16 @@ diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextTo
 +        }
 +    }
 +
-+    // Hand the phone's audio session back once a tool session has ended. The
-+    // session is held for the life of a session on purpose (see
-+    // configureAudioSession) and nothing else released it, so the whole app
-+    // stayed quiet after a Sweeper session until it was restarted. This runs at
-+    // session end with speech already stopped, and drops the session back to
-+    // normal loud playback, so the background ambience and every other sound
-+    // come back to full volume on their own. (The session no longer ducks other
-+    // audio either: the app's own music is paused in JS while a tool runs, so
-+    // the duck only ever left the app quiet afterwards.)
++    // Hand the phone's audio session back once a tool session has ended, with
++    // its speech already stopped and its microphone already closed. The session
++    // stays usable for speech and recording for the whole time a tool runs, so
++    // this is the only other place it is touched: normal loud playback is
++    // restored, and the app's own ambient music (paused in JS while a tool runs)
++    // comes back on its own.
 +    @objc public func releaseAudioSession() {
 +        synthesizer.stopSpeaking(at: .immediate)
 +        do {
-+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
++            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
 +            try AVAudioSession.sharedInstance().setActive(true)
 +        } catch {
 +            print("Error releasing AVAudioSession: \(error)")
@@ -85,7 +96,7 @@ diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextTo
      public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
          self.resolveCurrentCall()
      }
-@@ -36,8 +87,18 @@
+@@ -36,8 +98,10 @@
      @objc public func speak(_ text: String, _ lang: String, _ rate: Float, _ pitch: Float, _ category: String, _ volume: Float, _ voice: Int, _ queueStrategy: Int, _ call: CAPPluginCall) throws {
          if queueStrategy == QUEUE_STRATEGY.QUEUE_FLUSH.rawValue {
              self.synthesizer.stopSpeaking(at: .immediate)
@@ -93,18 +104,10 @@ diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextTo
 +            self.refreshSynthesizer()
          }
          self.calls.append(call)
-+        // Cheap re-assert without a category change, in case the system
-+        // deactivated the session for a call or Siri: activating once at init
-+        // left later utterances silent.
-+        do {
-+            try AVAudioSession.sharedInstance().setActive(true)
-+        } catch {
-+            print("Error re-activating AVAudioSession: \(error)")
-+        }
  
          let utterance = AVSpeechUtterance(string: text)
          utterance.voice = AVSpeechSynthesisVoice(language: lang)
-@@ -59,6 +120,10 @@
+@@ -59,6 +123,10 @@
  
      @objc public func stop() {
          synthesizer.stopSpeaking(at: .immediate)
@@ -118,20 +121,26 @@ diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextTo
 diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeechPlugin.swift b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeechPlugin.swift
 --- a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeechPlugin.swift
 +++ b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeechPlugin.swift
-@@ -13,6 +13,7 @@
+@@ -13,6 +13,8 @@
      public let pluginMethods: [CAPPluginMethod] = [
          CAPPluginMethod(name: "speak", returnType: CAPPluginReturnPromise),
          CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
++        CAPPluginMethod(name: "prepareAudioSession", returnType: CAPPluginReturnPromise),
 +        CAPPluginMethod(name: "releaseAudioSession", returnType: CAPPluginReturnPromise),
          CAPPluginMethod(name: "openInstall", returnType: CAPPluginReturnPromise),
          CAPPluginMethod(name: "getSupportedLanguages", returnType: CAPPluginReturnPromise),
          CAPPluginMethod(name: "getSupportedVoices", returnType: CAPPluginReturnPromise),
-@@ -48,8 +49,13 @@
+@@ -48,8 +50,18 @@
      @objc public func stop(_ call: CAPPluginCall) {
          implementation.stop()
          call.resolve()
      }
  
++    @objc public func prepareAudioSession(_ call: CAPPluginCall) {
++        implementation.prepareAudioSession()
++        call.resolve()
++    }
++
 +    @objc public func releaseAudioSession(_ call: CAPPluginCall) {
 +        implementation.releaseAudioSession()
 +        call.resolve()

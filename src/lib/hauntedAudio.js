@@ -48,8 +48,38 @@ export function reconcileAudioBusy() {
   liveRecorders.forEach((r) => {
     if (!r || r.state === 'inactive') { liveRecorders.delete(r); changed = true; }
   });
+  if (changed) notifyBusy();
+}
+
+// Playing media holds the bus, and that hold is re-derived from what is on
+// screen instead of trusted from events: the phone reports a video as paused for
+// an instant while it opens full screen, seeks or buffers, and acting on one
+// such reading is what let the ambience come back underneath a video that was
+// still playing. Only the element's own play event acquires a hold; this keeps
+// the holds honest afterwards. Three consecutive stopped readings are treated as
+// the video really stopping (~1.2s at the player's 400ms poll), so a single
+// false reading cannot release anything. Called by the HauntedMusic player on
+// that poll, so it is safe to call at any time.
+const liveMediaMisses = new WeakMap();
+export function syncLiveMediaBusy() {
+  if (typeof document === 'undefined') return;
+  const playing = new Set();
+  document.querySelectorAll('audio, video').forEach((el) => {
+    if (el._hauntedMusic || el.paused || el.ended || !el.isConnected) return;
+    playing.add(el);
+  });
+  let changed = false;
+  playing.forEach((el) => {
+    if (!liveMedia.has(el)) { liveMedia.add(el); changed = true; }
+  });
   liveMedia.forEach((el) => {
-    if (!el || el.paused || el.ended || !el.isConnected) { liveMedia.delete(el); changed = true; }
+    if (!el.isConnected) { liveMediaMisses.delete(el); liveMedia.delete(el); changed = true; return; }
+    if (playing.has(el)) { liveMediaMisses.delete(el); return; }
+    const misses = (liveMediaMisses.get(el) || 0) + 1;
+    if (misses < 3) { liveMediaMisses.set(el, misses); return; }
+    liveMediaMisses.delete(el);
+    liveMedia.delete(el);
+    changed = true;
   });
   if (changed) notifyBusy();
 }
@@ -122,6 +152,12 @@ if (typeof window !== 'undefined' && window.MediaRecorder && !window.MediaRecord
 // pauses while it plays and resumes when it stops. Using the capture phase
 // catches native-controls play buttons that may bypass a prototype patch.
 // The haunted player's own element is marked _hauntedMusic and skipped.
+//
+// Only 'play' acquires a hold here, and 'ended' releases one: those are the two
+// readings the phone reports reliably. Every other release is left to
+// syncLiveMediaBusy()'s state check, because a pause event fires for an instant
+// while a video is in fact still playing (opening full screen, seeking,
+// buffering) and reacting to it brought the ambience back over the video.
 if (typeof window !== 'undefined' && !window.__hauntedMediaDelegated) {
   const onPlay = (e) => {
     const el = e.target;
@@ -139,8 +175,6 @@ if (typeof window !== 'undefined' && !window.__hauntedMediaDelegated) {
     }
   };
   document.addEventListener('play', onPlay, true);
-  document.addEventListener('pause', onStop, true);
   document.addEventListener('ended', onStop, true);
-  document.addEventListener('error', onStop, true);
   window.__hauntedMediaDelegated = true;
 }
