@@ -15,6 +15,7 @@ import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
 import { CUE_CHIME } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import { toast } from '@/components/ui/use-toast';
+import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 // Phonetic spellings so TTS pronounces each letter as a clear letter name
@@ -138,6 +139,10 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const pausedRef = useRef(false);
   const sessionActiveRef = useRef(false);
   const resumeIntervalRef = useRef(null);
+  // The session's own hold on the app's background music. Ref-guarded pair,
+  // like useGhostVoice's narration hold, so the ambience can never be released
+  // more often than it was held (or left held after the tool is left).
+  const ambienceHeldRef = useRef(false);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
   useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
@@ -162,6 +167,22 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     }
     }, []);
 
+  // Hold the background music quiet for the whole session. This tool speaks its
+  // directions BEFORE the recording's microphone opens, so the recorder's own
+  // hold starts too late to cover them — the music used to play underneath them.
+  // Holding for the session (instead of per utterance) also keeps the ambience
+  // quiet across the mic/camera prompts, with no blip between the two holds.
+  const holdAmbience = () => {
+    if (ambienceHeldRef.current) return;
+    ambienceHeldRef.current = true;
+    audioAcquire();
+  };
+  const releaseAmbience = () => {
+    if (!ambienceHeldRef.current) return;
+    ambienceHeldRef.current = false;
+    audioRelease();
+  };
+
   useEffect(() => () => stopEverything(), []);
 
   const stopEverything = () => {
@@ -185,6 +206,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     // Leaving the tool is an implicit session end: hand the phone's audio session
     // back here too, or leaving mid-session leaves the app's own sound quiet.
     releaseToolSpeech();
+    releaseAmbience();
     setMotionDetected(false);
   };
 
@@ -442,6 +464,9 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     // (spoken after an await) play on web iOS; on native this pre-loads the
     // voice list.
     primeToolSpeech();
+    // The directions are spoken next, before the mic prompt, camera and
+    // recording — hold the app's music quiet from here.
+    holdAmbience();
     // Request sensor permissions up front (just the permission prompt).
     await requestSensorPermissions();
     startDrawing();
@@ -524,6 +549,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     // End of session, speech stopped: hand the phone's audio session back so the
     // app's music and every other sound return to full volume.
     releaseToolSpeech();
+    releaseAmbience();
     setPhase('stopped');
   };
 
