@@ -5,19 +5,27 @@
 // 2) A live in-memory store for the music enabled/volume settings, kept in sync
 //    with the persisted user settings by the Settings page.
 
-let busyCount = 0;
+// Duck holds are counted per owner rather than as one anonymous counter, so a
+// hold whose owner no longer exists can be reconciled away instead of ducking
+// the ambience forever:
+//   narrationHolds — narration / tool speech (useGhostVoice)
+//   liveRecorders  — MediaRecorder instances currently started
+//   liveMedia      — playing <audio>/<video> elements
+let narrationHolds = 0;
+const liveRecorders = new Set();
+const liveMedia = new Set();
 const busyListeners = new Set();
 
 export function audioAcquire() {
-  busyCount += 1;
+  narrationHolds += 1;
   notifyBusy();
 }
 export function audioRelease() {
-  busyCount = Math.max(0, busyCount - 1);
+  narrationHolds = Math.max(0, narrationHolds - 1);
   notifyBusy();
 }
 export function isAudioBusy() {
-  return busyCount > 0;
+  return narrationHolds > 0 || liveRecorders.size > 0 || liveMedia.size > 0;
 }
 export function onAudioBusyChange(cb) {
   busyListeners.add(cb);
@@ -27,6 +35,23 @@ export function onAudioBusyChange(cb) {
 function notifyBusy() {
   const b = isAudioBusy();
   busyListeners.forEach((l) => l(b));
+}
+
+// Drop holds whose owner is gone: a recorder that never fired stop (it failed
+// to start, or its stream was stopped without one) and a media element removed
+// from the screen while playing. Without this, one lost hold left the ambience
+// silenced for the rest of the app run. Safe to call at any time — the
+// HauntedMusic player calls it on its existing poll, so the music always comes
+// back on its own.
+export function reconcileAudioBusy() {
+  let changed = false;
+  liveRecorders.forEach((r) => {
+    if (!r || r.state === 'inactive') { liveRecorders.delete(r); changed = true; }
+  });
+  liveMedia.forEach((el) => {
+    if (!el || el.paused || el.ended || !el.isConnected) { liveMedia.delete(el); changed = true; }
+  });
+  if (changed) notifyBusy();
 }
 
 let musicState = { enabled: true, volume: 50, hauntedEnabled: true, hauntedVolume: 50 };
@@ -66,21 +91,28 @@ export function onHauntedPlaybackStateChange(cb) {
 // sweepers) signals the busy bus — the music ducks while recording.
 if (typeof window !== 'undefined' && window.MediaRecorder && !window.MediaRecorder.__hauntedPatched) {
   const _start = window.MediaRecorder.prototype.start;
-  const recording = new WeakSet();
   window.MediaRecorder.prototype.start = function (...args) {
-    if (!recording.has(this)) {
-      recording.add(this);
-      try { audioAcquire(); } catch {}
+    // Start FIRST: if the recorder refuses to start (the flakiness these tools
+    // hit on iOS), nothing is held, so a failed start can never leave the
+    // ambience ducked with no stop event coming.
+    const result = _start.apply(this, args);
+    if (!liveRecorders.has(this)) {
+      liveRecorders.add(this);
+      try { notifyBusy(); } catch {}
       const releaseOnce = () => {
-        if (recording.has(this)) {
-          recording.delete(this);
-          try { audioRelease(); } catch {}
+        if (liveRecorders.delete(this)) {
+          try { notifyBusy(); } catch {}
         }
       };
       try { this.addEventListener('stop', releaseOnce, { once: true }); } catch {}
       try { this.addEventListener('error', releaseOnce, { once: true }); } catch {}
+      // A stream stopped by the caller ends its tracks without necessarily
+      // firing a stop event — release as soon as the audio track is gone.
+      try {
+        (this.stream?.getAudioTracks?.() || []).forEach((t) => t.addEventListener('ended', releaseOnce, { once: true }));
+      } catch {}
     }
-    return _start.apply(this, args);
+    return result;
   };
   window.MediaRecorder.__hauntedPatched = true;
 }
@@ -91,21 +123,19 @@ if (typeof window !== 'undefined' && window.MediaRecorder && !window.MediaRecord
 // catches native-controls play buttons that may bypass a prototype patch.
 // The haunted player's own element is marked _hauntedMusic and skipped.
 if (typeof window !== 'undefined' && !window.__hauntedMediaDelegated) {
-  const playingMedia = new WeakSet();
   const onPlay = (e) => {
     const el = e.target;
     if (!el || el._hauntedMusic || !(el instanceof HTMLMediaElement)) return;
-    if (!playingMedia.has(el)) {
-      playingMedia.add(el);
-      try { audioAcquire(); } catch {}
+    if (!liveMedia.has(el)) {
+      liveMedia.add(el);
+      try { notifyBusy(); } catch {}
     }
   };
   const onStop = (e) => {
     const el = e.target;
     if (!el || el._hauntedMusic || !(el instanceof HTMLMediaElement)) return;
-    if (playingMedia.has(el)) {
-      playingMedia.delete(el);
-      try { audioRelease(); } catch {}
+    if (liveMedia.delete(el)) {
+      try { notifyBusy(); } catch {}
     }
   };
   document.addEventListener('play', onPlay, true);

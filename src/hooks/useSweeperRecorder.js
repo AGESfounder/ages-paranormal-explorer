@@ -104,8 +104,15 @@ export default function useSweeperRecorder({
   // the same videoChunksRef so the final blob spans the whole session.
   const spinup = useCallback(async () => {
     try {
+      // Mic capture matches the standalone Audio Recorder (which records the
+      // phone's default feed and is loud): automatic gain ON so the
+      // investigator's own voice and the room come through at a usable level,
+      // while echo cancellation and noise suppression stay OFF — with those on,
+      // iOS cancels the phone's own speaker output out of the mic, which is
+      // exactly the dictated letters/words that have to survive in the
+      // recording.
       const audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
       });
       audioStreamRef.current = audioStream;
       await new Promise((r) => setTimeout(r, 150));

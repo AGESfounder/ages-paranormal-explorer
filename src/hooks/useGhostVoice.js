@@ -34,6 +34,10 @@ export default function useGhostVoice() {
   useEffect(() => {
     return () => {
       deviceSpeechGenRef.current += 1; // block a pending native speakDevice
+      // Drop this hook's hold on the audio bus: narration still playing when
+      // the page unmounts would otherwise keep the ambience ducked for the
+      // rest of the app run.
+      releaseNarration();
       stopEerieBackground();
       if (audioRef.current) {
         audioRef.current.pause();
@@ -561,14 +565,26 @@ export default function useGhostVoice() {
       if (!recordDestRef.current) recordDestRef.current = ctx.createMediaStreamDestination();
       if (micStream) {
         const micSrc = ctx.createMediaStreamSource(micStream);
-        // Boost the mic level before the recording destination so the
-        // captured audio (ambient + acoustic TTS bleed) is hotter and
-        // clearer on playback, especially on iOS where the raw feed is
-        // otherwise quiet.
+        // Boost the mic into the recording destination so the saved mix
+        // (the investigator's own voice, room sound, and the tools' spoken
+        // items leaving the speaker) sits at the level the standalone Audio
+        // Recorder achieves. A limiter follows the boost so a loud room or a
+        // voice right at the mic cannot clip the saved audio.
         const micGain = ctx.createGain();
-        micGain.gain.value = 2.0;
+        micGain.gain.value = 4.0;
         micSrc.connect(micGain);
-        micGain.connect(recordDestRef.current);
+        let micOut = micGain;
+        if (typeof ctx.createDynamicsCompressor === 'function') {
+          const limiter = ctx.createDynamicsCompressor();
+          limiter.threshold.value = -6;
+          limiter.knee.value = 4;
+          limiter.ratio.value = 12;
+          limiter.attack.value = 0.003;
+          limiter.release.value = 0.25;
+          micGain.connect(limiter);
+          micOut = limiter;
+        }
+        micOut.connect(recordDestRef.current);
       }
       return recordDestRef.current.stream.getAudioTracks()[0] || null;
     } catch { return null; }

@@ -6,6 +6,7 @@ import {
   getMusicSettings,
   setMusicSettings,
   isAudioBusy,
+  reconcileAudioBusy,
   setHauntedPlaybackState,
 } from '@/lib/hauntedAudio';
 
@@ -266,8 +267,13 @@ export default function HauntedMusic() {
     const unsubBusy = onAudioBusyChange(applyVolume);
     const unsubMusic = onMusicSettingsChange(applyVolume);
     // Safety net: keep the player's volume in sync with the live settings even
-    // if a settings-change event is missed.
-    const poll = setInterval(applyVolume, 400);
+    // if a settings-change event is missed — and clear any duck hold whose
+    // owner has gone (a recorder that never fired stop, a clip removed while
+    // playing), so the ambience always comes back on its own.
+    const poll = setInterval(() => {
+      reconcileAudioBusy();
+      applyVolume();
+    }, 400);
 
     return () => {
       unsubBusy && unsubBusy();
