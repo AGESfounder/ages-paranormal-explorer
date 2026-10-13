@@ -132,6 +132,14 @@ export function drawSiegCameraOverlay(ctx, s, fit) {
   }
 }
 
+// Fit a source frame inside the camera pane, centred, with no crop.
+function fitPane(sourceW, sourceH) {
+  const scale = Math.min(SIEG_W / sourceW, CAM_H / sourceH);
+  const dw = sourceW * scale;
+  const dh = sourceH * scale;
+  return { dx: (SIEG_W - dw) / 2, dy: CAM_Y + (CAM_H - dh) / 2, dw, dh };
+}
+
 export function drawSiegFrame(ctx, canvas, s) {
   const now = s.now ?? Date.now();
   const samples = s.samples || [];
@@ -176,14 +184,17 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, CAM_Y, SIEG_W, CAM_H);
   const vid = s.video;
+  const depthImage = s.depthFrame?.imageEl;
   let fit = null;
-  if (vid && vid.readyState >= 2 && vid.videoWidth) {
-    const scale = Math.min(SIEG_W / vid.videoWidth, CAM_H / vid.videoHeight);
-    const dw = vid.videoWidth * scale;
-    const dh = vid.videoHeight * scale;
-    const dx = (SIEG_W - dw) / 2;
-    const dy = CAM_Y + (CAM_H - dh) / 2;
-    fit = { dx, dy, dw, dh };
+  // A depth frame arrives from the sensor already colourised by distance, so it is
+  // drawn as it is; the camera method is drawn through the same green scan the
+  // standalone Anomaly Camera uses. Either way the full frame is fitted inside the
+  // pane, so an outline lands on the form it belongs to.
+  if (depthImage?.naturalWidth) {
+    fit = fitPane(depthImage.naturalWidth, depthImage.naturalHeight);
+    try { ctx.drawImage(depthImage, fit.dx, fit.dy, fit.dw, fit.dh); } catch { /* frame not readable yet */ }
+  } else if (vid && vid.readyState >= 2 && vid.videoWidth) {
+    fit = fitPane(vid.videoWidth, vid.videoHeight);
     try { drawSiegAnomalyScan(ctx, vid, fit, s.figureBoxes); } catch { /* frame not readable yet */ }
   }
   drawSiegCameraOverlay(ctx, s, fit);

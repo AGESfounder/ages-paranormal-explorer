@@ -10,10 +10,15 @@ import SiegReview from '@/components/sieg/SiegReview';
 import SiegEventLog from '@/components/sieg/SiegEventLog';
 import SiegViewport from '@/components/sieg/SiegViewport';
 import useSiegCameraPlayback from '@/components/sieg/useSiegCameraPlayback';
+import SiegCameraControls from '@/components/sieg/SiegCameraControls';
 import { SIEG_LANES, SIEG_W, SIEG_H, drawSiegFrame, moonPhase, formatClock } from '@/lib/siegDisplay';
 import { SIEG_CALIBRATION_MS } from '@/lib/siegSessions';
 import { measureLevels, createBaselineTracker, eventThresholdDb, dominantBand } from '@/lib/acousticAnalysis';
-import { detectFigures, DEFAULT_BRIGHTNESS } from '@/lib/anomalyDetect';
+import useSensitivity, { isTorchActive } from '@/hooks/useSensitivity';
+import useDepthDetection from '@/hooks/useDepthDetection';
+import { enableTorch, disableTorch } from '@/lib/torchControl';
+import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame } from '@/lib/nativeDepth';
+import { detectFigures } from '@/lib/anomalyDetect';
 import { sensorSupport, startSensors, stopSensors, onSensorReading } from '@/lib/nativeSensors';
 import {
   createEnvironmentTracker, magneticThreshold, pressureThreshold, SENSITIVITY, MOVEMENT_LIMIT,
@@ -84,9 +89,15 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const [blob, setBlob] = useState(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Which camera the figure scan runs on: the camera-image reader everywhere, the
+  // depth sensor where the device carries one. Chosen before a session starts.
+  const [cameraMode, setCameraMode] = useState('contrast');
+  const [depthAvailable, setDepthAvailable] = useState(false);
 
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
+  const depthFrameRef = useRef(null);
+  const depthUnsubRef = useRef(null);
   const analysisCanvasRef = useRef(null);
   const micStreamRef = useRef(null);
   const camStreamRef = useRef(null);
@@ -134,8 +145,26 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const ambienceHeldRef = useRef(false);
   const autoSaveRef = useRef(false);
 
+  // The depth method is only offered on a device that reports a depth sensor, so
+  // the setup screen never presents a camera this phone cannot run.
+  useEffect(() => {
+    let cancelled = false;
+    depthSupport().then((result) => {
+      if (cancelled) return;
+      setDepthAvailable(result.supported);
+      if (!result.supported) setCameraMode('contrast');
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const moonNow = moonPhase();
   const conditionsLine = `${moonNow.name} · ${moonNow.illumination}%${weather ? ` · ${weather}` : ''}`;
+
+  // The figure scan's tuning, shared with the standalone Anomaly Camera: the
+  // brightness scale for the camera method, the detector's own distance gates for
+  // the depth method.
+  const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
+  const depthDetection = useDepthDetection();
 
   const measuring = phase === 'calibrating' || phase === 'live';
   // A second, unmuted keep-awake video can interrupt the camera on mobile.
@@ -333,9 +362,32 @@ export default function SiegConsole({ gateSave, refundSave }) {
   };
 
   // ── Figure lane ────────────────────────────────────────────────────────────
-  // Runs off the live camera frame on a slower cadence than the other lanes: the
-  // scan is a per-pixel pass over the frame, and the room does not change shape
-  // four times a second.
+  // A form has to hold in view before it counts, then the view has to stay clear
+  // before the lane can report again. Both camera methods feed this same logic, so
+  // a session judges the room the same way whichever one it ran on.
+  const stepFigureLane = (count) => {
+    if (phaseRef.current !== 'live') return;
+    const st = figureRef.current;
+    const now = Date.now();
+    if (count > 0) {
+      st.quietSince = 0;
+      if (!st.since) st.since = now;
+      st.peak = Math.max(st.peak, count);
+      if (st.armed && now - st.since >= FIGURE_HOLD_MS && now - st.lastEvent >= FIGURE_RELEASE_MS) {
+        st.armed = false;
+        st.lastEvent = now;
+        logEvent('figure', `${st.peak} figure-shaped ${st.peak === 1 ? 'form' : 'forms'} in view`, now);
+      }
+    } else {
+      st.since = 0;
+      if (!st.quietSince) st.quietSince = now;
+      if (now - st.quietSince >= FIGURE_RELEASE_MS) { st.armed = true; st.quietSince = 0; st.peak = 0; }
+    }
+  };
+
+  // The camera method runs off the live camera frame on a slower cadence than the
+  // other lanes: the scan is a per-pixel pass over the frame, and the room does not
+  // change shape four times a second.
   const figureTick = () => {
     const video = videoRef.current;
     if (!video || video.readyState < 2 || !video.videoWidth) return;
@@ -353,7 +405,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     let figures = [];
     try {
       ctx.drawImage(video, 0, 0, w, h);
-      figures = detectFigures(ctx.getImageData(0, 0, w, h), w, h, DEFAULT_BRIGHTNESS);
+      figures = detectFigures(ctx.getImageData(0, 0, w, h), w, h, sensitivityRef.current);
     } catch {
       figures = [];
     }
@@ -362,23 +414,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       width: w,
       height: h,
     };
-    if (phaseRef.current !== 'live') return;
-    const st = figureRef.current;
-    const now = Date.now();
-    if (figures.length > 0) {
-      st.quietSince = 0;
-      if (!st.since) st.since = now;
-      st.peak = Math.max(st.peak, figures.length);
-      if (st.armed && now - st.since >= FIGURE_HOLD_MS && now - st.lastEvent >= FIGURE_RELEASE_MS) {
-        st.armed = false;
-        st.lastEvent = now;
-        logEvent('figure', `${st.peak} figure-shaped ${st.peak === 1 ? 'form' : 'forms'} in view`, now);
-      }
-    } else {
-      st.since = 0;
-      if (!st.quietSince) st.quietSince = now;
-      if (now - st.quietSince >= FIGURE_RELEASE_MS) { st.armed = true; st.quietSince = 0; st.peak = 0; }
-    }
+    stepFigureLane(figures.length);
   };
 
   // ── One sampling tick drives every lane, then redraws the composite ────────
@@ -456,6 +492,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       markers: markersRef.current,
       correlations: correlationsRef.current,
       figureBoxes: figureBoxesRef.current,
+      depthFrame: depthFrameRef.current,
       readouts: readoutsRef.current,
       eventCount: eventsRef.current.length,
       correlatedCount: correlatedRef.current,
@@ -545,9 +582,15 @@ export default function SiegConsole({ gateSave, refundSave }) {
       if (r.current) { clearInterval(r.current); r.current = null; }
     });
     if (envUnsubRef.current) { envUnsubRef.current(); envUnsubRef.current = null; }
+    if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
+    depthFrameRef.current = null;
+    stopDepthStream();
     stopSensors();
     window.removeEventListener('devicemotion', handleMotion);
     if (camStreamRef.current) {
+      // Turn the torch off before the track goes; the session's own light must not
+      // outlive the session.
+      disableTorch(camStreamRef.current);
       camStreamRef.current.getTracks().forEach((t) => t.stop());
       camStreamRef.current = null;
     }
@@ -614,6 +657,37 @@ export default function SiegConsole({ gateSave, refundSave }) {
     }
   };
 
+  // Depth method: the native module owns the camera and hands over the colourised
+  // depth image with the forms it found, so no web camera stream is opened here. The
+  // composite draws those frames as they arrive, and the figure lane reads the
+  // sensor's own forms rather than scanning the image.
+  const startDepthCamera = async () => {
+    depthFrameRef.current = null;
+    await startDepthStream(8);
+    depthUnsubRef.current = onDepthFrame((data) => {
+      const figures = data.figures || [];
+      const image = new Image();
+      image.onload = () => {
+        depthFrameRef.current = { imageEl: image, figures };
+        setAvailability((a) => (a.camera ? a : { ...a, camera: true }));
+      };
+      image.src = data.image;
+      // The sensor reports its boxes as fractions of the frame, which is how the
+      // composite's overlay reads them.
+      figureBoxesRef.current = {
+        boxes: figures.map((f) => ({ x: f.x, y: f.y, w: f.w, h: f.h })),
+        width: 1,
+        height: 1,
+      };
+      stepFigureLane(figures.length);
+    });
+    setTimeout(() => {
+      if (!depthFrameRef.current && depthUnsubRef.current) {
+        setError('No depth readings are arriving — the depth scan could not start. The other lanes are still running.');
+      }
+    }, 6000);
+  };
+
   const startSession = async (preset) => {
     if (phaseRef.current !== 'idle') return;
     setError('');
@@ -641,6 +715,8 @@ export default function SiegConsole({ gateSave, refundSave }) {
     setReadouts({});
     readoutsRef.current = {};
     latestSensorRef.current = { magnetic: null, pressure: null, movement: 0 };
+    if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
+    depthFrameRef.current = null;
     sessionRef.current = preset;
     setSession(preset);
 
@@ -674,25 +750,41 @@ export default function SiegConsole({ gateSave, refundSave }) {
     await new Promise((r) => requestAnimationFrame(() => r()));
 
     let camOk = true;
-    try {
-      const cam = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-      });
-      camStreamRef.current = cam;
-      const video = videoRef.current;
-      if (!video) throw new Error('Camera view is not ready');
-      video.muted = true;
-      video.defaultMuted = true;
-      video.playsInline = true;
-      video.srcObject = cam;
-      await video.play();
-    } catch (e) {
-      camOk = false;
-      setError(e?.name === 'NotAllowedError'
-        ? 'Camera access or playback was blocked. Allow camera access, then tap the camera view to resume playback.'
-        : 'The live camera could not start. The other lanes can still run, but the camera image is unavailable.');
+    if (cameraMode === 'depth' && depthAvailable) {
+      try {
+        await startDepthCamera();
+      } catch {
+        camOk = false;
+        setAvailability((a) => ({ ...a, camera: false }));
+        setError('The depth sensor could not start. Close other camera apps and try again.');
+      }
+    } else {
+      try {
+        const cam = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        });
+        camStreamRef.current = cam;
+        const video = videoRef.current;
+        if (!video) throw new Error('Camera view is not ready');
+        video.muted = true;
+        video.defaultMuted = true;
+        video.playsInline = true;
+        video.srcObject = cam;
+        await video.play();
+        // The darkest end of the shared scale lights the scene with the torch, the
+        // same as the standalone camera does.
+        if (isTorchActive(sensitivityRef.current)) {
+          const ok = await enableTorch(cam);
+          if (!ok) setError('Torch not supported on this device — using Dark mode detection instead.');
+        }
+      } catch (e) {
+        camOk = false;
+        setError(e?.name === 'NotAllowedError'
+          ? 'Camera access or playback was blocked. Allow camera access, then tap the camera view to resume playback.'
+          : 'The live camera could not start. The other lanes can still run, but the camera image is unavailable.');
+      }
+      setAvailability((a) => ({ ...a, camera: camOk }));
     }
-    setAvailability((a) => ({ ...a, camera: camOk }));
 
     // Acoustic lane: one analyser on the session's microphone.
     try {
@@ -939,6 +1031,16 @@ export default function SiegConsole({ gateSave, refundSave }) {
           conditionsNote={conditionsNote}
           fetching={fetchingConditions}
           error={error}
+          cameraControls={(
+            <SiegCameraControls
+              mode={cameraMode}
+              onModeChange={setCameraMode}
+              depthAvailable={depthAvailable}
+              sensitivity={sensitivity}
+              onSensitivityChange={setSensitivity}
+              depthDetection={depthDetection}
+            />
+          )}
         />
         {gpsDialog}
         {trackingOffDialog}

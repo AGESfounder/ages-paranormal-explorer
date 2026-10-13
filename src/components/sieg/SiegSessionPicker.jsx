@@ -7,7 +7,7 @@ import { SIEG_LANES } from '@/lib/siegDisplay';
 // session lasts (and why each length was picked), and what to do before stepping
 // away. Five named lengths rather than one setting, because the number is the
 // thing an investigator remembers.
-export default function SiegSessionPicker({ onStart, conditions, conditionsNote, fetching, error }) {
+export default function SiegSessionPicker({ onStart, conditions, conditionsNote, fetching, error, cameraControls }) {
   return (
     <div className="space-y-3">
       <div className="p-3 rounded-lg bg-card/30 border border-border/30">
@@ -34,6 +34,8 @@ export default function SiegSessionPicker({ onStart, conditions, conditionsNote,
           <p className="text-[10px] text-amber-300 leading-relaxed">{error}</p>
         </div>
       )}
+
+      {cameraControls}
 
       <div className="space-y-1.5">
         <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Choose a session</p>
