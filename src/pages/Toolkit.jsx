@@ -213,7 +213,8 @@ export default function Toolkit() {
     rawNarrate(text, opts);
     spendNarration(estimateNarrationCost(text));
   };
-  useWakeLock(!!activeTool);
+  // SIEG owns its wake lock; do not start a competing silent-video fallback.
+  useWakeLock(!!activeTool && activeTool.type !== 'sieg');
 
   // Ad-gate hook — manages the rewarded-ad lifecycle for the ad-gated tool
   // currently waiting for an ad (adGateTool). Returns watching/granting/adError

@@ -8,7 +8,9 @@ import useWakeLock from '@/hooks/useWakeLock';
 import SiegSessionPicker from '@/components/sieg/SiegSessionPicker';
 import SiegReview from '@/components/sieg/SiegReview';
 import SiegEventLog from '@/components/sieg/SiegEventLog';
-import { SIEG_LANES, SIEG_W, SIEG_H, drawSiegFrame, moonPhase, formatClock } from '@/lib/siegDisplay';
+import SiegViewport from '@/components/sieg/SiegViewport';
+import useSiegCameraPlayback from '@/components/sieg/useSiegCameraPlayback';
+import { SIEG_LANES, SIEG_W, SIEG_H, drawSiegFrame, drawSiegCameraOverlay, moonPhase, formatClock } from '@/lib/siegDisplay';
 import { SIEG_CALIBRATION_MS } from '@/lib/siegSessions';
 import { measureLevels, createBaselineTracker, eventThresholdDb, dominantBand } from '@/lib/acousticAnalysis';
 import { detectFigures, DEFAULT_BRIGHTNESS } from '@/lib/anomalyDetect';
@@ -84,6 +86,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const [saving, setSaving] = useState(false);
 
   const canvasRef = useRef(null);
+  const overlayRef = useRef(null);
   const videoRef = useRef(null);
   const analysisCanvasRef = useRef(null);
   const micStreamRef = useRef(null);
@@ -135,7 +138,10 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const moonNow = moonPhase();
   const conditionsLine = `${moonNow.name} · ${moonNow.illumination}%${weather ? ` · ${weather}` : ''}`;
 
-  useWakeLock(phase === 'calibrating' || phase === 'live');
+  const measuring = phase === 'calibrating' || phase === 'live';
+  // A second, unmuted keep-awake video can interrupt the camera on mobile.
+  useWakeLock(measuring, { mediaFallback: false });
+  useSiegCameraPlayback(videoRef, measuring, setError, setAvailability);
 
   // ── Silence ────────────────────────────────────────────────────────────────
   // The app's own music leaves through the phone's speaker, right beside the
@@ -438,7 +444,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       canvas.height = SIEG_H;
     }
     const ctx = canvas.getContext('2d');
-    drawSiegFrame(ctx, canvas, {
+    const snapshot = {
       now,
       video: videoRef.current,
       sessionName: sessionRef.current?.name || '',
@@ -456,11 +462,14 @@ export default function SiegConsole({ gateSave, refundSave }) {
       statusText: phaseRef.current === 'calibrating' ? 'BASELINE' : phaseRef.current === 'live' ? 'MEASURING' : '',
       recording: phaseRef.current === 'live',
       scales: SCALES,
-    });
-    // Hand this paint to the recorder. The composite is drawn on a timer rather than
-    // on the phone's animation frames, and this is the call that makes the recorder
-    // take the frame either way — without it a phone can decide the canvas was never
-    // repainted and save a still.
+    };
+    const { cameraFit } = drawSiegFrame(ctx, canvas, snapshot);
+    const overlay = overlayRef.current?.getContext('2d');
+    if (overlay) {
+      overlay.clearRect(0, 0, SIEG_W, SIEG_H);
+      drawSiegCameraOverlay(overlay, snapshot, cameraFit);
+    }
+    // Push the complete camera-and-chart composite to the existing recorder.
     try { frameTrackRef.current?.requestFrame?.(); } catch { /* not offered here */ }
   };
 
@@ -619,6 +628,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     setBlob(null);
     setSaved(false);
     durationRef.current = 0;
+    chunksRef.current = [];
     samplesRef.current = [];
     markersRef.current = [];
     correlationsRef.current = [];
@@ -674,12 +684,18 @@ export default function SiegConsole({ gateSave, refundSave }) {
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
       });
       camStreamRef.current = cam;
-      if (videoRef.current) {
-        videoRef.current.srcObject = cam;
-        await videoRef.current.play().catch(() => {});
-      }
-    } catch {
+      const video = videoRef.current;
+      if (!video) throw new Error('Camera view is not ready');
+      video.muted = true;
+      video.defaultMuted = true;
+      video.playsInline = true;
+      video.srcObject = cam;
+      await video.play();
+    } catch (e) {
       camOk = false;
+      setError(e?.name === 'NotAllowedError'
+        ? 'Camera access or playback was blocked. Allow camera access, then tap the camera view to resume playback.'
+        : 'The live camera could not start. The other lanes can still run, but the camera image is unavailable.');
     }
     setAvailability((a) => ({ ...a, camera: camOk }));
 
@@ -958,13 +974,14 @@ export default function SiegConsole({ gateSave, refundSave }) {
 
   return (
     <div className="space-y-3">
-      <div className="relative rounded-lg overflow-hidden bg-black border border-border/40" style={{ aspectRatio: '4/3' }}>
-        {/* Kept laid out and transparent rather than display:none: a hidden video
-            can stop delivering frames, and the figure lane reads them. */}
-        <video ref={videoRef} className="absolute inset-0 w-full h-full opacity-0 pointer-events-none" playsInline muted />
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-
-      </div>
+      <SiegViewport
+        videoRef={videoRef}
+        canvasRef={canvasRef}
+        overlayRef={overlayRef}
+        sessionName={session?.name || ''}
+        conditions={conditionsLine}
+        minutes={session?.minutes || 0}
+      />
 
       {error && (
         <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10">

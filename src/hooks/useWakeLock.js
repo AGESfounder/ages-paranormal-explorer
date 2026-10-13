@@ -9,7 +9,7 @@ const NOSLEEP_MP4 = 'data:video/mp4;base64,AAAAHGZ0eXBNNFYgAAACAGlzb21pc28yYXZjM
 // Keeps the device screen awake (no auto-lock/dim) while `active` is true.
 // Uses the native Screen Wake Lock API where available (Android/desktop) and
 // falls back to a looping silent video on iOS, which lacks the Wake Lock API.
-export default function useWakeLock(active) {
+export default function useWakeLock(active, { mediaFallback = true } = {}) {
   const activeRef = useRef(active);
   activeRef.current = active;
   const lockRef = useRef(null);
@@ -53,7 +53,7 @@ export default function useWakeLock(active) {
           lockRef.current = sentinel;
           sentinel.addEventListener('release', () => { if (activeRef.current) request(); });
         } catch (e) { /* unsupported / blocked */ }
-      } else {
+      } else if (mediaFallback) {
         const v = ensureVideo();
         try { if (v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); } } catch (e) {}
       }
@@ -80,7 +80,7 @@ export default function useWakeLock(active) {
       document.removeEventListener('pointerdown', onInteraction);
       release();
     };
-  }, [active]);
+  }, [active, mediaFallback]);
 
   // Remove the fallback video element on unmount.
   useEffect(() => () => {

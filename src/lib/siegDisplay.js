@@ -29,9 +29,11 @@ export const CORRELATION_COLOR = '#ffffff';
 export const SIEG_W = 640;
 export const SIEG_H = 480;
 
-const HEADER_H = 60;
-const CAM_Y = HEADER_H;
-const CAM_H = 250;
+export const SIEG_CAMERA_Y = 60;
+export const SIEG_CAMERA_H = 250;
+const HEADER_H = SIEG_CAMERA_Y;
+const CAM_Y = SIEG_CAMERA_Y;
+const CAM_H = SIEG_CAMERA_H;
 const LANE_Y = CAM_Y + CAM_H;
 const LANE_H = 144;
 const FOOT_Y = LANE_Y + LANE_H;
@@ -94,6 +96,41 @@ function drawTrace(ctx, samples, now, pick, scale, y0, h, color, width = 1.4) {
   ctx.stroke();
 }
 
+// Shared by the recorded composite and the transparent layer above the visible
+// camera video, so both views have identical form outlines and calibration text.
+export function drawSiegCameraOverlay(ctx, s, fit) {
+  if (!fit) {
+    ctx.fillStyle = C.muted;
+    ctx.font = '11px monospace';
+    ctx.fillText('CAMERA STARTING…', 12, CAM_Y + 22);
+  }
+  const boxes = s.figureBoxes;
+  if (fit && boxes?.boxes?.length) {
+    const sx = fit.dw / (boxes.width || 320);
+    const sy = fit.dh / (boxes.height || 240);
+    ctx.strokeStyle = '#33e0ff';
+    ctx.lineWidth = 2;
+    boxes.boxes.forEach((b) => {
+      ctx.strokeRect(fit.dx + b.x * sx, fit.dy + b.y * sy, b.w * sx, b.h * sy);
+    });
+  }
+  if (s.calibrating) {
+    ctx.fillStyle = 'rgba(4, 6, 11, 0.78)';
+    ctx.fillRect(0, CAM_Y, SIEG_W, CAM_H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = C.accent;
+    ctx.font = 'bold 17px sans-serif';
+    ctx.fillText('MEASURING THE ROOM’S BASELINE', SIEG_W / 2, CAM_Y + 108);
+    ctx.fillStyle = C.text;
+    ctx.font = 'bold 30px monospace';
+    ctx.fillText(String(Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))), SIEG_W / 2, CAM_Y + 156);
+    ctx.fillStyle = C.muted;
+    ctx.font = '11px sans-serif';
+    ctx.fillText('Step away now — do not handle the device.', SIEG_W / 2, CAM_Y + 186);
+    ctx.textAlign = 'left';
+  }
+}
+
 export function drawSiegFrame(ctx, canvas, s) {
   const now = s.now ?? Date.now();
   const samples = s.samples || [];
@@ -147,40 +184,8 @@ export function drawSiegFrame(ctx, canvas, s) {
     const dy = CAM_Y + (CAM_H - dh) / 2;
     try { ctx.drawImage(vid, dx, dy, dw, dh); } catch { /* frame not readable yet */ }
     fit = { dx, dy, dw, dh };
-  } else {
-    ctx.fillStyle = C.muted;
-    ctx.font = '11px monospace';
-    ctx.fillText('CAMERA STARTING…', 12, CAM_Y + 22);
   }
-
-  const boxes = s.figureBoxes;
-  if (fit && boxes?.boxes?.length) {
-    const sx = fit.dw / (boxes.width || 320);
-    const sy = fit.dh / (boxes.height || 240);
-    ctx.strokeStyle = '#33e0ff';
-    ctx.lineWidth = 2;
-    boxes.boxes.forEach((b) => {
-      const bx = fit.dx + b.x * sx;
-      const by = fit.dy + b.y * sy;
-      ctx.strokeRect(bx, by, b.w * sx, b.h * sy);
-    });
-  }
-
-  if (s.calibrating) {
-    ctx.fillStyle = 'rgba(4, 6, 11, 0.78)';
-    ctx.fillRect(0, CAM_Y, SIEG_W, CAM_H);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = C.accent;
-    ctx.font = 'bold 17px sans-serif';
-    ctx.fillText('MEASURING THE ROOM’S BASELINE', SIEG_W / 2, CAM_Y + 108);
-    ctx.fillStyle = C.text;
-    ctx.font = 'bold 30px monospace';
-    ctx.fillText(String(Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))), SIEG_W / 2, CAM_Y + 156);
-    ctx.fillStyle = C.muted;
-    ctx.font = '11px sans-serif';
-    ctx.fillText('Step away now — do not handle the device.', SIEG_W / 2, CAM_Y + 186);
-    ctx.textAlign = 'left';
-  }
+  drawSiegCameraOverlay(ctx, s, fit);
 
   // ── Lanes ──
   ctx.fillStyle = C.panel;
