@@ -477,13 +477,13 @@
   background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
 }
 
-/* Reserved slot — an empty socket, not an instrument: a gunmetal-black chassis
-   (the only truly black shell in the rack) with a dim dotted drill grid across a
-   bare face, and no emblem or caption. It reads as a vacant bay waiting for the
-   next tool rather than as one of the tools around it. */
-.tkd-placeholder { --td-accent: #94a3b8; --td-light: #2c3036; --td-body: #17191d; --td-dark: #0a0b0e; }
+/* Reserved slot — an empty socket, not an instrument: a deep sea-teal chassis
+   (a colour family worn by nothing else in the rack) with a dim dotted drill
+   grid across a bare face, and no emblem or caption. It reads as a vacant bay
+   waiting for the next tool rather than as one of the tools around it. */
+.tkd-placeholder { --td-accent: #2dd4bf; --td-light: #1a5a60; --td-body: #0e3034; --td-dark: #05171a; }
 .tkd-placeholder .tkd-face::before {
-  background-image: radial-gradient(circle at 50% 50%, rgba(148, 163, 184, 0.20) 0 1px, rgba(0, 0, 0, 0) 1.5px);
+  background-image: radial-gradient(circle at 50% 50%, rgba(45, 212, 191, 0.22) 0 1px, rgba(0, 0, 0, 0) 1.5px);
   background-size: 10px 10px;
   background-position: 50% 50%;
   background-repeat: repeat;
