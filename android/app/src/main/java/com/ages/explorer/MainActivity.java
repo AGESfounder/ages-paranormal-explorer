@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         // Local plugins must be registered before super.onCreate().
         registerPlugin(AgesSettingsPlugin.class);
         registerPlugin(AgesDepthPlugin.class);
+        registerPlugin(AgesSensorsPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

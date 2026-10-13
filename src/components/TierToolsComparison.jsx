@@ -3,13 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Wrench, Check } from 'lucide-react';
 import { TIER_TOOLS } from '@/lib/toolAccess';
 
-// All 12 toolkit tools with access metadata.
+// All 13 toolkit tools with access metadata.
 // ad_gate = true: ad-gated for Observer, free for Seeker+.
 const ALL_TOOLS = [
   { name: 'Audio Recorder', desc: 'EVP session recorder with save', ad_gate: true },
   { name: 'Acoustic Anomaly Sweeper', desc: 'Listen-only room acoustics monitor + video record', ad_gate: true },
   { name: 'Yes/No/IDK Sweeper', desc: 'Motion-triggered answer sweep + screen record' },
   { name: 'Vibration Communicator', desc: 'Detect energy disturbances via phone sensors' },
+  { name: 'Environmental Anomaly Monitor', desc: 'Barometric + magnetic field meter with baseline spike logging' },
   { name: 'Alphabet Sweeper', desc: 'Sweep A→Z — environment-triggered letter dictation' },
   { name: 'Terms Sweeper', desc: 'Environment-triggered spirit dictation + screen record' },
   { name: 'Anomaly Camera', desc: 'Detect human-shaped figures in the live camera view' },
@@ -39,7 +40,7 @@ export default function TierToolkitAccess({ planId }) {
         </span>
         <span className="flex items-center gap-2">
           <span className={`text-xs font-heading ${count === 0 ? 'text-muted-foreground' : 'text-primary'}`}>
-            {count === 12 ? 'All 12' : `${count} of 12`}
+            {count === 13 ? 'All 13' : `${count} of 13`}
           </span>
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
         </span>

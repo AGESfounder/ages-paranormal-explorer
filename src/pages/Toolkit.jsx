@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap, Library, Type, MessageCircle } from 'lucide-react';
+import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap, Library, Type, MessageCircle, Gauge } from 'lucide-react';
 import SLSCamera from '../components/SLSCamera';
+import EnvironmentalAnomalyMonitor from '../components/EnvironmentalAnomalyMonitor';
 import PhoneREMDevice from '../components/PhoneREMDevice';
 import LocationTermBank from '../components/LocationTermBank';
 import AlphabetSweeper from '../components/AlphabetSweeper';
@@ -40,8 +41,8 @@ import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 import { toast } from '@/components/ui/use-toast';
 
 // Two-column grid order (fills left→right, row by row):
-//   Col 1: Equipment Guide, Audio Recorder, Anomaly Camera, Vibration Communicator, Weather Monitor, Paranormal Research: Terms
-//   Col 2: Acoustic Anomaly Sweeper, Terms Sweeper, Alphabet Sweeper, Yes/No/IDK Sweeper, Moon Phase, Safety Protocol
+//   Col 1: Equipment Guide, Audio Recorder, Anomaly Camera, Vibration Communicator, Environmental Anomaly Monitor, Weather Monitor, Paranormal Research: Terms
+//   Col 2: Acoustic Anomaly Sweeper, Terms Sweeper, Alphabet Sweeper, Yes/No/IDK Sweeper, Reserved (blank), Moon Phase, Safety Protocol
 const DEFAULT_TOOLS = [
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Acoustic Anomaly Sweeper', icon: Volume2, desc: 'Listen-only room acoustics monitor — mic spectral analysis + video record', type: 'audio' },
@@ -51,6 +52,10 @@ const DEFAULT_TOOLS = [
   { name: 'Alphabet Sweeper', icon: Type, desc: 'Sweep A→Z — environment-triggered letter dictation + screen record', type: 'alphabet' },
   { name: 'Vibration Communicator', icon: Zap, desc: 'Detect energy disturbances via phone sensors + video record', type: 'rem' },
   { name: 'Yes/No/IDK Sweeper', icon: MessageCircle, desc: 'Sweep Yes · No · I Don\'t Know — motion-triggered answer + screen record', type: 'yesno' },
+  { name: 'Environmental Anomaly Monitor', icon: Gauge, desc: 'Barometric + magnetic field meter — logs departures from the room baseline', type: 'environment' },
+  // The reserved tile is an empty slot: the next tool goes here. It has no icon or
+  // caption, and tapping it opens nothing.
+  { name: 'Reserved', placeholder: true, type: 'placeholder' },
   { name: 'Weather Monitor', icon: Cloud, desc: 'Real-time local weather conditions', type: 'weather' },
   { name: 'Moon Phase', icon: Moon, desc: 'Current moon phase & illumination', type: 'moon' },
   { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
@@ -104,9 +109,11 @@ export default function Toolkit() {
     }).catch(() => {});
   }, []);
 
-  // Gate tool access by tier — all 12 tools are visible, but tapping a tool
+  // Gate tool access by tier — all 13 tools are visible, but tapping a tool
   // the user's plan doesn't include shows the upgrade prompt instead of opening it.
   const handleSelectTool = async (tool) => {
+    // The reserved slot is a placeholder for a future tool — it opens nothing.
+    if (tool.placeholder) return;
     if (isAdmin) { setActiveTool(tool); return; }
     const allowed = SHARED_TIER_TOOLS[userPlan];
     if (allowed && !allowed.includes(tool.name)) {
@@ -1144,6 +1151,8 @@ Best Practices
         return <AlphabetSweeper gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
       case 'yesno':
         return <YesNoSweeper gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
+      case 'environment':
+        return <EnvironmentalAnomalyMonitor gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
 
       default:
         return null;

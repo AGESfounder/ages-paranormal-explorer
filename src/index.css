@@ -462,6 +462,18 @@
   background-position: 0 100%;
 }
 
+/* Environmental Anomaly Monitor — twin traces over one baseline: a cyan pressure
+   line and a violet magnetic line crossing, lit white where they meet. */
+.tkd-environment { --td-accent: #8be9fd; --td-light: #303c54; --td-body: #1e2636; --td-dark: #0c1018; }
+.tkd-environment .tkd-face::before {
+  background-image:
+    linear-gradient(160deg, rgba(0, 0, 0, 0) 44%, rgba(34, 211, 238, 0.85) 47% 50%, rgba(0, 0, 0, 0) 53%),
+    linear-gradient(200deg, rgba(0, 0, 0, 0) 44%, rgba(167, 139, 250, 0.85) 47% 50%, rgba(0, 0, 0, 0) 53%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.80) 0 7%, rgba(0, 0, 0, 0) 8%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0) 49.4%, rgba(255, 255, 255, 0.26) 50%, rgba(0, 0, 0, 0) 50.6%);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+}
+
 /* ── Opened tool panel ───────────────────────────────────────────────────
    The panel a tool opens into wears that tool's skin: a thick rounded bezel
    in its accent hue, a halo of the same colour outside and a faint accent

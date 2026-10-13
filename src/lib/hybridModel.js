@@ -176,7 +176,7 @@ export function downloadHybridPDF() {
 
   // ---------- 3e ----------
   heading('3e. Toolkit Visibility & AdGate (Oct 2026 - IMPLEMENTED)');
-  para('All 12 toolkit tools are visible to every user. Observer (free) gets 4 tools - 2 free (Equipment Guide, Safety Protocol) + 2 ad-gated (Audio Recorder, Acoustic Anomaly Sweeper: 30s ad = 30s use, 300s/day cap per tool). Seeker gets the same 4 tools ad-free. Technician and Explorer get 10 of 12 tools. Investigator+ get all 12. Observer ad-gated tools are device-only - 0 integration credits, so ad revenue is nearly pure profit.');
+  para('All 13 toolkit tools are visible to every user. Observer (free) gets 4 tools - 2 free (Equipment Guide, Safety Protocol) + 2 ad-gated (Audio Recorder, Acoustic Anomaly Sweeper: 30s ad = 30s use, 300s/day cap per tool). Seeker gets the same 4 tools ad-free. Technician and Explorer get 11 of 13 tools. Investigator+ get all 13. Observer ad-gated tools are device-only - 0 integration credits, so ad revenue is nearly pure profit.');
   table(['Tier', 'Visible', 'Accessible', 'Locked'], TOOLKIT_TIERS.map((t) => [t.tier, t.visible, t.accessible, t.locked]), [160, 60, 70, 60]);
   para('Seeker ($3.99/mo) and Technician ($5.99/mo) are ad-free tiers with 0 AI energy - they consume 0 platform credits. High-margin tiers that capture ad-averse users without AI features.');
 
