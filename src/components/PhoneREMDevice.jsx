@@ -6,6 +6,7 @@ import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import { toast } from '@/components/ui/use-toast';
 import { buildMicChain } from '@/lib/micRecordChain';
+import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 
 // Quiet window the sensor baseline is measured over, before the session — and
 // its recording — begin.
@@ -82,6 +83,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   // the on-screen display (every iPhone): the microphone is that recording's
   // only input, so it needs its own destination (see startRecording).
   const micOnlyDestRef = useRef(null);
+  // This session's own hold on the app's background music (ref-guarded, so the
+  // ambience is never released more often than it was held).
+  const ambienceHeldRef = useRef(false);
 
   // Sensor handlers
   const handleMotion = (e) => {
@@ -169,10 +173,22 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     beepIntervalRef.current = setInterval(() => playBeep(freq, 0.08), 90);
   };
 
-  const startAudioEngine = async () => {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') await ctx.resume();
+  // Creates the engine and kicks it awake WITHOUT waiting on it. On iOS a
+  // suspended engine's resume() can stay pending for as long as the page has no
+  // fresh gesture; awaiting it here held up everything after it — the recorder
+  // was never built, so the session neither recorded nor worked. The session
+  // loop nudges this engine back awake on every tick instead, and the session
+  // now runs whether or not the engine ever comes up.
+  const startAudioEngine = () => {
+    let ctx;
+    try {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch {
+      beepCtxRef.current = null;
+      return;
+    }
     beepCtxRef.current = ctx;
+    if (ctx.state === 'suspended') { try { ctx.resume().catch(() => {}); } catch {} }
     // Mixing point for the recording: beeps + ambient mic.
     try { recordDestRef.current = ctx.createMediaStreamDestination(); } catch { recordDestRef.current = null; }
     try { micOnlyDestRef.current = ctx.createMediaStreamDestination(); } catch { micOnlyDestRef.current = null; }
@@ -183,6 +199,21 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     if (beepCtxRef.current) { beepCtxRef.current.close(); beepCtxRef.current = null; }
     recordDestRef.current = null;
     micOnlyDestRef.current = null;
+  };
+
+  // The app's own music is held quiet from the moment a session begins — the
+  // calibration as well as the recording. It used to duck only once the
+  // recorder started, so it played over the whole baseline window, and with the
+  // recording starting after the baseline it played through the session too.
+  const holdAmbience = () => {
+    if (ambienceHeldRef.current) return;
+    ambienceHeldRef.current = true;
+    audioAcquire();
+  };
+  const releaseAmbience = () => {
+    if (!ambienceHeldRef.current) return;
+    ambienceHeldRef.current = false;
+    audioRelease();
   };
 
   // Canvas drawing — renders the REM device visualization for recording
@@ -320,10 +351,15 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       let audioTrack = null;
       if (canvasCapture) {
         try {
+          const ctx = beepCtxRef.current;
           const dest = recordDestRef.current;
-          if (dest && beepCtxRef.current) {
-            buildMicChain(beepCtxRef.current, audioStream).connect(dest);
-            audioTrack = dest.stream.getAudioTracks()[0] || null;
+          // Only while the engine is actually running: a suspended engine's
+          // destination track still exists but carries silence, and the plain
+          // mic track below is recorded instead of a silent one.
+          if (dest && ctx && ctx.state === 'running') {
+            buildMicChain(ctx, audioStream).connect(dest);
+            const t = dest.stream.getAudioTracks()[0];
+            if (t && t.readyState === 'live') audioTrack = t;
           }
         } catch {}
       } else {
@@ -425,6 +461,12 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     const ok = await requestSensorPermissions();
     if (!ok) return;
 
+    // Engine and music hold before the countdown: the engine is created as
+    // close to the tap as the permission prompts allow, and the recorder built
+    // after the calibration mixes the beeps through its destination.
+    startAudioEngine();
+    holdAmbience();
+
     window.addEventListener('devicemotion', handleMotion);
     window.addEventListener('deviceorientationabsolute', handleOrientation);
     window.addEventListener('deviceorientation', handleOrientation);
@@ -454,9 +496,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     await new Promise(r => setTimeout(r, 100));
 
     startCanvasDrawing();
-    // Engine first: the recorder mixes the beeps through this engine's
-    // destination, so it must exist before the recorder is built.
-    await startAudioEngine();
+    // The engine (and the music hold) were started when the session was
+    // activated; the recorder built below mixes the beeps through its
+    // destination.
     await startRecording();
 
     sessionStartRef.current = Date.now();
@@ -498,6 +540,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     if (timerRef.current) clearInterval(timerRef.current);
     stopCanvasDrawing();
     stopAudioEngine();
+    releaseAmbience();
     window.removeEventListener('devicemotion', handleMotion);
     window.removeEventListener('deviceorientationabsolute', handleOrientation);
     window.removeEventListener('deviceorientation', handleOrientation);
@@ -574,6 +617,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       if (timerRef.current) clearInterval(timerRef.current);
       stopCanvasDrawing();
       stopAudioEngine();
+      releaseAmbience();
       window.removeEventListener('devicemotion', handleMotion);
       window.removeEventListener('deviceorientationabsolute', handleOrientation);
       window.removeEventListener('deviceorientation', handleOrientation);
