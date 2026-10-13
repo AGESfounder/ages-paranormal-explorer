@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Check, Video } from 'lucide-react';
+import React, { useRef, useMemo, useEffect } from 'react';
+import { X, Check, Video, Maximize2 } from 'lucide-react';
 import EvidenceSaveButtons from '@/components/EvidenceSaveButtons';
 import SiegEventLog from '@/components/sieg/SiegEventLog';
 import { SIEG_LANES } from '@/lib/siegDisplay';
@@ -13,10 +13,28 @@ function formatDuration(sec) {
 // counts, and where it goes. A long session is one evidence record, saved through
 // the same gate every other tool uses.
 //
+// The recording is the only thing here that goes full screen — the session screen
+// itself stays inline, so the rest of the toolkit stays on screen around it.
+//
 // A session that ended on its own has already saved itself by the time anyone
 // gets back to the phone, so this screen then says so and keeps the recording and
 // the log on screen rather than emptying itself.
 export default function SiegReview({ blob, session, events, counts, correlatedCount, duration, saving, saved, onSave, onDiscard }) {
+  const videoRef = useRef(null);
+  const src = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
+
+  useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
+
+  const goFullScreen = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      if (v.requestFullscreen) v.requestFullscreen();
+      else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+      else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();
+    } catch { /* this device will not open the video full screen */ }
+  };
+
   return (
     <div className="space-y-3">
       <div className="p-2.5 rounded-lg bg-card/30 border border-border/30">
@@ -41,8 +59,23 @@ export default function SiegReview({ blob, session, events, counts, correlatedCo
         </div>
       )}
 
-      {blob ? (
-        <video src={URL.createObjectURL(blob)} controls className="w-full rounded border border-border/30" style={{ maxHeight: 220 }} />
+      {src ? (
+        <>
+          <video
+            ref={videoRef}
+            src={src}
+            controls
+            playsInline
+            className="w-full rounded border border-border/30 bg-black"
+            style={{ maxHeight: 220 }}
+          />
+          <button
+            onClick={goFullScreen}
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-border/40 text-muted-foreground font-heading text-[10px] uppercase tracking-wider hover:border-primary/30 hover:text-primary transition-colors"
+          >
+            <Maximize2 className="w-3 h-3" /> Full screen
+          </button>
+        </>
       ) : (
         <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-center">
           <Video className="w-6 h-6 text-muted-foreground/40 mx-auto mb-1.5" />
@@ -57,7 +90,7 @@ export default function SiegReview({ blob, session, events, counts, correlatedCo
         </div>
       </div>
 
-      {blob && !saved && <EvidenceSaveButtons onSave={onSave} saving={saving} />}
+      {src && !saved && <EvidenceSaveButtons onSave={onSave} saving={saving} />}
 
       <button
         onClick={onDiscard}

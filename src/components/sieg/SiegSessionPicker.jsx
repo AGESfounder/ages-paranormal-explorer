@@ -54,7 +54,7 @@ export default function SiegSessionPicker({ onStart, conditions, conditionsNote,
               <span className="min-w-0">
                 <span className="block text-xs font-medium text-foreground">{s.name}</span>
                 <span className="block text-[10px] text-muted-foreground">{s.purpose}</span>
-                <span className="block text-[9px] text-muted-foreground/70 mt-1 leading-relaxed">{s.why}</span>
+                <span className="block text-[10px] text-muted-foreground/80 mt-1 leading-relaxed">{s.why}</span>
               </span>
             </span>
             <Play className="w-4 h-4 text-primary shrink-0 mt-0.5" />
@@ -82,7 +82,7 @@ export default function SiegSessionPicker({ onStart, conditions, conditionsNote,
           <Moon className="w-3 h-3" /> Conditions
           {fetching && <Loader2 className="w-3 h-3 animate-spin" />}
         </p>
-        <p className="text-[10px] text-muted-foreground mt-1.5">
+        <p className="text-xs text-foreground/90 mt-1.5">
           {conditions?.moon} · {conditions?.illumination}% illumination
           {conditions?.weather ? ` · ${conditions.weather}` : fetching ? ' · fetching local weather…' : ''}
         </p>

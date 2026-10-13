@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Maximize2, Minimize2 } from 'lucide-react';
+import { X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -78,7 +78,6 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const [weather, setWeather] = useState(null);
   const [fetchingConditions, setFetchingConditions] = useState(false);
   const [conditionsNote, setConditionsNote] = useState('');
-  const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState('');
   const [blob, setBlob] = useState(null);
   const [saved, setSaved] = useState(false);
@@ -442,7 +441,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       now,
       video: videoRef.current,
       sessionName: sessionRef.current?.name || '',
-      conditions: `Conditions: ${conditionsLine}`,
+      conditions: conditionsLine,
       calibrating: phaseRef.current === 'calibrating',
       calibratingMsLeft: Math.max(0, calibrationEndRef.current - now),
       remaining: phaseRef.current === 'live' ? Math.max(0, (endsAtRef.current - now) / 1000) : (sessionRef.current?.minutes || 0) * 60,
@@ -770,12 +769,6 @@ export default function SiegConsole({ gateSave, refundSave }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Leaving the session closes any full-screen view, so the review screen is never
-  // left sitting behind a stopped chart.
-  useEffect(() => {
-    if (phase === 'review' || phase === 'idle') setExpanded(false);
-  }, [phase]);
-
   useEffect(() => () => {
     userStoppedRef.current = true;
     const recorder = recorderRef.current;
@@ -920,61 +913,12 @@ export default function SiegConsole({ gateSave, refundSave }) {
 
   return (
     <div className="space-y-3">
-      {/* Full screen changes this container's own classes and the canvas's size —
-          the canvas element is never remounted, because the recorder is capturing
-          this exact element's stream and a new element would end the recording. */}
-      <div
-        className={expanded
-          ? 'fixed inset-0 z-[60] bg-background'
-          : 'relative rounded-lg overflow-hidden bg-black border border-border/40'}
-        style={expanded ? undefined : { aspectRatio: '4/3' }}
-      >
+      <div className="relative rounded-lg overflow-hidden bg-black border border-border/40" style={{ aspectRatio: '4/3' }}>
         {/* Kept laid out and transparent rather than display:none: a hidden video
             can stop delivering frames, and the figure lane reads them. */}
         <video ref={videoRef} className="absolute inset-0 w-full h-full opacity-0 pointer-events-none" playsInline muted />
-        <canvas
-          ref={canvasRef}
-          className="absolute"
-          style={expanded
-            ? {
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: 'min(96vw, calc((100vh - 130px) * 4 / 3))',
-                aspectRatio: '4 / 3',
-              }
-            : { inset: 0, width: '100%', height: '100%' }}
-        />
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
-        {!expanded && (
-          <button
-            onClick={() => setExpanded(true)}
-            title="Full screen"
-            className="absolute bottom-2 right-2 p-1.5 rounded-md bg-black/60 border border-white/15 text-foreground/90 hover:bg-black/80 transition-colors"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
-        )}
-
-        {expanded && (
-          <div className="absolute bottom-3 left-0 right-0 flex flex-wrap items-center justify-center gap-2 px-3">
-            <button
-              onClick={() => setExpanded(false)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 border border-white/20 text-foreground font-heading text-[10px] uppercase tracking-wider hover:bg-black/80 transition-colors"
-            >
-              <Minimize2 className="w-3 h-3" /> Exit full screen
-            </button>
-            <span className="text-[10px] font-mono text-foreground/80">
-              {phase === 'live' ? `${formatClock(remaining)} remaining` : 'Calibrating…'}
-            </span>
-            <button
-              onClick={() => { setExpanded(false); finishSession('manual'); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/40 text-red-300 font-heading text-[10px] uppercase tracking-wider hover:bg-red-500/25 transition-colors"
-            >
-              <X className="w-3 h-3" /> Stop session
-            </button>
-          </div>
-        )}
       </div>
 
       {error && (

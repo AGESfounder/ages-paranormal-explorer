@@ -29,11 +29,11 @@ export const CORRELATION_COLOR = '#ffffff';
 export const SIEG_W = 640;
 export const SIEG_H = 480;
 
-const HEADER_H = 46;
+const HEADER_H = 60;
 const CAM_Y = HEADER_H;
-const CAM_H = 260;
+const CAM_H = 250;
 const LANE_Y = CAM_Y + CAM_H;
-const LANE_H = 146;
+const LANE_H = 144;
 const FOOT_Y = LANE_Y + LANE_H;
 const TRACE_X0 = 76;
 const TRACE_X1 = SIEG_W - 12;
@@ -43,6 +43,7 @@ const C = {
   bg: '#04060b',
   panel: '#0b1220',
   text: '#e2ebf3',
+  name: '#a9bccf',
   muted: '#7588a3',
   accent: '#2dd4bf',
   rec: '#ef4444',
@@ -101,25 +102,35 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillRect(0, 0, SIEG_W, SIEG_H);
 
   // ── Header ──
+  // Line one carries the three things an investigator glancing at the phone needs
+  // together: the tool's own name, the room's conditions (moon phase and local
+  // weather, at a size that can be read from across the room), and the countdown.
+  // The chosen session sits on its own line under SIEG, where there is room for it.
   ctx.fillStyle = C.panel;
   ctx.fillRect(0, 0, SIEG_W, HEADER_H);
   ctx.fillStyle = C.accent;
-  ctx.font = 'bold 19px monospace';
-  ctx.fillText('SIEG', 10, 21);
+  ctx.font = 'bold 24px monospace';
+  ctx.fillText('SIEG', 10, 28);
   const siegW = ctx.measureText('SIEG').width;
+  const condX = 24 + siegW;
+  const condMax = SIEG_W - 96 - condX;
+  ctx.font = '15px sans-serif';
+  let conditions = s.conditions || '—';
+  while (ctx.measureText(conditions).width > condMax && conditions.length > 6) {
+    conditions = `${conditions.slice(0, -3)}…`;
+  }
   ctx.fillStyle = C.text;
-  ctx.font = '11px sans-serif';
-  ctx.fillText(s.sessionName || '', 20 + siegW, 20);
-  ctx.fillStyle = C.muted;
-  ctx.font = '9px sans-serif';
-  ctx.fillText(s.conditions || 'Conditions: —', 10, 38);
+  ctx.fillText(conditions, condX, 27);
+  ctx.fillStyle = C.name;
+  ctx.font = '14px sans-serif';
+  ctx.fillText(s.sessionName || '', 11, 51);
   ctx.textAlign = 'right';
   ctx.fillStyle = s.calibrating ? C.muted : C.text;
-  ctx.font = 'bold 18px monospace';
-  ctx.fillText(s.calibrating ? '—:—' : formatClock(s.remaining), SIEG_W - 10, 21);
+  ctx.font = 'bold 24px monospace';
+  ctx.fillText(s.calibrating ? '—:—' : formatClock(s.remaining), SIEG_W - 10, 28);
   ctx.font = '9px sans-serif';
   ctx.fillStyle = C.muted;
-  ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 37);
+  ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 45);
   ctx.textAlign = 'left';
 
   // ── Camera pane. The full frame is fitted inside the pane (no crop) so the
@@ -247,7 +258,7 @@ export function drawSiegFrame(ctx, canvas, s) {
     ctx.textAlign = 'right';
     ctx.fillStyle = readout ? lane.color : C.muted;
     ctx.font = 'bold 8px monospace';
-    ctx.fillText(readout || '—', SIEG_W - 12, mid - amp - 1);
+    ctx.fillText(readout || '—', SIEG_W - 12, y0 + 9);
     ctx.textAlign = 'left';
   });
 
