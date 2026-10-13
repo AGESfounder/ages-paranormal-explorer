@@ -10,7 +10,7 @@ import SiegReview from '@/components/sieg/SiegReview';
 import SiegEventLog from '@/components/sieg/SiegEventLog';
 import SiegViewport from '@/components/sieg/SiegViewport';
 import useSiegCameraPlayback from '@/components/sieg/useSiegCameraPlayback';
-import { SIEG_LANES, SIEG_W, SIEG_H, drawSiegFrame, drawSiegCameraOverlay, moonPhase, formatClock } from '@/lib/siegDisplay';
+import { SIEG_LANES, SIEG_W, SIEG_H, drawSiegFrame, moonPhase, formatClock } from '@/lib/siegDisplay';
 import { SIEG_CALIBRATION_MS } from '@/lib/siegSessions';
 import { measureLevels, createBaselineTracker, eventThresholdDb, dominantBand } from '@/lib/acousticAnalysis';
 import { detectFigures, DEFAULT_BRIGHTNESS } from '@/lib/anomalyDetect';
@@ -86,7 +86,6 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const [saving, setSaving] = useState(false);
 
   const canvasRef = useRef(null);
-  const overlayRef = useRef(null);
   const videoRef = useRef(null);
   const analysisCanvasRef = useRef(null);
   const micStreamRef = useRef(null);
@@ -343,13 +342,14 @@ export default function SiegConsole({ gateSave, refundSave }) {
     let canvas = analysisCanvasRef.current;
     if (!canvas) {
       canvas = document.createElement('canvas');
-      canvas.width = 320;
-      canvas.height = 240;
       analysisCanvasRef.current = canvas;
     }
-    const w = canvas.width;
-    const h = canvas.height;
-    const ctx = canvas.getContext('2d');
+    // Match the standalone detector's actual camera dimensions rather than
+    // stretching every source frame to 320×240 and changing its pixel gates.
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     let figures = [];
     try {
       ctx.drawImage(video, 0, 0, w, h);
@@ -358,7 +358,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       figures = [];
     }
     figureBoxesRef.current = {
-      boxes: figures.map((f) => ({ x: f.x, y: f.y, w: f.w, h: f.h })),
+      boxes: figures.map((f) => ({ x: f.x, y: f.y, w: f.w, h: f.h, pixels: f.pixels })),
       width: w,
       height: h,
     };
@@ -463,12 +463,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       recording: phaseRef.current === 'live',
       scales: SCALES,
     };
-    const { cameraFit } = drawSiegFrame(ctx, canvas, snapshot);
-    const overlay = overlayRef.current?.getContext('2d');
-    if (overlay) {
-      overlay.clearRect(0, 0, SIEG_W, SIEG_H);
-      drawSiegCameraOverlay(overlay, snapshot, cameraFit);
-    }
+    drawSiegFrame(ctx, canvas, snapshot);
     // Push the complete camera-and-chart composite to the existing recorder.
     try { frameTrackRef.current?.requestFrame?.(); } catch { /* not offered here */ }
   };
@@ -977,7 +972,6 @@ export default function SiegConsole({ gateSave, refundSave }) {
       <SiegViewport
         videoRef={videoRef}
         canvasRef={canvasRef}
-        overlayRef={overlayRef}
         sessionName={session?.name || ''}
         conditions={conditionsLine}
         minutes={session?.minutes || 0}

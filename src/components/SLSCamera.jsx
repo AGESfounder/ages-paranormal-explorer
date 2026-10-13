@@ -14,15 +14,11 @@ import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame } from '@
 import useDepthDetection from '@/hooks/useDepthDetection';
 import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
-import AnomalyCameraViewport from '@/components/anomaly/AnomalyCameraViewport';
-import { drawAnomalyCameraOverlay } from '@/lib/anomalyCameraOverlay';
-import useInlineCameraPlayback, { configureInlineCameraVideo } from '@/hooks/useInlineCameraPlayback';
 
 export default function SLSCamera({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const overlayRef = useRef(null);
   const animFrameRef = useRef(null);
   const streamRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -52,7 +48,6 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // The depth method's own two gates (stand-out distance, smallest form), pushed
   // to the native module so a change applies to the next frame.
   const depthDetection = useDepthDetection();
-  useInlineCameraPlayback(videoRef, active && mode === 'contrast', setError);
 
   const formatDuration = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 
@@ -122,15 +117,13 @@ export default function SLSCamera({ gateSave, refundSave }) {
     setRecordDuration(0);
     if (mode === 'depth' && depthAvailable) { await startDepthCamera(); return; }
     try {
-      const video = videoRef.current;
-      configureInlineCameraVideo(video);
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
         audio: true,
       });
       streamRef.current = stream;
-      video.srcObject = stream;
-      await video.play();
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
 
       // Torch mode: turn on the phone's torch for the duration of the session.
       if (isTorchActive(sensitivityRef.current)) {
@@ -271,11 +264,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
     const w = video.videoWidth || 640;
     const h = video.videoHeight || 480;
-    // Resizing clears the capture surface, so only resize when the camera's
-    // dimensions actually change, not on every recorded frame.
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    canvas.width = w; canvas.height = h;
 
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const ctx = canvas.getContext('2d');
 
     ctx.drawImage(video, 0, 0, w, h);
     const imageData = ctx.getImageData(0, 0, w, h);
@@ -287,16 +278,53 @@ export default function SLSCamera({ gateSave, refundSave }) {
       d[i] = 0; d[i + 1] = Math.min(255, gray * 1.3); d[i + 2] = 0;
     }
 
+    // Light up detected figure shapes in bright green (actual shape & size)
+    figures.forEach(({ pixels }) => {
+      if (!pixels) return;
+      for (const vi of pixels) {
+        const cx = vi % w;
+        const cy = Math.floor(vi / w);
+        for (let dy = 0; dy < 4 && cy + dy < h; dy++) {
+          for (let dx = 0; dx < 4 && cx + dx < w; dx++) {
+            const pi = ((cy + dy) * w + (cx + dx)) * 4;
+            d[pi] = 0;
+            d[pi + 1] = 180;
+            d[pi + 2] = 255;
+          }
+        }
+      }
+    });
     ctx.putImageData(imageData, 0, 0);
-    drawAnomalyCameraOverlay(ctx, w, h, figures);
 
-    const overlay = overlayRef.current;
-    if (overlay) {
-      if (overlay.width !== w || overlay.height !== h) { overlay.width = w; overlay.height = h; }
-      const overlayCtx = overlay.getContext('2d');
-      overlayCtx.clearRect(0, 0, w, h);
-      drawAnomalyCameraOverlay(overlayCtx, w, h, figures);
-    }
+    // Overlay drawn directly on canvas so recording captures what's on screen
+    ctx.strokeStyle = 'rgba(0, 255, 100, 0.06)';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < w; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y < h; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+    // Bright blue outline tracing the edge of each detected shape. Every lit
+    // pixel is drawn as a 4x4 block on a 4px grid, so a side is an outline edge
+    // when the neighbouring grid block is not part of the shape. Stroked twice —
+    // a wide soft halo under a solid bright line — so the outline stays visible
+    // against the dim green image. Drawn on the canvas, so it records too.
+    figures.forEach(({ pixels }) => {
+      if (!pixels || !pixels.size) return;
+      ctx.beginPath();
+      for (const vi of pixels) {
+        const cx = vi % w;
+        const cy = Math.floor(vi / w);
+        if (cx + 4 >= w || !pixels.has(vi + 4)) { ctx.moveTo(cx + 4, cy); ctx.lineTo(cx + 4, cy + 4); }
+        if (cx - 4 < 0 || !pixels.has(vi - 4)) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + 4); }
+        if (cy - 4 < 0 || !pixels.has(vi - 4 * w)) { ctx.moveTo(cx, cy); ctx.lineTo(cx + 4, cy); }
+        if (cy + 4 >= h || !pixels.has(vi + 4 * w)) { ctx.moveTo(cx, cy + 4); ctx.lineTo(cx + 4, cy + 4); }
+      }
+      ctx.strokeStyle = 'rgba(51, 224, 255, 0.28)';
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ctx.strokeStyle = '#33e0ff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    });
 
     setFigureCount(figures.length);
     if (figures.length > 0 && !anomalyDetected) {
@@ -304,6 +332,22 @@ export default function SLSCamera({ gateSave, refundSave }) {
       if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
       anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
     }
+
+    // Bounding box + label for each detected figure
+    figures.forEach(({ x, y, w: bw, h: bh }) => {
+      ctx.strokeStyle = 'rgba(0, 180, 255, 0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x, y, bw, bh);
+      ctx.fillStyle = 'rgba(0, 180, 255, 0.9)';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText('ANOMALY DETECTED', x, y - 8);
+    });
+
+    ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';
+    ctx.font = '10px monospace';
+    ctx.fillText('ANOMALY CAM · FIGURE SCAN', 8, 16);
+    ctx.fillText(`FIGURES: ${figures.length}`, 8, 30);
+    ctx.fillText(new Date().toLocaleTimeString(), w - 72, 16);
 
     animFrameRef.current = requestAnimationFrame(processFrame);
   };
@@ -351,7 +395,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
   return (
     <div className="space-y-3">
-      <AnomalyCameraViewport videoRef={videoRef} canvasRef={canvasRef} overlayRef={overlayRef} mode={mode}>
+      <div className="relative rounded-lg overflow-hidden bg-black border border-green-500/30" style={{ aspectRatio: '4/3' }}>
+        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover opacity-0" playsInline muted />
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover" />
 
         {!active && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80">
@@ -373,7 +419,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
             <span className="text-[9px] text-white font-mono">REC {formatDuration(recordDuration)}</span>
           </div>
         )}
-      </AnomalyCameraViewport>
+      </div>
 
       {!active && (
         <div className="space-y-3">
@@ -413,7 +459,6 @@ export default function SLSCamera({ gateSave, refundSave }) {
         )}
       </div>
 
-      {active && error && <p className="text-[10px] text-destructive text-center px-2">{error}</p>}
       {depthHint && (
         <p className="text-[10px] text-amber-400/90 text-center px-2">{depthHint}</p>
       )}

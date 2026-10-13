@@ -15,6 +15,8 @@
 // two events at the same moment sit at the same x, and a correlation is drawn as
 // the white band the tools' additive-colour idea implies.
 
+import { drawSiegAnomalyScan } from '@/components/sieg/anomalyScanDisplay';
+
 export const SIEG_LANES = [
   { id: 'acoustic', label: 'ACOUSTIC', color: '#a3e635', unit: 'dB from baseline' },
   { id: 'figure', label: 'FIGURE', color: '#33e0ff', unit: 'forms in view' },
@@ -96,8 +98,7 @@ function drawTrace(ctx, samples, now, pick, scale, y0, h, color, width = 1.4) {
   ctx.stroke();
 }
 
-// Shared by the recorded composite and the transparent layer above the visible
-// camera video, so both views have identical form outlines and calibration text.
+// The visible and recorded composite share these outlines and calibration text.
 export function drawSiegCameraOverlay(ctx, s, fit) {
   if (!fit) {
     ctx.fillStyle = C.muted;
@@ -182,8 +183,8 @@ export function drawSiegFrame(ctx, canvas, s) {
     const dh = vid.videoHeight * scale;
     const dx = (SIEG_W - dw) / 2;
     const dy = CAM_Y + (CAM_H - dh) / 2;
-    try { ctx.drawImage(vid, dx, dy, dw, dh); } catch { /* frame not readable yet */ }
     fit = { dx, dy, dw, dh };
+    try { drawSiegAnomalyScan(ctx, vid, fit, s.figureBoxes); } catch { /* frame not readable yet */ }
   }
   drawSiegCameraOverlay(ctx, s, fit);
 
