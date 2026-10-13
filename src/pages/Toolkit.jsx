@@ -9,6 +9,7 @@ import AlphabetSweeper from '../components/AlphabetSweeper';
 import YesNoSweeper from '../components/YesNoSweeper';
 import AcousticAnomalySweeper from '../components/AcousticAnomalySweeper';
 import ToolkitGrid from '../components/ToolkitGrid';
+import SiegConsole from '@/components/SiegConsole';
 import ToolDevice from '../components/toolkit/ToolDevice';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
@@ -42,7 +43,7 @@ import { toast } from '@/components/ui/use-toast';
 
 // Two-column grid order (fills left→right, row by row):
 //   Col 1: Equipment Guide, Audio Recorder, Anomaly Camera, Vibration Communicator, Environmental Anomaly Monitor, Weather Monitor, Paranormal Research: Terms
-//   Col 2: Acoustic Anomaly Sweeper, Terms Sweeper, Alphabet Sweeper, Yes/No/IDK Sweeper, Reserved (blank), Moon Phase, Safety Protocol
+//   Col 2: Acoustic Anomaly Sweeper, Terms Sweeper, Alphabet Sweeper, Yes/No/IDK Sweeper, SIEG, Moon Phase, Safety Protocol
 const DEFAULT_TOOLS = [
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
   { name: 'Acoustic Anomaly Sweeper', icon: Volume2, desc: 'Listen-only room acoustics monitor — mic spectral analysis + video record', type: 'audio' },
@@ -53,9 +54,10 @@ const DEFAULT_TOOLS = [
   { name: 'Vibration Communicator', icon: Zap, desc: 'Detect energy disturbances via phone sensors + video record', type: 'rem' },
   { name: 'Yes/No/IDK Sweeper', icon: MessageCircle, desc: 'Sweep Yes · No · I Don\'t Know — motion-triggered answer + screen record', type: 'yesno' },
   { name: 'Environmental Anomaly Monitor', icon: Gauge, desc: 'Barometric + magnetic field meter — logs departures from the room baseline', type: 'environment' },
-  // The reserved tile is an empty slot: the next tool goes here. It has no icon or
-  // caption, and tapping it opens nothing.
-  { name: 'Reserved', placeholder: true, type: 'placeholder' },
+  // SIEG — Septer Inquiry Evidence Gleaner. The bay that was kept empty now holds
+  // the integrated session tool: the rack's four detectors run at once, over one
+  // clock, and the whole screen is recorded as one file. Investigator and higher.
+  { name: 'SIEG', icon: Gauge, stencil: 'SIEG', desc: 'Septer Inquiry Evidence Gleaner — four detectors at once', type: 'sieg' },
   { name: 'Weather Monitor', icon: Cloud, desc: 'Real-time local weather conditions', type: 'weather' },
   { name: 'Moon Phase', icon: Moon, desc: 'Current moon phase & illumination', type: 'moon' },
   { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
@@ -109,7 +111,7 @@ export default function Toolkit() {
     }).catch(() => {});
   }, []);
 
-  // Gate tool access by tier — all 13 tools are visible, but tapping a tool
+  // Gate tool access by tier — all 14 tools are visible, but tapping a tool
   // the user's plan doesn't include shows the upgrade prompt instead of opening it.
   const handleSelectTool = async (tool) => {
     // The reserved slot is a placeholder for a future tool — it opens nothing.
@@ -1153,6 +1155,8 @@ Best Practices
         return <YesNoSweeper gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
       case 'environment':
         return <EnvironmentalAnomalyMonitor gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
+      case 'sieg':
+        return <SiegConsole gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} requestGps={requestGps} />;
 
       default:
         return null;
@@ -1177,7 +1181,7 @@ Best Practices
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <ToolDevice type={adGateTool.type} icon={adGateTool.icon} size="sm" />
+                <ToolDevice type={adGateTool.type} icon={adGateTool.icon} stencil={adGateTool.stencil} size="sm" />
                 <div>
                   <h3 className="font-heading text-sm font-semibold text-foreground">{adGateTool.name}</h3>
                   <p className="text-[10px] text-muted-foreground">{adGateTool.desc}</p>
@@ -1206,7 +1210,7 @@ Best Practices
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <ToolDevice type={activeTool.type} icon={activeTool.icon} size="sm" />
+                <ToolDevice type={activeTool.type} icon={activeTool.icon} stencil={activeTool.stencil} size="sm" />
                 <div>
                   <h3 className="font-heading text-sm font-semibold text-foreground">{activeTool.name}</h3>
                   <p className="text-[10px] text-muted-foreground">{activeTool.desc}</p>

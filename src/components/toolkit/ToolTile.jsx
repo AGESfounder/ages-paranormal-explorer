@@ -17,7 +17,7 @@ export default function ToolTile({ tool, index, active, onSelect }) {
         active ? 'border-primary/60 bg-primary/5' : 'border-border/40 bg-card/30 hover:border-primary/30 hover:bg-card/50'
       }`}
     >
-      <ToolDevice type={tool.type} icon={tool.icon} />
+      <ToolDevice type={tool.type} icon={tool.icon} stencil={tool.stencil} />
 
       {/* A reserved tile is an empty slot kept for a tool that does not exist yet:
           the chassis is drawn, its face and caption are left blank. */}

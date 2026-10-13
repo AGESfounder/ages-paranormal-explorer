@@ -122,7 +122,7 @@ export function downloadPlanAnalysisA() {
     [110, 100, 35, 35, 45, 45, 110]);
 
   heading('3e. Toolkit Visibility & AdGate (Oct 2026 — IMPLEMENTED)');
-  para('All 13 toolkit tools are visible to every user. Observer (free) gets 4 tools — 2 free (Equipment Guide, Safety Protocol) + 2 ad-gated (Audio Recorder, Acoustic Anomaly Sweeper: 30s ad = 30s use, 300s/day cap per tool). Seeker gets the same 4 tools ad-free. Technician and Explorer get 11 of 13 tools. Investigator+ get all 13. Observer ad-gated tools are device-only — 0 integration credits, so ad revenue is nearly pure profit.');
+  para('All 14 toolkit tools are visible to every user. Observer (free) gets 4 tools — 2 free (Equipment Guide, Safety Protocol) + 2 ad-gated (Audio Recorder, Acoustic Anomaly Sweeper: 30s ad = 30s use, 300s/day cap per tool). Seeker gets the same 4 tools ad-free. Technician and Explorer get 11 of 14 tools. Investigator+ get all 14 (SIEG, the integrated session tool, is theirs alone). Observer ad-gated tools are device-only — 0 integration credits, so ad revenue is nearly pure profit.');
   table(['Tier', 'Visible', 'Accessible', 'Locked'],
     TOOLKIT_TIERS.map(t => [t.tier, t.visible, t.accessible, t.locked]),
     [120, 40, 40, 40]);

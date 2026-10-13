@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Wrench, Check } from 'lucide-react';
 import { TIER_TOOLS } from '@/lib/toolAccess';
 
-// All 13 toolkit tools with access metadata.
+// All 14 toolkit tools with access metadata.
 // ad_gate = true: ad-gated for Observer, free for Seeker+.
 const ALL_TOOLS = [
   { name: 'Audio Recorder', desc: 'EVP session recorder with save', ad_gate: true },
@@ -19,6 +19,7 @@ const ALL_TOOLS = [
   { name: 'Paranormal Research: Terms', desc: 'Research database & field manual' },
   { name: 'Equipment Guide', desc: 'Ghost hunting equipment guide' },
   { name: 'Safety Protocol', desc: 'Investigation safety guidelines' },
+  { name: 'SIEG', desc: 'Integrated session — four detectors running at once' },
 ];
 
 export default function TierToolkitAccess({ planId }) {
@@ -40,7 +41,7 @@ export default function TierToolkitAccess({ planId }) {
         </span>
         <span className="flex items-center gap-2">
           <span className={`text-xs font-heading ${count === 0 ? 'text-muted-foreground' : 'text-primary'}`}>
-            {count === 13 ? 'All 13' : `${count} of 13`}
+            {count === 14 ? 'All 14' : `${count} of 14`}
           </span>
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
         </span>

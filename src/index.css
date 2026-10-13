@@ -477,16 +477,33 @@
   background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
 }
 
-/* Reserved slot — an empty socket, not an instrument: a deep sea-teal chassis
-   (a colour family worn by nothing else in the rack) with a dim dotted drill
-   grid across a bare face, and no emblem or caption. It reads as a vacant bay
-   waiting for the next tool rather than as one of the tools around it. */
-.tkd-placeholder { --td-accent: #2dd4bf; --td-light: #1a5a60; --td-body: #0e3034; --td-dark: #05171a; }
-.tkd-placeholder .tkd-face::before {
-  background-image: radial-gradient(circle at 50% 50%, rgba(45, 212, 191, 0.22) 0 1px, rgba(0, 0, 0, 0) 1.5px);
-  background-size: 10px 10px;
-  background-position: 50% 50%;
-  background-repeat: repeat;
+/* SIEG — the rack's only deep sea-teal shell, and the one tool whose face carries
+   its name instead of an emblem. The face signature is the tool itself: four
+   trace lanes, one per instrument it runs at once, in those instruments' own
+   colours. */
+.tkd-sieg { --td-accent: #2dd4bf; --td-light: #1a5a60; --td-body: #0e3034; --td-dark: #05171a; }
+.tkd-sieg .tkd-face::before {
+  background-image:
+    linear-gradient(0deg, rgba(0, 0, 0, 0) 16.4%, rgba(163, 230, 53, 0.9) 17% 18.2%, rgba(0, 0, 0, 0) 18.8%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0) 36.4%, rgba(51, 224, 255, 0.9) 37% 38.2%, rgba(0, 0, 0, 0) 38.8%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0) 56.4%, rgba(74, 222, 128, 0.9) 57% 58.2%, rgba(0, 0, 0, 0) 58.8%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0) 76.4%, rgba(251, 146, 60, 0.9) 77% 78.2%, rgba(0, 0, 0, 0) 78.8%);
+  background-size: 100% 100%;
+  opacity: 0.55;
+}
+
+/* The stencil: a tool name set on the bay itself, kept in the shell's accent. */
+.tkd-emblem .tkd-stencil-text {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 21px;
+  letter-spacing: 0.16em;
+  color: var(--td-accent);
+  text-shadow: 0 0 10px var(--td-accent), 0 0 22px rgba(45, 212, 191, 0.35);
+}
+.tkd-sm .tkd-emblem .tkd-stencil-text {
+  font-size: 12px;
+  letter-spacing: 0.12em;
 }
 
 /* ── Opened tool panel ───────────────────────────────────────────────────

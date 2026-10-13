@@ -149,7 +149,7 @@ export default function UpgradePrompt({ show, onClose, reason = 'plan', onReward
                     className="block w-full py-3 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 font-heading text-xs uppercase tracking-wider hover:bg-sky-500/20 transition-colors min-h-[44px] flex flex-col items-center justify-center gap-0.5"
                   >
                     <span>Get Technician — $5.99/mo</span>
-                    <span className="text-[9px] normal-case font-body tracking-normal text-sky-400/70">11 of 13 tools + Aura saves</span>
+                    <span className="text-[9px] normal-case font-body tracking-normal text-sky-400/70">11 of 14 tools + Aura saves</span>
                   </Link>
                   <Link
                     to="/dashboard"

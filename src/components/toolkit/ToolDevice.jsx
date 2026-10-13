@@ -8,11 +8,15 @@ import React from 'react';
 // pattern — plus its icon as the glowing control emblem.
 //
 // size: 'md' (tile) | 'sm' (opened-tool header badge).
-export default function ToolDevice({ type, icon: Icon, size = 'md', className = '' }) {
+// A tool may carry a stencil instead of an icon: SIEG's name is drawn straight on
+// the bay, so its identity is the word itself rather than a glyph.
+export default function ToolDevice({ type, icon: Icon, size = 'md', stencil, className = '' }) {
   return (
     <div className={`tkd tkd-${type} ${size === 'sm' ? 'tkd-sm' : ''} ${className}`}>
       <div className="tkd-face" />
-      <div className="tkd-emblem">{Icon ? <Icon /> : null}</div>
+      <div className="tkd-emblem">
+        {stencil ? <span className="tkd-stencil-text">{stencil}</span> : Icon ? <Icon /> : null}
+      </div>
     </div>
   );
 }

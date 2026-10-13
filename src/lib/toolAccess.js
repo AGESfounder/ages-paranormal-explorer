@@ -19,12 +19,14 @@ export const TOOL_AD_DURATION = 30;
 // 5 minutes (300 seconds) daily cap per tool
 export const TOOL_DAILY_CAP = 300;
 
-// Tier → tool access. null = all 13 tools.
+// Tier → tool access. null = all 14 tools.
 // Observer: 4 tools (2 free + 2 ad-gated)
 // Seeker: 4 tools (ad-free, same as Observer)
 // Technician: 11 tools (adds 7 investigation tools)
 // Explorer: 11 tools (same as Technician — adds energy, not tools)
-// Investigator+: all 13 tools (adds Terms Sweeper + Anomaly Camera)
+// Investigator+: all 14 tools (adds Terms Sweeper + Anomaly Camera + SIEG).
+// SIEG is Investigator+ only by design: it is the rack's integrated session, and
+// the top tier's tool-count advantage over Technician/Explorer is exactly it.
 export const TIER_TOOLS = {
   observer: [
     'Audio Recorder', 'Acoustic Anomaly Sweeper',
@@ -46,7 +48,7 @@ export const TIER_TOOLS = {
     'Weather Monitor', 'Moon Phase', 'Paranormal Research: Terms',
     'Equipment Guide', 'Safety Protocol',
   ],
-  investigator: null, // null = all 13 tools
+  investigator: null, // null = all 14 tools
   trailblazer: null,
 };
 
