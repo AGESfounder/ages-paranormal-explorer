@@ -15,7 +15,7 @@ const MODES = [
     id: 'depth',
     label: 'Depth Scan',
     icon: Layers,
-    desc: 'Reads the phone\'s LiDAR depth sensor and outlines solid, figure-sized forms standing out from the background. Anything outlined is physically in the space, and the sensor supplies its own illumination, so it works in the dark with no torch. Depth readings are shown in metres, straight from the sensor.',
+    desc: 'Reads the phone\'s depth sensor — LiDAR where the device carries one, Google\'s AR depth estimation on supported Android phones — and outlines solid, figure-sized forms standing out from the background. Anything outlined is physically in the space, and readings are shown in metres straight from the sensor. Where there is no LiDAR sensor the map builds over the first few seconds: slowly sweep the phone across the room to start it, in reasonable light.',
   },
 ];
 

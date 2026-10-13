@@ -49,6 +49,10 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    // Google Play Services for AR (ARCore): supplies the depth readings behind the
+    // Anomaly Camera's Depth Scan. Declared optional in the manifest, so a device
+    // without AR support still installs the app and simply never sees that method.
+    implementation 'com.google.ar:core:1.42.0'
 }
 
 apply from: 'capacitor.build.gradle'

@@ -1024,9 +1024,9 @@ What Is an Anomaly Camera?
 
 A camera tool that scans the live image in real time for bright, skin-toned regions, groups neighbouring pixels into shapes, and outlines any group large enough to be a head, torso or limb. It works on what the camera can see: no infrared or depth sensor is involved.
 
-Depth layer (devices that have a depth sensor)
+Depth layer (devices that support it)
 
-Where the device carries one, the camera can read its LiDAR depth sensor instead. That maps the solid surfaces in front of it and outlines any figure-sized form standing out from the background. This is a physical reading: anything it outlines is really there in the space — a person, or an object shaped like one — and because the sensor supplies its own illumination it works in the dark with no torch. Depth sessions show the reading in metres. Devices without a depth sensor simply use the camera-image method described above.
+Where the device supports depth, the camera can read depth instead of the image: LiDAR on the iPhones and iPads that carry it, and Google's AR depth estimation on supported Android phones. That maps the solid surfaces in front of it and outlines any figure-sized form standing out from the background. This is a physical reading: anything it outlines is really there in the space — a person, or an object shaped like one — and sessions show the reading in metres. LiDAR supplies its own illumination, so it works in the dark with no torch; Android's depth estimation works from the camera image, so give it reasonable light and the first few seconds to build its map by sweeping the phone slowly across the room. Devices without depth support simply use the camera-image method described above.
 
 Scientific Theory
 

@@ -36,6 +36,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const [mode, setMode] = useState('contrast');
   const [depthAvailable, setDepthAvailable] = useState(false);
   const [centerDepth, setCenterDepth] = useState(null);
+  const [depthHint, setDepthHint] = useState(null);
   const anomalyTimerRef = useRef(null);
   const depthUnsubRef = useRef(null);
   const depthFrameRef = useRef(null);
@@ -54,6 +55,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     // released here as well.
     if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
     depthFrameRef.current = null;
+    setDepthHint(null);
     stopDepthStream();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
@@ -182,6 +184,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       imageEl.onload = () => { depthFrameRef.current = { ...data, imageEl }; };
       imageEl.src = data.image;
       setCenterDepth(data.centerDepth ?? null);
+      setDepthHint(null);
     });
 
     setFigureCount(0);
@@ -215,13 +218,20 @@ export default function SLSCamera({ gateSave, refundSave }) {
     setRecordDuration(0);
     timerRef.current = setInterval(() => setRecordDuration(prev => prev + 1), 1000);
 
-    // If the sensor never delivers a frame, say so rather than leaving an empty
-    // screen in front of the investigator.
+    // The sensor needs a moment to build its map before the first trustworthy
+    // reading (on a phone with no dedicated depth sensor the room has to be swept
+    // first), and a session that never delivers a frame at all means depth is not
+    // available. Both are said on screen rather than left as an empty view.
     setTimeout(() => {
       if (!depthFrameRef.current && depthUnsubRef.current) {
-        setError('No depth readings are arriving — check that no other app is using the camera.');
+        setDepthHint('Building the depth map — slowly sweep the phone across the room.');
       }
-    }, 4000);
+    }, 2500);
+    setTimeout(() => {
+      if (!depthFrameRef.current && depthUnsubRef.current) {
+        setError('No depth readings are arriving — close other camera apps and try again.');
+      }
+    }, 12000);
   };
 
   const processDepthFrame = () => {
@@ -437,6 +447,10 @@ export default function SLSCamera({ gateSave, refundSave }) {
         )}
       </div>
 
+      {depthHint && (
+        <p className="text-[10px] text-amber-400/90 text-center px-2">{depthHint}</p>
+      )}
+
       {/* Post-session save controls */}
       {!active && recordedBlob && (
         <div className="space-y-2">
@@ -451,7 +465,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       <div className="p-2.5 rounded-lg bg-card/30 border border-border/30">
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           {mode === 'depth'
-            ? 'Depth analysis reads the phone\'s LiDAR depth sensor and outlines solid, figure-sized forms standing out from the background. Anything outlined is physically in the space — the reading is in metres, straight from the sensor. Session is recorded — save to your Evidence Journal when done.'
+            ? 'Depth analysis reads the phone\'s depth sensor and outlines solid, figure-sized forms standing out from the background. Anything outlined is physically in the space — the reading is in metres, straight from the sensor. Session is recorded — save to your Evidence Journal when done.'
             : 'The live camera image is scanned for human-shaped patches of skin-toned colour, and any it finds are outlined. It can only flag what the camera can actually see — no infrared or depth sensing. Session is recorded — save to your Evidence Journal when done.'}
         </p>
       </div>
