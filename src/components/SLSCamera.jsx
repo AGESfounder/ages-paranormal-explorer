@@ -8,6 +8,9 @@ import { detectFigures } from '@/lib/anomalyDetect';
 import useSensitivity, { isTorchActive } from '../hooks/useSensitivity';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
+import AnomalyModePicker from './AnomalyModePicker';
+import { drawDepthFrame } from '@/lib/depthFrame';
+import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame } from '@/lib/nativeDepth';
 import { toast } from '@/components/ui/use-toast';
 
 export default function SLSCamera({ gateSave, refundSave }) {
@@ -28,7 +31,15 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordDuration, setRecordDuration] = useState(0);
   const [saving, setSaving] = useState(false);
+  // Which method the camera uses. The depth layer is only ever offered on a device
+  // that actually has a depth sensor, so the tool is unchanged everywhere else.
+  const [mode, setMode] = useState('contrast');
+  const [depthAvailable, setDepthAvailable] = useState(false);
+  const [centerDepth, setCenterDepth] = useState(null);
   const anomalyTimerRef = useRef(null);
+  const depthUnsubRef = useRef(null);
+  const depthFrameRef = useRef(null);
+  const depthAudioRef = useRef(null);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
@@ -39,6 +50,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
     if (timerRef.current) clearInterval(timerRef.current);
     // Turn off the torch before stopping the track (Torch mode).
     if (streamRef.current) disableTorch(streamRef.current);
+    // A depth session runs on the native module rather than a web stream, so it is
+    // released here as well.
+    if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
+    depthFrameRef.current = null;
+    stopDepthStream();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     } else if (streamRef.current) {
@@ -56,10 +72,43 @@ export default function SLSCamera({ gateSave, refundSave }) {
     if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
   }, [stopCamera]);
 
+  // Ask the native module once whether this device can do a depth scan at all.
+  useEffect(() => {
+    let cancelled = false;
+    depthSupport().then((result) => { if (!cancelled) setDepthAvailable(result.supported); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Recorder plumbing shared by both methods: whichever stream it is handed (the
+  // on-screen canvas, or the raw camera feed where a canvas cannot be recorded),
+  // it picks a supported format, collects the chunks and assembles the saved
+  // evidence blob when the session stops. onFinish releases whatever that session
+  // was holding — the camera stream, or the session's microphone.
+  const startSessionRecorder = (recordStream, onFinish) => {
+    const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+    const mr = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
+    mediaRecorderRef.current = mr;
+    chunksRef.current = [];
+    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    mr.onstop = () => {
+      // Name the file after the format the recorder actually produced. It reports
+      // its real container in .mimeType, so a device that silently used a
+      // different one still saves under the right extension.
+      const actualType = (mr.mimeType || mimeType || 'video/webm').split(';')[0];
+      setRecordedBlob(new Blob(chunksRef.current, { type: actualType }));
+      recordStream.getTracks().forEach(t => t.stop());
+      if (onFinish) onFinish();
+    };
+    mr.start(1000);
+    setRecording(true);
+  };
+
   const startCamera = async () => {
     setError('');
     setRecordedBlob(null);
     setRecordDuration(0);
+    if (mode === 'depth' && depthAvailable) { await startDepthCamera(); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -88,26 +137,10 @@ export default function SLSCamera({ gateSave, refundSave }) {
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) recordStream.addTrack(audioTrack);
 
-      const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
-        .find(t => MediaRecorder.isTypeSupported(t)) || '';
-      const mr = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
-      mediaRecorderRef.current = mr;
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        // Name the file after what the recorder actually produced. MediaRecorder
-        // reports its real container in .mimeType, so a device that silently used
-        // a different format still saves under the right extension instead of a
-        // guessed one.
-        const actualType = (mr.mimeType || mimeType || 'video/webm').split(';')[0];
-        const blob = new Blob(chunksRef.current, { type: actualType });
-        setRecordedBlob(blob);
-        recordStream.getTracks().forEach(t => t.stop());
+      startSessionRecorder(recordStream, () => {
         stream.getTracks().forEach(t => t.stop());
         streamRef.current = null;
-      };
-      mr.start(1000);
-      setRecording(true);
+      });
 
       // Timer
       setRecordDuration(0);
@@ -126,6 +159,84 @@ export default function SLSCamera({ gateSave, refundSave }) {
         setError('Could not start the camera. Please try again.');
       }
     }
+  };
+
+  // Depth session: the native module supplies the colourised depth image (LiDAR)
+  // and the forms it found. Frames are drawn onto the same canvas the contrast
+  // method uses, so the recording and the Evidence save are unchanged — and the
+  // saved file carries the depth image exactly as it looked on screen.
+  const startDepthCamera = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = 640;
+    canvas.height = 480;
+    depthFrameRef.current = null;
+    try {
+      await startDepthStream(8);
+    } catch {
+      setError('The depth sensor could not start. Close other camera apps and try again.');
+      return;
+    }
+    depthUnsubRef.current = onDepthFrame((data) => {
+      const imageEl = new Image();
+      imageEl.onload = () => { depthFrameRef.current = { ...data, imageEl }; };
+      imageEl.src = data.image;
+      setCenterDepth(data.centerDepth ?? null);
+    });
+
+    setFigureCount(0);
+    setActive(true);
+    processDepthFrame();
+
+    // The depth module owns the camera, so the session's own microphone is opened
+    // separately and recorded alongside the canvas.
+    let audioTrack = null;
+    try {
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+      });
+      depthAudioRef.current = audioStream;
+      audioTrack = audioStream.getAudioTracks()[0] || null;
+    } catch { /* record the picture without sound */ }
+
+    if (typeof canvas.captureStream === 'function') {
+      const recordStream = canvas.captureStream(30);
+      if (audioTrack) recordStream.addTrack(audioTrack);
+      startSessionRecorder(recordStream, () => {
+        if (depthAudioRef.current) {
+          depthAudioRef.current.getTracks().forEach(t => t.stop());
+          depthAudioRef.current = null;
+        }
+      });
+    } else {
+      setError('This device cannot record the on-screen depth view, so the session cannot be saved.');
+    }
+
+    setRecordDuration(0);
+    timerRef.current = setInterval(() => setRecordDuration(prev => prev + 1), 1000);
+
+    // If the sensor never delivers a frame, say so rather than leaving an empty
+    // screen in front of the investigator.
+    setTimeout(() => {
+      if (!depthFrameRef.current && depthUnsubRef.current) {
+        setError('No depth readings are arriving — check that no other app is using the camera.');
+      }
+    }, 4000);
+  };
+
+  const processDepthFrame = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const frame = depthFrameRef.current;
+    const count = frame?.figures?.length || 0;
+    setFigureCount(count);
+    if (count > 0 && !anomalyDetected) {
+      setAnomalyDetected(true);
+      if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
+      anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
+    }
+    drawDepthFrame(canvas.getContext('2d'), canvas, frame, { figureCount: count });
+    animFrameRef.current = requestAnimationFrame(processDepthFrame);
   };
 
   const processFrame = () => {
@@ -296,14 +407,23 @@ export default function SLSCamera({ gateSave, refundSave }) {
       </div>
 
       {!active && (
-        <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
+        <div className="space-y-3">
+          <AnomalyModePicker mode={mode} onChange={setMode} depthAvailable={depthAvailable} />
+          {mode === 'contrast' && (
+            <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
+          )}
+        </div>
       )}
 
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${active ? 'bg-green-400 animate-pulse' : 'bg-red-500/50'}`} />
           <span className="text-[10px] font-mono text-muted-foreground">
-            {active ? `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''} detected` : 'STANDBY'}
+            {active
+              ? mode === 'depth'
+                ? `LIVE · ${figureCount} form${figureCount !== 1 ? 's' : ''}${centerDepth ? ` · ${centerDepth.toFixed(1)} m centre` : ''}`
+                : `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''} detected`
+              : 'STANDBY'}
           </span>
         </div>
         {active ? (
@@ -330,7 +450,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
       <div className="p-2.5 rounded-lg bg-card/30 border border-border/30">
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          The live camera image is scanned for human-shaped patches of skin-toned colour, and any it finds are outlined. It can only flag what the camera can actually see — no infrared or depth sensing. Session is recorded — save to your Evidence Journal when done.
+          {mode === 'depth'
+            ? 'Depth analysis reads the phone\'s LiDAR depth sensor and outlines solid, figure-sized forms standing out from the background. Anything outlined is physically in the space — the reading is in metres, straight from the sensor. Session is recorded — save to your Evidence Journal when done.'
+            : 'The live camera image is scanned for human-shaped patches of skin-toned colour, and any it finds are outlined. It can only flag what the camera can actually see — no infrared or depth sensing. Session is recorded — save to your Evidence Journal when done.'}
         </p>
       </div>
       {gpsDialog}

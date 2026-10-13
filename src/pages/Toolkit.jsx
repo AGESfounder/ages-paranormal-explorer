@@ -1024,6 +1024,10 @@ What Is an Anomaly Camera?
 
 A camera tool that scans the live image in real time for bright, skin-toned regions, groups neighbouring pixels into shapes, and outlines any group large enough to be a head, torso or limb. It works on what the camera can see: no infrared or depth sensor is involved.
 
+Depth layer (devices that have a depth sensor)
+
+Where the device carries one, the camera can read its LiDAR depth sensor instead. That maps the solid surfaces in front of it and outlines any figure-sized form standing out from the background. This is a physical reading: anything it outlines is really there in the space — a person, or an object shaped like one — and because the sensor supplies its own illumination it works in the dark with no torch. Depth sessions show the reading in metres. Devices without a depth sensor simply use the camera-image method described above.
+
 Scientific Theory
 
 Each frame is examined pixel by pixel for warm, flesh-toned colour. Matching pixels that touch are grouped into one region, and a region above a size threshold is boxed and counted as a detected figure. Because the detector reads colour and light, it needs light in the frame to work with — the sensitivity presets describe how bright the scene is expected to be, and the torch switches on at the darkest setting.
