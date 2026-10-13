@@ -160,11 +160,10 @@ export default function SiegConsole({ gateSave, refundSave }) {
 
   const moonNow = moonPhase();
   const conditionsLine = `${moonNow.name} · ${moonNow.illumination}%${weather ? ` · ${weather}` : ''}`;
-  // Today's date, written the way an investigator writes it on a session note
-  // (10-13-2026). Rebuilt on each render — the console re-renders every quarter
-  // second, so a session that runs past midnight shows the new date.
-  const today = new Date();
-  const dateStamp = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}-${today.getFullYear()}`;
+
+  // The session's date and start time are written onto the saved evidence record
+  // itself, so no date is drawn on screen — but the real time stays in the display
+  // header, because that IS recorded and is what an event gets noted against.
 
   // The figure scan's tuning, shared with the standalone Anomaly Camera: the
   // brightness scale for the camera method, the detector's own distance gates for
@@ -1080,7 +1079,6 @@ export default function SiegConsole({ gateSave, refundSave }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-center text-[12px] font-mono tracking-[0.2em] text-muted-foreground">{dateStamp}</p>
       <SiegViewport
         videoRef={videoRef}
         canvasRef={canvasRef}
