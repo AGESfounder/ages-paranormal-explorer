@@ -47,7 +47,7 @@ const DEFAULT_TOOLS = [
   { name: 'Acoustic Anomaly Sweeper', icon: Volume2, desc: 'Listen-only room acoustics monitor — mic spectral analysis + video record', type: 'audio' },
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
   { name: 'Terms Sweeper', icon: Library, desc: 'Sweep location terms — environment-triggered spirit dictation + screen record', type: 'termbank' },
-  { name: 'Anomaly Camera', icon: ScanFace, desc: 'Detect human & ghost figures via IR depth scan', type: 'sls' },
+  { name: 'Anomaly Camera', icon: ScanFace, desc: 'Detect human-shaped figures in the live camera view', type: 'sls' },
   { name: 'Alphabet Sweeper', icon: Type, desc: 'Sweep A→Z — environment-triggered letter dictation + screen record', type: 'alphabet' },
   { name: 'Vibration Communicator', icon: Zap, desc: 'Detect energy disturbances via phone sensors + video record', type: 'rem' },
   { name: 'Yes/No/IDK Sweeper', icon: MessageCircle, desc: 'Sweep Yes · No · I Don\'t Know — motion-triggered answer + screen record', type: 'yesno' },
@@ -1017,33 +1017,35 @@ Best Practices
               },
               {
                 name: 'Anomaly Camera',
-                short: 'IR Depth Scan for Human & Ghost Figures',
+                short: 'Figure Detection from the Live Camera Image',
                 detail: `Anomaly Cameras in Ghost Hunting
 
 What Is an Anomaly Camera?
 
-An anomaly camera uses a phone's depth and infrared sensing capabilities to scan a scene for human-shaped figures and anomalies that may be invisible to the naked eye, mapping detected forms and flagging potential apparitions in real time.
+A camera tool that scans the live image in real time for bright, skin-toned regions, groups neighbouring pixels into shapes, and outlines any group large enough to be a head, torso or limb. It works on what the camera can see: no infrared or depth sensor is involved.
 
 Scientific Theory
 
-The camera reads depth and IR data to build a spatial map of the scene. Software analyzes the map for shapes and silhouettes that resemble a human form — head, torso, limbs — and highlights them on screen. The system can detect movement and depth changes beyond standard visible-light capture.
+Each frame is examined pixel by pixel for warm, flesh-toned colour. Matching pixels that touch are grouped into one region, and a region above a size threshold is boxed and counted as a detected figure. Because the detector reads colour and light, it needs light in the frame to work with — the sensitivity presets describe how bright the scene is expected to be, and the torch switches on at the darkest setting.
 
 Paranormal Theory
 
 Investigators theorize that:
-• Spirits may present as energy fields or forms detectable by depth/IR sensing.
-• Humanoid shapes appearing where no living person is present may indicate an apparition.
-• Figures mapped at unusual heights or positions can be especially notable.
+• A figure-shaped reading appearing where no living person is present may indicate an apparition.
+• Figures detected at unusual heights or positions can be especially notable.
+• A detected shape is only as meaningful as the readings that corroborate it.
 
 Limitations and False Positives
-• Furniture, curtains, and reflections can be misread as humanoid shapes.
-• Shadows and lighting changes can confuse depth sensing.
-• Other people in range can create overlapping readings.
+• Skin-toned surfaces are the most common false positive — wood, leather, beige walls, warm lamplight, skin-coloured fabric.
+• The detector needs light: in near-total darkness there is nothing to read, which is why the torch setting exists.
+• A detection is a colour match, not a depth or thermal reading, and nothing the camera cannot see can be detected.
+• Other people in frame will register as figures.
 
 Best Practices
 • Clear the area of people before scanning.
-• Note reflective surfaces and light sources.
-• Document any detected figure with a screenshot or recording.
+• Note the skin-toned surfaces in the frame so you can rule them out afterwards.
+• Use the torch setting in dark rooms.
+• Record the session, so any detected figure is timestamped with the moment it appeared.
 • Cross-reference with EMF, temperature, and audio for corroboration.
 • A single detected shape alone is not proof.`
               },

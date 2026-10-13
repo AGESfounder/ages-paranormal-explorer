@@ -32,7 +32,7 @@ const NEWLY_VISIBLE_COSTLY_TOOLS = [
   { name: 'Term Sweeper', tier: 'Investigator+', costType: 'Manifest. + Narration', credits: '3 (build terms) + 1/trigger voice', desc: 'Location-based spirit dictation with LLM term generation + GenerateSpeech trigger voices' },
   { name: 'Alphabet Sweeper', tier: 'Investigator+', costType: 'Narration', credits: '1/trigger voice', desc: 'A→Z sweep with GenerateSpeech trigger voices' },
   { name: 'Vibration Communicator', tier: 'Investigator+', costType: 'No credits', credits: '0 (sensor-only)', desc: 'Phone sensor detection — no LLM or speech credits needed' },
-  { name: 'Anomaly Camera', tier: 'Investigator+', costType: 'No credits', credits: '0 (camera-only)', desc: 'IR depth scan — no LLM or speech credits needed' },
+  { name: 'Anomaly Camera', tier: 'Investigator+', costType: 'No credits', credits: '0 (camera-only)', desc: 'Image-based figure detection — no LLM or speech credits needed' },
 ];
 
 function buildPlans(option, toursPerEnergy, auraSplit) {

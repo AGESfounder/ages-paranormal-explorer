@@ -78,10 +78,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
       setActive(true);
       processFrame();
 
-      // Record from canvas (what's shown on screen) + audio from camera. On a
-      // device whose web view cannot record a canvas (every iPhone) record the
-      // live camera feed itself instead: this tool's evidence IS the camera view,
-      // and a session there previously saved no file at all.
+      // Record from canvas (what's shown on screen) + audio from camera. A device
+      // whose web view cannot capture a canvas is fed the live camera feed instead,
+      // so a session there still saves a file — the raw feed, without the overlay.
       await new Promise(r => setTimeout(r, 300));
       const canvasCapture = !!canvasRef.current && typeof canvasRef.current.captureStream === 'function';
       const recordStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
@@ -96,7 +95,12 @@ export default function SLSCamera({ gateSave, refundSave }) {
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
+        // Name the file after what the recorder actually produced. MediaRecorder
+        // reports its real container in .mimeType, so a device that silently used
+        // a different format still saves under the right extension instead of a
+        // guessed one.
+        const actualType = (mr.mimeType || mimeType || 'video/webm').split(';')[0];
+        const blob = new Blob(chunksRef.current, { type: actualType });
         setRecordedBlob(blob);
         recordStream.getTracks().forEach(t => t.stop());
         stream.getTracks().forEach(t => t.stop());
@@ -176,7 +180,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     // pixel is drawn as a 4x4 block on a 4px grid, so a side is an outline edge
     // when the neighbouring grid block is not part of the shape. Stroked twice —
     // a wide soft halo under a solid bright line — so the outline stays visible
-    // against the dim IR image. Drawn on the canvas, so it records too.
+    // against the dim green image. Drawn on the canvas, so it records too.
     figures.forEach(({ pixels }) => {
       if (!pixels || !pixels.size) return;
       ctx.beginPath();
@@ -215,7 +219,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
     ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';
     ctx.font = '10px monospace';
-    ctx.fillText('ANOMALY CAM · IR DEPTH SCAN', 8, 16);
+    ctx.fillText('ANOMALY CAM · FIGURE SCAN', 8, 16);
     ctx.fillText(`FIGURES: ${figures.length}`, 8, 30);
     ctx.fillText(new Date().toLocaleTimeString(), w - 72, 16);
 
@@ -326,7 +330,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
       <div className="p-2.5 rounded-lg bg-card/30 border border-border/30">
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          IR depth analysis maps humanoid shapes invisible to the naked eye. Session is recorded — save to your Evidence Journal when done.
+          The live camera image is scanned for human-shaped patches of skin-toned colour, and any it finds are outlined. It can only flag what the camera can actually see — no infrared or depth sensing. Session is recorded — save to your Evidence Journal when done.
         </p>
       </div>
       {gpsDialog}

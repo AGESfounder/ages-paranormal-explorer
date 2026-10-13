@@ -17,7 +17,7 @@ export default function SensitivityControl({ sensitivity, onChange }) {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Eye className="w-3 h-3" /> IR Sensitivity
+          <Eye className="w-3 h-3" /> Detection Sensitivity
         </p>
         <span className="text-[10px] font-mono text-primary">{Math.round(sensitivity)}%</span>
       </div>

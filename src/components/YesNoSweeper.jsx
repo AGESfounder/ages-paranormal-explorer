@@ -311,7 +311,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     window.addEventListener('deviceorientation', orientHandler);
   };
 
-  // Camera-based anomaly trigger: runs the same IR figure detection as the
+  // Camera-based anomaly trigger: runs the same figure detection as the
   // Anomaly Camera. When a humanoid shape is detected, the current phrase is
   // locked — same effect as a motion/orientation disturbance.
   const startCamera = async () => {
@@ -582,7 +582,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Start</span>. "Asking Next Question…" appears for 10 seconds (no dictation) — THIS IS WHEN YOU ASK A QUESTION — then the phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> appear once, one every 4 seconds, each spoken aloud in your device's narration voice, while the session records.</li>
             <li>If no trigger occurs during the rotation, "Asking Next Question…" appears again for 10 seconds and the cycle repeats. If the device is triggered, the phrase on screen finishes speaking, then xylophone notes announce the answer: <span className="text-foreground">1 note = YES</span>, <span className="text-foreground">2 notes = NO</span>, <span className="text-foreground">3 notes = I DON'T KNOW</span>. The phrase stays lit on screen and in the recording.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and the xylophone plays the answer. The IR camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and the xylophone plays the answer. The camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
           <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>
@@ -613,7 +613,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
           {cameraActive && (
             <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/80">
               <Camera className="w-2.5 h-2.5 text-white" />
-              <span className="text-[9px] text-white font-mono">IR</span>
+              <span className="text-[9px] text-white font-mono">CAM</span>
             </div>
           )}
           {anomalyDetected && (
@@ -633,11 +633,11 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
             </div>
           )}
         </div>
-        {/* Hidden camera elements for IR anomaly detection */}
+        {/* Hidden camera elements for figure detection */}
         <video ref={camVideoRef} className="hidden" playsInline muted />
         <canvas ref={detectCanvasRef} className="hidden" />
         <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
-          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or vibrate the device — or let the IR camera detect an anomaly — to lock an answer
+          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or vibrate the device — or let the camera catch a figure — to lock an answer
         </p>
         {lockedPhrase ? (
           <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}

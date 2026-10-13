@@ -1,6 +1,7 @@
-// Shared IR/anomaly figure-detection logic used by the SLS Camera and the
-// Yes/No/IDK, Alphabet, and Term Sweepers' camera triggers. Detects
-// humanoid-shaped skin-tone regions in a frame and returns bounding boxes.
+// Shared figure-detection logic used by the Anomaly Camera and the Yes/No/IDK,
+// Alphabet, and Term Sweepers' camera triggers. Detects bright, skin-toned
+// regions in a frame, groups them into human-shaped blobs and returns bounding
+// boxes. No infrared or depth hardware is involved — it reads the camera image.
 //
 // Brightness scale (shared with useSensitivity): 0 = bright Daylight, 100 =
 // complete darkness. The five original presets are anchored at marks along that

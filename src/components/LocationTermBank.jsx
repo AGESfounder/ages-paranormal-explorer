@@ -757,7 +757,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Build Terms</span> — if you're on a tour stop, AGES extracts terms from that stop's history (names, nouns, verbs, phrases, time words); otherwise it gathers words tied to your area's history & hauntings.</li>
             <li>Tap <span className="text-primary font-medium">Start Session</span>. Words appear on screen for 3 seconds each, each spoken aloud in your device's narration voice; the session records.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright, the word finishes speaking, and a cymbal crash announces it. The IR camera also watches for anomalies: a detected figure locks the current word the same way.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current word on screen — it glows bright, the word finishes speaking, and a cymbal crash announces it. The camera also watches for anomalies: a detected figure locks the current word the same way.</li>
             <li>After each word is locked and the cymbal crashes, the scan resumes automatically with a new random word every 3 seconds.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
@@ -823,7 +823,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
           {cameraActive && (
             <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/80">
               <Camera className="w-2.5 h-2.5 text-white" />
-              <span className="text-[9px] text-white font-mono">IR</span>
+              <span className="text-[9px] text-white font-mono">CAM</span>
             </div>
           )}
           {anomalyDetected && (
@@ -843,11 +843,11 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
             </div>
           )}
         </div>
-        {/* Hidden camera elements for IR anomaly detection */}
+        {/* Hidden camera elements for figure detection */}
         <video ref={camVideoRef} className="hidden" playsInline muted />
         <canvas ref={detectCanvasRef} className="hidden" />
         <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
-          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device — or let the IR camera detect an anomaly — to lock a word
+          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device — or let the camera catch a figure — to lock a word
         </p>
         {lockedWord && (
           <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}

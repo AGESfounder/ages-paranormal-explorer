@@ -12,7 +12,7 @@ const ALL_TOOLS = [
   { name: 'Vibration Communicator', desc: 'Detect energy disturbances via phone sensors' },
   { name: 'Alphabet Sweeper', desc: 'Sweep A→Z — environment-triggered letter dictation' },
   { name: 'Terms Sweeper', desc: 'Environment-triggered spirit dictation + screen record' },
-  { name: 'Anomaly Camera', desc: 'Detect human & ghost figures via IR depth scan' },
+  { name: 'Anomaly Camera', desc: 'Detect human-shaped figures in the live camera view' },
   { name: 'Weather Monitor', desc: 'Real-time local weather conditions' },
   { name: 'Moon Phase', desc: 'Current moon phase & illumination' },
   { name: 'Paranormal Research: Terms', desc: 'Research database & field manual' },

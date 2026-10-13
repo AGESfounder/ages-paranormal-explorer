@@ -308,7 +308,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     window.addEventListener('deviceorientation', orientHandler);
   };
 
-  // Camera-based anomaly trigger: runs the same IR figure detection as the
+  // Camera-based anomaly trigger: runs the same figure detection as the
   // Anomaly Camera. When a humanoid shape is detected, the current letter is
   // locked — same effect as a motion/orientation disturbance.
   const startCameraStream = async () => {
@@ -613,7 +613,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Start Sweep</span>. Letters cycle A → Z, one every 2 seconds, each spoken aloud in your device's narration voice, while the session records.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current letter — it glows bright, the letter finishes speaking, and a brief chime announces it. The IR camera also watches for anomalies: a detected figure locks the current letter the same way.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current letter — it glows bright, the letter finishes speaking, and a brief chime announces it. The camera also watches for anomalies: a detected figure locks the current letter the same way.</li>
             <li>After each letter is locked and the chime sounds, the alphabet restarts from A.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
@@ -646,7 +646,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
           {cameraActive && (
             <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/80">
               <Camera className="w-2.5 h-2.5 text-white" />
-              <span className="text-[9px] text-white font-mono">IR</span>
+              <span className="text-[9px] text-white font-mono">CAM</span>
             </div>
           )}
           {anomalyDetected && (
@@ -666,11 +666,11 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
             </div>
           )}
         </div>
-        {/* Hidden camera elements for IR anomaly detection */}
+        {/* Hidden camera elements for figure detection */}
         <video ref={camVideoRef} className="hidden" playsInline muted />
         <canvas ref={detectCanvasRef} className="hidden" />
         <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
-          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device — or let the IR camera detect an anomaly — to lock a letter
+          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device — or let the camera catch a figure — to lock a letter
         </p>
         {paused ? (
           <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
