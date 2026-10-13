@@ -462,9 +462,12 @@
   background-position: 0 100%;
 }
 
-/* Environmental Anomaly Monitor — twin traces over one baseline: a cyan pressure
-   line and a violet magnetic line crossing, lit white where they meet. */
-.tkd-environment { --td-accent: #8be9fd; --td-light: #303c54; --td-body: #1e2636; --td-dark: #0c1018; }
+/* Environmental Anomaly Monitor — the rack's only burnt-copper shell, so it can
+   never be mistaken for the blue-grey instruments around it. The face keeps the
+   tool's own signature: a cyan pressure trace and a violet magnetic trace
+   crossing, lit white where the two sensors agree — exactly the pairing the live
+   chart draws (environmentChart.js). */
+.tkd-environment { --td-accent: #fb923c; --td-light: #7a4620; --td-body: #4a2a14; --td-dark: #241205; }
 .tkd-environment .tkd-face::before {
   background-image:
     linear-gradient(160deg, rgba(0, 0, 0, 0) 44%, rgba(34, 211, 238, 0.85) 47% 50%, rgba(0, 0, 0, 0) 53%),
@@ -472,6 +475,18 @@
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.80) 0 7%, rgba(0, 0, 0, 0) 8%),
     linear-gradient(0deg, rgba(0, 0, 0, 0) 49.4%, rgba(255, 255, 255, 0.26) 50%, rgba(0, 0, 0, 0) 50.6%);
   background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+}
+
+/* Reserved slot — an empty socket, not an instrument: a gunmetal-black chassis
+   (the only truly black shell in the rack) with a dim dotted drill grid across a
+   bare face, and no emblem or caption. It reads as a vacant bay waiting for the
+   next tool rather than as one of the tools around it. */
+.tkd-placeholder { --td-accent: #94a3b8; --td-light: #2c3036; --td-body: #17191d; --td-dark: #0a0b0e; }
+.tkd-placeholder .tkd-face::before {
+  background-image: radial-gradient(circle at 50% 50%, rgba(148, 163, 184, 0.20) 0 1px, rgba(0, 0, 0, 0) 1.5px);
+  background-size: 10px 10px;
+  background-position: 50% 50%;
+  background-repeat: repeat;
 }
 
 /* ── Opened tool panel ───────────────────────────────────────────────────
