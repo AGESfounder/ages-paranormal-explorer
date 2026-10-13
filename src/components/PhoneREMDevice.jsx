@@ -39,12 +39,22 @@ function alertHexColor(level) {
   return '#ef4444';
 }
 
+// A disturbance is named by the highest level it reached, not by the reading
+// that happened to be on screen when it was noticed.
+function levelLabel(level) {
+  if (level < 50) return '🟡 MINOR FLUCTUATION';
+  if (level < 80) return '🟠 MODERATE ACTIVITY';
+  return '🔴 STRONG DISTURBANCE';
+}
+
 export default function PhoneREMDevice({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const [phase, setPhase] = useState('idle'); // idle | countdown | active | stopped
   const [countdown, setCountdown] = useState(3);
   const [alertLevel, setAlertLevel] = useState(0);
   const [events, setEvents] = useState([]);
+  // The disturbance currently running, shown as one live row until it ends.
+  const [liveEvent, setLiveEvent] = useState(null);
   const [sessionDuration, setSessionDuration] = useState(0);
   const [videoBlob, setVideoBlob] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -59,6 +69,8 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   const alertLevelRef = useRef(0);
   const sessionDurationRef = useRef(0);
   const eventsRef = useRef([]);
+  // The disturbance in progress: its start and the peak it has reached so far.
+  const excursionRef = useRef(null);
   const sensorDataReceivedRef = useRef(false);
 
   const timerRef = useRef(null);
@@ -445,12 +457,36 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     return Math.round(Math.min(combined, 100));
   };
 
+  // One disturbance is one logged event, written as the peak it reached: the run
+  // is tracked from the moment the level leaves the green until the room settles
+  // back into it, so climbing through orange into red and back down again is a
+  // single red event rather than one per step.
+  const finalizeExcursion = (now) => {
+    const ex = excursionRef.current;
+    if (!ex) return;
+    excursionRef.current = null;
+    setLiveEvent(null);
+    const entry = {
+      time: ex.startedAt,
+      label: levelLabel(ex.peak),
+      level: ex.peak,
+      duration: Math.max(1, Math.round((now - ex.startedAtMs) / 1000)),
+    };
+    setEvents((prev) => {
+      const updated = [entry, ...prev].slice(0, 20);
+      eventsRef.current = updated;
+      return updated;
+    });
+  };
+
   const activate = async () => {
     setSensorError(null);
     setVideoBlob(null);
     videoBlobRef.current = null;
     setEvents([]);
     eventsRef.current = [];
+    excursionRef.current = null;
+    setLiveEvent(null);
     setSessionDuration(0);
     sessionDurationRef.current = 0;
     setAlertLevel(0);
@@ -523,21 +559,31 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       alertLevelRef.current = level;
       updateBeeping(level);
 
+      // While the level is out of the green the run's peak is tracked and
+      // nothing is logged; the event is written the moment the room settles back
+      // into the green.
+      const now = Date.now();
+      const ex = excursionRef.current;
       if (level >= 20) {
-        const label = level >= 80 ? '🔴 STRONG DISTURBANCE' : level >= 50 ? '🟠 MODERATE ACTIVITY' : '🟡 MINOR FLUCTUATION';
-        const ts = new Date().toLocaleTimeString();
-        const newEvent = { time: ts, label, level };
-        setEvents(prev => {
-          const updated = [newEvent, ...prev].slice(0, 20);
-          eventsRef.current = updated;
-          return updated;
-        });
+        if (!ex) {
+          const started = { startedAt: new Date(now).toLocaleTimeString(), startedAtMs: now, peak: level };
+          excursionRef.current = started;
+          setLiveEvent({ time: started.startedAt, label: levelLabel(level), level });
+        } else if (level > ex.peak) {
+          ex.peak = level;
+          setLiveEvent({ time: ex.startedAt, label: levelLabel(level), level });
+        }
+      } else if (ex) {
+        finalizeExcursion(now);
       }
     }, 300);
   };
 
   const deactivate = () => {
     if (timerRef.current) clearInterval(timerRef.current);
+    // A disturbance still running when the session ends is logged with the peak
+    // it reached, so the last one is never lost.
+    finalizeExcursion(Date.now());
     stopCanvasDrawing();
     stopAudioEngine();
     releaseAmbience();
@@ -582,7 +628,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       await base44.entities.Evidence.create({
         title: `Vibration Communicator Session ${date}`,
         type: blob.type.startsWith('audio') ? 'evp' : 'video',
-        description: `Vibration Communicator session — ${formatDuration(sessionDuration)} — ${events.length} disturbance event(s) detected.`,
+        description: `Vibration Communicator session — ${formatDuration(sessionDuration)} — ${events.length} disturbance event(s) detected${events.length ? `, strongest peak ${Math.max(...events.map((e) => e.level))}` : ''}.`,
         file_url,
         date,
         time,
@@ -595,6 +641,8 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       setPhase('idle');
       setEvents([]);
       eventsRef.current = [];
+      excursionRef.current = null;
+      setLiveEvent(null);
     } catch (e) {
       if (gateSucceeded && refundSave) await refundSave();
       console.error('Save failed', e);
@@ -608,6 +656,8 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     setPhase('idle');
     setEvents([]);
     eventsRef.current = [];
+    excursionRef.current = null;
+    setLiveEvent(null);
     setAlertLevel(0);
     alertLevelRef.current = 0;
   };
@@ -746,13 +796,19 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
         </div>
 
         {/* Event log */}
-        {events.length > 0 && (
+        {(events.length > 0 || liveEvent) && (
           <div className="space-y-1 max-h-32 overflow-y-auto">
             <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Event Log</p>
+            {liveEvent && (
+              <div className="flex items-center justify-between px-2 py-1 rounded bg-card/40 border border-dashed border-border/50">
+                <span className="text-[10px] text-muted-foreground font-mono">{liveEvent.time}</span>
+                <span className={`text-[10px] font-medium ${alertColor(liveEvent.level)}`}>{liveEvent.label} · in progress</span>
+              </div>
+            )}
             {events.map((ev, i) => (
               <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-card/30 border border-border/20">
                 <span className="text-[10px] text-muted-foreground font-mono">{ev.time}</span>
-                <span className={`text-[10px] font-medium ${alertColor(ev.level)}`}>{ev.label}</span>
+                <span className={`text-[10px] font-medium ${alertColor(ev.level)}`}>{ev.label} · {ev.duration}s</span>
               </div>
             ))}
           </div>
@@ -787,7 +843,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
             {events.map((ev, i) => (
               <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded bg-card/30 border border-border/20">
                 <span className="text-[10px] text-muted-foreground font-mono">{ev.time}</span>
-                <span className={`text-[10px] font-medium ${alertColor(ev.level)}`}>{ev.label}</span>
+                <span className={`text-[10px] font-medium ${alertColor(ev.level)}`}>{ev.label} · {ev.duration}s</span>
               </div>
             ))}
           </div>
