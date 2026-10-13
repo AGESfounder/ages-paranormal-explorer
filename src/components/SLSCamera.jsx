@@ -11,6 +11,8 @@ import SensitivityControl from './SensitivityControl';
 import AnomalyModePicker from './AnomalyModePicker';
 import { drawDepthFrame } from '@/lib/depthFrame';
 import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame } from '@/lib/nativeDepth';
+import useDepthDetection from '@/hooks/useDepthDetection';
+import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
 
 export default function SLSCamera({ gateSave, refundSave }) {
@@ -43,6 +45,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const depthAudioRef = useRef(null);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
+  // The depth method's own two gates (stand-out distance, smallest form), pushed
+  // to the native module so a change applies to the next frame.
+  const depthDetection = useDepthDetection();
 
   const formatDuration = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 
@@ -422,6 +427,13 @@ export default function SLSCamera({ gateSave, refundSave }) {
           {mode === 'contrast' && (
             <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
           )}
+          {mode === 'depth' && (
+            <DepthSensitivityControl
+              protrusion={depthDetection.protrusion}
+              minSize={depthDetection.minSize}
+              onChange={depthDetection.update}
+            />
+          )}
         </div>
       )}
 
@@ -465,7 +477,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       <div className="p-2.5 rounded-lg bg-card/30 border border-border/30">
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           {mode === 'depth'
-            ? 'Depth analysis reads the phone\'s depth sensor and outlines solid, figure-sized forms standing out from the background. Anything outlined is physically in the space — the reading is in metres, straight from the sensor. Session is recorded — save to your Evidence Journal when done.'
+            ? 'Depth analysis reads the phone\'s depth sensor and outlines solid, figure-sized forms standing out from the background. Anything outlined is physically in the space — the reading is in metres, straight from the sensor. Both gates can be tuned above: how far a form must stand out, and the smallest form counted. Session is recorded — save to your Evidence Journal when done.'
             : 'The live camera image is scanned for human-shaped patches of skin-toned colour, and any it finds are outlined. It can only flag what the camera can actually see — no infrared or depth sensing. Session is recorded — save to your Evidence Journal when done.'}
         </p>
       </div>

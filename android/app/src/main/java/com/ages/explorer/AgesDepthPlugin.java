@@ -66,13 +66,17 @@ public class AgesDepthPlugin extends Plugin {
 
     private static final String TAG = "AgesDepth";
 
-    // Detection constants, kept in step with the iOS module.
+    // Detection gates, kept in step with the iOS module. The live gates hold the
+    // defaults and are moved at runtime by the web layer's two depth controls (see
+    // setDetection); the width and cell gates follow the height gate, so that one
+    // slider is the whole size control.
     private static final int GRID_STEP = 4;
-    private static final float PROTRUSION_METRES = 0.35f;
-    private static final float MIN_FIGURE_HEIGHT = 0.30f;
-    private static final float MIN_FIGURE_WIDTH = 0.08f;
+    private float liveProtrusion = 0.35f;
+    private float liveFigureHeight = 0.30f;
+    private float liveFigureWidth = 0.08f;
+    private int liveFigureCells = 10;
+    // Not wall-wide, and no more than this many forms per frame.
     private static final float MAX_FIGURE_WIDTH = 0.75f;
-    private static final int MIN_FIGURE_CELLS = 10;
     private static final int MAX_FIGURES = 4;
 
     private Session session;
@@ -82,6 +86,31 @@ public class AgesDepthPlugin extends Plugin {
     private long lastFrameAt = 0;
 
     // ── Plugin API ──────────────────────────────────────────────────────────
+
+    /**
+     * Both depth gates, set from the web layer's depth controls. Clamped here as
+     * well as there, so a stray value can never switch detection off or flood it.
+     * The height gate is the size control: the width and cell gates follow it, and
+     * the wall-wide cap above stays fixed. Applies to the next frame.
+     */
+    @PluginMethod
+    public void setDetection(PluginCall call) {
+        Double protrusion = call.getDouble("protrusion");
+        if (protrusion != null) {
+            liveProtrusion = (float) Math.min(1.5, Math.max(0.05, protrusion));
+        }
+        Double minHeight = call.getDouble("minHeight");
+        if (minHeight != null) {
+            liveFigureHeight = (float) Math.min(0.8, Math.max(0.12, minHeight));
+            float scale = liveFigureHeight / 0.30f;
+            liveFigureWidth = 0.08f * scale;
+            liveFigureCells = Math.max(4, Math.round(10f * scale));
+        }
+        JSObject result = new JSObject();
+        result.put("protrusion", (double) liveProtrusion);
+        result.put("minHeight", (double) liveFigureHeight);
+        call.resolve(result);
+    }
 
     @PluginMethod
     public void isSupported(PluginCall call) {
@@ -350,7 +379,7 @@ public class AgesDepthPlugin extends Plugin {
             // ── A form has to stand out in front of that surface ──
             boolean[] mask = new boolean[totalCells];
             for (int i = 0; i < totalCells; i++) {
-                if (cellValid[i] && cellDepth[i] < background - PROTRUSION_METRES) mask[i] = true;
+                if (cellValid[i] && cellDepth[i] < background - liveProtrusion) mask[i] = true;
             }
 
             boolean[] visited = new boolean[totalCells];
@@ -381,10 +410,10 @@ public class AgesDepthPlugin extends Plugin {
                 }
                 final float boxWidth = (float) (maxX - minX + 1) / gridW;
                 final float boxHeight = (float) (maxY - minY + 1) / gridH;
-                final boolean figureShaped = boxHeight >= MIN_FIGURE_HEIGHT
-                    && boxWidth >= MIN_FIGURE_WIDTH
+                final boolean figureShaped = boxHeight >= liveFigureHeight
+                    && boxWidth >= liveFigureWidth
                     && boxWidth <= MAX_FIGURE_WIDTH
-                    && cells.size() >= MIN_FIGURE_CELLS;
+                    && cells.size() >= liveFigureCells;
                 if (!figureShaped) continue;
                 for (int cell : cells) figureMask[cell] = true;
                 JSObject box = new JSObject();

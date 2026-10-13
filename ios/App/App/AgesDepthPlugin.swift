@@ -29,21 +29,25 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "isSupported", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setDetection", returnType: CAPPluginReturnPromise)
     ]
 
     // The depth map arrives at 256 x 192. Frames go to the web layer a few times a
     // second (a depth scan does not need more) and detection runs on a coarser
     // 4:1 grid.
     private static let gridStep = 4
-    // A form must stand this far in front of the background surface to count.
-    // Closer than this and it is sensor noise or texture on a surface.
-    private static let protrusionMetres: Float = 0.35
-    // Human-sized gate: tall relative to the frame, and not wall-wide.
-    private static let minFigureHeight = 0.30
-    private static let minFigureWidth = 0.08
+    // Detection gates. The live gates hold the defaults and are moved at runtime by
+    // the web layer's two depth controls (see setDetection): a form must stand this
+    // far in front of the background surface to count, and fill at least this much
+    // of the frame height. The width and cell gates follow the height gate, so that
+    // one slider is the whole size control.
+    private var liveProtrusion: Float = 0.35
+    private var liveFigureHeight: Double = 0.30
+    private var liveFigureWidth: Double = 0.08
+    private var liveFigureCells: Int = 10
+    // Not wall-wide, and no more than this many forms per frame.
     private static let maxFigureWidth = 0.75
-    private static let minFigureCells = 10
     private static let maxFigures = 4
 
     private var session: ARSession?
@@ -53,6 +57,26 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     private let renderQueue = DispatchQueue(label: "com.ages.explorer.depth")
 
     // ── Plugin API ──────────────────────────────────────────────────────────
+
+    // Both depth gates, set from the web layer's depth controls. Clamped here as
+    // well as there, so a stray value can never switch detection off or flood it.
+    // The height gate is the size control: the width and cell gates follow it, and
+    // the wall-wide cap above stays fixed. Applies to the next frame.
+    @objc func setDetection(_ call: CAPPluginCall) {
+        if let protrusion = call.getDouble("protrusion") {
+            liveProtrusion = Float(min(1.5, max(0.05, protrusion)))
+        }
+        if let minHeight = call.getDouble("minHeight") {
+            liveFigureHeight = min(0.8, max(0.12, minHeight))
+            let scale = liveFigureHeight / 0.30
+            liveFigureWidth = 0.08 * scale
+            liveFigureCells = max(4, Int((10.0 * scale).rounded()))
+        }
+        call.resolve([
+            "protrusion": Double(liveProtrusion),
+            "minHeight": liveFigureHeight
+        ])
+    }
 
     @objc func isSupported(_ call: CAPPluginCall) {
         guard ARWorldTrackingConfiguration.isSupported else {
@@ -186,7 +210,7 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
         // ── A form has to stand out in front of that surface ──
         var mask = [Bool](repeating: false, count: totalCells)
         for i in 0..<totalCells where cellValid[i] {
-            if cellDepth[i] < background - AgesDepthPlugin.protrusionMetres { mask[i] = true }
+            if cellDepth[i] < background - liveProtrusion { mask[i] = true }
         }
 
         var visited = [Bool](repeating: false, count: totalCells)
@@ -222,10 +246,10 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             }
             let boxWidth = Double(maxX - minX + 1) / Double(gw)
             let boxHeight = Double(maxY - minY + 1) / Double(gh)
-            let figureShaped = boxHeight >= AgesDepthPlugin.minFigureHeight
-                && boxWidth >= AgesDepthPlugin.minFigureWidth
+            let figureShaped = boxHeight >= liveFigureHeight
+                && boxWidth >= liveFigureWidth
                 && boxWidth <= AgesDepthPlugin.maxFigureWidth
-                && cells.count >= AgesDepthPlugin.minFigureCells
+                && cells.count >= liveFigureCells
             guard figureShaped, figures.count < AgesDepthPlugin.maxFigures else { continue }
             for cell in cells { figureMask[cell] = true }
             figures.append([

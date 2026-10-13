@@ -46,6 +46,19 @@ export async function stopDepthStream() {
  * data URL, the forms detected in it (normalised boxes), and the depth readings
  * behind them. Returns an unsubscribe function.
  */
+/**
+ * Move the detector's two gates: `protrusion` is how far a form must stand in
+ * front of the background surface to count (metres), `minHeight` is the smallest
+ * form counted (fraction of the frame height). They apply to the next frame, so a
+ * change is visible mid-session. Callable with no session running — the module
+ * simply remembers the values. Silent when the module is absent.
+ */
+export async function setDepthDetection(protrusion, minHeight) {
+  try {
+    await AgesDepth.setDetection({ protrusion, minHeight });
+  } catch { /* module absent (web, or a build without the depth module) */ }
+}
+
 export function onDepthFrame(handler) {
   const handle = AgesDepth.addListener('frame', handler);
   return () => {
