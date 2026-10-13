@@ -125,6 +125,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const envUnsubRef = useRef(null);
   const recorderRef = useRef(null);
   const ownTrackRef = useRef(null);
+  const frameTrackRef = useRef(null);
   const chunksRef = useRef([]);
   const userStoppedRef = useRef(true);
   const ambienceHeldRef = useRef(false);
@@ -456,6 +457,11 @@ export default function SiegConsole({ gateSave, refundSave }) {
       recording: phaseRef.current === 'live',
       scales: SCALES,
     });
+    // Hand this paint to the recorder. The composite is drawn on a timer rather than
+    // on the phone's animation frames, and this is the call that makes the recorder
+    // take the frame either way — without it a phone can decide the canvas was never
+    // repainted and save a still.
+    try { frameTrackRef.current?.requestFrame?.(); } catch { /* not offered here */ }
   };
 
   // ── Recording ──────────────────────────────────────────────────────────────
@@ -466,14 +472,27 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const startRecorder = async () => {
     const canvas = canvasRef.current;
     const useCanvas = !!canvas && typeof canvas.captureStream === 'function';
-    const stream = useCanvas ? canvas.captureStream(10) : new MediaStream();
+    // 30 fps, the rate every other recorder in this app asks for. A canvas stream
+    // asked for a lower rate can end up waiting on the phone's compositor and hand
+    // the recorder nothing beyond its first frame, which saves as one still shot.
+    const stream = useCanvas ? canvas.captureStream(30) : new MediaStream();
     if (!useCanvas) camStreamRef.current?.getVideoTracks().forEach((t) => stream.addTrack(t));
     const micTrack = micStreamRef.current?.getAudioTracks?.()[0];
     if (micTrack) stream.addTrack(micTrack);
-    ownTrackRef.current = useCanvas ? (stream.getVideoTracks()[0] || null) : null;
+    // The track every paint is pushed into (see drawComposite), and the only track
+    // this recorder owns — the camera and the microphone outlive it.
+    const picture = stream.getVideoTracks()[0] || null;
+    frameTrackRef.current = picture;
+    ownTrackRef.current = useCanvas ? picture : null;
 
-    const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
-      .find((t) => MediaRecorder.isTypeSupported(t)) || '';
+    // With no camera and no canvas to record there is no picture at all, so the
+    // session is recorded as audio: a video file with no moving frames plays back as
+    // one frozen frame, which is worth less than an honest audio recording.
+    const candidates = picture
+      ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+      : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
+    const mime = candidates.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+    console.log(`[SIEG] recording ${useCanvas ? 'composite canvas' : picture ? 'camera' : 'audio only'} · ${mime || 'browser default'}`);
     let mr;
     try {
       mr = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
@@ -513,6 +532,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   };
 
   const teardownDevices = () => {
+    frameTrackRef.current = null;
     [sampleTimerRef, figureTimerRef, clockTimerRef, heartbeatRef].forEach((r) => {
       if (r.current) { clearInterval(r.current); r.current = null; }
     });
@@ -809,7 +829,13 @@ export default function SiegConsole({ gateSave, refundSave }) {
     setSaving(true);
     let gateSucceeded = false;
     try {
-      const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('audio') ? 'm4a' : 'webm';
+      // The extension follows what was actually recorded rather than a default:
+      // audio in a video container is one more still frame for whoever reviews it.
+      const recordedType = (blob.type || '').split(';')[0];
+      const ext = recordedType === 'video/mp4' ? 'mp4'
+        : recordedType === 'audio/mp4' ? 'm4a'
+          : recordedType === 'audio/webm' ? 'weba'
+            : 'webm';
       const file = new File([blob], `sieg_session.${ext}`, { type: blob.type });
       const upload = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();

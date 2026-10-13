@@ -20,13 +20,17 @@ function formatDuration(sec) {
 // gets back to the phone, so this screen then says so and keeps the recording and
 // the log on screen rather than emptying itself.
 export default function SiegReview({ blob, session, events, counts, correlatedCount, duration, saving, saved, onSave, onDiscard }) {
-  const videoRef = useRef(null);
+  const mediaRef = useRef(null);
   const src = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
 
   useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
 
+  // A session recorded without a picture is played as audio. The same file in a
+  // video player is a single frozen frame, and the recording is the evidence here.
+  const isAudio = !!(blob && blob.type.startsWith('audio'));
+
   const goFullScreen = () => {
-    const v = videoRef.current;
+    const v = mediaRef.current;
     if (!v) return;
     try {
       if (v.requestFullscreen) v.requestFullscreen();
@@ -60,22 +64,26 @@ export default function SiegReview({ blob, session, events, counts, correlatedCo
       )}
 
       {src ? (
-        <>
-          <video
-            ref={videoRef}
-            src={src}
-            controls
-            playsInline
-            className="w-full rounded border border-border/30 bg-black"
-            style={{ maxHeight: 220 }}
-          />
-          <button
-            onClick={goFullScreen}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-border/40 text-muted-foreground font-heading text-[10px] uppercase tracking-wider hover:border-primary/30 hover:text-primary transition-colors"
-          >
-            <Maximize2 className="w-3 h-3" /> Full screen
-          </button>
-        </>
+        isAudio ? (
+          <audio ref={mediaRef} src={src} controls className="w-full" />
+        ) : (
+          <>
+            <video
+              ref={mediaRef}
+              src={src}
+              controls
+              playsInline
+              className="w-full rounded border border-border/30 bg-black"
+              style={{ maxHeight: 220 }}
+            />
+            <button
+              onClick={goFullScreen}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-border/40 text-muted-foreground font-heading text-[10px] uppercase tracking-wider hover:border-primary/30 hover:text-primary transition-colors"
+            >
+              <Maximize2 className="w-3 h-3" /> Full screen
+            </button>
+          </>
+        )
       ) : (
         <div className="p-4 rounded-lg bg-card/30 border border-border/30 text-center">
           <Video className="w-6 h-6 text-muted-foreground/40 mx-auto mb-1.5" />
