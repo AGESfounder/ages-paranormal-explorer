@@ -484,9 +484,12 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     await new Promise(r => setTimeout(r, 80));
     startDrawing();
     await startRecording();
-    let elapsed = 0;
+    // Length from the clock, not from the timer callbacks that happened to fire:
+    // a phone throttles timers while it is recording, and the session log has to
+    // show the session's true length.
+    const startedAt = Date.now();
     timerRef.current = setInterval(() => {
-      elapsed++;
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
       sessionDurRef.current = elapsed;
       setSessionDuration(elapsed);
     }, 1000);

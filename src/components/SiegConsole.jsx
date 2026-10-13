@@ -11,7 +11,7 @@ import SiegEventLog from '@/components/sieg/SiegEventLog';
 import SiegViewport from '@/components/sieg/SiegViewport';
 import useSiegCameraPlayback from '@/components/sieg/useSiegCameraPlayback';
 import SiegCameraControls from '@/components/sieg/SiegCameraControls';
-import { SIEG_LANES, SIEG_W, SIEG_H, drawSiegFrame, moonPhase, formatClock } from '@/lib/siegDisplay';
+import { SIEG_LANES, SIEG_W, SIEG_H, drawSiegFrame, moonPhase, formatClock, formatWallClock } from '@/lib/siegDisplay';
 import { SIEG_CALIBRATION_MS } from '@/lib/siegSessions';
 import { measureLevels, createBaselineTracker, eventThresholdDb, dominantBand } from '@/lib/acousticAnalysis';
 import useSensitivity, { isTorchActive } from '@/hooks/useSensitivity';
@@ -76,6 +76,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const [phase, setPhase] = useState('idle'); // idle | calibrating | live | review
   const [session, setSession] = useState(null);
   const [remaining, setRemaining] = useState(0);
+  const [clockText, setClockText] = useState('');
   const [events, setEvents] = useState([]);
   const [counts, setCounts] = useState({});
   const [correlatedCount, setCorrelatedCount] = useState(0);
@@ -848,6 +849,9 @@ export default function SiegConsole({ gateSave, refundSave }) {
 
   const clockTick = () => {
     const now = Date.now();
+    // The real time runs for the whole session, baseline included — it is the clock
+    // an investigator reads off the screen when writing an event down.
+    setClockText(formatWallClock(now));
     if (phaseRef.current === 'calibrating') {
       if (now >= calibrationEndRef.current) beginLive();
       return;
@@ -1108,6 +1112,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
 
       <div className="flex items-center justify-between">
         <p className="text-[10px] font-mono text-muted-foreground">
+          {clockText && <span className="text-foreground/80 mr-2">{clockText}</span>}
           {phase === 'live' ? `${formatClock(remaining)} remaining` : 'Calibrating…'}
         </p>
         <button

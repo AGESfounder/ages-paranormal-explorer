@@ -59,6 +59,21 @@ export function formatClock(sec) {
   return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// The phone's own wall clock. Formatted once per second and reused, because the
+// composite is painted on every animation frame and formatting time on each one
+// is not worth the cost.
+let wallClockCache = { sec: -1, text: '' };
+export function formatWallClock(nowMs = Date.now()) {
+  const sec = Math.floor(nowMs / 1000);
+  if (wallClockCache.sec !== sec) {
+    wallClockCache = {
+      sec,
+      text: new Date(sec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+  }
+  return wallClockCache.text;
+}
+
 // Moon phase, computed locally: no network call, so the ambient corner is always
 // there even when the phone has no signal in the field.
 export function moonPhase(date = new Date()) {
@@ -177,6 +192,11 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.font = '9px sans-serif';
   ctx.fillStyle = C.muted;
   ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 45);
+  // Real time on the line opposite the session's name: the phone's own clock, so a
+  // time written down from the screen matches the recording and the event log.
+  ctx.fillStyle = C.text;
+  ctx.font = 'bold 15px monospace';
+  ctx.fillText(formatWallClock(now), SIEG_W - 10, 51);
   ctx.textAlign = 'left';
 
   // ── Camera pane. The full frame is fitted inside the pane (no crop) so the
