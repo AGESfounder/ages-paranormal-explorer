@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X } from 'lucide-react';
+import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -19,16 +19,19 @@ import {
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 import { synthesizeCue, CUE_CHIME } from '@/lib/toolCues';
 import { fetchWeatherByCoords } from '@/lib/openMeteo';
+import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { toast } from '@/components/ui/use-toast';
 
-// SIEG — one integrated session, four detectors at once.
+// SIEG — one integrated session, seven tools at once.
 //
-// The four lanes are the tools that already exist, hosted here instead of each
+// Seven of the rack's tools run inside it at once, hosted here instead of each
 // owning the phone: the acoustic sweeper's baseline listening, the anomaly
 // camera's figure scan, the vibration communicator's disturbance detection, and
-// the environmental monitor's magnetic and barometric channels. What is new is
-// only the hosting — one camera, one microphone, one clock, one shared baseline,
-// one recorder, one evidence save.
+// the environmental monitor's magnetic and barometric channels draw the four live
+// lanes, while the weather monitor and moon phase supply the conditions on screen
+// and the audio recorder captures the session. What is new is only the hosting —
+// one camera, one microphone, one clock, one shared baseline, one recorder, one
+// evidence save.
 //
 // Two rules make simultaneous measurement honest:
 //   1. Nothing this app can make is allowed to sound during a session. The
@@ -59,7 +62,7 @@ const LANE_UNAVAILABLE = 'Not on this device';
 
 const newEnvChannel = () => ({ armed: true, since: 0, quietSince: 0, lastEvent: 0, hold: false, peak: 0 });
 
-export default function SiegConsole({ gateSave, refundSave, requestGps }) {
+export default function SiegConsole({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const { stop: stopSpeech } = useGhostVoice();
 
@@ -74,6 +77,8 @@ export default function SiegConsole({ gateSave, refundSave, requestGps }) {
   const [motionSeen, setMotionSeen] = useState(false);
   const [weather, setWeather] = useState(null);
   const [fetchingConditions, setFetchingConditions] = useState(false);
+  const [conditionsNote, setConditionsNote] = useState('');
+  const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState('');
   const [blob, setBlob] = useState(null);
   const [saved, setSaved] = useState(false);
@@ -528,7 +533,6 @@ export default function SiegConsole({ gateSave, refundSave, requestGps }) {
     audioCtxRef.current = null;
     analyserRef.current = null;
     freqRef.current = null;
-    releaseAmbience();
   };
 
   const finishSession = (reason) => {
@@ -612,9 +616,10 @@ export default function SiegConsole({ gateSave, refundSave, requestGps }) {
     sessionRef.current = preset;
     setSession(preset);
 
-    // Everything this app can make goes quiet before the microphone opens.
+    // Nothing this app can make is allowed to sound once the microphone is open.
+    // The ambience is already held for as long as SIEG is on screen; narration left
+    // playing from another tool is stopped here.
     try { stopSpeech(); } catch { /* nothing to stop */ }
-    holdAmbience();
 
     // iOS only offers motion sensors behind a user gesture, and the tap on the
     // session button is the one we get.
@@ -626,7 +631,6 @@ export default function SiegConsole({ gateSave, refundSave, requestGps }) {
       });
       micStreamRef.current = mic;
     } catch (e) {
-      releaseAmbience();
       const name = e?.name || '';
       setError(name === 'NotAllowedError' || name === 'PermissionDeniedError'
         ? 'Microphone access denied. SIEG needs the microphone for both the acoustic lane and the session recording.'
@@ -731,6 +735,47 @@ export default function SiegConsole({ gateSave, refundSave, requestGps }) {
     }, 1500);
   };
 
+  // SIEG is a quiet-room instrument, so the app's own ambience is held quiet for as
+  // long as the tool is on screen — not only while a session runs. The setup screen
+  // is part of the measurement: it is where the room is first listened to, and the
+  // phone's speaker sits right beside the microphone that is listening to it.
+  useEffect(() => {
+    holdAmbience();
+    return () => releaseAmbience();
+  }, []);
+
+  // Local conditions come up on their own: the moon phase is computed locally, and
+  // the weather is fetched once through the app's usual device-location path. If
+  // location is switched off or refused, the app's own explanation is shown in the
+  // conditions block instead of a silent blank — and the session runs either way.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFetchingConditions(true);
+      const pos = await getDevicePosition({ enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 });
+      if (cancelled) return;
+      if (!pos.ok) {
+        setConditionsNote(pos.message);
+        setFetchingConditions(false);
+        return;
+      }
+      try {
+        const w = await fetchWeatherByCoords(pos.coords.lat, pos.coords.lng);
+        if (!cancelled) setWeather(`${Math.round(w.temperature)}°F ${w.conditions}`);
+      } catch {
+        if (!cancelled) setConditionsNote('Local weather is unavailable right now.');
+      }
+      if (!cancelled) setFetchingConditions(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Leaving the session closes any full-screen view, so the review screen is never
+  // left sitting behind a stopped chart.
+  useEffect(() => {
+    if (phase === 'review' || phase === 'idle') setExpanded(false);
+  }, [phase]);
+
   useEffect(() => () => {
     userStoppedRef.current = true;
     const recorder = recorderRef.current;
@@ -829,26 +874,6 @@ export default function SiegConsole({ gateSave, refundSave, requestGps }) {
     setSaving(false);
   };
 
-  const fetchConditions = async () => {
-    setFetchingConditions(true);
-    setError('');
-    try {
-      const fix = await requestGps?.({ enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 });
-      if (!fix || !fix.ok) {
-        setError(fix?.error === 'denied'
-          ? 'Location access denied — allow location to add local weather, or check the Weather Monitor tool.'
-          : 'Could not determine your location. Sessions run without local weather.');
-        setFetchingConditions(false);
-        return;
-      }
-      const w = await fetchWeatherByCoords(fix.coords.lat, fix.coords.lng);
-      setWeather(`${Math.round(w.temperature)}°F ${w.conditions}`);
-    } catch {
-      setError('Local weather is unavailable right now. Sessions run without it.');
-    }
-    setFetchingConditions(false);
-  };
-
   const laneUnavailable = (id) => {
     if (id === 'acoustic') return !availability.mic;
     if (id === 'figure') return !availability.camera;
@@ -862,7 +887,7 @@ export default function SiegConsole({ gateSave, refundSave, requestGps }) {
         <SiegSessionPicker
           onStart={startSession}
           conditions={{ moon: moonNow.name, illumination: moonNow.illumination, weather }}
-          onFetchConditions={fetchConditions}
+          conditionsNote={conditionsNote}
           fetching={fetchingConditions}
           error={error}
         />
@@ -895,11 +920,61 @@ export default function SiegConsole({ gateSave, refundSave, requestGps }) {
 
   return (
     <div className="space-y-3">
-      <div className="relative rounded-lg overflow-hidden bg-black border border-border/40" style={{ aspectRatio: '4/3' }}>
+      {/* Full screen changes this container's own classes and the canvas's size —
+          the canvas element is never remounted, because the recorder is capturing
+          this exact element's stream and a new element would end the recording. */}
+      <div
+        className={expanded
+          ? 'fixed inset-0 z-[60] bg-background'
+          : 'relative rounded-lg overflow-hidden bg-black border border-border/40'}
+        style={expanded ? undefined : { aspectRatio: '4/3' }}
+      >
         {/* Kept laid out and transparent rather than display:none: a hidden video
             can stop delivering frames, and the figure lane reads them. */}
         <video ref={videoRef} className="absolute inset-0 w-full h-full opacity-0 pointer-events-none" playsInline muted />
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+        <canvas
+          ref={canvasRef}
+          className="absolute"
+          style={expanded
+            ? {
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: 'min(96vw, calc((100vh - 130px) * 4 / 3))',
+                aspectRatio: '4 / 3',
+              }
+            : { inset: 0, width: '100%', height: '100%' }}
+        />
+
+        {!expanded && (
+          <button
+            onClick={() => setExpanded(true)}
+            title="Full screen"
+            className="absolute bottom-2 right-2 p-1.5 rounded-md bg-black/60 border border-white/15 text-foreground/90 hover:bg-black/80 transition-colors"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {expanded && (
+          <div className="absolute bottom-3 left-0 right-0 flex flex-wrap items-center justify-center gap-2 px-3">
+            <button
+              onClick={() => setExpanded(false)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 border border-white/20 text-foreground font-heading text-[10px] uppercase tracking-wider hover:bg-black/80 transition-colors"
+            >
+              <Minimize2 className="w-3 h-3" /> Exit full screen
+            </button>
+            <span className="text-[10px] font-mono text-foreground/80">
+              {phase === 'live' ? `${formatClock(remaining)} remaining` : 'Calibrating…'}
+            </span>
+            <button
+              onClick={() => { setExpanded(false); finishSession('manual'); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/40 text-red-300 font-heading text-[10px] uppercase tracking-wider hover:bg-red-500/25 transition-colors"
+            >
+              <X className="w-3 h-3" /> Stop session
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (

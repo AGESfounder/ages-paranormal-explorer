@@ -479,8 +479,7 @@
 
 /* SIEG — the rack's only deep sea-teal shell, and the one tool whose face carries
    its name instead of an emblem. The face signature is the tool itself: four
-   trace lanes, one per instrument it runs at once, in those instruments' own
-   colours. */
+   trace lanes, one per live lane it runs at once, in those lanes' own colours. */
 .tkd-sieg { --td-accent: #2dd4bf; --td-light: #1a5a60; --td-body: #0e3034; --td-dark: #05171a; }
 .tkd-sieg .tkd-face::before {
   background-image:
@@ -492,14 +491,17 @@
   opacity: 0.55;
 }
 
-/* The stencil: a tool name set on the bay itself, kept in the shell's accent. */
+/* The stencil: a tool name set on the bay itself, kept in the shell's accent.
+   Sized to fill the instrument face — the bay's own label is the tool's identity,
+   so it is the largest mark on any tile in the rack. */
 .tkd-emblem .tkd-stencil-text {
   font-family: var(--font-heading);
   font-weight: 700;
-  font-size: 21px;
-  letter-spacing: 0.16em;
+  font-size: 34px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
   color: var(--td-accent);
-  text-shadow: 0 0 10px var(--td-accent), 0 0 22px rgba(45, 212, 191, 0.35);
+  text-shadow: 0 0 14px var(--td-accent), 0 0 30px rgba(45, 212, 191, 0.40);
 }
 .tkd-sm .tkd-emblem .tkd-stencil-text {
   font-size: 12px;

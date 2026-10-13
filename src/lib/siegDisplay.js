@@ -5,6 +5,9 @@
 // lanes, and a status footer. Because this canvas is what gets recorded, the
 // saved file shows exactly what the session measured, in the order it happened.
 //
+// SIEG runs seven tools at once; four of them draw a lane here. The other three
+// (Weather Monitor, Moon Phase, Audio Recorder) feed the header and the recording.
+//
 // Each lane draws its own detector's units — dB of departure from the room's
 // baseline, a form count, a disturbance level, and the magnetic/barometric
 // departures — normalised so a lane's full height means "three times its own

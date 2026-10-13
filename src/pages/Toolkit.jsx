@@ -55,9 +55,9 @@ const DEFAULT_TOOLS = [
   { name: 'Yes/No/IDK Sweeper', icon: MessageCircle, desc: 'Sweep Yes · No · I Don\'t Know — motion-triggered answer + screen record', type: 'yesno' },
   { name: 'Environmental Anomaly Monitor', icon: Gauge, desc: 'Barometric + magnetic field meter — logs departures from the room baseline', type: 'environment' },
   // SIEG — Septer Inquiry Evidence Gleaner. The bay that was kept empty now holds
-  // the integrated session tool: the rack's four detectors run at once, over one
+  // the integrated session tool: seven of the rack's tools run at once, over one
   // clock, and the whole screen is recorded as one file. Investigator and higher.
-  { name: 'SIEG', icon: Gauge, stencil: 'SIEG', desc: 'Septer Inquiry Evidence Gleaner — four detectors at once', type: 'sieg' },
+  { name: 'SIEG', icon: Gauge, stencil: 'SIEG', desc: 'Septer Inquiry Evidence Gleaner — 7 tools at once', type: 'sieg' },
   { name: 'Weather Monitor', icon: Cloud, desc: 'Real-time local weather conditions', type: 'weather' },
   { name: 'Moon Phase', icon: Moon, desc: 'Current moon phase & illumination', type: 'moon' },
   { name: 'Paranormal Research: Terms', icon: Search, desc: 'Comprehensive research database & field manual', type: 'research' },
@@ -1156,7 +1156,7 @@ Best Practices
       case 'environment':
         return <EnvironmentalAnomalyMonitor gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
       case 'sieg':
-        return <SiegConsole gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} requestGps={requestGps} />;
+        return <SiegConsole gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
 
       default:
         return null;

@@ -19,7 +19,7 @@ const ALL_TOOLS = [
   { name: 'Paranormal Research: Terms', desc: 'Research database & field manual' },
   { name: 'Equipment Guide', desc: 'Ghost hunting equipment guide' },
   { name: 'Safety Protocol', desc: 'Investigation safety guidelines' },
-  { name: 'SIEG', desc: 'Integrated session — four detectors running at once' },
+  { name: 'SIEG', desc: 'Integrated session — seven tools running at once' },
 ];
 
 export default function TierToolkitAccess({ planId }) {
