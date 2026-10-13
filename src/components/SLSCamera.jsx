@@ -14,6 +14,7 @@ import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame } from '@
 import useDepthDetection from '@/hooks/useDepthDetection';
 import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
+import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 
 export default function SLSCamera({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
@@ -396,7 +397,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   return (
     <div className="space-y-3">
       <div className="relative rounded-lg overflow-hidden bg-black border border-green-500/30" style={{ aspectRatio: '4/3' }}>
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover opacity-0" playsInline muted />
+        <AnomalyCameraSource videoRef={videoRef} />
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover" />
 
         {!active && (

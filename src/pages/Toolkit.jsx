@@ -213,8 +213,9 @@ export default function Toolkit() {
     rawNarrate(text, opts);
     spendNarration(estimateNarrationCost(text));
   };
-  // SIEG owns its wake lock; do not start a competing silent-video fallback.
-  useWakeLock(!!activeTool && activeTool.type !== 'sieg');
+  // SIEG owns its wake lock. The standalone camera must not compete with a
+  // second hidden video; keep its native screen wake lock without that fallback.
+  useWakeLock(!!activeTool && activeTool.type !== 'sieg', { mediaFallback: activeTool?.type !== 'sls' });
 
   // Ad-gate hook — manages the rewarded-ad lifecycle for the ad-gated tool
   // currently waiting for an ad (adGateTool). Returns watching/granting/adError
