@@ -118,7 +118,8 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const endsAtRef = useRef(0);
   const durationRef = useRef(0);
   const calibrationEndRef = useRef(0);
-  const sampleTimerRef = useRef(null);
+  const frameRef = useRef(null);
+  const lastSampleRef = useRef(0);
   const figureTimerRef = useRef(null);
   const clockTimerRef = useRef(null);
   const heartbeatRef = useRef(null);
@@ -427,7 +428,6 @@ export default function SiegConsole({ gateSave, refundSave }) {
         setMotionSeen(true);
       }
     }
-    drawComposite(now);
   };
 
   const drawComposite = (now) => {
@@ -505,13 +505,16 @@ export default function SiegConsole({ gateSave, refundSave }) {
       if (userStoppedRef.current) {
         const actual = (mr.mimeType || mime || 'video/webm').split(';')[0];
         releaseOwnTrack();
-        setBlob(new Blob(chunksRef.current, { type: actual }));
+        const finished = new Blob(chunksRef.current, { type: actual });
+        console.log(`[SIEG] recording stopped after ${Math.round((Date.now() - startedAtRef.current) / 1000)}s · ${chunksRef.current.length} chunks · ${Math.round(finished.size / 1024)} kB`);
+        setBlob(finished);
         return;
       }
       // The recorder stopped on its own while the session is still running (the
       // phone's web view is fragile about long recordings). Restart on a fresh
       // canvas stream and keep the chunks already collected, so the rest of the
       // session is still captured instead of lost.
+      console.warn(`[SIEG] recorder stopped on its own at ${Math.round((Date.now() - startedAtRef.current) / 1000)}s · ${chunksRef.current.length} chunks — restarting`);
       releaseOwnTrack();
       if (phaseRef.current === 'live') startRecorder().catch(() => {});
     };
@@ -533,7 +536,8 @@ export default function SiegConsole({ gateSave, refundSave }) {
 
   const teardownDevices = () => {
     frameTrackRef.current = null;
-    [sampleTimerRef, figureTimerRef, clockTimerRef, heartbeatRef].forEach((r) => {
+    if (frameRef.current) { cancelAnimationFrame(frameRef.current); frameRef.current = null; }
+    [figureTimerRef, clockTimerRef, heartbeatRef].forEach((r) => {
       if (r.current) { clearInterval(r.current); r.current = null; }
     });
     if (envUnsubRef.current) { envUnsubRef.current(); envUnsubRef.current = null; }
@@ -719,7 +723,22 @@ export default function SiegConsole({ gateSave, refundSave }) {
     if (motionOk) window.addEventListener('devicemotion', handleMotion);
 
     calibrationEndRef.current = Date.now() + SIEG_CALIBRATION_MS;
-    sampleTimerRef.current = setInterval(sampleTick, SAMPLE_MS);
+    // The composite is painted on the phone's own animation frames, not on a timer.
+    // A phone throttles page timers hard, and a canvas that only changes a few times
+    // a minute is exactly what records as a still image — the frames follow the
+    // screen instead. Sampling keeps its 10 Hz cadence inside the same loop, so the
+    // chart's time axis is unchanged.
+    lastSampleRef.current = 0;
+    const paintLoop = () => {
+      const now = Date.now();
+      if (now - lastSampleRef.current >= SAMPLE_MS) {
+        lastSampleRef.current = now;
+        sampleTick();
+      }
+      drawComposite(now);
+      frameRef.current = requestAnimationFrame(paintLoop);
+    };
+    frameRef.current = requestAnimationFrame(paintLoop);
     figureTimerRef.current = setInterval(figureTick, 250);
     clockTimerRef.current = setInterval(clockTick, 250);
   };
