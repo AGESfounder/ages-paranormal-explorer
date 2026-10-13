@@ -8,6 +8,7 @@ import EvidenceSaveButtons from './EvidenceSaveButtons';
 import { buildMicChain } from '@/lib/micRecordChain';
 import { toast } from '@/components/ui/use-toast';
 import { ACOUSTIC_BANDS, createBaselineTracker, measureLevels, eventThresholdDb, dominantBand } from '@/lib/acousticAnalysis';
+import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 
 // Listen-only acoustic monitor. It never emits sound: it listens through the
 // device microphone, measures the room's own baseline first, then watches for
@@ -45,6 +46,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   const [sensorError, setSensorError] = useState('');
   const [recordingError, setRecordingError] = useState('');
   const [videoBlob, setVideoBlob] = useState(null);
+  const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -81,6 +83,8 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   const mimeRef = useRef('');
   const audioOnlyRef = useRef(false);
   const anomalyTimerRef = useRef(null);
+  const recordingRef = useRef(false);
+  const ambienceHeldRef = useRef(false);
 
   useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
 
@@ -101,6 +105,20 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     analyserRef.current = null;
   };
 
+  // The app's own music is held quiet for the whole session, not just the
+  // recorded part: it leaves through the phone's speaker right beside the
+  // microphone, and the calibration is measuring exactly how quiet the room is.
+  const holdAmbience = () => {
+    if (ambienceHeldRef.current) return;
+    ambienceHeldRef.current = true;
+    audioAcquire();
+  };
+  const releaseAmbience = () => {
+    if (!ambienceHeldRef.current) return;
+    ambienceHeldRef.current = false;
+    audioRelease();
+  };
+
   const stopEverything = () => {
     sessionActiveRef.current = false;
     [sampleTimerRef, drawTimerRef, sessionTimerRef, heartbeatRef, anomalyTimerRef].forEach((r) => {
@@ -114,7 +132,10 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     } else {
       closeAudio();
     }
+    recordingRef.current = false;
+    setRecording(false);
     setAnomalyActive(false);
+    releaseAmbience();
   };
 
   // ── Microphone → analyser. Nothing is ever routed to the speakers: this tool
@@ -144,7 +165,10 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     const canvas = canvasRef.current;
     const ctx = ctxRef.current;
     const micStream = micStreamRef.current;
-    if (!canvas || !ctx || !micStream) return;
+    if (!canvas || !ctx || !micStream) {
+      setRecordingError('The session recording could not start on this device.');
+      return;
+    }
     const canvasCapture = typeof canvas.captureStream === 'function';
     audioOnlyRef.current = !canvasCapture;
     if (!canvasCapture) {
@@ -152,12 +176,19 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     }
     const stream = canvasCapture ? canvas.captureStream(30) : new MediaStream();
     canvasStreamRef.current = stream;
+    // The microphone goes into the recording through the shared lift and
+    // limiter (micRecordChain), never raw, so a voice and the room sit at a
+    // usable level. If that mixed destination is unavailable, the plain
+    // microphone track is recorded rather than nothing.
+    let audioTrack = null;
     try {
       const dest = ctx.createMediaStreamDestination();
       buildMicChain(ctx, micStream).connect(dest);
-      const track = dest.stream.getAudioTracks()[0];
-      if (track) stream.addTrack(track);
+      const t = dest.stream.getAudioTracks()[0];
+      if (t && t.readyState === 'live') audioTrack = t;
     } catch {}
+    if (!audioTrack) audioTrack = micStream.getAudioTracks()[0] || null;
+    if (audioTrack) stream.addTrack(audioTrack);
     const candidates = canvasCapture
       ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
       : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
@@ -174,12 +205,26 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
       // flushed its final chunk — stopping the tracks first can drop it.
       closeAudio();
     };
-    mr.start(1500);
-    // The phone can suspend the audio context under its own timer throttling; a
-    // suspended context ends the destination track and leaves a silent recording.
-    heartbeatRef.current = setInterval(() => {
-      try { if (ctxRef.current?.state !== 'running') ctxRef.current?.resume(); } catch {}
-    }, 1500);
+    mr.start(1000);
+    recordingRef.current = true;
+    setRecording(true);
+  };
+
+  // The baseline is measured first and the recording starts with it: the video
+  // and the session clock both begin the moment it is set, so neither carries
+  // the calibration. The trace display is on screen by then, which is also what
+  // the recorder needs to attach to.
+  const beginRecording = () => {
+    if (!sessionActiveRef.current || recordingRef.current) return;
+    sessionStartRef.current = Date.now();
+    durationRef.current = 0;
+    setSessionDuration(0);
+    sessionTimerRef.current = setInterval(() => {
+      const elapsed = Math.round((Date.now() - sessionStartRef.current) / 1000);
+      durationRef.current = elapsed;
+      setSessionDuration(elapsed);
+    }, 1000);
+    startRecording();
   };
 
   // ── One measurement frame ──
@@ -198,6 +243,8 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
         calibratingRef.current = false;
         setCalibrating(false);
         statusRef.current = 'LISTENING';
+        // Recording begins with the baseline, never before it.
+        beginRecording();
       }
       traceRef.current.push(0);
     } else {
@@ -295,12 +342,14 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     ctx.font = '10px monospace';
     ctx.fillText('RELATIVE dB · LISTEN-ONLY · 20 Hz – 16 kHz', 14, 39);
 
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath(); ctx.arc(w - 60, 20, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText('REC ' + formatDuration(durationRef.current), w - 14, 24);
+    if (recordingRef.current) {
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath(); ctx.arc(w - 60, 20, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('REC ' + formatDuration(durationRef.current), w - 14, 24);
+    }
 
     // Chart frame, grid and the baseline the trace is measured against.
     ctx.strokeStyle = 'rgba(148,163,184,0.16)';
@@ -414,6 +463,8 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     setSessionDuration(0);
     setLevel(0);
     setBandLevels({});
+    setRecording(false);
+    recordingRef.current = false;
     baselineRef.current = createBaselineTracker();
     calibratingRef.current = true;
     setCalibrating(true);
@@ -432,18 +483,20 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
 
     setPhase('running');
     sessionActiveRef.current = true;
-    sessionStartRef.current = Date.now();
     calibrationEndRef.current = Date.now() + CALIBRATION_MS;
-
-    startRecording();
+    // The trace display is switched in above; give React the frame it needs to
+    // mount the canvas before anything is drawn onto it.
+    await new Promise((r) => setTimeout(r, 150));
+    holdAmbience();
     draw();
     drawTimerRef.current = setInterval(draw, 33);
     sampleTimerRef.current = setInterval(sampleFrame, SAMPLE_MS);
-    sessionTimerRef.current = setInterval(() => {
-      const elapsed = Math.round((Date.now() - sessionStartRef.current) / 1000);
-      durationRef.current = elapsed;
-      setSessionDuration(elapsed);
-    }, 1000);
+    // The phone can suspend the audio engine under its own timer throttling: a
+    // suspended engine flatlines the analyser and ends the recording's audio
+    // track, so it is nudged back for the whole session, calibration included.
+    heartbeatRef.current = setInterval(() => {
+      try { if (ctxRef.current?.state !== 'running') ctxRef.current?.resume(); } catch {}
+    }, 1500);
   };
 
   const stopSession = () => {
@@ -514,7 +567,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Start Session</span>. The tool listens through your device's microphone and spends the first 10 seconds measuring the room's own baseline — stay quiet and still while it does.</li>
             <li>Once the baseline is set, the green trace shows how far the room is from it: rising with sound, dipping below when the room goes quieter than normal. Resting on the dashed center line means the room is at its baseline.</li>
-            <li>Set the device down and leave it alone. A rise that holds for at least half a second is logged as an event, with its time and the band that moved (SUB · LOW · VOICE · HIGH · AIR). The event is marked on the trace and listed below, and the whole display is recorded as video.</li>
+            <li>Recording begins the moment the baseline is set — the calibration itself is not recorded, so the video and its timer start with the session. Set the device down and leave it alone. A rise that holds for at least half a second is logged as an event, with its time and the band that moved (SUB · LOW · VOICE · HIGH · AIR). The event is marked on the trace and listed below, and the whole display is recorded as video.</li>
             <li>Tap <span className="text-primary font-medium">Mark Moment</span> whenever you hear something yourself — the timestamp is logged so you can match it to the recording.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
@@ -559,10 +612,12 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
         )}
         <div className="rounded-lg overflow-hidden border border-border/30 bg-black relative">
           <canvas ref={canvasRef} width={640} height={360} className="w-full h-44 object-cover" />
-          <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/80">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            <span className="text-[9px] text-white font-mono">REC {formatDuration(sessionDuration)}</span>
-          </div>
+          {recording && (
+            <div className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/80">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              <span className="text-[9px] text-white font-mono">REC {formatDuration(sessionDuration)}</span>
+            </div>
+          )}
           {anomalyActive && (
             <div className="absolute top-8 left-1/2 -translate-x-1/2 pointer-events-none">
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}

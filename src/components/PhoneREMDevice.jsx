@@ -7,6 +7,10 @@ import EvidenceSaveButtons from './EvidenceSaveButtons';
 import { toast } from '@/components/ui/use-toast';
 import { buildMicChain } from '@/lib/micRecordChain';
 
+// Quiet window the sensor baseline is measured over, before the session — and
+// its recording — begin.
+const CALIBRATION_MS = 10000;
+
 const SENSITIVITY_THRESHOLDS = {
   accel: 0.12,  // m/s² delta from baseline
   gyro: 0.025,  // rad/s delta from baseline
@@ -426,18 +430,22 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     window.addEventListener('deviceorientation', handleOrientation);
 
     setPhase('countdown');
-    setCountdown(3);
+    setCountdown(Math.ceil(CALIBRATION_MS / 1000));
 
-    let count = 3;
+    // The baseline is measured over a real quiet window and sampled at the same
+    // cadence the session uses; the session, its recording and its event log all
+    // start only once it is established. A baseline seeded from the moment or
+    // two before the phone was even set down is what flooded the log with
+    // detections the instant a session began.
+    const calibrationEnd = Date.now() + CALIBRATION_MS;
     const cdInterval = setInterval(() => {
       calibrateBaseline();
-      count--;
-      setCountdown(count);
-      if (count <= 0) {
+      setCountdown(Math.max(0, Math.ceil((calibrationEnd - Date.now()) / 1000)));
+      if (Date.now() >= calibrationEnd) {
         clearInterval(cdInterval);
         beginSession();
       }
-    }, 1000);
+    }, 300);
   };
 
   const beginSession = async () => {
@@ -616,9 +624,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
           <ol className="space-y-1">
             {[
               'Press Activate and grant sensor & mic permissions.',
-              'Wait for the 3-second calibration countdown.',
-              'Set your phone face-down on a flat surface.',
-              'Step away and observe — any energy disturbance will be detected.',
+              'Set the phone face-down on a flat surface and step away during the 10-second baseline calibration.',
+              'Recording begins once the baseline is set — the calibration itself is not recorded.',
+              'Observe — any energy disturbance will be detected.',
               'Press Deactivate when finished. You can save the video as evidence.',
             ].map((step, i) => (
               <li key={i} className="flex items-start gap-2 text-[10px] text-muted-foreground">
@@ -646,9 +654,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
         <div className="p-6 rounded-lg bg-black/40 border border-primary/30 flex flex-col items-center gap-3">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Calibrating Sensors…</p>
           <p className="font-mono text-6xl text-primary animate-pulse">{countdown}</p>
-          <p className="text-xs text-muted-foreground">Hold still. Establishing baseline readings.</p>
+          <p className="text-xs text-muted-foreground">Set the phone face-down on a flat surface and step away. Establishing baseline readings.</p>
         </div>
-        <p className="text-[10px] text-muted-foreground/60">After activation, place phone face-down on a flat surface and step away.</p>
+        <p className="text-[10px] text-muted-foreground/60">Recording starts once the baseline is set — the calibration itself is not recorded.</p>
       </div>
     );
   }
