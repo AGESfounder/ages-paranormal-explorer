@@ -41,7 +41,7 @@ function buildPlans(option, toursPerEnergy, auraSplit) {
   const tbFree = tbMonths - 24;
   return [
     { name: 'Observer', price: '$0', billing: 'Free forever', manE: 0, narE: 0,
-      features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; Device narration (an ad plays before each narration — ~27 ads per fully narrated tour); save favorites; 4-tool toolkit (2 ad-gated: Audio Recorder, Radio Sweeper — 30s ad = 30s use, 300s/day cap); evidence saves 10/day (ad-watched); evidence journal + dashboard' },
+      features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; Device narration (an ad plays before each narration — ~27 ads per fully narrated tour); save favorites; 4-tool toolkit (2 ad-gated: Audio Recorder, Acoustic Anomaly Sweeper — 30s ad = 30s use, 300s/day cap); evidence saves 10/day (ad-watched); evidence journal + dashboard' },
     { name: 'Seeker', price: '$3.99', billing: 'Monthly ($39.99/yr)', manE: 0, narE: 0,
       features: 'Everything in Observer, ad-free (no stop, narration, or tool ads); Device narration only (0 credits); 4-tool toolkit (no ads); community map posting; evidence saves 10/day (ad-watched, then Aura Save energy); Aura Bundle access (Save Energy only)' },
     { name: 'Technician', price: '$5.99', billing: 'Monthly ($59.99/yr)', manE: 0, narE: 0,

@@ -6,6 +6,7 @@ import PhoneREMDevice from '../components/PhoneREMDevice';
 import LocationTermBank from '../components/LocationTermBank';
 import AlphabetSweeper from '../components/AlphabetSweeper';
 import YesNoSweeper from '../components/YesNoSweeper';
+import AcousticAnomalySweeper from '../components/AcousticAnomalySweeper';
 import ToolkitGrid from '../components/ToolkitGrid';
 import ToolDevice from '../components/toolkit/ToolDevice';
 import PageContainer from '../components/PageContainer';
@@ -40,10 +41,10 @@ import { toast } from '@/components/ui/use-toast';
 
 // Two-column grid order (fills left→right, row by row):
 //   Col 1: Equipment Guide, Audio Recorder, Anomaly Camera, Vibration Communicator, Weather Monitor, Paranormal Research: Terms
-//   Col 2: Radio Sweeper, Terms Sweeper, Alphabet Sweeper, Yes/No/IDK Sweeper, Moon Phase, Safety Protocol
+//   Col 2: Acoustic Anomaly Sweeper, Terms Sweeper, Alphabet Sweeper, Yes/No/IDK Sweeper, Moon Phase, Safety Protocol
 const DEFAULT_TOOLS = [
   { name: 'Equipment Guide', icon: BookOpen, desc: 'Ghost hunting equipment guide', type: 'guide' },
-  { name: 'Radio Sweeper', icon: Volume2, desc: 'AM/FM frequency sweep for EVP', type: 'audio' },
+  { name: 'Acoustic Anomaly Sweeper', icon: Volume2, desc: 'Listen-only room acoustics monitor — mic spectral analysis + video record', type: 'audio' },
   { name: 'Audio Recorder', icon: Waves, desc: 'EVP session recorder with save', type: 'recorder' },
   { name: 'Terms Sweeper', icon: Library, desc: 'Sweep location terms — environment-triggered spirit dictation + screen record', type: 'termbank' },
   { name: 'Anomaly Camera', icon: ScanFace, desc: 'Detect human & ghost figures via IR depth scan', type: 'sls' },
@@ -59,10 +60,10 @@ const DEFAULT_TOOLS = [
 // Tier-based tool access is imported from @/lib/toolAccess as SHARED_TIER_TOOLS.
 // null = all tools. Mirrors TierToolsComparison.jsx.
 
-const SWEEP_SPEEDS = {
-  slow: { label: 'Slow', ms: 400 },
-  normal: { label: 'Normal', ms: 200 },
-  fast: { label: 'Fast', ms: 80 },
+// Names a tool used to be saved under in a user's toolkit_order, so renaming a
+// tool doesn't silently drop that user's saved tile position.
+const RENAMED_TOOLS = {
+  'Radio Sweeper': 'Acoustic Anomaly Sweeper',
 };
 
 export default function Toolkit() {
@@ -83,7 +84,7 @@ export default function Toolkit() {
   // new tools that aren't in the saved order.
   const applyOrder = (defaults, order) => {
     const byName = Object.fromEntries(defaults.map(t => [t.name, t]));
-    const ordered = (order || []).map(n => byName[n]).filter(Boolean);
+    const ordered = (order || []).map(n => byName[RENAMED_TOOLS[n] || n]).filter(Boolean);
     const seen = new Set(ordered.map(t => t.name));
     defaults.forEach(t => { if (!seen.has(t.name)) ordered.push(t); });
     return ordered;
@@ -166,30 +167,9 @@ export default function Toolkit() {
   const [weatherError, setWeatherError] = useState(null);
   const [weatherLocation, setWeatherLocation] = useState('');
   const [guideDetail, setGuideDetail] = useState(null);
-  const [radioActive, setRadioActive] = useState(false);
-  const [radioFrequency, setRadioFrequency] = useState(530);
-  const [radioBand, setRadioBand] = useState('AM');
-  const [heardWord, setHeardWord] = useState('');
-  const [savedWords, setSavedWords] = useState([]);
-  const radioIntervalRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
-  const audioCtxRef = useRef(null);
-  const noiseNodeRef = useRef(null);
-  const filterNodeRef = useRef(null);
-  const gainNodeRef = useRef(null);
-  const bandpassNodeRef = useRef(null);
-  const peakNodeRef = useRef(null);
-  const peak2NodeRef = useRef(null);
-  const lfoRef = useRef(null);
-  const lfoGainRef = useRef(null);
-  const crackleLfoRef = useRef(null);
-  const crackleGainRef = useRef(null);
-  const [radioVolume, setRadioVolume] = useState(0.35);
-  const [radioSweepSpeed, setRadioSweepSpeed] = useState('normal');
-  const freqRef = useRef(null);
-  const dirRef = useRef(1);
   const scrollRef = useRef(null);
   const { isSpeaking: narrating, isGenerating, narrate: rawNarrate, stop: stopNarration } = useGhostVoice();
   const { gateNarration, spendNarration, estimateNarrationCost, gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason, setGateReason, user: gateUser } = useEnergyGate();
@@ -234,18 +214,11 @@ export default function Toolkit() {
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
-      stopRadioAudio();
     };
   }, []);
-
-  useEffect(() => {
-    if (radioActive) runSweepTicker();
-    return () => { if (radioIntervalRef.current) clearInterval(radioIntervalRef.current); };
-  }, [radioSweepSpeed]);
 
   // When a tool is opened (or a guide detail expands), scroll the panel into
   // view at the top of the list.
@@ -258,235 +231,6 @@ export default function Toolkit() {
   // Weather is now fetched only when the user explicitly presses the
   // "Get My Location" button — no auto-fire on tool open (saves credits).
 
-  const stopRadioAudio = () => {
-    if (noiseNodeRef.current) {
-      try { noiseNodeRef.current.stop(); } catch (e) { /* already stopped */ }
-      noiseNodeRef.current = null;
-    }
-    if (lfoRef.current) {
-      try { lfoRef.current.stop(); } catch (e) { /* already stopped */ }
-      lfoRef.current = null;
-    }
-    if (crackleLfoRef.current) {
-      try { crackleLfoRef.current.stop(); } catch (e) { /* already stopped */ }
-      crackleLfoRef.current = null;
-    }
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close();
-      audioCtxRef.current = null;
-    }
-    filterNodeRef.current = null;
-    gainNodeRef.current = null;
-    bandpassNodeRef.current = null;
-    peakNodeRef.current = null;
-    peak2NodeRef.current = null;
-    lfoGainRef.current = null;
-    crackleGainRef.current = null;
-  };
-
-  const startRadioSweep = async () => {
-    stopRadioAudio();
-    setMediaError('');
-    setRadioActive(true);
-    setSavedWords([]);
-    setHeardWord('');
-
-    // Build audio graph: white noise → lowpass filter → gain → speakers + recording.
-    // The filter sweeps through the AUDIBLE range (200–6000 Hz) to create the
-    // sound of tuning through static, while the display shows radio frequency.
-    // The recording captures BOTH the generated sweep audio AND the microphone,
-    // so playback matches exactly what was heard during the session.
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    audioCtxRef.current = ctx;
-
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
-
-    // White noise — the radio static
-    const bufferSize = ctx.sampleRate * 2;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1);
-    }
-
-    const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
-    noise.loop = true;
-
-    // Lowpass filter — sweeps the audible range to change static character
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.Q.value = 0.7;
-    filter.frequency.value = 300;
-
-    // Bandpass filter — wide speech-frequency window so voice fragments cut through
-    const bandpass = ctx.createBiquadFilter();
-    bandpass.type = 'bandpass';
-    bandpass.frequency.value = 1800;
-    bandpass.Q.value = 0.4;
-
-    // Peaking filter — formant 1, adds spectral peaks that sweep with the dial
-    const peak = ctx.createBiquadFilter();
-    peak.type = 'peaking';
-    peak.frequency.value = 800;
-    peak.Q.value = 2;
-    peak.gain.value = 12;
-
-    // Second peaking filter — formant 2, higher range for vowel-like fragments
-    const peak2 = ctx.createBiquadFilter();
-    peak2.type = 'peaking';
-    peak2.frequency.value = 2200;
-    peak2.Q.value = 3;
-    peak2.gain.value = 10;
-
-    // Master gain
-    const gain = ctx.createGain();
-    gain.gain.value = radioVolume;
-
-    // LFO for pulsating static — pulses at the same rate as the frequency sweep
-    const sweepMs = SWEEP_SPEEDS[radioSweepSpeed]?.ms ?? 200;
-    const pulseHz = 1000 / sweepMs;
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = pulseHz;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = radioVolume * 0.4;
-    lfo.connect(lfoGain);
-    lfoGain.connect(gain.gain);
-    lfo.start();
-
-    // Second LFO for crackle texture — double the pulse rate for sizzle
-    const crackleLfo = ctx.createOscillator();
-    crackleLfo.type = 'square';
-    crackleLfo.frequency.value = pulseHz * 2;
-    const crackleGain = ctx.createGain();
-    crackleGain.gain.value = radioVolume * 0.12;
-    crackleLfo.connect(crackleGain);
-    crackleGain.connect(gain.gain);
-    crackleLfo.start();
-
-    noise.connect(filter);
-    filter.connect(bandpass);
-    bandpass.connect(peak);
-    peak.connect(peak2);
-    peak2.connect(gain);
-    gain.connect(ctx.destination);   // speakers (what the user hears)
-    noise.start();
-
-    noiseNodeRef.current = noise;
-    filterNodeRef.current = filter;
-    gainNodeRef.current = gain;
-    bandpassNodeRef.current = bandpass;
-    peakNodeRef.current = peak;
-    peak2NodeRef.current = peak2;
-    lfoRef.current = lfo;
-    lfoGainRef.current = lfoGain;
-    crackleLfoRef.current = crackleLfo;
-    crackleGainRef.current = crackleGain;
-
-    // Recording destination — captures the sweep audio
-    const dest = ctx.createMediaStreamDestination();
-    gain.connect(dest);               // sweep audio → recording
-
-    // Microphone → recording (so mic-picked noises are captured too).
-    // NOT connected to speakers to avoid feedback.
-    let micStream = null;
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const micSource = ctx.createMediaStreamSource(micStream);
-      micSource.connect(dest);
-    } catch (err) {
-      console.error('Microphone access denied', err);
-      setMediaError('Microphone access denied. Radio sweep will play without mic capture. Allow microphone permission to record ambient audio.');
-    }
-
-    // Record the mixed stream (sweep + mic)
-    try {
-      const mediaRecorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        setRecordedBlob(blob);
-        if (micStream) micStream.getTracks().forEach(t => t.stop());
-      };
-      mediaRecorder.start();
-      setRecording(true);
-      setRecordDuration(0);
-      setRecordedBlob(null);
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => {
-        setRecordDuration(prev => prev + 1);
-      }, 1000);
-    } catch (err) {
-      console.error('MediaRecorder setup failed', err);
-      setMediaError('Recording is not available in this browser. The radio sweep can still play, but sessions will not be saved as audio files.');
-    }
-
-    // Sweep the radio display AND map to audible filter range (200–6000 Hz)
-    freqRef.current = radioBand === 'AM' ? 530 : 88.1;
-    dirRef.current = 1;
-    runSweepTicker();
-  };
-
-  const runSweepTicker = () => {
-    if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
-    const amMin = 530, amMax = 1700, fmMin = 88.1, fmMax = 107.9;
-    const filterMin = 200, filterMax = 6000;
-    const ms = SWEEP_SPEEDS[radioSweepSpeed]?.ms ?? 200;
-    radioIntervalRef.current = setInterval(() => {
-      const min = radioBand === 'AM' ? amMin : fmMin;
-      const max = radioBand === 'AM' ? amMax : fmMax;
-      const step = radioBand === 'AM' ? 10 : 0.2;
-      let freq = (freqRef.current ?? min) + step * dirRef.current;
-      if (freq >= max) { freq = max; dirRef.current = -1; }
-      if (freq <= min) { freq = min; dirRef.current = 1; }
-      freqRef.current = freq;
-
-      // Display: radio frequency
-      setRadioFrequency(Math.round(freq * 10) / 10);
-
-      // Audio: map radio freq range → audible filter range
-      const ratio = (freq - min) / (max - min);
-      const audibleFreq = filterMin + ratio * (filterMax - filterMin);
-      if (filterNodeRef.current && audioCtxRef.current) {
-        filterNodeRef.current.frequency.setValueAtTime(audibleFreq, audioCtxRef.current.currentTime);
-      }
-      // Sweep formant 1 (300–3000 Hz) for word-like fragments
-      if (peakNodeRef.current && audioCtxRef.current) {
-        const formantFreq = 300 + ratio * 2700;
-        peakNodeRef.current.frequency.setValueAtTime(formantFreq, audioCtxRef.current.currentTime);
-      }
-      // Sweep formant 2 (800–4000 Hz) for vowel-like character
-      if (peak2NodeRef.current && audioCtxRef.current) {
-        const formant2Freq = 800 + ratio * 3200;
-        peak2NodeRef.current.frequency.setValueAtTime(formant2Freq, audioCtxRef.current.currentTime);
-      }
-      // Sync the pulse LFO to the sweep rate — one pulse per frequency step
-      const pulseHz = 1000 / ms;
-      if (lfoRef.current) lfoRef.current.frequency.setValueAtTime(pulseHz, audioCtxRef.current.currentTime);
-      if (crackleLfoRef.current) crackleLfoRef.current.frequency.setValueAtTime(pulseHz * 2, audioCtxRef.current.currentTime);
-    }, ms);
-  };
-
-  const stopRadioSweep = () => {
-    if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
-    radioIntervalRef.current = null;
-    stopRecording();
-    stopRadioAudio();
-    setRadioActive(false);
-  };
-
-  const addHeardWord = () => {
-    if (!heardWord.trim()) return;
-    setSavedWords(prev => [...prev, heardWord.trim()]);
-    setHeardWord('');
-  };
 
   const handleGuideNarration = () => {
     narrate(guideDetail);
@@ -558,10 +302,8 @@ export default function Toolkit() {
       const now = new Date();
       const date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
       const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-      const isRadio = activeTool?.type === 'audio';
-      let description = (isRadio ? 'Radio Sweeper session — ' : 'Recorded EVP session — ') + formatDuration(recordDuration);
+      let description = 'Recorded EVP session — ' + formatDuration(recordDuration);
       if (recorderNotes.trim()) description += '\n\nNotes: ' + recorderNotes.trim();
-      if (savedWords.length > 0) description += '\n\nWords heard: ' + savedWords.join(', ');
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSavingRec(false); return; }
       if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
@@ -575,7 +317,7 @@ export default function Toolkit() {
       if (!allowed) { setSavingRec(false); return; }
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
-        title: (isRadio ? 'Radio Sweeper Session ' : 'EVP Session ') + date,
+        title: 'EVP Session ' + date,
         type: 'evp',
         description,
         file_url: uploadRes.file_url,
@@ -588,7 +330,6 @@ export default function Toolkit() {
       setRecordedBlob(null);
       setRecordDuration(0);
       setRecorderNotes('');
-      setSavedWords([]);
     } catch (err) {
       // Evidence.create failed — refund the daily save charge so the user
       // is not permanently consume an allowance for a record that was never created.
@@ -715,117 +456,7 @@ export default function Toolkit() {
       }
 
       case 'audio':
-        return (
-          <div className="space-y-4">
-            {mediaError && (
-              <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10">
-                <p className="text-xs text-amber-200">{mediaError}</p>
-              </div>
-            )}
-            <div className="flex gap-1.5">
-              <button onClick={() => { stopRadioSweep(); setRecordedBlob(null); setRecordDuration(0); setSavedWords([]); setRadioBand('AM'); setRadioFrequency(530); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${!radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : radioActive && radioBand === 'AM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
-                AM 530–1700 kHz
-              </button>
-              <button onClick={() => { stopRadioSweep(); setRecordedBlob(null); setRecordDuration(0); setSavedWords([]); setRadioBand('FM'); setRadioFrequency(88.1); }} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${!radioActive && radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : radioActive && radioBand === 'FM' ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
-                FM 88.1–107.9 MHz
-              </button>
-            </div>
-
-            <div className="p-4 rounded-lg bg-black/40 border border-primary/20 text-center">
-              <p className="font-mono text-3xl text-primary mb-1">
-                {radioBand === 'AM' ? radioFrequency.toFixed(0) : radioFrequency.toFixed(1)}
-              </p>
-              <p className="text-[10px] text-muted-foreground font-mono">
-                {radioBand === 'AM' ? 'kHz' : 'MHz'} {radioActive ? '● Sweeping — Recording ' + formatDuration(recordDuration) : '— Standby'}
-              </p>
-            </div>
-
-            {/* Volume slider */}
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground flex items-center justify-between mb-1">
-                <span>Volume</span>
-                <span className="font-mono text-primary">{Math.round(radioVolume * 100)}%</span>
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={Math.round(radioVolume * 100)}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value) / 100;
-                  setRadioVolume(v);
-                  if (gainNodeRef.current) {
-                    gainNodeRef.current.gain.value = v;
-                  }
-                  if (lfoGainRef.current) {
-                    lfoGainRef.current.gain.value = v * 0.4;
-                  }
-                  if (crackleGainRef.current) {
-                    crackleGainRef.current.gain.value = v * 0.12;
-                  }
-                }}
-                className="w-full h-1.5 rounded-full bg-secondary appearance-none cursor-pointer accent-primary"
-              />
-            </div>
-
-            {/* Sweep speed control */}
-            <div>
-              <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-1 block">Sweep Speed</label>
-              <div className="flex gap-1.5">
-                {Object.entries(SWEEP_SPEEDS).map(([key, val]) => (
-                  <button key={key} onClick={() => setRadioSweepSpeed(key)} className={`flex-1 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${radioSweepSpeed === key ? 'bg-primary/20 border border-primary/40 text-primary' : 'bg-card/30 border border-border/40 text-muted-foreground'}`}>
-                    {val.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {radioActive ? (
-              <button onClick={stopRadioSweep} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-heading text-xs uppercase tracking-wider hover:bg-red-500/20 transition-colors">
-                <Pause className="w-3.5 h-3.5" /> Stop Sweep
-              </button>
-            ) : recordedBlob ? (
-              <div className="space-y-3">
-                {/* Manual word entry — only real words actually heard */}
-                <div className="space-y-2">
-                  <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Words Heard</p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Type what you actually heard..."
-                      value={heardWord}
-                      onChange={e => setHeardWord(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && addHeardWord()}
-                      className="flex-1 px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-                    />
-                    <button onClick={addHeardWord} className="px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                      Add
-                    </button>
-                  </div>
-                  {savedWords.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {savedWords.map((w, i) => (
-                        <span key={i} className="px-2 py-1 rounded text-[10px] bg-primary/10 border border-primary/20 text-primary font-mono">
-                          {w}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <EvidenceSaveButtons onSave={saveRecording} saving={savingRec} />
-                <p className="text-[10px] text-muted-foreground/60 text-center">{formatDuration(recordDuration)} captured</p>
-                <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); setSavedWords([]); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
-                  <X className="w-3.5 h-3.5" /> Discard Recording
-                </button>
-              </div>
-            ) : (
-              <button onClick={startRadioSweep} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                <Play className="w-3.5 h-3.5" /> Start Sweep
-              </button>
-            )}
-          </div>
-        );
+        return <AcousticAnomalySweeper gateSave={gateEvidenceSave} refundSave={refundEvidenceSave} />;
 
       case 'weather':
         return (
@@ -1231,33 +862,77 @@ Best Practices
 • Never use voice activation — it can cut off beginnings of EVPs.`
               },
               {
-                name: 'Radio Sweeper',
-                short: 'AM/FM Frequency Sweep for EVP',
-                detail: `Radio Sweepers in Ghost Hunting
+                name: 'Acoustic Anomaly Sweeper',
+                short: 'Listen-Only Room Acoustics Monitor',
+                detail: `Acoustic Anomaly Sweepers in Ghost Hunting
 
-What Is a Radio Sweeper?
+What Is an Acoustic Anomaly Sweeper?
 
-A radio sweeper continuously cycles through AM or FM broadcast frequencies, producing a rapid stream of static, fragments of stations, and white noise. In ghost hunting, it functions as a spirit box or "ghost box" — a device spirits are believed to manipulate to form words from the audio fragments.
+An acoustic anomaly sweeper listens to a room through a microphone and reports when the sound in that room departs from its own measured baseline. This app's tool is listen-only: it never broadcasts, tunes, or plays anything. It measures, then shows what it measured.
 
 Scientific Theory
 
-A radio sweeper tunes across a frequency band (e.g. AM 530–1700 kHz or FM 88.1–107.9 MHz), stepping through channels faster than a person could manually dial. The resulting audio is a blend of carrier static and brief snippets of broadcast audio. The continuous change in frequency creates a rich bed of raw sound fragments.
+The tool opens the device microphone, runs a real-time frequency analysis across the audible range (about 20 Hz to 16 kHz, within the limits of the phone's own microphone), and spends the first ten seconds measuring the room's quiet baseline. From then on it plots how far the room sits above or below that baseline.
+
+What the numbers mean:
+• Levels are relative — dBFS measured at the device's analyser, not calibrated sound-pressure level. A phone microphone has no calibration, so an absolute figure would be false precision.
+• A rise has to hold for at least half a second to be logged as an event, so a single knocked door does not flood the log.
+• The baseline adapts slowly to the room, so a fridge cycling, a building settling or air handling does not accumulate into false events.
+• The event log names the band that moved. Low frequencies rumble and travel through structures; the voice band (250–2000 Hz) is where speech and vocal sounds sit.
+
+Paranormal Theory
+
+Investigators use a baseline-and-departure method because it removes expectation: the room's own quiet level is the reference, rather than the investigator's memory of it. Some researchers theorize that:
+• A sudden sound with no visible or mechanical source is worth correlating with other readings.
+• A drop below the baseline can be as notable as a rise.
+• Departures that repeat at the same place and time across sessions are stronger than single events.
+
+Limitations and False Sources
+
+Every ordinary source matters here, and there are many:
+• HVAC, refrigeration, plumbing and electrical hum.
+• Footsteps, settling structures, traffic, weather and wind on windows.
+• The investigator's own breathing, clothing, speech and handling of the phone.
+• Device processing: some phones apply noise suppression or automatic gain, which changes what is measured.
+
+Best Practices
+• Calibrate in silence, and leave the room if you can.
+• Place the device on a stable surface away from vents and appliances.
+• Note every known sound source for the session.
+• Mark the moments you hear yourself so they line up with the recording.
+• Treat an event as a marker of something to investigate, never as proof of what caused it.`
+              },
+              {
+                name: 'Traditional Radio Sweeper',
+                short: 'Spirit Box — AM/FM Frequency Sweep (Field Equipment)',
+                detail: `Radio Sweepers (Spirit Boxes) in Ghost Hunting
+
+What Is a Radio Sweeper?
+
+A radio sweeper — commonly called a spirit box or ghost box — is a real piece of field equipment. It continuously sweeps AM or FM broadcast bands, producing a rapid stream of static, fragments of stations and white noise. Investigators believe spirits can influence the sweep to assemble words from those fragments.
+
+Important: this app does not contain a radio sweeper. This app's Acoustic Anomaly Sweeper is a listen-only microphone tool and does not tune or receive broadcasts. The radio sweeper is described here as field equipment you may bring or use alongside the app.
+
+Scientific Theory
+
+A radio sweeper steps a receiver across a band — typically AM 530–1700 kHz or FM 88.1–107.9 MHz — far faster than a person could dial by hand. The audio is a blend of carrier static and brief slices of broadcast audio. Early models in this style (the SB-7 and SB-11) manually swept a modified portable radio; later "Frank's Box" style units and phone apps sweep automatically.
+
+The standing skeptical explanation is straightforward: a swept band continuously presents a dense stream of speech fragments, and a listener primed with a question will find meaningful-sounding words in that stream. Broadcast fragments, pareidolia and expectation account for most reported responses.
 
 Paranormal Theory
 
 Spirit communicators are theorized to:
 • Select and assemble fragments from the sweeping audio to form words or short phrases.
 • Influence the tuning to land on meaningful syllables at the right moment.
-• Produce real-time, audible responses that are absent from a normal broadcast.
-
-Capturing both the sweep audio and the microphone ensures playback contains exactly what was heard — the sweeping static and any voices, including ambient sounds in the room.
+• Produce real-time, audible responses that are not part of a normal broadcast.
 
 Best Practices
-• Allow the sweep to run for several minutes to give spirits time to respond.
-• Ask clear, simple questions and pause between them.
-• Record the session so fragments can be reviewed later.
-• Note any words heard and the question being asked at the time.
-• Distinguish genuine responses from coincidental broadcast fragments — consistency and relevance are key.`
+• Sweep for several minutes before expecting anything.
+• Ask clear, simple questions, and pause between them.
+• Record the whole session, including the question being asked and its timing.
+• Note the station or frequency when a fragment sounds like a response.
+• Test the method in a location with no local stations in range — the results should change.
+• Never use a sweeper while driving, and never let it replace a real evaluation of a sound.`
               },
               {
                 name: 'Terms Sweeper',
@@ -1523,16 +1198,10 @@ Best Practices
                 </div>
               </div>
               <button onClick={() => {
-                stopRadioAudio();
                 setActiveTool(null);
                 if (recording) stopRecording();
-                if (radioActive) {
-                  setRadioActive(false);
-                  if (radioIntervalRef.current) clearInterval(radioIntervalRef.current);
-                }
                 setRecordedBlob(null);
                 setRecorderNotes('');
-                setSavedWords([]);
                 setGuideDetail(null);
                 stopNarration();
                 toolAdGate.stopConsumption(activeTool?.name);

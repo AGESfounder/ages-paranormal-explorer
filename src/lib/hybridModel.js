@@ -92,7 +92,7 @@ export function downloadHybridPDF() {
   // ---------- 1 ----------
   const plans = [
     { name: 'Observer', price: '$0', billing: 'Free forever', manE: 0, narE: 0,
-      features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; Device narration (an ad plays before each narration - ~27 ads per fully narrated tour); save favorites; 4-tool toolkit (2 ad-gated: Audio Recorder, Radio Sweeper - 30s ad = 30s use, 300s/day cap); evidence saves 10/day (ad-watched); evidence journal + dashboard' },
+      features: 'Browse all 50 states + international tours; view tour details, stops, maps, text; Device narration (an ad plays before each narration - ~27 ads per fully narrated tour); save favorites; 4-tool toolkit (2 ad-gated: Audio Recorder, Acoustic Anomaly Sweeper - 30s ad = 30s use, 300s/day cap); evidence saves 10/day (ad-watched); evidence journal + dashboard' },
     { name: 'Seeker', price: '$3.99', billing: 'Monthly ($39.99/yr)', manE: 0, narE: 0,
       features: 'Everything in Observer, ad-free (no stop, narration, or tool ads); Device narration only (0 credits); 4-tool toolkit (no ads); community map posting; evidence saves 10/day (ad-watched, then Aura Save energy); Aura Bundle access (Save Energy only)' },
     { name: 'Technician', price: '$5.99', billing: 'Monthly ($59.99/yr)', manE: 0, narE: 0,
@@ -128,7 +128,7 @@ export function downloadHybridPDF() {
   para(`AdMob Interstitial: $${M.ADMOB_ECPM}/1k impressions (eCPM). Free users see ads on stops 2+ (~${M.ADS_PER_TOUR} ads/tour, ~${M.TOURS_PER_FREE_USER_MO} tours/mo = $${M.AD_REV_PER_FREE_USER_MO.toFixed(3)}/free user/mo)`);
   para(`AdMob Rewarded: $${M.ADMOB_REWARDED_ECPM}/1k impressions. Paid users watch ~${M.ADS_PER_PAID_USER_MO} ads/mo for +${P.adRewardEnergy} energy each (${P.adRewardNarration} narration / ${P.adRewardManifestation} manifestation). Ad rev: $${B.adReward.rev.toFixed(3)}/paid user/mo. Energy cost: ${B.adReward.creditsPerAd.toFixed(2)} credits/ad x ${Math.round(M.AD_REWARD_UTILIZATION * 100)}% utilization x $${M.COST_PER_CREDIT.toFixed(4)} = $${B.adReward.cost.toFixed(3)}/paid user/mo. Net: ${usd(B.adReward.net)}/paid user/mo (retention investment, not profit).`);
   para(`AdMob Observer narration: Device narration plays one ad before each narration; a fully narrated tour is ~${M.OBSERVER_NARRATION_ADS_PER_TOUR} ads. ${M.OBSERVER_NARRATION_ADS_PER_TOUR} ads x ${M.TOURS_PER_FREE_USER_MO} tours/mo x $${M.ADMOB_PER_IMPRESSION.toFixed(3)} = $${M.NARRATION_AD_REV_PER_FREE_USER_MO.toFixed(2)}/free user/mo.`);
-  para(`AdMob Observer tools + saves: Audio Recorder / Radio Sweeper (30s ad = 30s use) ~${M.TOOL_USE_ADS_OBSERVER_MO} ads/mo = $${M.TOOL_USE_AD_REV_OBSERVER_MO.toFixed(2)}; ad-watched evidence saves (Observer and Seeker) ~${M.SAVE_ADS_MO}/mo = $${M.SAVE_AD_REV_MO.toFixed(2)}, each save costs 1 upload credit. Total Observer ad revenue: $${M.OBSERVER_AD_REV_MO.toFixed(2)}/free user/mo.`);
+  para(`AdMob Observer tools + saves: Audio Recorder / Acoustic Anomaly Sweeper (30s ad = 30s use) ~${M.TOOL_USE_ADS_OBSERVER_MO} ads/mo = $${M.TOOL_USE_AD_REV_OBSERVER_MO.toFixed(2)}; ad-watched evidence saves (Observer and Seeker) ~${M.SAVE_ADS_MO}/mo = $${M.SAVE_AD_REV_MO.toFixed(2)}, each save costs 1 upload credit. Total Observer ad revenue: $${M.OBSERVER_AD_REV_MO.toFixed(2)}/free user/mo.`);
   para('Narration modes: Seeker and Technician use Device narration only (0 credits, no ads). Explorer / Investigator / Trailblazer can use Device (free) or Enhanced (spends narration energy). Rewarded energy top-up ads apply to Explorer+ only.');
   para('Credits charged per action at runtime. 100% utilization = worst case; 50-70% = realistic average.');
   para(`Two-Pass Stop Enrichment (Sept 2026, unchanged): single-site tours run a second LLM pass. One enrichment call costs ~${M.ENRICHMENT_CREDITS_SINGLE_SITE} credits single-site, ~${M.ENRICHMENT_CREDITS_MULTI_SITE} multi-site; blended ~${B.avgEnrichmentCredits} credits per call.`);
@@ -176,7 +176,7 @@ export function downloadHybridPDF() {
 
   // ---------- 3e ----------
   heading('3e. Toolkit Visibility & AdGate (Oct 2026 - IMPLEMENTED)');
-  para('All 12 toolkit tools are visible to every user. Observer (free) gets 4 tools - 2 free (Equipment Guide, Safety Protocol) + 2 ad-gated (Audio Recorder, Radio Sweeper: 30s ad = 30s use, 300s/day cap per tool). Seeker gets the same 4 tools ad-free. Technician and Explorer get 10 of 12 tools. Investigator+ get all 12. Observer ad-gated tools are device-only - 0 integration credits, so ad revenue is nearly pure profit.');
+  para('All 12 toolkit tools are visible to every user. Observer (free) gets 4 tools - 2 free (Equipment Guide, Safety Protocol) + 2 ad-gated (Audio Recorder, Acoustic Anomaly Sweeper: 30s ad = 30s use, 300s/day cap per tool). Seeker gets the same 4 tools ad-free. Technician and Explorer get 10 of 12 tools. Investigator+ get all 12. Observer ad-gated tools are device-only - 0 integration credits, so ad revenue is nearly pure profit.');
   table(['Tier', 'Visible', 'Accessible', 'Locked'], TOOLKIT_TIERS.map((t) => [t.tier, t.visible, t.accessible, t.locked]), [160, 60, 70, 60]);
   para('Seeker ($3.99/mo) and Technician ($5.99/mo) are ad-free tiers with 0 AI energy - they consume 0 platform credits. High-margin tiers that capture ad-averse users without AI features.');
 

@@ -14,7 +14,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 // tool_banks structure: { "Tool Name": { r: remaining, e: earned_today, l: last_heartbeat_ms } }
 // l = 0 means no active session (clock stopped). l > 0 means heartbeat in progress.
 
-const AD_GATED_TOOLS = ['Audio Recorder', 'Radio Sweeper'];
+const AD_GATED_TOOLS = ['Audio Recorder', 'Acoustic Anomaly Sweeper'];
 
 export default async function(req) {
   try {
@@ -30,7 +30,7 @@ export default async function(req) {
       return Response.json({ error: 'toolName is required' }, { status: 400 });
     }
 
-    // Validate tool is ad-gated (prevent abuse — only Audio Recorder and Radio Sweeper)
+    // Validate tool is ad-gated (prevent abuse — only Audio Recorder and Acoustic Anomaly Sweeper)
     if (!AD_GATED_TOOLS.includes(toolName)) {
       return Response.json({ error: 'Tool is not ad-gated' }, { status: 400 });
     }

@@ -7,7 +7,7 @@ import { TIER_TOOLS } from '@/lib/toolAccess';
 // ad_gate = true: ad-gated for Observer, free for Seeker+.
 const ALL_TOOLS = [
   { name: 'Audio Recorder', desc: 'EVP session recorder with save', ad_gate: true },
-  { name: 'Radio Sweeper', desc: 'AM/FM frequency sweep for EVP', ad_gate: true },
+  { name: 'Acoustic Anomaly Sweeper', desc: 'Listen-only room acoustics monitor + video record', ad_gate: true },
   { name: 'Yes/No/IDK Sweeper', desc: 'Motion-triggered answer sweep + screen record' },
   { name: 'Vibration Communicator', desc: 'Detect energy disturbances via phone sensors' },
   { name: 'Alphabet Sweeper', desc: 'Sweep A→Z — environment-triggered letter dictation' },

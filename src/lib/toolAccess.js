@@ -1,6 +1,6 @@
 // Toolkit tool access configuration — shared across Toolkit.jsx, TierToolsComparison,
 // and the tool ad-gate hook. Mirrors the approved Phase 3 spec:
-//   2 ad-gated tools (Observer only): Audio Recorder, Radio Sweeper
+//   2 ad-gated tools (Observer only): Audio Recorder, Acoustic Anomaly Sweeper
 //   30s ad = 30s use, 5-min (300s) daily cap per tool
 //   Server-authoritative: consume-tool-time uses server wall clock;
 //   client never writes tool_banks.r directly.
@@ -11,7 +11,7 @@ import { getEffectivePlanId } from '@/lib/access';
 // Seeker+ tiers get these ad-free (no ad gate).
 export const AD_GATED_TOOLS = [
   'Audio Recorder',
-  'Radio Sweeper',
+  'Acoustic Anomaly Sweeper',
 ];
 
 // 30 seconds of tool use per ad watch
@@ -27,21 +27,21 @@ export const TOOL_DAILY_CAP = 300;
 // Investigator+: all 12 tools (adds Terms Sweeper + Anomaly Camera)
 export const TIER_TOOLS = {
   observer: [
-    'Audio Recorder', 'Radio Sweeper',
+    'Audio Recorder', 'Acoustic Anomaly Sweeper',
     'Equipment Guide', 'Safety Protocol',
   ],
   seeker: [
-    'Audio Recorder', 'Radio Sweeper',
+    'Audio Recorder', 'Acoustic Anomaly Sweeper',
     'Equipment Guide', 'Safety Protocol',
   ],
   technician: [
-    'Audio Recorder', 'Radio Sweeper',
+    'Audio Recorder', 'Acoustic Anomaly Sweeper',
     'Yes/No/IDK Sweeper', 'Vibration Communicator', 'Alphabet Sweeper',
     'Weather Monitor', 'Moon Phase', 'Paranormal Research: Terms',
     'Equipment Guide', 'Safety Protocol',
   ],
   explorer: [
-    'Audio Recorder', 'Radio Sweeper',
+    'Audio Recorder', 'Acoustic Anomaly Sweeper',
     'Yes/No/IDK Sweeper', 'Vibration Communicator', 'Alphabet Sweeper',
     'Weather Monitor', 'Moon Phase', 'Paranormal Research: Terms',
     'Equipment Guide', 'Safety Protocol',
