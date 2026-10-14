@@ -22,8 +22,10 @@ export function useNarrationMode(user) {
     setNarrationMode(newMode);
   }, []);
 
-  // If user can't use enhanced, force device mode regardless of saved state
-  const effectiveMode = (user && !canUseEnhanced(user)) ? 'device' : mode;
+  // If the user can't use enhanced (or there is no user record at all), force
+  // device mode regardless of saved state. Enhanced is a paid mode: it must
+  // never be reachable on an unavailable record.
+  const effectiveMode = (!user || !canUseEnhanced(user)) ? 'device' : mode;
 
   return { mode: effectiveMode, setMode };
 }

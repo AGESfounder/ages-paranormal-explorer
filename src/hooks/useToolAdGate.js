@@ -55,7 +55,10 @@ export function useToolAdGate(user, toolName) {
     setEarned(banks[toolName]?.e || 0);
   }, [user, toolName]);
 
-  const needsAd = user ? needsToolAdGate(user, toolName) : false;
+  // needsToolAdGate treats an unavailable user as the free tier itself, so the
+  // gate is never skipped just because the record has not loaded (or cannot be
+  // read). The free-tier rules apply; nothing steps aside.
+  const needsAd = needsToolAdGate(user, toolName);
   const capReached = earned >= TOOL_DAILY_CAP;
 
   // Watch a rewarded ad and call grant-tool-time to add 30s server-side.

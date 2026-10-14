@@ -27,7 +27,10 @@ export function useObserverNarrationGate(user) {
   const [showGate, setShowGate] = useState(false);
   const pendingResolve = useRef(null);
 
-  const isObserver = !!user && user.role !== 'admin' && getEffectivePlanId(user) === 'observer';
+  // An unavailable user is the free tier, never an exempt one:
+  // getEffectivePlanId resolves a missing record to 'observer', so requestAccess()
+  // shows the ad gate instead of waving the narration through.
+  const isObserver = user?.role !== 'admin' && getEffectivePlanId(user) === 'observer';
 
   const requestAccess = useCallback(() => {
     if (!isObserver) return Promise.resolve(true);

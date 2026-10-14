@@ -73,10 +73,14 @@ export function canAccessTool(planId, toolName, isAdmin = false) {
 // Observer. Uses getEffectivePlanId so Google Trailblazer (whose access lives
 // in google_trailblazer_expiration_date, not user.plan) is NOT gated.
 // Seeker+ and admins never need ads.
+//
+// An UNAVAILABLE user — no record loaded yet, or a record the app cannot read —
+// is the free tier, never an exempt one: the gate is applied exactly as it is
+// for Observer. A gate that steps aside because the user could not be read is
+// an open door, so a missing user resolves to 'observer' instead of skipping.
 export function needsToolAdGate(user, toolName) {
-  if (!user) return false;
-  if (user.role === 'admin') return false;
-  const planId = getEffectivePlanId(user);
+  if (user?.role === 'admin') return false;
+  const planId = user ? getEffectivePlanId(user) : 'observer';
   if (planId !== 'observer') return false;
   return isAdGated(toolName);
 }
