@@ -84,6 +84,23 @@ workflows:
         script: |
           cd "$CM_BUILD_DIR"
           xcode-project use-profiles
+      - name: Verify the native iOS modules are linked
+        script: |
+          # Both native modules must be compiled into the App target, or their tools
+          # fail silently on the device with no error: the Environment Monitor needs
+          # AgesSensorsPlugin (magnetometer + barometer), the LiDAR depth scan needs
+          # AgesDepthPlugin. Build 24 shipped without the sensors module linked, so
+          # this step fails the build instead of uploading one that behaves the same.
+          set -eu
+          cd "$CM_BUILD_DIR/ios/App"
+          for MODULE in AgesSensorsPlugin AgesDepthPlugin; do
+            COUNT="$(grep -c "$MODULE.swift in Sources" App.xcodeproj/project.pbxproj || true)"
+            echo "$MODULE.swift in Sources entries: $COUNT"
+            test "$COUNT" -ge 1 || {
+              echo "$MODULE.swift is not linked into the App target. The build would ship without that tool's native support."
+              exit 1
+            }
+          done
       - name: Set the iOS build number
         script: |
           # CFBundleVersion comes from CURRENT_PROJECT_VERSION in the checked-out
