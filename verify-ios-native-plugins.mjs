@@ -115,7 +115,7 @@ for (const key of ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription', '
 
 // ── 7. Protected version guards (regression tripwires only — nothing here edits)
 const androidGradle = read('android/app/build.gradle');
-check('Android remains versionCode 19', !!androidGradle && androidGradle.includes('versionCode 19'));
+check('Android remains versionCode 20', !!androidGradle && androidGradle.includes('versionCode 20'));
 const pbxproj = read('ios/App/App.xcodeproj/project.pbxproj');
 check('iOS build settings remain CURRENT_PROJECT_VERSION = 27', !!pbxproj && (pbxproj.match(/CURRENT_PROJECT_VERSION = 27;/g) || []).length >= 2);
 check('iOS project has no unreleased Build 28 stamp', !!pbxproj && !pbxproj.includes('CURRENT_PROJECT_VERSION = 28;'));
