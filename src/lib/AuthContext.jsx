@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
+import useAppResumeRefresh from '@/hooks/useAppResumeRefresh';
 import { base44, base44ServerUrl } from '@/api/base44Client';
 import { appParams } from '@/lib/app-params';
 import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
@@ -273,6 +274,34 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Re-reads the signed-in user and the webhook-written ledger rows without
+  // touching the loading/auth flags, so it is safe to call while the app is
+  // already open (the resume refresh below does exactly that).
+  //
+  // A failed re-read is NOT a revocation: the record the server last confirmed
+  // stands, because a locked screen, a lift or a dropped connection must never
+  // lock a paying subscriber out of what they paid for. Only a genuine 401/403 —
+  // the session itself ending — is treated as signed out. Nothing is ever granted
+  // from a cached value: the only paid fields this app trusts are the ones the
+  // webhook-written record carries from this read, so each gate decides on the
+  // subscription state the server has now.
+  const refreshUser = async () => {
+    try {
+      const fresh = await withAppleLedger(await base44.auth.me());
+      if (!fresh?.id) return;
+      setUser(fresh);
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('User refresh failed:', error);
+      if (error?.status === 401 || error?.status === 403) {
+        setAuthError({ type: 'auth_required', message: 'Authentication required' });
+      }
+    }
+  };
+
+  // Re-read the record whenever the app returns to the foreground.
+  useAppResumeRefresh(refreshUser);
+
   const logout = (shouldRedirect = true, redirectUrl) => {
     setUser(null);
     setIsAuthenticated(false);
@@ -327,7 +356,8 @@ export const AuthProvider = ({ children }) => {
       logout,
       navigateToLogin,
       checkUserAuth,
-      checkAppState
+      checkAppState,
+      refreshUser
     }}>
       {children}
     </AuthContext.Provider>

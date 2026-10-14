@@ -8,6 +8,7 @@ import {
   applyManifestationSpend,
   applyNarrationSpend,
 } from '@/lib/access';
+import useAppResumeRefresh from '@/hooks/useAppResumeRefresh';
 
 /**
  * Central energy-gating hook. Checks the user's subscription plan and energy
@@ -48,6 +49,11 @@ export function useEnergyGate() {
   useEffect(() => {
     refreshUser();
   }, [refreshUser]);
+
+  // Re-read when the app comes back to the foreground: a plan can lapse, renew or
+  // be refunded while it sits in the background, and a gate must decide on the
+  // subscription state the server has now.
+  useAppResumeRefresh(refreshUser);
 
   // Listen for ad reward events — refresh user state so earned energy is
   // immediately usable without a page reload.
@@ -111,27 +117,33 @@ export function useEnergyGate() {
   // If blocked, shows the upgrade prompt automatically.
   const gateManifestation = useCallback(() => {
     if (isAdmin) return true;
+    // No user record read yet, or nothing readable: the subscription status
+    // cannot be verified, so paid access is not granted and the prompt says so
+    // rather than claiming the user has no plan.
+    if (!user) { setGateReason('unverified'); setShowUpgrade(true); return false; }
     if (!isPaid) { setGateReason('plan'); setShowUpgrade(true); return false; }
     if (totalMan <= 0) { setGateReason('energy'); setShowUpgrade(true); return false; }
     return true;
-  }, [isAdmin, isPaid, totalMan]);
+  }, [isAdmin, isPaid, totalMan, user]);
 
   // Gate a tour-generation action (Nearby/Abroad). Only Explorer+ may generate.
   const gateGeneration = useCallback(() => {
     if (isAdmin) return true;
+    if (!user) { setGateReason('unverified'); setShowUpgrade(true); return false; }
     if (!canGen) { setGateReason('plan'); setShowUpgrade(true); return false; }
     if (totalMan <= 0) { setGateReason('energy'); setShowUpgrade(true); return false; }
     return true;
-  }, [isAdmin, canGen, totalMan]);
+  }, [isAdmin, canGen, totalMan, user]);
 
   // Gate a narration (GenerateSpeech) action. Returns true if allowed.
   const gateNarration = useCallback((text) => {
     if (isAdmin) return true;
+    if (!user) { setGateReason('unverified'); setShowUpgrade(true); return false; }
     if (!isPaid) { setGateReason('plan'); setShowUpgrade(true); return false; }
     const cost = estimateNarrationCost(text);
     if (totalNar < cost) { setGateReason('energy'); setShowUpgrade(true); return false; }
     return true;
-  }, [isAdmin, isPaid, totalNar, estimateNarrationCost]);
+  }, [isAdmin, isPaid, totalNar, estimateNarrationCost, user]);
 
   return {
     user, isPaid,

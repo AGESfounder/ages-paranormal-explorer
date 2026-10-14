@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { getEffectivePlanId } from '@/lib/access';
 import { withAppleLedger } from '@/lib/appleLedger';
+import useAppResumeRefresh from '@/hooks/useAppResumeRefresh';
 
 // Evidence save daily caps (must match server: spend-evidence-save)
 export const EVIDENCE_FREE_DAILY_CAP = 10;   // Observer / Seeker (ad-watched)
@@ -67,6 +68,11 @@ export function useEvidenceSaveGate() {
     if (updated) setUser(updated);
   }, []);
 
+  // Re-read when the app returns to the foreground, so the branch a save takes
+  // (free daily save, Aura energy, or the ad gate) matches the subscription state
+  // the server has now. The charge itself is always the server's decision.
+  useAppResumeRefresh(refreshUser);
+
   const isAdmin = user?.role === 'admin';
   const planId = user ? getEffectivePlanId(user) : 'observer';
   const isFree = planId === 'observer' || planId === 'seeker';
@@ -92,7 +98,10 @@ export function useEvidenceSaveGate() {
     // Clear any stale cost from a previous gate cycle
     lastChargeCostRef.current = null;
     if (isAdmin) return 'admin';
-    if (!user) return false;
+    // No user record: the subscription status cannot be verified, so no save is
+    // granted from a cached value — and the prompt says why instead of failing
+    // silently.
+    if (!user) { setGateReason('unverified'); setShowUpgrade(true); return false; }
 
     // Observer: ad-watched saves with daily cap, blocked at cap
     if (planId === 'observer') {

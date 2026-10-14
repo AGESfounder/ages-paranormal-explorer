@@ -17,6 +17,7 @@ import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import { getEffectivePlanId } from '@/lib/access';
 import { withAppleLedger } from '@/lib/appleLedger';
+import useAppResumeRefresh from '@/hooks/useAppResumeRefresh';
 import { buildEvidenceContext, primeGPS } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import ResearchDatabase from '../components/ResearchDatabase';
@@ -115,6 +116,10 @@ export default function Toolkit() {
   };
 
   useEffect(() => { loadUser(); }, []);
+
+  // Re-read when the app returns to the foreground: tool access is decided on the
+  // subscription state the server has now, not the one read when the page opened.
+  useAppResumeRefresh(loadUser);
 
   // Gate tool access by tier — all 14 tools are visible, but tapping a tool
   // the user's plan doesn't include shows the upgrade prompt instead of opening it.

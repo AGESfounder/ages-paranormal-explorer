@@ -86,7 +86,7 @@ export default function UpgradePrompt({ show, onClose, reason = 'plan', onReward
               </div>
             </div>
             <h2 className="font-heading text-lg font-bold text-foreground mb-2">
-              {reason === 'energy' ? 'Energy Depleted' : reason === 'daily_cap' ? 'Daily Saves Used Up' : 'Upgrade Required'}
+              {reason === 'energy' ? 'Energy Depleted' : reason === 'daily_cap' ? 'Daily Saves Used Up' : reason === 'unverified' ? 'Subscription Not Verified' : 'Upgrade Required'}
             </h2>
             <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
               {reason === 'energy'
@@ -95,7 +95,9 @@ export default function UpgradePrompt({ show, onClose, reason = 'plan', onReward
                     : "You've used all your monthly energy. Watch a quick ad for a free boost, buy an Aura Bundle, or upgrade your plan.")
                 : reason === 'daily_cap'
                   ? "You've used all your daily saves. Upgrade for more saves and ad-free access."
-                  : "This feature requires a paid plan. Upgrade to unlock AI narration, custom tour generation, and the full investigation toolkit."}
+                  : reason === 'unverified'
+                    ? "We couldn't verify your subscription status just now, so paid access wasn't granted. Reconnect and try again — if you're already subscribed, nothing has changed."
+                    : "This feature requires a paid plan. Upgrade to unlock AI narration, custom tour generation, and the full investigation toolkit."}
             </p>
 
             {adError && <p className="text-[11px] text-destructive mb-3">{adError}</p>}
