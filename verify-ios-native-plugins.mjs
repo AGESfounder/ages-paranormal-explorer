@@ -117,8 +117,8 @@ for (const key of ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription', '
 const androidGradle = read('android/app/build.gradle');
 check('Android remains versionCode 19', !!androidGradle && androidGradle.includes('versionCode 19'));
 const pbxproj = read('ios/App/App.xcodeproj/project.pbxproj');
-check('iOS build settings remain CURRENT_PROJECT_VERSION = 26', !!pbxproj && (pbxproj.match(/CURRENT_PROJECT_VERSION = 26;/g) || []).length >= 2);
-check('iOS project has no unreleased Build 27 stamp', !!pbxproj && !pbxproj.includes('CURRENT_PROJECT_VERSION = 27;'));
+check('iOS build settings remain CURRENT_PROJECT_VERSION = 27', !!pbxproj && (pbxproj.match(/CURRENT_PROJECT_VERSION = 27;/g) || []).length >= 2);
+check('iOS project has no unreleased Build 28 stamp', !!pbxproj && !pbxproj.includes('CURRENT_PROJECT_VERSION = 28;'));
 
 // ── Report
 const width = Math.max(...results.map((r) => r.label.length));
