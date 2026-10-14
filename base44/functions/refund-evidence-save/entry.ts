@@ -4,18 +4,20 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 //
 // Rule: No successfully created Evidence record = no evidence-save charge.
 //
-// The client passes the `cost` value returned by spend-evidence-save so this
-// function knows which pool to refund:
-//   'free'               → decrement evidence_save_count by 1 (same day only, min 0)
-//   'aura_save'           → increment aura_save_energy by 1
-//   'aura_narration'      → increment aura_narration_energy by 1
-//   'aura_manifestation'  → increment aura_manifestation_energy by 1
-//   'admin'               → no-op (admin saves are always free)
+// The refund is validated SERVER-SIDE. It reverses the charge this server
+// actually recorded on the user (evidence_save_charge, written by
+// spend-evidence-save in the same update as the charge itself). The `cost` the
+// client sends is NOT the basis of a refund: a client-supplied cost would let
+// any signed-in user mint energy by calling this function with whichever pool
+// they name, having spent nothing at all.
 //
-// Idempotency: the client clears its tracked cost after calling this, so a
-// single gate instance cannot double-refund. If the day rolls over between
-// the charge and the refund, the free-daily counter is not decremented (the
-// counter already reset to 0 for the new day).
+// One recorded charge is refundable exactly once: the pending record is
+// cleared in the same update that gives the energy back. A charge older than
+// REFUND_WINDOW_MS is never refunded — a save whose Evidence.create failed
+// does so within seconds — so a save that actually succeeded cannot be claimed
+// back later.
+
+const REFUND_WINDOW_MS = 5 * 60 * 1000;
 
 export default async function(req) {
   try {
@@ -24,10 +26,20 @@ export default async function(req) {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
-    const cost = body.cost;
+    const claimed = body?.cost;   // logged for support only — never acted on
 
-    if (!cost || cost === 'admin') {
+    // The server's own record of its last charge is the only refundable thing.
+    const pending = user.evidence_save_charge;
+    if (!pending || typeof pending !== 'object' || typeof pending.cost !== 'string') {
+      console.log('Evidence save refund: no-op — no charge recorded by the server (client claimed:', claimed, ')');
       return Response.json({ success: true, refunded: false, reason: 'no_charge' });
+    }
+
+    const cost = pending.cost;
+    const atMs = Date.parse(pending.at);
+    if (!Number.isFinite(atMs) || Date.now() - atMs > REFUND_WINDOW_MS) {
+      console.log('Evidence save refund: no-op — recorded charge is stale:', cost, pending.at);
+      return Response.json({ success: true, refunded: false, reason: 'stale_charge' });
     }
 
     // ── Free daily save: decrement the daily counter ──
@@ -46,40 +58,32 @@ export default async function(req) {
       const newCount = current - 1;
       await base44.asServiceRole.entities.User.update(user.id, {
         evidence_save_count: newCount,
+        evidence_save_charge: null,
       });
       console.log('Evidence save refund (free daily):', user.id, `${current} → ${newCount}`);
       return Response.json({ success: true, refunded: true, cost: 'free', newCount });
     }
 
-    // ── Aura pool refunds: increment the charged pool ──
-    if (cost === 'aura_save') {
-      const current = user.aura_save_energy || 0;
-      await base44.asServiceRole.entities.User.update(user.id, {
-        aura_save_energy: current + 1,
-      });
-      console.log('Evidence save refund (aura_save):', user.id, `${current} → ${current + 1}`);
-      return Response.json({ success: true, refunded: true, cost: 'aura_save', newEnergy: current + 1 });
+    // ── Aura pool refund: return the unit to the pool the server charged ──
+    const poolByCost = {
+      aura_save: 'aura_save_energy',
+      aura_narration: 'aura_narration_energy',
+      aura_manifestation: 'aura_manifestation_energy',
+    };
+    const field = poolByCost[cost];
+    if (!field) {
+      // The record is server-written, so this cannot be reached by a caller.
+      console.log('Evidence save refund: no-op — unrecognized recorded charge:', cost);
+      return Response.json({ success: true, refunded: false, reason: 'unknown_charge' });
     }
 
-    if (cost === 'aura_narration') {
-      const current = user.aura_narration_energy || 0;
-      await base44.asServiceRole.entities.User.update(user.id, {
-        aura_narration_energy: current + 1,
-      });
-      console.log('Evidence save refund (aura_narration):', user.id, `${current} → ${current + 1}`);
-      return Response.json({ success: true, refunded: true, cost: 'aura_narration', newEnergy: current + 1 });
-    }
-
-    if (cost === 'aura_manifestation') {
-      const current = user.aura_manifestation_energy || 0;
-      await base44.asServiceRole.entities.User.update(user.id, {
-        aura_manifestation_energy: current + 1,
-      });
-      console.log('Evidence save refund (aura_manifestation):', user.id, `${current} → ${current + 1}`);
-      return Response.json({ success: true, refunded: true, cost: 'aura_manifestation', newEnergy: current + 1 });
-    }
-
-    return Response.json({ error: `Unknown cost type: ${cost}` }, { status: 400 });
+    const current = user[field] || 0;
+    await base44.asServiceRole.entities.User.update(user.id, {
+      [field]: current + 1,
+      evidence_save_charge: null,
+    });
+    console.log(`Evidence save refund (${cost}):`, user.id, `${current} → ${current + 1}`);
+    return Response.json({ success: true, refunded: true, cost, newEnergy: current + 1 });
   } catch (error) {
     console.error('refund-evidence-save error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });

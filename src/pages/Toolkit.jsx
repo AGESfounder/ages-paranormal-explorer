@@ -99,17 +99,22 @@ export default function Toolkit() {
 
   useEffect(() => primeGPS(), []);
 
-  useEffect(() => {
-    base44.auth.me().then(async (u) => {
+  // Loads (or reloads) the signed-in user. The reload is what the tool ad gate
+  // offers when the record could not be read: nothing can be credited to an
+  // account the app cannot load, so an ad watched there is spent for nothing.
+  const loadUser = async () => {
+    try {
       // Attach Apple ledger rows so tool tier gating resolves the same
       // effective plan as the backend (fail-soft: bare user on error).
-      const withLedger = await withAppleLedger(u);
+      const withLedger = await withAppleLedger(await base44.auth.me());
       setUser(withLedger);
       setIsAdmin(withLedger?.role === 'admin');
       setUserPlan(getEffectivePlanId(withLedger));
       setTools(applyOrder(DEFAULT_TOOLS, withLedger?.toolkit_order));
-    }).catch(() => {});
-  }, []);
+    } catch { /* the gate stays in its unavailable state */ }
+  };
+
+  useEffect(() => { loadUser(); }, []);
 
   // Gate tool access by tier — all 14 tools are visible, but tapping a tool
   // the user's plan doesn't include shows the upgrade prompt instead of opening it.
@@ -1196,6 +1201,8 @@ Best Practices
             </div>
             <ToolAdGate
               toolName={adGateTool.name}
+              accountUnavailable={toolAdGate.accountUnavailable}
+              onReload={loadUser}
               remaining={toolAdGate.remaining}
               earned={toolAdGate.earned}
               watching={toolAdGate.watching}

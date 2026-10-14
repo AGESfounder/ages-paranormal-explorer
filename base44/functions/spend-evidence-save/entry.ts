@@ -23,6 +23,12 @@ import { APPLE_STORE, getAppleLedgerProduct } from '../../shared/revenuecat.js';
 const FREE_DAILY_CAP = 10;   // Observer / Seeker
 const PAID_DAILY_CAP = 20;    // Technician / Explorer / Investigator / Trailblazer
 
+// The charge this save made, recorded on the user in the SAME update as the
+// charge itself. refund-evidence-save reverses only what is recorded here and
+// clears the record as it pays out, so a refund can never mint energy this
+// server did not take, and one charge can never be paid back twice.
+const chargeRecord = (cost) => ({ cost, at: new Date().toISOString() });
+
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
@@ -78,6 +84,7 @@ export default async function(req) {
       await base44.asServiceRole.entities.User.update(user.id, {
         evidence_save_count: newCount,
         evidence_save_date: today,
+        evidence_save_charge: chargeRecord('free'),
       });
       console.log('Evidence save (free daily):', user.id, planId, `${newCount}/${dailyCap}`);
       return Response.json({
@@ -110,6 +117,7 @@ export default async function(req) {
       }
       await base44.asServiceRole.entities.User.update(user.id, {
         aura_save_energy: saveEnergy - 1,
+        evidence_save_charge: chargeRecord('aura_save'),
       });
       console.log('Evidence save (aura_save):', user.id, 'remaining:', saveEnergy - 1);
       return Response.json({
@@ -128,6 +136,7 @@ export default async function(req) {
     if (auraNar > 0) {
       await base44.asServiceRole.entities.User.update(user.id, {
         aura_narration_energy: auraNar - 1,
+        evidence_save_charge: chargeRecord('aura_narration'),
       });
       console.log('Evidence save (aura_narration):', user.id, 'remaining:', auraNar - 1 + auraMan);
       return Response.json({
@@ -142,6 +151,7 @@ export default async function(req) {
     if (auraMan > 0) {
       await base44.asServiceRole.entities.User.update(user.id, {
         aura_manifestation_energy: auraMan - 1,
+        evidence_save_charge: chargeRecord('aura_manifestation'),
       });
       console.log('Evidence save (aura_manifestation):', user.id, 'remaining:', auraMan - 1);
       return Response.json({

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ghost, Play, Loader2, Clock, Crown, Plus } from 'lucide-react';
+import { Ghost, Play, Loader2, Clock, Crown, Plus, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TOOL_AD_DURATION, TOOL_DAILY_CAP } from '@/lib/toolAccess';
 
@@ -21,13 +21,48 @@ export default function ToolAdGate({
   watching,
   granting,
   adError,
+  accountUnavailable = false,
   onWatchAd,
   onUseNow,
+  onReload,
 }) {
   const navigate = useNavigate();
   const capReached = earned >= TOOL_DAILY_CAP;
   const hasBalance = remaining > 0;
   const busy = watching || granting;
+
+  // The account could not be read. An ad watched here would not become Tool
+  // Time — grant-tool-time credits the user record, and there is none to credit
+  // — so the prompt does not offer one. It says what happened and offers a
+  // reload, which is the only thing that can actually unlock the tool.
+  if (accountUnavailable) {
+    return (
+      <div className="p-4 rounded-xl border border-border/40 bg-card/30 flex flex-col items-center justify-center py-8 gap-4">
+        <Ghost className="w-8 h-8 text-primary/60" />
+        <div className="text-center space-y-1">
+          <p className="text-sm font-heading uppercase tracking-wider text-foreground">{toolName}</p>
+          <p className="text-xs text-muted-foreground max-w-xs">
+            We couldn't load your account, so an ad can't be credited to it as Tool Time. Reload your account and try again.
+          </p>
+        </div>
+
+        <button
+          onClick={() => onReload?.()}
+          disabled={busy}
+          className="px-4 py-2.5 rounded-lg bg-primary/15 border border-primary/40 text-primary text-xs font-heading uppercase tracking-wider hover:bg-primary/25 transition-colors min-h-[44px] flex items-center gap-2 disabled:opacity-50"
+        >
+          {granting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Reload account
+        </button>
+
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-heading uppercase tracking-wider hover:bg-amber-500/20 transition-colors min-h-[44px]"
+        >
+          <Crown className="w-3.5 h-3.5" /> Upgrade to Remove Ads
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 rounded-xl border border-border/40 bg-card/30 flex flex-col items-center justify-center py-8 gap-4">

@@ -179,6 +179,10 @@ export function useToolAdGate(user, toolName) {
 
   return {
     needsAd,
+    // An unavailable account changes the prompt: an ad watched on a record the
+    // app cannot read is never credited server-side (grant-tool-time needs the
+    // user), so the gate asks for a reload instead of selling an ad it cannot pay.
+    accountUnavailable: !user,
     remaining,
     earned,
     capReached,

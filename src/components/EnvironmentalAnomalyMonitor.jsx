@@ -94,6 +94,11 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const sensorErrorUnsubRef = useRef(null);
   const ambienceHeldRef = useRef(false);
   const tonesRef = useRef(tonesOn);
+  // When the combined alert was last logged. Both channels departing together is
+  // one moment: the channel that crosses first marks it, and a simultaneous
+  // partner inside this window is absorbed into that alert instead of logging a
+  // second "both sensors" entry and sounding the combined tone again.
+  const combinedAlertRef = useRef(0);
 
   const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
     canvasRef,
@@ -224,6 +229,19 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
         // Both channels departing at once is the one case worth marking: it is the
         // only thing here that is about the room rather than a single reading.
         const combined = ctx[other.value] != null && Math.abs(ctx[other.value]) >= ctx[other.threshold];
+
+        // One moment, one combined alert. Crossing together, each channel would
+        // otherwise log its own "both sensors" entry and each sound the combined
+        // tone — two log lines, two markers, two tones for a single moment. The
+        // channel that crossed first already marked it, so this partner joins that
+        // alert: it stays latched (its excursion is still on the trace and inside
+        // the open entry) and logs nothing of its own.
+        if (combined && now - combinedAlertRef.current <= REARM_COOLDOWN_MS) {
+          st.id = null;
+          return;
+        }
+        if (combined) combinedAlertRef.current = now;
+
         statusRef.current = 'EVENT';
         logEvent({
           id: st.id,
@@ -385,6 +403,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     recordingRef.current = false;
     traceRef.current = { magnetic: [], pressure: [] };
     markersRef.current = [];
+    combinedAlertRef.current = 0;
     channelsRef.current = createChannelState();
     trackerRef.current = createEnvironmentTracker();
     calibratingRef.current = true;
