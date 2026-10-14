@@ -14,6 +14,17 @@ const PLAN_RANK = {
   trailblazer: 5,
 };
 
+// The plan ids this app defines — the ONLY values that count as a plan.
+// Anything else is not a plan and can never rank as a paid tier, so a mistyped
+// or crafted value on the user record, and an aura bundle product id, all fail
+// closed and are treated as the free tier: every privileged path stays blocked.
+// Mirrors KNOWN_PLAN_IDS in base44/shared/access.js.
+const KNOWN_PLAN_IDS = new Set(Object.keys(PLAN_RANK));
+
+export function isKnownPlanId(planId) {
+  return typeof planId === 'string' && KNOWN_PLAN_IDS.has(planId);
+}
+
 // Apple App Store subscription product id → Base44 plan id, for resolving
 // RevenueCatPurchase ledger rows. Mirrors APPLE_SUBSCRIPTION_PRODUCTS in
 // base44/shared/revenuecat.js (kept local so this pure module never pulls in
@@ -41,9 +52,9 @@ export function resolveAppleLedgerProduct(productId) {
   return planId ? { plan_id: planId } : null;
 }
 
-/** Public plan rank for grant/poll helpers (higher wins). */
+/** Public plan rank for grant/poll helpers (higher wins). Unknown ids rank 0. */
 export function getPlanRank(planId) {
-  if (!planId) return 0;
+  if (!isKnownPlanId(planId)) return 0;
   return PLAN_RANK[planId] || 0;
 }
 
@@ -60,8 +71,11 @@ export function isDateActive(isoDate, now = new Date()) {
  */
 export function isGenericPlanActive(user, now = new Date()) {
   if (!user) return false;
-  const plan = user.plan || 'observer';
-  if (plan === 'observer') return false;
+  const plan = user.plan;
+  // Only a plan this app defines can be active. An unrecognized value is not a
+  // plan, and 'observer' is the free tier — both fail closed here rather than
+  // granting paid access to a record the app cannot verify.
+  if (!isKnownPlanId(plan) || plan === 'observer') return false;
 
   if (user.plan_expiration_date) {
     return isDateActive(user.plan_expiration_date, now);
@@ -88,7 +102,9 @@ export function isGoogleTrailblazerActive(user, now = new Date()) {
 function getBaseEffectivePlanId(user, now = new Date()) {
   if (!user) return 'observer';
   if (user.role === 'admin') {
-    return user.plan && user.plan !== 'observer' ? user.plan : 'trailblazer';
+    // Admins hold full access either way; an unrecognized plan value must never
+    // leak out of the resolver as though it were a tier.
+    return isKnownPlanId(user.plan) && user.plan !== 'observer' ? user.plan : 'trailblazer';
   }
 
   let best = 'observer';
@@ -180,7 +196,9 @@ export function getEffectivePlanIdWithAppleLedger(
 ) {
   if (!user) return 'observer';
   if (user.role === 'admin') {
-    return user.plan && user.plan !== 'observer' ? user.plan : 'trailblazer';
+    // Admins hold full access either way; an unrecognized plan value must never
+    // leak out of the resolver as though it were a tier.
+    return isKnownPlanId(user.plan) && user.plan !== 'observer' ? user.plan : 'trailblazer';
   }
 
   let best = getBaseEffectivePlanId(user, now);
@@ -193,7 +211,7 @@ export function getEffectivePlanIdWithAppleLedger(
     // one-time product. Both count when plan_expiration_date is still future.
     if (!row || (row.status !== 'active' && row.status !== 'paid')) continue;
     const product = resolveAppleProduct(row.product_id);
-    if (!product || !product.plan_id) continue;
+    if (!product || !isKnownPlanId(product.plan_id)) continue;
     if (!isDateActive(row.plan_expiration_date, now)) continue;
     const rank = getPlanRank(product.plan_id);
     if (rank > bestRank) {

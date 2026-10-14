@@ -685,6 +685,12 @@ export default function useGhostVoice() {
       if (!ctx || ctx.state !== 'running') return;
       const nodes = [ctx.destination];
       if (recordDestRef.current) nodes.push(recordDestRef.current);
+      // The audio-only path — a web view that cannot record a canvas at all,
+      // which is every iPhone — records the boosted mic-only destination instead
+      // of the mixed one, so the cue is mixed into that stream too. Without it a
+      // saved session there carries the cue only acoustically: whatever the
+      // phone's own speaker and microphone happened to pass on.
+      if (micOnlyDestRef.current) nodes.push(micOnlyDestRef.current);
       const ms = synthesizeCue(ctx, nodes, kind, opts);
       if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms));
     } catch {}

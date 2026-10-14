@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+import { getEffectivePlanId } from '../../shared/access.js';
 
 // Server-authoritative tool-time consumption for Observer ad-gated tools.
 // The client sends a heartbeat every 5 seconds while the tool is open.
@@ -35,8 +36,12 @@ export default async function(req) {
       return Response.json({ error: 'Tool is not ad-gated' }, { status: 400 });
     }
 
-    // Only Observer users use ad-gated tools. Admins can test.
-    const planId = user.plan || 'observer';
+    // Only Observer (free) users use ad-gated tools. Admins can test.
+    // Resolve through the shared fail-closed helper rather than the raw field:
+    // an unrecognized plan value is never a paid tier, so it resolves to
+    // Observer — the same resolution the client gate uses, so server and client
+    // can never disagree about who sees the ad gate.
+    const planId = getEffectivePlanId(user);
     if (planId !== 'observer' && user.role !== 'admin') {
       return Response.json(
         { error: 'Ad-gated tools are only for free (Observer) users' },
