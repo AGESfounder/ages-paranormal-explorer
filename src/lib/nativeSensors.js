@@ -9,9 +9,12 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 // sensor service. Both report the same reading shape, so nothing here branches per
 // platform.
 //
-// On the web, and in any build that predates the module, the calls reject: the tool
-// reads that as "no such sensor on this device" and says so on screen, rather than
-// showing a meter that is not measuring anything.
+// The module has to be registered with the native bridge to respond at all: on
+// iOS the app-local AgesBridgeViewController registers it at startup. The
+// support probe therefore reports three distinct states — 'web' (a browser can
+// never reach the sensors), 'unregistered' (a native build whose module is not
+// linked — a build problem, not a device verdict), and 'connected' (the module
+// answered and the booleans say what the device actually has).
 const AgesSensors = registerPlugin('AgesSensors');
 
 let supportPromise = null;
@@ -19,17 +22,27 @@ let supportPromise = null;
 /**
  * Resolve once per app run which of the two sensors this device actually has.
  *
- * @returns {Promise<{ magnetometer: boolean, barometer: boolean }>}
+ * @returns {Promise<{ magnetometer: boolean, barometer: boolean, status: 'web'|'unregistered'|'connected', detail: string }>}
  */
 export function sensorSupport() {
   if (!supportPromise) {
     supportPromise = (async () => {
+      if (!Capacitor.isNativePlatform()) {
+        return { magnetometer: false, barometer: false, status: 'web', detail: 'A web browser cannot reach the phone\'s sensors.' };
+      }
       try {
-        if (!Capacitor.isNativePlatform()) return { magnetometer: false, barometer: false };
         const result = await AgesSensors.isSupported();
-        return { magnetometer: !!result?.magnetometer, barometer: !!result?.barometer };
-      } catch {
-        return { magnetometer: false, barometer: false };
+        return {
+          magnetometer: !!result?.magnetometer,
+          barometer: !!result?.barometer,
+          status: 'connected',
+          detail: result?.altimeterAuth || '',
+        };
+      } catch (e) {
+        // The module did not answer: it is not linked into this build (or the
+        // bridge came up before registration finished). Never read this as the
+        // device lacking sensors.
+        return { magnetometer: false, barometer: false, status: 'unregistered', detail: e?.message || 'The native sensor module did not respond.' };
       }
     })();
   }
@@ -57,6 +70,24 @@ export async function stopSensors() {
  */
 export function onSensorReading(handler) {
   const handle = AgesSensors.addListener('reading', handler);
+  return () => {
+    Promise.resolve(handle)
+      .then((listener) => listener.remove())
+      .catch(() => {});
+  };
+}
+
+/**
+ * Subscribe to native sensor faults while a session runs. Each payload is
+ * { code, category, message }: category is 'permission' (e.g. the altimeter was
+ * refused) or 'runtime' (a stream fault after a successful start). Additive —
+ * the reading payload and shape are unchanged. Returns an unsubscribe function.
+ */
+export function onSensorError(handler) {
+  const handle = AgesSensors.addListener('error', handler);
+  // An absent module rejects the listener promise; the support probe already
+  // reported that state, so the subscription is simply inert there.
+  Promise.resolve(handle).catch(() => {});
   return () => {
     Promise.resolve(handle)
       .then((listener) => listener.remove())

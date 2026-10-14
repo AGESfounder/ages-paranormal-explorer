@@ -11,8 +11,11 @@ import CoreMotion
 // channel against its own measured baseline (see src/lib/environmentAnalysis.js) and
 // draws it — this module reports raw sensor values and makes no judgement about them.
 //
-// Registration is automatic: Capacitor discovers any class in the app target that
-// conforms to CAPBridgedPlugin, so nothing in AppDelegate changes. The web side
+// Registration: the app-local AgesBridgeViewController (declared in
+// AppDelegate.swift, instantiated by Main.storyboard) registers one instance of
+// this class with the Capacitor bridge in capacitorDidLoad(). CAPBridgedPlugin
+// alone is not registration — without that hook the class compiles but the web
+// layer's calls fail as "not implemented". The web side
 // (src/lib/nativeSensors.js) calls this by jsName "AgesSensors", asks isSupported()
 // which of the two sensors the device actually has, and says so on screen rather than
 // showing a meter that measures nothing — so devices without a barometer (most iPads)
@@ -40,12 +43,28 @@ public class AgesSensorsPlugin: CAPPlugin, CAPBridgedPlugin {
     private var lastField: CMMagneticField?
     private var lastPressure: Double?
     private var lastMovement: Double = 0
+    // One error of each kind per streaming session is enough — a faulting handler
+    // would otherwise report every frame.
+    private var reportedErrorCodes = Set<String>()
 
     @objc func isSupported(_ call: CAPPluginCall) {
         call.resolve([
             "magnetometer": motion.isMagnetometerAvailable,
-            "barometer": CMAltimeter.isRelativeAltitudeAvailable()
+            "barometer": CMAltimeter.isRelativeAltitudeAvailable(),
+            // Additive diagnostics only: the web layer's sensor verdicts still read
+            // the two booleans above; this helps it say WHY the pressure channel
+            // stays quiet on a device that has the hardware.
+            "altimeterAuth": altimeterAuthorization()
         ])
+    }
+
+    private func altimeterAuthorization() -> String {
+        switch CMAltimeter.authorizationStatus() {
+        case .authorized: return "authorized"
+        case .denied: return "denied"
+        case .restricted: return "restricted"
+        default: return "notDetermined"
+        }
     }
 
     @objc func start(_ call: CAPPluginCall) {
@@ -55,11 +74,17 @@ public class AgesSensorsPlugin: CAPPlugin, CAPBridgedPlugin {
             self.emitInterval = interval
             self.lastEmit = 0
             self.streaming = true
+            self.reportedErrorCodes.removeAll()
 
             if self.motion.isMagnetometerAvailable {
                 self.motion.magnetometerUpdateInterval = interval
-                self.motion.startMagnetometerUpdates(to: .main) { [weak self] data, _ in
-                    guard let self, let data else { return }
+                self.motion.startMagnetometerUpdates(to: .main) { [weak self] data, error in
+                    guard let self else { return }
+                    if let error {
+                        self.emitFailure(code: "magnetometer_failed", category: "runtime", message: error.localizedDescription)
+                        return
+                    }
+                    guard let data else { return }
                     self.lastField = data.magneticField
                     self.emit()
                 }
@@ -70,8 +95,13 @@ public class AgesSensorsPlugin: CAPPlugin, CAPBridgedPlugin {
             // reports movement, not the room, and the web layer holds that channel.
             if self.motion.isAccelerometerAvailable {
                 self.motion.accelerometerUpdateInterval = 0.1
-                self.motion.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
-                    guard let self, let acceleration = data?.acceleration else { return }
+                self.motion.startAccelerometerUpdates(to: .main) { [weak self] data, error in
+                    guard let self else { return }
+                    if let error {
+                        self.emitFailure(code: "accelerometer_failed", category: "runtime", message: error.localizedDescription)
+                        return
+                    }
+                    guard let acceleration = data?.acceleration else { return }
                     let magnitude = sqrt(acceleration.x * acceleration.x
                         + acceleration.y * acceleration.y
                         + acceleration.z * acceleration.z)
@@ -80,8 +110,22 @@ public class AgesSensorsPlugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             if CMAltimeter.isRelativeAltitudeAvailable() {
-                self.altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, _ in
-                    guard let self, let data else { return }
+                self.altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
+                    guard let self else { return }
+                    if let error {
+                        // A denied altimeter reports through the handler's error, not
+                        // through isSupported: keep the verdict precise about WHY the
+                        // pressure channel went quiet.
+                        let status = CMAltimeter.authorizationStatus()
+                        let denied = status == .denied || status == .restricted
+                        self.emitFailure(
+                            code: denied ? "altimeter_unauthorized" : "altimeter_failed",
+                            category: denied ? "permission" : "runtime",
+                            message: error.localizedDescription
+                        )
+                        return
+                    }
+                    guard let data else { return }
                     // CoreMotion reports pressure in kilopascal; the tool works in
                     // hectopascal (millibar), the unit weather and field notes use.
                     self.lastPressure = data.pressure.doubleValue * 10
@@ -103,6 +147,18 @@ public class AgesSensorsPlugin: CAPPlugin, CAPBridgedPlugin {
             self.lastPressure = nil
             self.lastMovement = 0
             call.resolve(["running": false])
+        }
+    }
+
+    // Additive failure channel: the reading payload is untouched, and faults are
+    // reported next to it as {code, category, message} on the "error" event so the
+    // web layer can tell a permission refusal from a stream fault from a missing
+    // build. Deduped per session so a faulting handler cannot flood the log.
+    private func emitFailure(code: String, category: String, message: String) {
+        guard streaming, !reportedErrorCodes.contains(code) else { return }
+        reportedErrorCodes.insert(code)
+        DispatchQueue.main.async { [weak self] in
+            self?.notifyListeners("error", data: ["code": code, "category": category, "message": message])
         }
     }
 

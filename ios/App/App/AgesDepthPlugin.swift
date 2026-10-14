@@ -2,6 +2,7 @@ import Foundation
 import Capacitor
 import ARKit
 import UIKit
+import AVFoundation
 import Vision
 
 // AGES depth module.
@@ -26,8 +27,11 @@ import Vision
 // detection still works on the sensor's own grid, and the rotation between the two
 // is written down once, in DisplayTurn.
 //
-// Registration is automatic: Capacitor discovers any class in the app target that
-// conforms to CAPBridgedPlugin, so nothing in AppDelegate changes. The web side
+// Registration: the app-local AgesBridgeViewController (declared in
+// AppDelegate.swift, instantiated by Main.storyboard) registers one instance of
+// this class with the Capacitor bridge in capacitorDidLoad(). CAPBridgedPlugin
+// alone is not registration — without that hook the class compiles but the web
+// layer's calls fail as "not implemented". The web side
 // (src/lib/nativeDepth.js) calls this by jsName "AgesDepth" and hides the depth
 // method entirely when isSupported() says no, so devices without a depth sensor —
 // and every web build — are unaffected.
@@ -208,14 +212,26 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
 
     @objc func isSupported(_ call: CAPPluginCall) {
         guard ARWorldTrackingConfiguration.isSupported else {
-            call.resolve(["supported": false, "detail": "This device does not support ARKit world tracking."])
+            call.resolve(["supported": false, "detail": "This device does not support ARKit world tracking.", "camera": cameraAuthorization()])
             return
         }
         let supported = ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
         call.resolve([
             "supported": supported,
-            "detail": supported ? "" : "This device has no LiDAR depth sensor."
+            "detail": supported ? "" : "This device has no LiDAR depth sensor.",
+            // Additive: the camera permission snapshot, so the web layer can point
+            // at Settings instead of guessing when a start goes wrong later.
+            "camera": cameraAuthorization()
         ])
+    }
+
+    private func cameraAuthorization() -> String {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized: return "authorized"
+        case .denied: return "denied"
+        case .restricted: return "restricted"
+        default: return "notDetermined"
+        }
     }
 
     @objc func start(_ call: CAPPluginCall) {
@@ -223,7 +239,15 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
         interval = 1.0 / max(2.0, min(15.0, fps))
         DispatchQueue.main.async {
             guard ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) else {
-                call.reject("This device has no depth sensor.")
+                call.reject("This device has no depth sensor.", "depth_unsupported")
+                return
+            }
+            // A previously refused camera permission never reaches session.run —
+            // ARKit would just fail the session asynchronously. Say so directly,
+            // with a stable code the web layer maps to a Settings hint.
+            let cameraStatus = AVCaptureDevice.authorizationStatus(for: .video)
+            if cameraStatus == .denied || cameraStatus == .restricted {
+                call.reject("Camera access is denied. Allow camera access in Settings, then try again.", "camera_permission_denied")
                 return
             }
             let session = self.session ?? ARSession()
@@ -274,8 +298,25 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
 
     public func session(_ session: ARSession, didFailWithError error: Error) {
         streaming = false
+        // Classify at the native boundary so the web layer never has to guess what
+        // an ARKit failure means: camera permission, unsupported hardware or
+        // configuration, or a runtime session failure after the session started.
+        var code = "arkit_runtime_failure"
+        var category = "runtime"
+        if let arError = error as? ARError {
+            switch arError.code {
+            case .cameraUnauthorized:
+                code = "camera_permission_denied"
+                category = "permission"
+            case .sensorUnavailable, .unsupportedConfiguration:
+                code = "depth_unsupported"
+                category = "unsupported"
+            default:
+                break
+            }
+        }
         DispatchQueue.main.async { [weak self] in
-            self?.notifyListeners("error", data: ["message": error.localizedDescription])
+            self?.notifyListeners("error", data: ["code": code, "category": category, "message": error.localizedDescription])
         }
     }
 

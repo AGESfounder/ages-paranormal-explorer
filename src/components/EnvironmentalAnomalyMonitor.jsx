@@ -8,7 +8,7 @@ import EvidenceSaveButtons from './EvidenceSaveButtons';
 import useGhostVoice from '@/hooks/useGhostVoice';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
-import { sensorSupport, startSensors, stopSensors, onSensorReading } from '@/lib/nativeSensors';
+import { sensorSupport, startSensors, stopSensors, onSensorReading, onSensorError } from '@/lib/nativeSensors';
 import {
   createEnvironmentTracker, magneticThreshold, pressureThreshold, SENSITIVITY, MOVEMENT_LIMIT,
 } from '@/lib/environmentAnalysis';
@@ -91,6 +91,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const anomalyTimerRef = useRef(null);
   const watchTimerRef = useRef(null);
   const unsubRef = useRef(null);
+  const sensorErrorUnsubRef = useRef(null);
   const ambienceHeldRef = useRef(false);
   const tonesRef = useRef(tonesOn);
 
@@ -152,6 +153,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
       if (r.current) { clearInterval(r.current); clearTimeout(r.current); r.current = null; }
     });
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
+    if (sensorErrorUnsubRef.current) { sensorErrorUnsubRef.current(); sensorErrorUnsubRef.current = null; }
     stopSensors();
     if (recordingRef.current) stopRecording();
     recordingRef.current = false;
@@ -359,7 +361,17 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const startSession = async () => {
     const sensors = availableRef.current || (await sensorSupport());
     if (!sensors.magnetometer && !sensors.barometer) {
-      setSensorError('This device reports neither a magnetic-field sensor nor a barometer, so there is nothing for this tool to measure.');
+      // Three different reasons to have nothing to read: a browser (no path to
+      // the sensors at all), a build whose native module is not linked (a build
+      // problem, reported as such, never as a device verdict), or a device that
+      // genuinely has neither sensor.
+      setSensorError(
+        sensors.status === 'web'
+          ? 'This tool reads the phone\'s own magnetic-field sensor and barometer, which a web browser cannot reach — open it in the mobile app.'
+          : sensors.status === 'unregistered'
+            ? 'The app\'s native sensor module did not respond in this build, so the readings are not about the device — reinstall or update the app.'
+            : 'This device reports neither a magnetic-field sensor nor a barometer, so there is nothing for this tool to measure.'
+      );
       return;
     }
     setSensorError('');
@@ -389,13 +401,32 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     // session recording has one.
     unlock();
 
+    // Both subscriptions go up BEFORE the stream starts: the first reading — or
+    // a native start fault — must never arrive before anyone is listening.
+    unsubRef.current = onSensorReading((reading) => {
+      latestRef.current = reading;
+      // The stream is delivering: the no-reading watchdog is satisfied.
+      if (watchTimerRef.current) {
+        clearTimeout(watchTimerRef.current);
+        watchTimerRef.current = null;
+      }
+    });
+    sensorErrorUnsubRef.current = onSensorError((failure) => {
+      setSensorError(failure?.category === 'permission'
+        ? 'Motion sensor access was denied. Allow motion and fitness access for the app in Settings, then try again.'
+        : `The sensor stream reported a fault${failure?.message ? `: ${failure.message}` : ''}. The tool may keep running on the healthy channel — stop and restart if the trace goes flat.`);
+    });
+
     try {
       await startSensors(10);
     } catch {
+      // Start failed after the bridges were checked: a real stream failure, not a
+      // missing module. Take the subscriptions back down with it.
+      if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
+      if (sensorErrorUnsubRef.current) { sensorErrorUnsubRef.current(); sensorErrorUnsubRef.current = null; }
       setSensorError('The sensors could not be started on this device. Close other apps using them and try again.');
       return;
     }
-    unsubRef.current = onSensorReading((reading) => { latestRef.current = reading; });
 
     setPhase('running');
     sessionActiveRef.current = true;
@@ -407,7 +438,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     sampleTimerRef.current = setInterval(sampleFrame, SAMPLE_MS);
     watchTimerRef.current = setTimeout(() => {
       if (!latestRef.current) {
-        setSensorError('No sensor readings are arriving — this build or this device may not expose the sensors this tool needs.');
+        setSensorError('The native sensor module is connected, but no readings are arriving from it — the sensors may be held by another app. Close other sensor apps, stop, and try again.');
       }
     }, 5000);
   };
@@ -503,14 +534,22 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
         <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 space-y-1">
           <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Sensors on this device</p>
           {available ? (
-            <>
-              <p className={`text-[11px] flex items-center gap-1.5 ${available.magnetometer ? 'text-foreground/80' : 'text-muted-foreground/60'}`}>
-                <Compass className="w-3 h-3" /> Magnetic field: {available.magnetometer ? 'available' : 'not available'}
+            available.status === 'connected' ? (
+              <>
+                <p className={`text-[11px] flex items-center gap-1.5 ${available.magnetometer ? 'text-foreground/80' : 'text-muted-foreground/60'}`}>
+                  <Compass className="w-3 h-3" /> Magnetic field: {available.magnetometer ? 'available' : 'not available'}
+                </p>
+                <p className={`text-[11px] flex items-center gap-1.5 ${available.barometer ? 'text-foreground/80' : 'text-muted-foreground/60'}`}>
+                  <Gauge className="w-3 h-3" /> Barometric pressure: {available.barometer ? 'available' : available.detail === 'denied' || available.detail === 'restricted' ? 'available, but motion access is denied in Settings' : 'not available'}
+                </p>
+              </>
+            ) : (
+              <p className="text-[11px] text-muted-foreground/60">
+                {available.status === 'web'
+                  ? 'Only reachable in the mobile app — a browser build has no magnetometer or barometer.'
+                  : 'The app\'s native sensor module did not respond in this build — the readings here say nothing about the device. Reinstall or update the app.'}
               </p>
-              <p className={`text-[11px] flex items-center gap-1.5 ${available.barometer ? 'text-foreground/80' : 'text-muted-foreground/60'}`}>
-                <Gauge className="w-3 h-3" /> Barometric pressure: {available.barometer ? 'available' : 'not available'}
-              </p>
-            </>
+            )
           ) : (
             <p className="text-[11px] text-muted-foreground/60">Checking this device's sensors…</p>
           )}
