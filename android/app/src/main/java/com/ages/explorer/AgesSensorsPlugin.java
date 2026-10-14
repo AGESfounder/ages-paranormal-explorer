@@ -49,7 +49,8 @@ public class AgesSensorsPlugin extends Plugin implements SensorEventListener {
 
     // Sensors are resolved once and kept: looking them up on every start is wasted
     // work, and a missing sensor is a permanent property of the device.
-    private void load() {
+    @Override
+    public void load() {
         if (sensorManager != null) return;
         sensorManager = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager == null) return;
