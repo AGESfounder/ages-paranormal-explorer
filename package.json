@@ -12,6 +12,7 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
+    "verify:native-plugins": "node verify-ios-native-plugins.mjs",
     "preview": "vite preview",
     "postinstall": "patch-package"
   },

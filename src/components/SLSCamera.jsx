@@ -10,7 +10,7 @@ import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import AnomalyModePicker from './AnomalyModePicker';
 import { drawDepthFrame } from '@/lib/depthFrame';
-import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame } from '@/lib/nativeDepth';
+import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame, onDepthError } from '@/lib/nativeDepth';
 import useDepthDetection from '@/hooks/useDepthDetection';
 import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
@@ -42,6 +42,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const [depthHint, setDepthHint] = useState(null);
   const anomalyTimerRef = useRef(null);
   const depthUnsubRef = useRef(null);
+  const depthErrorUnsubRef = useRef(null);
+  const depthHintTimerRef = useRef(null);
+  const depthTimeoutRef = useRef(null);
   const depthFrameRef = useRef(null);
   const depthAudioRef = useRef(null);
 
@@ -60,6 +63,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
     // A depth session runs on the native module rather than a web stream, so it is
     // released here as well.
     if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
+    if (depthErrorUnsubRef.current) { depthErrorUnsubRef.current(); depthErrorUnsubRef.current = null; }
+    if (depthHintTimerRef.current) { clearTimeout(depthHintTimerRef.current); depthHintTimerRef.current = null; }
+    if (depthTimeoutRef.current) { clearTimeout(depthTimeoutRef.current); depthTimeoutRef.current = null; }
     depthFrameRef.current = null;
     setDepthHint(null);
     stopDepthStream();
@@ -179,10 +185,34 @@ export default function SLSCamera({ gateSave, refundSave }) {
     canvas.width = 640;
     canvas.height = 480;
     depthFrameRef.current = null;
+
+    // The failure listener goes up before the session starts, so an ARKit fault
+    // at startup can never arrive unobserved. A fatal native error ends the
+    // depth session: the message says what actually happened, and stopCamera
+    // lands the session in the usual Stop & Save state — the recorder and the
+    // native session never outlive a depth lane that has already failed.
+    depthErrorUnsubRef.current = onDepthError((failure) => {
+      setError(failure?.category === 'permission'
+        ? 'The depth session stopped — camera access is denied. Allow camera access for the app in Settings, then start again.'
+        : failure?.category === 'unsupported'
+          ? 'The depth session stopped — this device or its current configuration cannot run a depth scan.'
+          : `The depth session failed: ${failure?.message || 'the native depth session ended.'}`);
+      stopCamera();
+    });
+
     try {
       await startDepthStream(8);
-    } catch {
-      setError('The depth sensor could not start. Close other camera apps and try again.');
+    } catch (e) {
+      if (depthErrorUnsubRef.current) { depthErrorUnsubRef.current(); depthErrorUnsubRef.current = null; }
+      // Coded rejections: say which of the distinct failures actually happened
+      // instead of a generic "could not start".
+      setError(e?.category === 'permission'
+        ? 'Camera access is denied. Allow camera access for the app in Settings, then try again.'
+        : e?.category === 'unsupported'
+          ? 'The depth module reports this device has no depth sensor, so a depth scan cannot run.'
+          : e?.category === 'unavailable'
+            ? 'The depth module did not respond in this build of the app — update the app and try again.'
+            : 'The depth sensor could not start. Close other camera apps and try again.');
       return;
     }
     depthUnsubRef.current = onDepthFrame((data) => {
@@ -228,14 +258,14 @@ export default function SLSCamera({ gateSave, refundSave }) {
     // reading (on a phone with no dedicated depth sensor the room has to be swept
     // first), and a session that never delivers a frame at all means depth is not
     // available. Both are said on screen rather than left as an empty view.
-    setTimeout(() => {
+    depthHintTimerRef.current = setTimeout(() => {
       if (!depthFrameRef.current && depthUnsubRef.current) {
         setDepthHint('Building the depth map — slowly sweep the phone across the room.');
       }
     }, 2500);
-    setTimeout(() => {
+    depthTimeoutRef.current = setTimeout(() => {
       if (!depthFrameRef.current && depthUnsubRef.current) {
-        setError('No depth readings are arriving — close other camera apps and try again.');
+        setError('The depth module is connected, but no depth readings are arriving — close other camera apps and try again.');
       }
     }, 12000);
   };

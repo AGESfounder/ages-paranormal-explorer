@@ -47,3 +47,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
 }
+
+// AGES app-local bridge controller — the class the main storyboard's bridge scene
+// instantiates (Base.lproj/Main.storyboard points at AgesBridgeViewController in
+// module App).
+//
+// Capacitor creates the bridge inside loadView() and calls capacitorDidLoad()
+// immediately afterwards, before the web view loads — the supported registration
+// point for app-local plugin instances
+// (https://capacitorjs.com/docs/v7/ios/custom-code). The Environment Monitor and
+// the LiDAR depth camera reach their native modules through the bridge under the
+// JS names "AgesSensors" and "AgesDepth" (src/lib/nativeSensors.js and
+// src/lib/nativeDepth.js). Without these two lines the plugin classes are
+// compiled but never registered with the bridge, and every call from the web
+// layer fails as "not implemented", which the JS seams surface as a
+// missing-module state rather than a real sensor verdict.
+class AgesBridgeViewController: CAPBridgeViewController {
+    override open func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        bridge?.registerPluginInstance(AgesSensorsPlugin())
+        bridge?.registerPluginInstance(AgesDepthPlugin())
+    }
+}

@@ -101,23 +101,32 @@ workflows:
               exit 1
             }
           done
+      - name: Verify the iOS native plugin bridge registration
+        script: |
+          # Additive wiring/contract check (verify-ios-native-plugins.mjs): the
+          # storyboard -> AgesBridgeViewController -> capacitorDidLoad registration
+          # path, the JS/native plugin names, methods and events, and the version
+          # guards. This does not replace the Compile Sources guard above and does
+          # not touch any build setting.
+          cd "$CM_BUILD_DIR"
+          npm run verify:native-plugins
       - name: Set the iOS build number
         script: |
           # CFBundleVersion comes from CURRENT_PROJECT_VERSION in the checked-out
           # project.pbxproj. The rejected IPA archived a checkout that still had 14;
-          # App Store Connect already holds 24, so the required next value is 25.
-          # Hard-stamp 25 deterministically (no App Store Connect lookup) so the
-          # archived IPA always embeds CFBundleVersion 25 regardless of what the
+          # App Store Connect already holds 25, so the required next value is 26.
+          # Hard-stamp 26 deterministically (no App Store Connect lookup) so the
+          # archived IPA always embeds CFBundleVersion 26 regardless of what the
           # checked-out project file contains. `agvtool new-version` only writes
           # CURRENT_PROJECT_VERSION, so marketing version 1.0 is untouched.
           # For the next release, bump this value by one.
           set -eu
           cd "$CM_BUILD_DIR/ios/App"
-          agvtool new-version -all 25
-          STAMPED="$(grep -c 'CURRENT_PROJECT_VERSION = 25;' App.xcodeproj/project.pbxproj || true)"
-          echo "CURRENT_PROJECT_VERSION = 25 occurrences in project.pbxproj: $STAMPED"
+          agvtool new-version -all 26
+          STAMPED="$(grep -c 'CURRENT_PROJECT_VERSION = 26;' App.xcodeproj/project.pbxproj || true)"
+          echo "CURRENT_PROJECT_VERSION = 26 occurrences in project.pbxproj: $STAMPED"
           test "$STAMPED" -ge 2 || {
-            echo "CFBundleVersion 25 was not stamped into the Xcode project. Failing instead of uploading a stale build number."
+            echo "CFBundleVersion 26 was not stamped into the Xcode project. Failing instead of uploading a stale build number."
             exit 1
           }
       - name: Build the signed App Store IPA
@@ -127,6 +136,41 @@ workflows:
             --scheme "$XCODE_SCHEME" \
             --config Release \
             --ipa-directory "$CM_BUILD_DIR/build/ios/ipa"
+      - name: Verify the exported IPA embeds Build 26
+        script: |
+          # Additive pre-Publishing gate on the artifact itself, not the project
+          # file: unzip the IPA xcode-project build-ipa just produced and read
+          # the app Info.plist with PlistBuddy (both /usr/bin/unzip and
+          # /usr/libexec/PlistBuddy ship with macOS on the build machine). The
+          # archived values must be exactly bundle id com.ages.explorer,
+          # marketing version 1.0, build number 26, or App Store Connect would
+          # reject the upload again — so fail here, before Publishing runs.
+          set -eu
+          IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
+          IPA="$(ls "$IPA_DIR"/*.ipa 2>/dev/null | head -n 1 || true)"
+          if [ -z "$IPA" ] || [ ! -f "$IPA" ]; then
+            echo "No .ipa found in $IPA_DIR — the build-ipa step produced no artifact. Failing before Publishing."
+            exit 1
+          fi
+          echo "Inspecting built IPA: $IPA"
+          TMP_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TMP_DIR"' EXIT
+          /usr/bin/unzip -o -q "$IPA" 'Payload/*.app/Info.plist' -d "$TMP_DIR" || true
+          APP_PLIST="$(ls "$TMP_DIR"/Payload/*.app/Info.plist 2>/dev/null | head -n 1 || true)"
+          if [ -z "$APP_PLIST" ] || [ ! -f "$APP_PLIST" ]; then
+            echo "The IPA at $IPA contains no Payload/<App>.app/Info.plist. Failing before Publishing."
+            exit 1
+          fi
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PLIST" 2>/dev/null || true)"
+          SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PLIST" 2>/dev/null || true)"
+          BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PLIST" 2>/dev/null || true)"
+          echo "Embedded CFBundleIdentifier: $BUNDLE_ID"
+          echo "Embedded CFBundleShortVersionString: $SHORT_VERSION"
+          echo "Embedded CFBundleVersion: $BUNDLE_VERSION"
+          [ "$BUNDLE_ID" = "com.ages.explorer" ] || { echo "Expected CFBundleIdentifier com.ages.explorer but the IPA embeds '$BUNDLE_ID'. Failing before Publishing."; exit 1; }
+          [ "$SHORT_VERSION" = "1.0" ] || { echo "Expected CFBundleShortVersionString 1.0 but the IPA embeds '$SHORT_VERSION'. Failing before Publishing."; exit 1; }
+          [ "$BUNDLE_VERSION" = "26" ] || { echo "Expected CFBundleVersion 26 but the IPA embeds '$BUNDLE_VERSION'. Failing before Publishing."; exit 1; }
+          echo "IPA metadata verified: com.ages.explorer 1.0 (26)."
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log

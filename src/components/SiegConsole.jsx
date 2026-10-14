@@ -17,9 +17,9 @@ import { measureLevels, createBaselineTracker, eventThresholdDb, dominantBand } 
 import useSensitivity, { isTorchActive } from '@/hooks/useSensitivity';
 import useDepthDetection from '@/hooks/useDepthDetection';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
-import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame } from '@/lib/nativeDepth';
+import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame, onDepthError } from '@/lib/nativeDepth';
 import { detectFigures } from '@/lib/anomalyDetect';
-import { sensorSupport, startSensors, stopSensors, onSensorReading } from '@/lib/nativeSensors';
+import { sensorSupport, startSensors, stopSensors, onSensorReading, onSensorError } from '@/lib/nativeSensors';
 import {
   createEnvironmentTracker, magneticThreshold, pressureThreshold, SENSITIVITY, MOVEMENT_LIMIT,
 } from '@/lib/environmentAnalysis';
@@ -99,6 +99,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const videoRef = useRef(null);
   const depthFrameRef = useRef(null);
   const depthUnsubRef = useRef(null);
+  const depthErrorUnsubRef = useRef(null);
   const analysisCanvasRef = useRef(null);
   const micStreamRef = useRef(null);
   const camStreamRef = useRef(null);
@@ -138,6 +139,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const clockTimerRef = useRef(null);
   const heartbeatRef = useRef(null);
   const envUnsubRef = useRef(null);
+  const envErrorUnsubRef = useRef(null);
   const recorderRef = useRef(null);
   const ownTrackRef = useRef(null);
   const frameTrackRef = useRef(null);
@@ -587,7 +589,9 @@ export default function SiegConsole({ gateSave, refundSave }) {
       if (r.current) { clearInterval(r.current); r.current = null; }
     });
     if (envUnsubRef.current) { envUnsubRef.current(); envUnsubRef.current = null; }
+    if (envErrorUnsubRef.current) { envErrorUnsubRef.current(); envErrorUnsubRef.current = null; }
     if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
+    if (depthErrorUnsubRef.current) { depthErrorUnsubRef.current(); depthErrorUnsubRef.current = null; }
     depthFrameRef.current = null;
     stopDepthStream();
     stopSensors();
@@ -668,7 +672,25 @@ export default function SiegConsole({ gateSave, refundSave }) {
   // sensor's own forms rather than scanning the image.
   const startDepthCamera = async () => {
     depthFrameRef.current = null;
-    await startDepthStream(8);
+    // A native depth failure mid-session is reported as a lane failure: the error
+    // banner says what happened, the depth feeds are released, and every other
+    // lane — and the session recording — keeps running.
+    depthErrorUnsubRef.current = onDepthError((failure) => {
+      setAvailability((a) => (a.camera ? { ...a, camera: false } : a));
+      setError(failure?.category === 'permission'
+        ? 'The depth scan stopped — camera access is denied for this app. The other lanes are still running.'
+        : failure?.category === 'unsupported'
+          ? 'The depth scan stopped — this device cannot run a depth scan. The other lanes are still running.'
+          : `The depth scan stopped: ${failure?.message || 'the native depth session ended.'} The other lanes are still running.`);
+      if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
+      stopDepthStream();
+    });
+    try {
+      await startDepthStream(8);
+    } catch (e) {
+      if (depthErrorUnsubRef.current) { depthErrorUnsubRef.current(); depthErrorUnsubRef.current = null; }
+      throw e;
+    }
     depthUnsubRef.current = onDepthFrame((data) => {
       const figures = data.figures || [];
       const image = new Image();
@@ -758,10 +780,16 @@ export default function SiegConsole({ gateSave, refundSave }) {
     if (cameraMode === 'depth' && depthAvailable) {
       try {
         await startDepthCamera();
-      } catch {
+      } catch (e) {
         camOk = false;
         setAvailability((a) => ({ ...a, camera: false }));
-        setError('The depth sensor could not start. Close other camera apps and try again.');
+        setError(e?.category === 'permission'
+          ? 'Camera access is denied — allow it in Settings to use the depth scan. The other lanes can still run.'
+          : e?.category === 'unsupported'
+            ? 'This device cannot run the depth scan — try the contrast method. The other lanes can still run.'
+            : e?.category === 'unavailable'
+              ? 'The depth module did not respond in this build of the app — the other lanes can still run.'
+              : 'The depth sensor could not start. Close other camera apps and try again.');
       }
     } else {
       try {
@@ -818,15 +846,30 @@ export default function SiegConsole({ gateSave, refundSave }) {
       const support = await sensorSupport();
       setAvailability((a) => ({ ...a, magnetometer: support.magnetometer, barometer: support.barometer }));
       if (support.magnetometer || support.barometer) {
-        await startSensors(10);
+        // Both subscriptions go up before the stream starts, so no reading or
+        // native fault can arrive unobserved. A native fault mid-session stops
+        // only this lane; everything else keeps measuring and recording.
         envUnsubRef.current = onSensorReading((r) => {
           const s = latestSensorRef.current;
           if (r?.magnetic && Number.isFinite(r.magnetic.total)) s.magnetic = r.magnetic.total;
           if (Number.isFinite(r?.pressure)) s.pressure = r.pressure;
           s.movement = Number.isFinite(r?.movement) ? r.movement : 0;
         });
+        envErrorUnsubRef.current = onSensorError((failure) => {
+          setAvailability((a) => (a.magnetometer || a.barometer ? { ...a, magnetometer: false, barometer: false } : a));
+          setError(failure?.category === 'permission'
+            ? 'Motion sensor access was denied, so the environmental lane stopped — the other lanes are still running.'
+            : `The environmental sensors reported a fault${failure?.message ? `: ${failure.message}` : ''} — that lane stopped; the other lanes are still running.`);
+          if (envUnsubRef.current) { envUnsubRef.current(); envUnsubRef.current = null; }
+          stopSensors();
+        });
+        await startSensors(10);
       }
-    } catch { /* lane reads as unavailable */ }
+    } catch {
+      // The lane reads as unavailable; take any half-installed subscriptions down.
+      if (envUnsubRef.current) { envUnsubRef.current(); envUnsubRef.current = null; }
+      if (envErrorUnsubRef.current) { envErrorUnsubRef.current(); envErrorUnsubRef.current = null; }
+    }
 
     if (motionOk) window.addEventListener('devicemotion', handleMotion);
 

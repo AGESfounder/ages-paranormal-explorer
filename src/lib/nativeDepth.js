@@ -2,9 +2,13 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 // Bridge to the native depth module (ios/App/App/AgesDepthPlugin.swift).
 //
-// On the web, on Android, and in any app build that predates the module, every
-// call here rejects — the Anomaly Camera reads that as "no depth sensor" and
-// simply does not offer the depth method, so nothing else in the tool changes.
+// The module has to be registered with the native bridge to respond at all: on
+// iOS the app-local AgesBridgeViewController registers it at startup. A rejected
+// isSupported() therefore means "no depth module in this build", which the
+// support result reports as status 'unregistered' — distinct from a connected
+// module answering that the device has no depth sensor, and from a web build
+// that can never have one. The Anomaly Camera only ever offers the depth method
+// on a connected, supported result.
 const AgesDepth = registerPlugin('AgesDepth');
 
 let supportPromise = null;
@@ -12,26 +16,50 @@ let supportPromise = null;
 /**
  * Resolve once per app run whether this device can do a depth scan.
  *
- * @returns {Promise<{ supported: boolean, detail: string }>}
+ * @returns {Promise<{ supported: boolean, detail: string, status: 'web'|'unregistered'|'connected', camera: string }>}
  */
 export function depthSupport() {
   if (!supportPromise) {
     supportPromise = (async () => {
+      if (!Capacitor.isNativePlatform()) return { supported: false, detail: 'Not a device build.', status: 'web', camera: '' };
       try {
-        if (!Capacitor.isNativePlatform()) return { supported: false, detail: 'Not a device build.' };
         const result = await AgesDepth.isSupported();
-        return { supported: !!result?.supported, detail: result?.detail || '' };
+        return {
+          supported: !!result?.supported,
+          detail: result?.detail || '',
+          status: 'connected',
+          camera: result?.camera || '',
+        };
       } catch {
-        return { supported: false, detail: 'No depth module in this build.' };
+        return { supported: false, detail: 'No depth module in this build.', status: 'unregistered', camera: '' };
       }
     })();
   }
   return supportPromise;
 }
 
-/** Start the native depth stream. Frames arrive through onDepthFrame(). */
+/**
+ * Start the native depth stream. Frames arrive through onDepthFrame().
+ *
+ * On failure the thrown error carries the native code, normalised into
+ * categories the UI can act on:
+ *   'depth_unsupported'       — module answered; the device has no depth sensor
+ *   'camera_permission_denied'— the camera permission was refused before
+ *   'plugin_unavailable'      — the module did not answer this call at all
+ * anything else               — a runtime start failure
+ */
 export async function startDepthStream(fps = 8) {
-  await AgesDepth.start({ fps });
+  try {
+    await AgesDepth.start({ fps });
+  } catch (e) {
+    const code = e?.code || 'plugin_unavailable';
+    const category = code === 'camera_permission_denied' ? 'permission'
+      : code === 'depth_unsupported' ? 'unsupported'
+        : code === 'plugin_unavailable' ? 'unavailable' : 'runtime';
+    const err = new Error(e?.message || 'The depth session could not start.');
+    Object.assign(err, { code, category });
+    throw err;
+  }
 }
 
 /** Stop the native depth stream. Safe to call when nothing is running. */
@@ -61,6 +89,25 @@ export async function setDepthDetection(protrusion, minHeight) {
 
 export function onDepthFrame(handler) {
   const handle = AgesDepth.addListener('frame', handler);
+  return () => {
+    Promise.resolve(handle)
+      .then((listener) => listener.remove())
+      .catch(() => {});
+  };
+}
+
+/**
+ * Subscribe to native depth failures. Each payload is { code, category,
+ * message }: category is 'permission' (camera unauthorised), 'unsupported'
+ * (hardware or configuration), or 'runtime' (the ARKit session was running and
+ * then failed). The frame payload and frame event are unchanged. Returns an
+ * unsubscribe function.
+ */
+export function onDepthError(handler) {
+  const handle = AgesDepth.addListener('error', handler);
+  // An absent module rejects the listener promise; the support probe already
+  // reported that state, so the subscription is simply inert there.
+  Promise.resolve(handle).catch(() => {});
   return () => {
     Promise.resolve(handle)
       .then((listener) => listener.remove())
