@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { paidSpeech } from '@/lib/paidAi';
+import { toast } from '@/components/ui/use-toast';
 import { audioAcquire, audioRelease, getMusicSettings } from '@/lib/hauntedAudio';
 import { isNativeToolSpeech, getToolVoices, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
 import { synthesizeCue } from '@/lib/toolCues';
@@ -220,7 +221,7 @@ export default function useGhostVoice() {
     setIsSpeaking(false);
     setIsGenerating(true);
     try {
-      const result = await base44.integrations.Core.GenerateSpeech({
+      const result = await paidSpeech({
         text: sanitizeText(text),
         voice: opts.voice || 'storm',
       });
@@ -280,6 +281,7 @@ export default function useGhostVoice() {
 
       await audio.play();
     } catch (err) {
+      toast({ title: 'Narration unavailable', description: err.message, variant: 'destructive' });
       setIsGenerating(false);
       setIsSpeaking(false);
       stopEerieBackground();

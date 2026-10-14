@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Navigation, Search, Loader2, Clock, DollarSign, MapPin, X, ChevronDown, Sparkles, Volume2, Square } from 'lucide-react';
 import HauntedHouse from './icons/HauntedHouse';
 import { base44 } from '@/api/base44Client';
+import { paidGenerate } from '@/lib/paidAi';
 import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
@@ -148,7 +149,7 @@ export default function HauntedLocations() {
   const [createAccessType, setCreateAccessType] = useState('exterior_interior');
   const navigate = useNavigate();
   const { narrate: rawNarrate, stop, isSpeaking, isGenerating } = useGhostVoice();
-  const { gateManifestation, spendManifestation, gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user } = useEnergyGate();
+  const { gateManifestation, gateNarration, showUpgrade, setShowUpgrade, gateReason, user } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
   const canEnhance = canUseEnhanced(user);
   const { requestAccess: requestNarrationAccess, adGateElement: narrationAdGateEl } = useObserverNarrationGate(user);
@@ -165,7 +166,6 @@ export default function HauntedLocations() {
     if (isSpeaking || isGenerating) { rawNarrate(text, opts); return; }
     if (!gateNarration(text)) return;
     rawNarrate(text, opts);
-    spendNarration(estimateNarrationCost(text));
   };
 
   useEffect(() => {
@@ -367,7 +367,7 @@ export default function HauntedLocations() {
 
     try {
       // First attempt: full prompt with category quotas.
-      const result = await base44.integrations.Core.InvokeLLM({
+      const result = await paidGenerate({
         prompt: `Find real haunted locations and haunted areas within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return at least 10 results (up to 15 if the area is rich in haunted history). AREA TOURS ARE THE PRIMARY CATEGORY — you MUST include at least 3 area tours. An "area" is a city, town, or neighborhood known for MULTIPLE haunted locations within it (e.g. "Haunted Gettysburg", "Ghosts of Savannah", "Haunted New Orleans French Quarter") — these are walking/driving tours that visit several different haunted properties in one local area. Required minimum per category: at least 3 areas, at least 3 properties (single haunted properties with multiple stops/areas on the same site, like an asylum, hotel, or prison), at least 2 cold spots (single haunted locations with only 1-4 stops, like a single haunted house, bridge, or small cemetery), and at least 1 road trip (wider driving routes with stops 5+ miles apart). If you cannot find enough real locations in one category, fill the remaining slots with more area tours. For each result provide: name, type ("cold_spot", "property", "area", or "road_trip"), address (street address for properties/cold spots, or the city name for areas/road trips), city, state (full state name), latitude, longitude (real GPS coordinates — for areas/road trips use the center of the area), overview (2-3 sentences combining the history and documented paranormal activity), hours (hours of operation if restricted, otherwise an empty string), fee (admission cost if any, otherwise an empty string). Only include real, well-known locations with documented paranormal history. Use current web search results to verify each location exists and is accurate.`,
         add_context_from_internet: true,
         model: 'gemini_3_1_pro',
@@ -380,7 +380,7 @@ export default function HauntedLocations() {
       // with category quotas. The retry strips all quotas and just asks for
       // volume, which consistently produces more results. Only 1 credit total.
       if (mapped.length < 8) {
-        const retry = await base44.integrations.Core.InvokeLLM({
+        const retry = await paidGenerate({
           prompt: `List as many real haunted locations as you can find within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). Return at least 12 haunted places — include haunted hotels, cemeteries, historic houses, bridges, battlefields, asylums, theaters, restaurants, bars, parks, and any other real places with documented ghost sightings or paranormal activity. For each: name, type ("cold_spot" for 1-4 stop single locations, "property" for multi-stop single properties, "area" for multi-location neighborhoods/cities, "road_trip" for wide driving routes), address, city, state (full name), latitude, longitude, overview (2-3 sentences of history + paranormal activity), hours (or empty string), fee (or empty string). Use web search to verify each location is real and the coordinates are accurate.`,
           add_context_from_internet: true,
           model: 'gemini_3_1_pro',
@@ -397,7 +397,7 @@ export default function HauntedLocations() {
       const areaCount = mapped.filter(l => l.tourCategory === 'area').length;
       if (areaCount < 4) {
         try {
-          const areaResult = await base44.integrations.Core.InvokeLLM({
+          const areaResult = await paidGenerate({
             prompt: `Find real haunted AREA TOURS within 30 miles of latitude ${lat}, longitude ${lon} (approximately ${label}). An "area" tour is a walking or driving tour that visits SEVERAL DIFFERENT haunted properties in one city, town, or neighborhood — e.g. "Haunted Gettysburg", "Ghosts of Savannah", "Haunted French Quarter", "Spooks of Sleepy Hollow". Each area tour should be in a DIFFERENT city or town within the 30-mile radius. Return at least 5 different area tours. For each: name (a creative haunted tour name for that area), type ("area"), address (the city/town name), city, state (full name), latitude, longitude (center of the city/town), overview (2-3 sentences about the area's haunted history and which properties are included), hours (or empty string), fee (or empty string). Use web search to verify each area is real and has documented paranormal history.`,
             add_context_from_internet: true,
             model: 'gemini_3_1_pro',
@@ -413,7 +413,6 @@ export default function HauntedLocations() {
         } catch (e) {}
       }
 
-      spendManifestation();
       return mapped;
     } catch (e) {
       return [];
@@ -506,7 +505,6 @@ export default function HauntedLocations() {
         loc.createCategory || 'landmark',
         accessType
       );
-      spendManifestation();
       navigate(`/tour/${newTour.id}`);
     } catch (e) {
       console.error('Tour creation failed:', e);

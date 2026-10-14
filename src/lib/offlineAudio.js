@@ -8,9 +8,8 @@
 //   evict Cache API website data under storage pressure, which silently
 //   deleted downloaded narration on device; files in app storage persist.
 
-import { base44 } from '@/api/base44Client';
+import { paidSpeech } from '@/lib/paidAi';
 import { condenseTextsBatch, cacheCondensation, truncateText } from '@/lib/narrationLength';
-import { spendManifestationEnergy } from '@/hooks/useEnergyGate';
 import { isNativeApp } from '@/lib/deviceCapabilities';
 
 const AUDIO_CACHE = 'ages-audio-v1';
@@ -231,9 +230,7 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
         }
       }
     }
-    if (batchEnergySpent > 0) {
-      try { await spendManifestationEnergy(); } catch {}
-    }
+    // Condensation calls settle energy individually; never add a second charge.
   }
 
   if (items.length === 0) {
@@ -264,7 +261,7 @@ export async function generateTourAudio(tour, stops, onProgress, narrationLength
       generatedSegments++;
 
       // Generate TTS
-      const result = await base44.integrations.Core.GenerateSpeech({
+      const result = await paidSpeech({
         text: item.text,
         voice: 'storm',
       });

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Library, MapPin, Play, Square, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle, Camera } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { paidGenerate } from '@/lib/paidAi';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { toast } from '@/components/ui/use-toast';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -92,7 +93,7 @@ async function buildStopTerms(stop, tour) {
   ].filter(Boolean);
   const stopText = textParts.join('\n\n');
   if (stopText.trim().length <= 30) return null;
-  const res = await base44.integrations.Core.InvokeLLM({
+  const res = await paidGenerate({
     prompt: `Analyze the following text from a paranormal tour stop and extract a word bank of terms for a "spirit communication" sweeper tool.
 
 ALL terms must come from the HISTORICAL and PARANORMAL history documented in the text below. Do NOT include generic words, filler, or terms unrelated to this stop's specific history and hauntings.
@@ -149,7 +150,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
 
   const { unlock, attachMicToRecording, boostMicStream, resumeContext, playCue } = useGhostVoice();
-  const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const speakNormal = (word) => {
     femaleBusyRef.current = true;
@@ -293,7 +294,6 @@ export default function LocationTermBank({ gateSave, refundSave }) {
             if (useStopTerms) {
               const result = await buildStopTerms(stop, tour);
               if (result) {
-                spendManifestation();
                 setTerms(result.list);
                 setLocationLabel(result.label);
                 setPhase('ready');
@@ -331,7 +331,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
         }
       } catch {}
 
-      const res = await base44.integrations.Core.InvokeLLM({
+      const res = await paidGenerate({
         prompt: `Generate 60 single-word or short-phrase terms a spirit might "select" for a paranormal investigator standing at latitude ${coords.latitude}, longitude ${coords.longitude}. Identify the nearest city/town and region first.
 
 IMPORTANT CONSTRAINTS:
@@ -358,7 +358,6 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       });
       const list = (res.terms || []).filter(t => t && typeof t === 'string');
       if (list.length === 0) throw new Error('No terms returned');
-      spendManifestation();
       setTerms(list);
       setLocationLabel(res.location || 'your location');
       setPhase('ready');

@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { paidGenerate } from '@/lib/paidAi';
 import { geocodeStopsWithNames } from '@/lib/geocodeStops';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP } from '@/lib/stopContent';
 import { getVerifiedCoordsForStops, applyVerifiedCoords } from '@/lib/reuseVerifiedCoords';
@@ -82,7 +83,7 @@ ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations
 ${BRAND_RULE_STOP}
 Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RULE}`;
 
-  const result = await base44.integrations.Core.InvokeLLM({
+  const result = await paidGenerate({
     prompt,
     response_json_schema: {
       type: 'object',
@@ -323,7 +324,7 @@ Provide:
 ${BRAND_RULE_STOP}
 Output ONLY a valid JSON object with a "stop" property. No markdown fences.`;
 
-  const result = await base44.integrations.Core.InvokeLLM({
+  const result = await paidGenerate({
     prompt,
     response_json_schema: {
       type: 'object',

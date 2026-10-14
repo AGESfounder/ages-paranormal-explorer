@@ -16,7 +16,7 @@ import { getOfflineStop, getOfflineTour } from '@/lib/offlineTours';
 import { getOfflineAudio } from '@/lib/offlineAudio';
 import BePatient from '@/components/BePatient';
 import AdGate from '@/components/AdGate';
-import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
+import { useEnergyGate, checkManifestationGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import { getNarrationLength, truncateText } from '@/lib/narrationLength';
@@ -62,7 +62,7 @@ export default function StopDetail() {
   const [enrichStatus, setEnrichStatus] = useState(null); // null | { state, reason?, message? }
   const [selectedPerson, setSelectedPerson] = useState(null);
   const { isSpeaking, isGenerating, narrate: rawNarrate, stop: stopNarration } = useGhostVoice();
-  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, setGateReason, user, isPaid } = useEnergyGate();
+  const { gateNarration, showUpgrade, setShowUpgrade, gateReason, setGateReason, user, isPaid } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
   const canEnhance = canUseEnhanced(user);
   const { requestAccess: requestNarrationAccess, adGateElement: narrationAdGateEl } = useObserverNarrationGate(user);
@@ -103,7 +103,6 @@ export default function StopDetail() {
     }
     if (!gateNarration(cleanText)) return;
     rawNarrate(cleanText, opts);
-    spendNarration(estimateNarrationCost(cleanText));
   };
 
   const [narrationLength, setNarrationLength] = useState(getNarrationLength());
@@ -241,7 +240,6 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             message: 'Detailed content was generated but could not be saved. Check your connection and reopen this stop.',
           });
         }
-        spendManifestationEnergy();
       } else {
         setEnrichStatus({
           state: needsFull ? 'error' : 'ready',

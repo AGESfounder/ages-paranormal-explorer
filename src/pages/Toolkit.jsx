@@ -192,7 +192,7 @@ export default function Toolkit() {
   const timerRef = useRef(null);
   const scrollRef = useRef(null);
   const { isSpeaking: narrating, isGenerating, narrate: rawNarrate, stop: stopNarration } = useGhostVoice();
-  const { gateNarration, spendNarration, estimateNarrationCost, gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason, setGateReason, user: gateUser } = useEnergyGate();
+  const { gateNarration, gateManifestation, showUpgrade, setShowUpgrade, gateReason, setGateReason, user: gateUser } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(gateUser);
   const canEnhance = canUseEnhanced(gateUser);
   // Observer Device Narration ad gate (Seeker+ bypasses — ad-free).
@@ -222,7 +222,6 @@ export default function Toolkit() {
     if (narrating || isGenerating) { rawNarrate(text, opts); return; }
     if (!gateNarration(text)) return;
     rawNarrate(text, opts);
-    spendNarration(estimateNarrationCost(text));
   };
   // SIEG owns its wake lock. The standalone camera must not compete with a
   // second hidden video; keep its native screen wake lock without that fallback.

@@ -184,10 +184,17 @@ export async function mirrorToRecord(base44, userId, account) {
  * from the record mirror and re-mirroring the result back onto the record.
  */
 export async function loadEnergyAccount(base44, user, entitlement) {
+  // An unavailable ledger must never seed or rewrite a user's balances.
+  if (entitlement.ledgerUnavailable) throw new Error('entitlement_unavailable');
   let account = await readAccount(base44, user.id);
 
   if (!account) {
     const seed = seedBalances(user, entitlement.ceilings);
+    // Stop BEFORE any write when migration would reduce an existing balance.
+    // Leave the original record intact for an evidence-based reconciliation.
+    if (ENERGY_POOLS.some(pool => toCount(user[MIRROR_FIELDS[pool]]) > seed[pool])) {
+      throw new Error('energy_reconciliation_required');
+    }
     account = await base44.asServiceRole.entities.EnergyAccount.create({
       user_id: user.id,
       ...seed,

@@ -9,6 +9,7 @@ import SwipeableTourCard from '../components/SwipeableTourCard';
 import BePatient from '@/components/BePatient';
 import { US_STATES } from '../lib/statesData';
 import { base44 } from '@/api/base44Client';
+import { paidGenerate } from '@/lib/paidAi';
 import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import TourCategoryDialog from '@/components/TourCategoryDialog';
@@ -61,7 +62,7 @@ export default function StateTours() {
     setLoading(true);
     setError('');
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
+      const result = await paidGenerate({
         prompt: `Generate exactly 3 paranormal tours for ${stateName}, USA — the TOP 3 most active haunted locations in the state. Rank them by documented paranormal activity level: #1 is the MOST active/well-known, #2 is the second most active, #3 is the third. Each at a real haunted location. Mix walking, driving, and "mixed" (walking + driving) tours. For mixed tours, walking stops come first in the route, driving stops last. Include:
 - rank: 1, 2, or 3 (1 = most active)
 - title, city, tour_type ("walking", "driving", or "mixed"), tour_category (see below), description (2-3 sentences)
@@ -191,7 +192,7 @@ Use real locations with documented paranormal history only.`,
       const existingCities = tours.map(t => t.city).filter(Boolean);
       const existingTitles = tours.map(t => t.title).filter(Boolean);
       const existingList = [...existingCities, ...existingTitles].filter((v, i, a) => v && a.indexOf(v) === i);
-      const result = await base44.integrations.Core.InvokeLLM({
+      const result = await paidGenerate({
         prompt: `Suggest ONE real haunted area, city, town, or property in ${stateName}, USA that has well-documented paranormal history and is NOT already covered by this list of existing tours and locations: ${existingList.length ? existingList.join(', ') : 'none yet'}. Pick a genuinely different area from any listed — do NOT suggest a location that overlaps with or is near any listed location. Use current web search to verify it is real and has documented paranormal activity.`,
         response_json_schema: {
           type: "object",

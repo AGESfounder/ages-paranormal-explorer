@@ -21,7 +21,7 @@ export default function CustomTourModal({ isOpen, onClose }) {
   const [accessType, setAccessType] = useState('exterior_interior');
   const [specificLocations, setSpecificLocations] = useState('');
   const navigate = useNavigate();
-  const { gateManifestation, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const handleGenerate = async () => {
     const dest = destination.trim();
@@ -46,7 +46,6 @@ export default function CustomTourModal({ isOpen, onClose }) {
       }
       const isShipOrOther = state === 'Ship / Other';
       const newTour = await generateLocationTour(destination, state, undefined, category, accessType, specificLocations, { isAbroad: isShipOrOther });
-      spendManifestation();
       onClose();
       setDestination('');
       setState('');

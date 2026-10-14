@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { paidGenerate } from '@/lib/paidAi';
 import { findExistingTour } from '@/lib/generateTour';
 import { haversineMiles } from '@/lib/deviceCapabilities';
 
@@ -130,7 +131,7 @@ ${ROUTING_RULES}${buildAvoidText(avoidLocations)}`;
 
 async function attemptGeneration(locationContext, category, avoidLocations) {
   try {
-    const result = await base44.integrations.Core.InvokeLLM({
+    const result = await paidGenerate({
       prompt: buildPrompt(locationContext, category, avoidLocations),
       response_json_schema: TOUR_SCHEMA,
       model: 'gemini_3_flash',

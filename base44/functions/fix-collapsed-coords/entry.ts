@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { paidCoordinateSearch } from '../../shared/paidAiRequest.js';
 
 // Inline large-property detection — inlined (not imported from shared module)
 // to ensure the deployed function always uses the latest keyword list.
@@ -672,7 +673,7 @@ Return a JSON object with:
 - source: brief description of where you found the coordinates (only if found)`;
           let definitive = false;
           try {
-            const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
+            const llmResult = await paidCoordinateSearch(base44, user, {
               prompt,
               add_context_from_internet: true,
               model: 'gemini_3_flash',
@@ -1118,7 +1119,7 @@ Return a JSON object with:
 - longitude: (number, only if found)
 - source: brief description of where you found the coordinates (only if found)`;
               try {
-                const llmResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
+                const llmResult = await paidCoordinateSearch(base44, user, {
                   prompt,
                   add_context_from_internet: true,
                   model: 'gemini_3_flash',

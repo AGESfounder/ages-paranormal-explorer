@@ -1,0 +1,82 @@
+{
+  "name": "AiOperation",
+  "type": "object",
+  "description": "Server-owned paid AI receipts. Payload hashes bind request IDs to their input; large results live in private storage. Only backend service-role operations write receipts.",
+  "properties": {
+    "user_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "payload_hash": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "generation",
+        "narration"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "succeeded",
+        "failed"
+      ]
+    },
+    "cost": {
+      "type": "number"
+    },
+    "charge": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "result_uri": {
+      "type": "string"
+    },
+    "failure_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "request_id",
+    "payload_hash",
+    "kind",
+    "status"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "data.user_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

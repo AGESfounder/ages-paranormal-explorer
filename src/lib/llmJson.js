@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { paidGenerate } from '@/lib/paidAi';
 
 // Tolerantly extract a JSON object from an LLM text response:
 // strips markdown fences and, if needed, extracts the first balanced {...}.
@@ -34,6 +34,6 @@ export async function callJson(prompt, { useWeb = true } = {}) {
   const cfg = useWeb
     ? { model: 'gemini_3_flash', add_context_from_internet: true }
     : { model: 'automatic' };
-  const raw = await base44.integrations.Core.InvokeLLM({ prompt, ...cfg });
+  const raw = await paidGenerate({ prompt, ...cfg }, { expectJson: true });
   return extractJson(typeof raw === 'string' ? raw : JSON.stringify(raw));
 }

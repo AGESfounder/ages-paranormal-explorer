@@ -23,7 +23,7 @@ export default function DownloadTourDialog({ tour, stops, open, onClose, onDownl
   const [progress, setProgress] = useState({ completed: 0, total: 0, label: '' });
   const {
     user, isPaid, manEnergy, auraManEnergy, narEnergy, auraNarEnergy,
-    spendNarration, showUpgrade, setShowUpgrade, gateReason, setGateReason,
+    showUpgrade, setShowUpgrade, gateReason, setGateReason,
   } = useEnergyGate();
 
   const thinStopsCount = useMemo(() => countThinStops(stops), [stops]);
@@ -146,11 +146,8 @@ export default function DownloadTourDialog({ tour, stops, open, onClose, onDownl
           setProgress({ completed, total, label: `Generating: ${label}` });
         }, selectedLevel);
 
-        // Spend narration credits (only for newly generated segments)
-        const narrationCredits = audioResult.generatedCredits ?? creditEstimates[selectedLevel].narration;
-        if (narrationCredits > 0) {
-          await spendNarration(narrationCredits);
-        }
+        // Each newly generated segment is authorized and charged on the server.
+        // Cached segments never call the paid operation and are not charged.
 
         if (audioResult.reason) {
           // Cache API unavailable (common in some iOS WKWebView configs) —

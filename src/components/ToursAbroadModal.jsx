@@ -70,7 +70,7 @@ const LOCATION_OPTIONS = [
 
 export default function ToursAbroadModal({ isOpen, onClose }) {
   const navigate = useNavigate();
-  const { gateGeneration, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateGeneration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
   const [destinationName, setDestinationName] = useState('');
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState('');
@@ -116,7 +116,6 @@ export default function ToursAbroadModal({ isOpen, onClose }) {
         specificLocations,
         { isAbroad: true }
       );
-      spendManifestation();
       onClose();
       setDestinationName('');
       setLocation('');

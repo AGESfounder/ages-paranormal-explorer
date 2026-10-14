@@ -16,7 +16,7 @@ import BePatient from '@/components/BePatient';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
 import TourAccessInfo from '@/components/TourAccessInfo';
 import VerificationBadge from '@/components/VerificationBadge';
-import { useEnergyGate, checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
+import { useEnergyGate, checkManifestationGate } from '@/hooks/useEnergyGate';
 import UpgradePrompt from '@/components/UpgradePrompt';
 import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
@@ -215,7 +215,7 @@ export default function TourDetail() {
     toast({ title: 'Offline tour removed', description: 'Saved data cleared from this device.' });
   };
   const { isSpeaking, isGenerating, narrate: rawNarrate } = useGhostVoice();
-  const { gateNarration, spendNarration, estimateNarrationCost, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
+  const { gateNarration, showUpgrade, setShowUpgrade, gateReason, user, isPaid } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(user);
   const canEnhance = canUseEnhanced(user);
   const { requestAccess: requestNarrationAccess, adGateElement: narrationAdGateEl } = useObserverNarrationGate(user);
@@ -253,7 +253,6 @@ export default function TourDetail() {
     }
     if (!gateNarration(cleanText)) return;
     rawNarrate(cleanText, opts);
-    spendNarration(estimateNarrationCost(cleanText));
   };
 
   // Lazily verify existing stops whose GPS coordinates haven't been verified.
@@ -896,7 +895,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         const saved = await base44.entities.TourStop.create({ ...rest, tour_id: tourId, geocoded: !!_geocoded });
         created.push(saved);
       }
-      if (!systemRegen) spendManifestationEnergy();
+      // Generation was already authorized and charged by the server.
 
       // Create parking stop — always create one for walking tours. If the LLM
       // provided parking, geocode its address for accurate on-land coords. If
@@ -1170,7 +1169,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         setAddingStop(false);
         return;
       }
-      spendManifestationEnergy();
       setStopSearchName('');
       // Reload and re-order all stops with the new stop included
       const allStops = await base44.entities.TourStop.filter({ tour_id: tourId });

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { truncateText, getCachedCondensation, cacheCondensation, condenseTextsBatch } from '@/lib/narrationLength';
-import { checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
+import { checkManifestationGate } from '@/hooks/useEnergyGate';
 
 /**
  * Batch-condense multiple texts via LLM into cohesive, self-contained summaries.
@@ -68,7 +68,7 @@ export function useCondensedTexts(textMap, mode) {
           }
           return updated;
         });
-        await spendManifestationEnergy();
+        // The condensation operation already settled its own energy on the server.
       } catch (e) {
         console.error('Batch condensation failed:', e);
       }

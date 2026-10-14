@@ -28,7 +28,9 @@ import {
   APPLE_SUBSCRIPTION_PRODUCTS,
   GOOGLE_SUBSCRIPTION_PRODUCTS,
 } from './base44/shared/revenuecat.js';
-import { readFileSync, execSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { verifyPaidAi } from './verify-paid-ai.mjs';
 import { eventAlreadyApplied, mergeEventIds } from './base44/shared/webhookCommon.ts';
 import {
   planSpend,
@@ -300,6 +302,8 @@ check('the client never writes an energy balance', clientWrites, '');
 const accountSchema = readFileSync('base44/entities/EnergyAccount.jsonc', 'utf8');
 check('energy account writes are admin-only', /"update": \{\s*"user_condition"/.test(accountSchema), true);
 check('energy account reads are owner-scoped', accountSchema.includes('"data.user_id": "{{user.id}}"'), true);
+
+await verifyPaidAi(check);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

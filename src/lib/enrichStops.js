@@ -4,7 +4,7 @@
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { stripConclusionOpeners, BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, STOP_CONTENT_VERSION } from '@/lib/stopContent';
-import { checkManifestationGate, spendManifestationEnergy } from '@/hooks/useEnergyGate';
+import { checkManifestationGate } from '@/hooks/useEnergyGate';
 import { estimateStopTime, estimateTourDuration } from '@/lib/estimateTimes';
 import { ENRICH_BATCH_SIZE, enrichStopBatch } from '@/lib/enrichBatch';
 
@@ -301,8 +301,7 @@ async function runEnrichment(tour, stops, { force }, onProgress) {
 
     // One unit covers the whole batch, so the user pays per pair of stops.
     if (produced) {
-      await spendManifestationEnergy();
-      energySpent++;
+      energySpent++; // Provider calls settle their energy inside the server operation.
     }
   }
 

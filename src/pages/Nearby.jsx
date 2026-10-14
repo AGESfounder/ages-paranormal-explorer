@@ -18,7 +18,7 @@ import UpgradePrompt from '@/components/UpgradePrompt';
 
 export default function Nearby() {
   const navigate = useNavigate();
-  const { gateGeneration, spendManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
+  const { gateGeneration, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
   const { requestLocation: requestGps, trackingOffDialog } = useLocationTrackingGate();
   const [tours, setTours] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +58,6 @@ export default function Nearby() {
       };
       const result = await generateNewNearbyTour(locationContext, originOpts);
       if (result.status === 'created') {
-        spendManifestation();
         setGeneratingRange(null);
         navigate(`/tour/${result.tour.id}`);
       } else {
@@ -110,7 +109,6 @@ export default function Nearby() {
       };
       const result = await generateNewNearbyTour(locationContext, originOpts);
       if (result.status === 'created') {
-        spendManifestation();
         setGeneratingRange(null);
         setZipCode('');
         setZipMode(false);
