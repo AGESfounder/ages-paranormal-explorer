@@ -46,7 +46,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const depthAudioRef = useRef(null);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
-  // The depth method's own two gates (stand-out distance, smallest form), pushed
+  // The depth method's own two gates (stand-out distance, smallest figure), pushed
   // to the native module so a change applies to the next frame.
   const depthDetection = useDepthDetection();
 
@@ -170,7 +170,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   };
 
   // Depth session: the native module supplies the colourised depth image (LiDAR)
-  // and the forms it found. Frames are drawn onto the same canvas the contrast
+  // and the figures it confirmed. Frames are drawn onto the same canvas the contrast
   // method uses, so the recording and the Evidence save are unchanged — and the
   // saved file carries the depth image exactly as it looked on screen.
   const startDepthCamera = async () => {
@@ -444,7 +444,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
           <span className="text-[10px] font-mono text-muted-foreground">
             {active
               ? mode === 'depth'
-                ? `LIVE · ${figureCount} form${figureCount !== 1 ? 's' : ''}${centerDepth ? ` · ${centerDepth.toFixed(1)} m centre` : ''}`
+                ? `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''}${centerDepth ? ` · ${centerDepth.toFixed(1)} m centre` : ''}`
                 : `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''} detected`
               : 'STANDBY'}
           </span>
@@ -478,7 +478,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       <div className="p-2.5 rounded-lg bg-card/30 border border-border/30">
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           {mode === 'depth'
-            ? 'Depth analysis reads the phone\'s depth sensor and outlines solid, figure-sized forms standing out from the background. Anything outlined is physically in the space — the reading is in metres, straight from the sensor. Both gates can be tuned above: how far a form must stand out, and the smallest form counted. Session is recorded — save to your Evidence Journal when done.'
+            ? 'Depth analysis marks human figures only: the phone\'s own body recognition confirms a person-shaped body standing in front of the surface behind it, and only then is it outlined, with the skeleton it found drawn over it. Everything else the sensor sees stays as the room\'s own depth image, so furniture and doorways are never labelled. Both gates can be tuned above: how far a figure must stand out, and the smallest figure counted. The figure needs some light on it; the depth reading itself does not. Session is recorded — save to your Evidence Journal when done.'
             : 'The live camera image is scanned for human-shaped patches of skin-toned colour, and any it finds are outlined. It can only flag what the camera can actually see — no infrared or depth sensing. Session is recorded — save to your Evidence Journal when done.'}
         </p>
       </div>

@@ -381,7 +381,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       if (st.armed && now - st.since >= FIGURE_HOLD_MS && now - st.lastEvent >= FIGURE_RELEASE_MS) {
         st.armed = false;
         st.lastEvent = now;
-        logEvent('figure', `${st.peak} figure-shaped ${st.peak === 1 ? 'form' : 'forms'} in view`, now);
+        logEvent('figure', `${st.peak} figure${st.peak === 1 ? '' : 's'} in view`, now);
       }
     } else {
       st.since = 0;
@@ -680,7 +680,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       // The sensor reports its boxes as fractions of the frame, which is how the
       // composite's overlay reads them.
       figureBoxesRef.current = {
-        boxes: figures.map((f) => ({ x: f.x, y: f.y, w: f.w, h: f.h })),
+        boxes: figures.map((f) => ({ x: f.x, y: f.y, w: f.w, h: f.h, joints: f.joints })),
         width: 1,
         height: 1,
       };

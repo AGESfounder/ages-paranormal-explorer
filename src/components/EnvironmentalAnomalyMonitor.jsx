@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Square, X, Info, Video, Activity, AlertTriangle, Compass, Gauge } from 'lucide-react';
+import { Play, Square, X, Info, Video, Activity, AlertTriangle, Compass, Gauge, Volume2, VolumeX } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -13,6 +13,8 @@ import {
   createEnvironmentTracker, magneticThreshold, pressureThreshold, SENSITIVITY, MOVEMENT_LIMIT,
 } from '@/lib/environmentAnalysis';
 import { drawEnvironmentChart, COMBINED_COLOR } from '@/lib/environmentChart';
+import { CUE_MAGNETIC, CUE_PRESSURE, CUE_COMBINED } from '@/lib/toolCues';
+import { monitorTonesEnabled, setMonitorTonesEnabled } from '@/lib/toolTonePrefs';
 import { toast } from '@/components/ui/use-toast';
 
 // Environmental Anomaly Monitor — a two-channel meter, not a trigger tool.
@@ -46,7 +48,7 @@ function formatDuration(sec) {
 
 export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
-  const { unlock, attachMicToRecording, boostMicStream, resumeContext } = useGhostVoice();
+  const { unlock, attachMicToRecording, boostMicStream, resumeContext, playCue } = useGhostVoice();
 
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
   const [available, setAvailable] = useState(null);
@@ -62,6 +64,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [tonesOn, setTonesOn] = useState(() => monitorTonesEnabled());
 
   const canvasRef = useRef(null);
   const latestRef = useRef(null);
@@ -89,6 +92,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const watchTimerRef = useRef(null);
   const unsubRef = useRef(null);
   const ambienceHeldRef = useRef(false);
+  const tonesRef = useRef(tonesOn);
 
   const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
     canvasRef,
@@ -100,6 +104,23 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   });
 
   useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
+
+  // A departure sounds as it is logged. The cue goes through the same audio bus the
+  // session recording listens to, so a saved session can be read by ear: the tone
+  // marks where the data says the spike was, and how big it was. Always a struck
+  // synthetic tone and never anything voice-like — a beep must not pass for an EVP
+  // when that recording is reviewed later.
+  const soundAlert = (kind, strength) => {
+    if (!tonesRef.current) return;
+    playCue(kind, { strength }).catch(() => {});
+  };
+
+  const toggleTones = () => {
+    const next = !tonesRef.current;
+    tonesRef.current = next;
+    setTonesOn(next);
+    setMonitorTonesEnabled(next);
+  };
 
   // Ask the native module once which of the two sensors this device has.
   useEffect(() => {
@@ -211,6 +232,12 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
           duration: 0,
           time: new Date().toLocaleTimeString(),
         });
+        // The bigger the departure, the bigger the tone. Both channels departing at
+        // once gets the one cue that carries both notes.
+        soundAlert(
+          combined ? CUE_COMBINED : channel === 'magnetic' ? CUE_MAGNETIC : CUE_PRESSURE,
+          Math.min(1, Math.abs(value) / (threshold * 2)),
+        );
         const flash = { channel, combined };
         setAnomaly(flash);
         anomalyRef.current = flash;
@@ -470,6 +497,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
           </ol>
           <p className="text-[10px] text-orange-400 mt-2">Note: Sensor sensitivity and accuracy are dependent upon the user's device/service. Levels are relative departures from the measured baseline, not calibrated measurements.</p>
           <p className="text-[10px] text-muted-foreground/70 mt-1.5">Reads the phone's own magnetic-field sensor and barometer — this tool does not use the camera, the microphone, or any radio. For the traditional handheld EMF meter described in the Equipment Guide, this is the phone's equivalent of that instrument.</p>
+          <p className="text-[10px] text-muted-foreground/70 mt-1.5">Each departure sounds a short struck tone as it is logged — the magnetic channel low and wooden, the pressure channel higher and glassier, both together when the two sensors depart at once — and the tone is captured in the session recording, so a saved session can be read by ear as well as by the log. The switch sits above Stop Session.</p>
         </div>
 
         <div className="p-2.5 rounded-lg bg-card/30 border border-border/30 space-y-1">
@@ -585,6 +613,13 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
             ))}
           </div>
         )}
+
+        <button
+          onClick={toggleTones}
+          className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border font-heading text-[10px] uppercase tracking-wider transition-colors ${tonesOn ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20' : 'bg-card/30 border-border/40 text-muted-foreground hover:border-primary/30'}`}
+        >
+          {tonesOn ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />} Alert tones {tonesOn ? 'on' : 'off'}
+        </button>
 
         <button onClick={stopSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 font-heading text-xs uppercase tracking-wider hover:bg-red-500/20 transition-colors">
           <Square className="w-3.5 h-3.5" /> Stop Session

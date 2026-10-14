@@ -15,7 +15,7 @@ const MODES = [
     id: 'depth',
     label: 'Depth Scan',
     icon: Layers,
-    desc: 'Reads the phone\'s depth sensor — LiDAR where the device carries one, Google\'s AR depth estimation on supported Android phones — and outlines solid, figure-sized forms standing out from the background. Anything outlined is physically in the space, and readings are shown in metres straight from the sensor. Where there is no LiDAR sensor the map builds over the first few seconds: slowly sweep the phone across the room to start it, in reasonable light.',
+    desc: 'Reads the phone\'s depth sensor — LiDAR where the device carries one, Google\'s AR depth estimation on supported Android phones — and marks human figures: the phone\'s own body recognition confirms a person-shaped body standing in front of the surface behind it, and only then is it outlined, with the skeleton it found drawn over it. Everything else the sensor sees stays as the room\'s own depth image, so furniture and doorways are never labelled. The figure needs some light on it; the depth reading itself does not. Where there is no LiDAR sensor the map builds over the first few seconds: slowly sweep the phone across the room to start it.',
   },
 ];
 

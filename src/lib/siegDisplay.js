@@ -16,10 +16,11 @@
 // the white band the tools' additive-colour idea implies.
 
 import { drawSiegAnomalyScan } from '@/components/sieg/anomalyScanDisplay';
+import { drawFigureSkeleton } from '@/lib/figureSkeleton';
 
 export const SIEG_LANES = [
   { id: 'acoustic', label: 'ACOUSTIC', color: '#a3e635', unit: 'dB from baseline' },
-  { id: 'figure', label: 'FIGURE', color: '#33e0ff', unit: 'forms in view' },
+  { id: 'figure', label: 'FIGURE', color: '#33e0ff', unit: 'figures in view' },
   { id: 'vibration', label: 'VIBRATION', color: '#4ade80', unit: 'device disturbance' },
   { id: 'environment', label: 'ENVIRONMENT', color: '#fb923c', unit: 'magnetic + pressure' },
 ];
@@ -128,6 +129,9 @@ export function drawSiegCameraOverlay(ctx, s, fit) {
     ctx.lineWidth = 2;
     boxes.boxes.forEach((b) => {
       ctx.strokeRect(fit.dx + b.x * sx, fit.dy + b.y * sy, b.w * sx, b.h * sy);
+      // A depth figure carries the joints its pose was confirmed on, so the same
+      // skeleton the standalone camera draws is drawn here, in the pane's own fit.
+      if (b.joints) drawFigureSkeleton(ctx, b.joints, ([jx, jy]) => [fit.dx + jx * sx, fit.dy + jy * sy]);
     });
   }
   if (s.calibrating) {

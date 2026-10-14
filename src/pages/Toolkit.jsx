@@ -34,7 +34,7 @@ import { useEvidenceSaveGate } from '@/hooks/useEvidenceSaveGate';
 import { useObserverNarrationGate } from '@/hooks/useObserverNarrationGate';
 import ToolAdGate from '@/components/ToolAdGate';
 import { useToolAdGate } from '@/hooks/useToolAdGate';
-import { TIER_TOOLS as SHARED_TIER_TOOLS, needsToolAdGate, getToolRemaining } from '@/lib/toolAccess';
+import { canAccessTool, needsToolAdGate, getToolRemaining } from '@/lib/toolAccess';
 import { fetchWeatherByCoords as omFetchByCoords, fetchWeatherByLocation as omFetchByLocation } from '@/lib/openMeteo';
 import { getWeatherFlavor } from '@/lib/weatherFlavor';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
@@ -64,7 +64,7 @@ const DEFAULT_TOOLS = [
   { name: 'Safety Protocol', icon: Shield, desc: 'Investigation safety guidelines', type: 'safety' },
 ];
 
-// Tier-based tool access is imported from @/lib/toolAccess as SHARED_TIER_TOOLS.
+// Tier-based tool access is canAccessTool() from @/lib/toolAccess.
 // null = all tools. Mirrors TierToolsComparison.jsx.
 
 // Names a tool used to be saved under in a user's toolkit_order, so renaming a
@@ -117,8 +117,9 @@ export default function Toolkit() {
     // The reserved slot is a placeholder for a future tool — it opens nothing.
     if (tool.placeholder) return;
     if (isAdmin) { setActiveTool(tool); return; }
-    const allowed = SHARED_TIER_TOOLS[userPlan];
-    if (allowed && !allowed.includes(tool.name)) {
+    // canAccessTool fails closed: a plan the app cannot resolve shows the upgrade
+    // prompt rather than unlocking a tool the plan may not include.
+    if (!canAccessTool(userPlan, tool.name)) {
       setGateReason('plan');
       setShowUpgrade(true);
       return;

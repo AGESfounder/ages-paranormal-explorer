@@ -22,10 +22,15 @@
 //               countable by ear.
 //   cymbal    — Term Sweeper: any triggered term (a full crash).
 //   chime     — Alphabet Sweeper: any triggered letter.
+//   magnetic / pressure / combined — Environmental Anomaly Monitor: one departure on
+//               the magnetic channel, one on the pressure channel, or both at once.
 
 export const CUE_XYLOPHONE = 'xylophone';
 export const CUE_CYMBAL = 'cymbal';
 export const CUE_CHIME = 'chime';
+export const CUE_MAGNETIC = 'magnetic';
+export const CUE_PRESSURE = 'pressure';
+export const CUE_COMBINED = 'combined';
 
 const BUS_GAIN = 0.95;
 
@@ -44,6 +49,19 @@ const CRASH_DRIVE = 1.8;
 const CHIME_STEP = 0.17;
 const CHIME_DECAY = 0.5;
 const CHIME_NOTES = [1568, 2094, 2637]; // G6 · C7 · E7
+
+// Environmental Anomaly Monitor cues: one short struck tone per sensor channel,
+// pitched and levelled by how big the departure was — the magnetic channel low and
+// wooden, the pressure channel higher and glassier — and both of them, a beat apart,
+// when the two sensors depart together. Bright, brief and obviously synthetic on
+// purpose: these land inside the session recording, and a beep must never pass for an
+// EVP when that recording is reviewed.
+const SENSOR_TONES = {
+  magnetic: { freq: 1046, rise: 0.22, gain: 0.6, decay: 0.4, partials: [[2, 0.22, 0.5], [3, 0.16, 0.3]] },
+  pressure: { freq: 1760, rise: 0.28, gain: 0.55, decay: 0.55, partials: [[2, 0.16, 0.55]] },
+};
+const COMBINED_GAP = 0.14;
+const SENSOR_SHINE = 3136;
 
 function connect(nodes, node) {
   nodes.forEach((dest) => { try { node.connect(dest); } catch {} });
@@ -111,10 +129,27 @@ function noiseBurst(ctx, dest, { gain, decay, attack = 0.002, at = 0, filter, fl
   src.stop(start + decay + 0.12);
 }
 
+// One sensor tone: the channel's own note, raised and lifted by how large the
+// departure was, so a small departure is a small sound and a large one is
+// unmistakable. Returns how long it lasts in milliseconds.
+function sensorStrike(ctx, bus, kind, strength, at = 0) {
+  const tone = SENSOR_TONES[kind];
+  const s = Math.max(0, Math.min(1, Number.isFinite(strength) ? strength : 0.5));
+  strike(ctx, bus, {
+    freq: tone.freq * (1 + tone.rise * s),
+    gain: tone.gain * (0.75 + 0.25 * s),
+    decay: tone.decay,
+    attack: 0.003,
+    at,
+    partials: tone.partials,
+  });
+  return Math.round((at + tone.decay + 0.2) * 1000);
+}
+
 // Schedules a cue on the given context and returns how long it lasts in
 // milliseconds, so callers can resume the rotation when it has finished.
 // Never throws — a cue that cannot play must not break a running session.
-export function synthesizeCue(ctx, nodes, kind, { rings = 1 } = {}) {
+export function synthesizeCue(ctx, nodes, kind, { rings = 1, strength = 0.5 } = {}) {
   const dests = (Array.isArray(nodes) ? nodes : [nodes]).filter(Boolean);
   if (!ctx || !dests.length) return 0;
 
@@ -138,6 +173,26 @@ export function synthesizeCue(ctx, nodes, kind, { rings = 1 } = {}) {
       out = limiter;
     }
     connect(dests, out);
+
+    if (kind === CUE_MAGNETIC || kind === CUE_PRESSURE) {
+      return sensorStrike(ctx, bus, kind, strength);
+    }
+
+    if (kind === CUE_COMBINED) {
+      // Both channels departing at once is the one event this tool exists to catch,
+      // so it is the only cue that carries both notes — the second a beat behind the
+      // first, under a bright shimmer that sets it apart from either channel alone.
+      sensorStrike(ctx, bus, CUE_MAGNETIC, strength, 0);
+      const ms = sensorStrike(ctx, bus, CUE_PRESSURE, strength, COMBINED_GAP);
+      strike(ctx, bus, {
+        freq: SENSOR_SHINE,
+        gain: 0.22 * (0.75 + 0.25 * Math.max(0, Math.min(1, strength))),
+        decay: 0.5,
+        attack: 0.002,
+        at: COMBINED_GAP,
+      });
+      return ms;
+    }
 
     if (kind === CUE_CYMBAL) {
       // Cymbal crash: a long bright noise wash, two bands of sizzle, and a few
