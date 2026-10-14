@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { withAppleLedger } from '@/lib/appleLedger';
-import {
-  isPaidAccess,
-  canGenerate,
-  getSpendableEnergy,
-  applyManifestationSpend,
-  applyNarrationSpend,
-} from '@/lib/access';
+import { isPaidAccess, canGenerate, getSpendableEnergy } from '@/lib/access';
+
+// A fresh id per spend. The server records the id with the deduction, so a
+// retried request can never spend twice while a new action always gets a new one.
+function newRequestId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 import useAppResumeRefresh from '@/hooks/useAppResumeRefresh';
 
 /**
@@ -93,25 +93,41 @@ export function useEnergyGate() {
     return totalNar >= cost;
   }, [isAdmin, isPaid, totalNar, estimateNarrationCost]);
 
+  // Energy is deducted on the SERVER (spend-energy) and nowhere else: a User
+  // record's custom fields are writable by their own owner, so a balance written
+  // from here could simply be edited to add energy. The server resolves the plan
+  // from the purchase ledger, deducts from the server-owned energy account with a
+  // guarded update (two concurrent requests cannot spend the same unit, and a
+  // balance cannot go below zero), then mirrors the result onto the record this
+  // hook displays.
+  const spendOnServer = useCallback(async (payload) => {
+    try {
+      const res = await base44.functions.invoke('spend-energy', payload);
+      if (res?.data?.ok) {
+        await refreshUser();
+        return true;
+      }
+      // Out of energy, or the plan could not be verified on the server: say which
+      // rather than failing silently, then re-read so the display matches.
+      setGateReason(res?.data?.reason === 'insufficient' ? 'energy' : 'plan');
+      setShowUpgrade(true);
+      await refreshUser();
+      return false;
+    } catch (e) {
+      console.error('Energy spend failed:', e);
+      return false;
+    }
+  }, [refreshUser]);
+
   const spendManifestation = useCallback(async () => {
     if (isAdmin) return; // Admins don't spend energy
-    const { updates, next } = applyManifestationSpend(user);
-    if (Object.keys(updates).length === 0) return;
-    try {
-      await base44.auth.updateMe(updates);
-      setUser(prev => ({ ...prev, ...next }));
-    } catch (e) { console.error('Failed to update manifestation energy:', e); }
-  }, [isAdmin, user]);
+    await spendOnServer({ kind: 'manifestation', request_id: newRequestId() });
+  }, [isAdmin, spendOnServer]);
 
   const spendNarration = useCallback(async (cost) => {
     if (isAdmin) return; // Admins don't spend energy
-    const { updates, next } = applyNarrationSpend(user, cost);
-    if (Object.keys(updates).length === 0) return;
-    try {
-      await base44.auth.updateMe(updates);
-      setUser(prev => ({ ...prev, ...next }));
-    } catch (e) { console.error('Failed to update narration energy:', e); }
-  }, [isAdmin, user]);
+    await spendOnServer({ kind: 'narration', cost, request_id: newRequestId() });
+  }, [isAdmin, spendOnServer]);
 
   // Gate a manifestation (InvokeLLM) action. Returns true if allowed.
   // If blocked, shows the upgrade prompt automatically.
@@ -194,8 +210,11 @@ export async function spendManifestationEnergy() {
   try {
     const user = await base44.auth.me();
     if (user?.role === 'admin') return; // Admins don't spend energy
-    const { updates } = applyManifestationSpend(user);
-    if (Object.keys(updates).length === 0) return;
-    await base44.auth.updateMe(updates);
+    // One unit, deducted server-side — see spendOnServer above for why the client
+    // must never write an energy balance itself.
+    await base44.functions.invoke('spend-energy', {
+      kind: 'manifestation',
+      request_id: newRequestId(),
+    });
   } catch (e) { console.error('Failed to spend manifestation energy:', e); }
 }

@@ -1,12 +1,19 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
-import { getEffectivePlanId } from '../../shared/access.js';
+import { resolveTrustedEntitlement } from '../../shared/entitlement.js';
+import { loadEnergyAccount, setAccountFields } from '../../shared/energy.js';
 
 // Grants 30 seconds of tool use time to an Observer user after they watch a
-// rewarded ad. The server-side tool_banks counter (JSON map on the User entity)
-// tracks remaining + earned-today per tool to prevent localStorage spoofing.
+// rewarded ad.
 //
-// Daily cap: 300s (5 min) earned per tool per day — 10 ad watches max.
-// Only Observer (free) users need ad-gated tool time; Seeker+ is ad-free.
+// The tool-time bank lives on the server-owned energy account (admin-write-only),
+// not on the User record: a record's custom fields are writable by their own
+// owner, so a bank kept there could simply be edited to unlimited time. The user
+// record keeps a display mirror for the UI.
+//
+// Daily cap: 300s (5 min) per tool per day — 10 ad watches max.
+// Only Observer (free) users need ad-gated tool time; Seeker+ is ad-free. The
+// tier is resolved from the purchase ledger, so a forged plan cannot buy ad-free
+// tool time and a real subscriber is never pushed into the ad gate.
 // The tool_banks structure: { "Tool Name": { r: remaining, e: earned_today } }
 // Resets daily via tool_banks_date comparison.
 
@@ -31,13 +38,8 @@ export default async function(req) {
       return Response.json({ error: 'Tool is not ad-gated' }, { status: 400 });
     }
 
-    // Only Observer (free) users need ad-gated tool time. Admins can test.
-    // Resolve through the shared fail-closed helper rather than the raw field:
-    // an unrecognized plan value is never a paid tier, so it resolves to
-    // Observer — the same resolution the client gate uses, so server and client
-    // can never disagree about who sees the ad gate.
-    const planId = getEffectivePlanId(user);
-    if (planId !== 'observer' && user.role !== 'admin') {
+    const entitlement = await resolveTrustedEntitlement(base44, user);
+    if (entitlement.planId !== 'observer' && !entitlement.isAdmin) {
       return Response.json(
         { error: 'Ad-gated tools are only for free (Observer) users' },
         { status: 403 },
@@ -45,17 +47,18 @@ export default async function(req) {
     }
 
     const today = new Date().toISOString().split('T')[0];
+    const account = await loadEnergyAccount(base44, user, entitlement);
 
-    // Parse existing tool_banks (JSON string on User entity)
+    // Parse existing tool_banks (JSON string on the account)
     let banks = {};
     try {
-      banks = user.tool_banks ? JSON.parse(user.tool_banks) : {};
+      banks = account.tool_banks ? JSON.parse(account.tool_banks) : {};
     } catch {
       banks = {};
     }
 
     // Reset all counters if it's a new day
-    if (user.tool_banks_date !== today) {
+    if (account.tool_banks_date !== today) {
       banks = {};
     }
 
@@ -79,7 +82,7 @@ export default async function(req) {
     entry.e += TOOL_AD_DURATION;
     banks[toolName] = entry;
 
-    await base44.asServiceRole.entities.User.update(user.id, {
+    await setAccountFields(base44, account, {
       tool_banks: JSON.stringify(banks),
       tool_banks_date: today,
     });

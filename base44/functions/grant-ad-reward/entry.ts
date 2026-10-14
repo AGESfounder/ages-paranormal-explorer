@@ -4,9 +4,8 @@ import {
   getAdRewardSplit,
   getTodayDateString,
 } from '../../shared/adRewards.js';
-import { isPaidAccess } from '../../shared/access.js';
-import { getEffectivePlanIdWithAppleLedger } from '../../shared/access.js';
-import { APPLE_STORE, getAppleLedgerProduct } from '../../shared/revenuecat.js';
+import { resolveTrustedEntitlement } from '../../shared/entitlement.js';
+import { loadEnergyAccount, grantEnergy, adCountToday } from '../../shared/energy.js';
 
 // Grants energy to a paid user after they watch a rewarded ad.
 // The daily cap (5/day) is enforced server-side to prevent farming.
@@ -22,43 +21,23 @@ export default async function(req) {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Only paid users (or admins) can earn ad rewards.
-    // An ACTIVE App Store recurring subscription on the RevenueCatPurchase
-    // ledger still counts when the generic plan fields hold only an expired
-    // entitlement (e.g. a lapsed Trailblazer that a preserved recurring grant
-    // coexists with). Google/Play rows are ignored by the Apple resolver, so
-    // Android results are unchanged; the ledger lookup only runs (best
-    // effort) when the generic/Google resolution is already not paid.
-    let isPaid = isPaidAccess(user);
-    if (!isPaid) {
-      let appleLedgerRows = [];
-      try {
-        appleLedgerRows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
-          user_id: user.id,
-          store: APPLE_STORE,
-        }) || [];
-      } catch {
-        appleLedgerRows = []; // ledger unavailable → generic fields decide
-      }
-      isPaid = getEffectivePlanIdWithAppleLedger(
-        user,
-        appleLedgerRows,
-        getAppleLedgerProduct,
-      ) !== 'observer';
-    }
-    if (!isPaid) {
+    // Only paid users (or admins) can earn ad rewards. Paid status is resolved
+    // from the purchase ledger with the shared trusted resolver — the user-readable
+    // plan fields are a display mirror that its owner can edit, so they decide
+    // nothing here.
+    const entitlement = await resolveTrustedEntitlement(base44, user);
+    if (!entitlement.isPaid) {
       return Response.json(
         { error: 'Ad rewards are available for paid plans only' },
         { status: 403 }
       );
     }
 
+    // The daily counter lives on the server-owned energy account, not on the user
+    // record: a counter its owner can reset would make the 5/day cap meaningless.
     const today = getTodayDateString();
-    let countToday = user.ad_rewards_count || 0;
-    // Reset counter if it's a new day
-    if (user.ad_rewards_date !== today) {
-      countToday = 0;
-    }
+    const account = await loadEnergyAccount(base44, user, entitlement);
+    const countToday = adCountToday(account, today);
 
     // Enforce daily cap
     if (countToday >= AD_REWARD_DAILY_LIMIT) {
@@ -68,18 +47,17 @@ export default async function(req) {
       );
     }
 
-    // Grant energy to aura (rollover) pool — 80% narration, 20% manifestation
+    // Grant energy to the Aura (rollover) pool — 80% narration, 20% manifestation.
+    // Atomic increments on the account, which also re-writes the record's mirror.
     const split = getAdRewardSplit();
-    const newAuraNar = (user.aura_narration_energy || 0) + split.narration;
-    const newAuraMan = (user.aura_manifestation_energy || 0) + split.manifestation;
     const newCount = countToday + 1;
 
-    await base44.asServiceRole.entities.User.update(user.id, {
-      aura_narration_energy: newAuraNar,
-      aura_manifestation_energy: newAuraMan,
-      ad_rewards_count: newCount,
-      ad_rewards_date: today,
-    });
+    const updated = await grantEnergy(
+      base44,
+      user.id,
+      { aura_narration: split.narration, aura_manifestation: split.manifestation },
+      { ad_count: newCount, ad_date: today },
+    );
 
     console.log('Ad reward granted to user:', user.id, 'count today:', newCount);
 
@@ -87,8 +65,8 @@ export default async function(req) {
       success: true,
       granted: { narration: split.narration, manifestation: split.manifestation },
       remaining: AD_REWARD_DAILY_LIMIT - newCount,
-      aura_narration_energy: newAuraNar,
-      aura_manifestation_energy: newAuraMan,
+      aura_narration_energy: Number(updated?.aura_narration) || 0,
+      aura_manifestation_energy: Number(updated?.aura_manifestation) || 0,
     });
   } catch (error) {
     console.error('grant-ad-reward error:', error.message);

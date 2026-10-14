@@ -133,6 +133,14 @@ function getBaseEffectivePlanId(user, now = new Date()) {
  */
 export function getEffectivePlanId(user, now = new Date()) {
   if (!user) return 'observer';
+  // The server's verified answer wins when the client has it (attached by
+  // withAppleLedger from the get-entitlement function). It is resolved on the
+  // backend from the purchase ledger, so a user who edits their own record's plan
+  // cannot change what the client believes either. Without it — the verification
+  // call failed — the record + ledger rows below decide exactly as before; the
+  // server still decides every spend, so a failed check never grants access.
+  const verified = user.server_entitlement;
+  if (verified && isKnownPlanId(verified.plan_id)) return verified.plan_id;
   if (Array.isArray(user.apple_ledger_rows)) {
     return getEffectivePlanIdWithAppleLedger(
       user,
@@ -244,6 +252,14 @@ export function getEffectivePlan(user, now = new Date()) {
 }
 
 export function getEnergySource(user, now = new Date()) {
+  // With the verified entitlement attached, the provider stores behind the plan
+  // decide which monthly pool is primary — the same answer the server spends by.
+  const verified = user?.server_entitlement;
+  if (verified?.monthly_pools) {
+    if (verified.is_paid && verified.monthly_pools.google) return 'google';
+    if (verified.is_paid && verified.monthly_pools.generic) return 'generic';
+    return 'none';
+  }
   if (isGoogleTrailblazerActive(user, now)) return 'google';
   if (isGenericPlanActive(user, now)) return 'generic';
   return 'none';
@@ -287,8 +303,17 @@ export function getDisplayEnergy(user, now = new Date()) {
 }
 
 export function getSpendableEnergy(user, now = new Date()) {
-  const googleActive = isGoogleTrailblazerActive(user, now);
-  const genericActive = isGenericPlanActive(user, now);
+  // Pool eligibility comes from the verified entitlement when present (a paid
+  // ledger subscription counts even before the record's own fields catch up, and
+  // a forged record's fields count for nothing); the amounts are the record's
+  // server-written mirror of the energy account.
+  const verified = user?.server_entitlement;
+  const googleActive = verified?.monthly_pools
+    ? Boolean(verified.is_paid && verified.monthly_pools.google)
+    : isGoogleTrailblazerActive(user, now);
+  const genericActive = verified?.monthly_pools
+    ? Boolean(verified.is_paid && verified.monthly_pools.generic)
+    : isGenericPlanActive(user, now);
 
   let man = 0;
   let nar = 0;

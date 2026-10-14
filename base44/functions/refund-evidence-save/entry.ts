@@ -1,23 +1,23 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+import { readAccount, mirrorToRecord, planRefund } from '../../shared/energy.js';
 
 // Reverses a charge made by spend-evidence-save when Evidence.create fails.
 //
 // Rule: No successfully created Evidence record = no evidence-save charge.
 //
-// The refund is validated SERVER-SIDE. It reverses the charge this server
-// actually recorded on the user (evidence_save_charge, written by
-// spend-evidence-save in the same update as the charge itself). The `cost` the
-// client sends is NOT the basis of a refund: a client-supplied cost would let
-// any signed-in user mint energy by calling this function with whichever pool
-// they name, having spent nothing at all.
+// The refund is validated SERVER-SIDE against the charge this server recorded on
+// the caller's own energy account (EnergyAccount.save_charge), which is
+// admin-write-only. That is what makes the claim unfakeable:
+//   * the `cost` the client sends is not the basis of anything — a client-supplied
+//     pool would let any signed-in user mint energy by naming one;
+//   * the account row is the caller's own and this request carries no user id, so
+//     another user's charge can never be reached;
+//   * one recorded charge is refundable exactly once — it is cleared in the same
+//     atomic update that pays it back, so a duplicate request finds nothing;
+//   * a charge older than the window is never refunded, so a save that actually
+//     succeeded cannot be claimed back later.
 //
-// One recorded charge is refundable exactly once: the pending record is
-// cleared in the same update that gives the energy back. A charge older than
-// REFUND_WINDOW_MS is never refunded — a save whose Evidence.create failed
-// does so within seconds — so a save that actually succeeded cannot be claimed
-// back later.
-
-const REFUND_WINDOW_MS = 5 * 60 * 1000;
+// Nothing is reported as refunded unless the corresponding update ran.
 
 export default async function(req) {
   try {
@@ -28,62 +28,61 @@ export default async function(req) {
     const body = await req.json().catch(() => ({}));
     const claimed = body?.cost;   // logged for support only — never acted on
 
-    // The server's own record of its last charge is the only refundable thing.
-    const pending = user.evidence_save_charge;
-    if (!pending || typeof pending !== 'object' || typeof pending.cost !== 'string') {
-      console.log('Evidence save refund: no-op — no charge recorded by the server (client claimed:', claimed, ')');
-      return Response.json({ success: true, refunded: false, reason: 'no_charge' });
+    const account = await readAccount(base44, user.id);
+    const decision = planRefund(account);
+
+    if (!decision.ok) {
+      if (account && decision.reason !== 'no_charge') {
+        // Nothing refundable, but a charge record is still sitting there: clear it
+        // so it can never be paid back later.
+        await base44.asServiceRole.entities.EnergyAccount.updateMany(
+          { id: account.id },
+          { $set: { save_charge: null } },
+        );
+      }
+      console.log(
+        'Evidence save refund: no-op —', decision.reason,
+        '(recorded:', decision.cost || 'none', '· client claimed:', claimed, ')',
+      );
+      return Response.json({ success: true, refunded: false, reason: decision.reason });
     }
 
-    const cost = pending.cost;
-    const atMs = Date.parse(pending.at);
-    if (!Number.isFinite(atMs) || Date.now() - atMs > REFUND_WINDOW_MS) {
-      console.log('Evidence save refund: no-op — recorded charge is stale:', cost, pending.at);
-      return Response.json({ success: true, refunded: false, reason: 'stale_charge' });
-    }
-
-    // ── Free daily save: decrement the daily counter ──
-    if (cost === 'free') {
+    if (decision.kind === 'daily_save') {
       const today = new Date().toISOString().split('T')[0];
-      if (user.evidence_save_date !== today) {
-        // Day rolled over — counter already reset, nothing to refund
+      if (account.save_date !== today) {
+        await base44.asServiceRole.entities.EnergyAccount.updateMany(
+          { id: account.id },
+          { $set: { save_charge: null } },
+        );
         console.log('Evidence save refund (free): no-op — day rolled over');
         return Response.json({ success: true, refunded: false, reason: 'day_rollover' });
       }
-      const current = user.evidence_save_count || 0;
-      if (current <= 0) {
-        console.log('Evidence save refund (free): no-op — count already 0');
-        return Response.json({ success: true, refunded: false, reason: 'count_zero' });
-      }
-      const newCount = current - 1;
-      await base44.asServiceRole.entities.User.update(user.id, {
-        evidence_save_count: newCount,
-        evidence_save_charge: null,
-      });
-      console.log('Evidence save refund (free daily):', user.id, `${current} → ${newCount}`);
-      return Response.json({ success: true, refunded: true, cost: 'free', newCount });
+      // Guarded and single-use: the slot goes back and the charge is cleared in the
+      // same atomic update, so it can never be refunded twice.
+      await base44.asServiceRole.entities.EnergyAccount.updateMany(
+        { id: account.id, save_count: { $gt: 0 }, save_charge: { $ne: null } },
+        { $inc: { save_count: -1 }, $set: { save_charge: null } },
+      );
+      const fresh = await readAccount(base44, user.id);
+      await mirrorToRecord(base44, user.id, fresh);
+      console.log('Evidence save refund (free): returned one daily save');
+      return Response.json({ success: true, refunded: true, cost: 'free', reason: 'refunded' });
     }
 
-    // ── Aura pool refund: return the unit to the pool the server charged ──
-    const poolByCost = {
-      aura_save: 'aura_save_energy',
-      aura_narration: 'aura_narration_energy',
-      aura_manifestation: 'aura_manifestation_energy',
-    };
-    const field = poolByCost[cost];
-    if (!field) {
-      // The record is server-written, so this cannot be reached by a caller.
-      console.log('Evidence save refund: no-op — unrecognized recorded charge:', cost);
-      return Response.json({ success: true, refunded: false, reason: 'unknown_charge' });
-    }
-
-    const current = user[field] || 0;
-    await base44.asServiceRole.entities.User.update(user.id, {
-      [field]: current + 1,
-      evidence_save_charge: null,
+    // Aura charge: return exactly the unit that was taken, once.
+    await base44.asServiceRole.entities.EnergyAccount.updateMany(
+      { id: account.id, save_charge: { $ne: null } },
+      { $inc: { [decision.pool]: 1 }, $set: { save_charge: null } },
+    );
+    const fresh = await readAccount(base44, user.id);
+    await mirrorToRecord(base44, user.id, fresh);
+    console.log('Evidence save refund:', user.id, decision.pool, 'returned');
+    return Response.json({
+      success: true,
+      refunded: true,
+      cost: decision.cost,
+      reason: 'refunded',
     });
-    console.log(`Evidence save refund (${cost}):`, user.id, `${current} → ${current + 1}`);
-    return Response.json({ success: true, refunded: true, cost, newEnergy: current + 1 });
   } catch (error) {
     console.error('refund-evidence-save error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });

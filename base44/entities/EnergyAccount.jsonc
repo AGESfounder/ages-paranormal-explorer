@@ -1,0 +1,124 @@
+{
+  "name": "EnergyAccount",
+  "type": "object",
+  "description": "Server-owned energy and usage authority. One row per user. Every balance that gates paid work (monthly narration/manifestation, Google monthly pools, Aura pools), the ad-gated tool-time bank, the daily evidence-save counter, the last evidence-save charge available for refund, and the ad-reward daily counter live HERE rather than on the User record, because a User record's custom fields are writable by their own owner through the platform's user API. Reads are limited to the owner's own row (and admins); writes are admin-only, so the app's backend functions (service role) are the only writers. The User record keeps a display mirror of these fields for the UI; the mirror is never the authority.",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "Base44 user id this account belongs to."
+    },
+    "narration": {
+      "type": "number",
+      "default": 0,
+      "description": "Generic (Apple/Wix) monthly narration energy."
+    },
+    "manifestation": {
+      "type": "number",
+      "default": 0,
+      "description": "Generic (Apple/Wix) monthly manifestation energy."
+    },
+    "google_narration": {
+      "type": "number",
+      "default": 0,
+      "description": "Isolated Google Play Trailblazer monthly narration energy."
+    },
+    "google_manifestation": {
+      "type": "number",
+      "default": 0,
+      "description": "Isolated Google Play Trailblazer monthly manifestation energy."
+    },
+    "aura_narration": {
+      "type": "number",
+      "default": 0,
+      "description": "Rollover Aura narration energy (purchased bundles + rewarded ads)."
+    },
+    "aura_manifestation": {
+      "type": "number",
+      "default": 0,
+      "description": "Rollover Aura manifestation energy (purchased bundles + rewarded ads)."
+    },
+    "aura_save": {
+      "type": "number",
+      "default": 0,
+      "description": "Aura save energy (Seeker/Technician evidence saves)."
+    },
+    "tool_banks": {
+      "type": "string",
+      "description": "JSON map of ad-gated tool time: { \"Tool Name\": { r: remaining, e: earned_today, l: last_heartbeat_ms } }."
+    },
+    "tool_banks_date": {
+      "type": "string",
+      "description": "UTC date the tool_banks counters belong to; a new date resets them."
+    },
+    "save_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Evidence saves made on save_date."
+    },
+    "save_date": {
+      "type": "string",
+      "description": "UTC date the evidence-save counter belongs to."
+    },
+    "save_charge": {
+      "type": "object",
+      "description": "The most recent evidence-save charge this server made, as { cost, at }. The only thing refund-evidence-save may reverse; cleared in the same update that pays it back."
+    },
+    "ad_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Rewarded-ad energy grants made on ad_date (daily cap)."
+    },
+    "ad_date": {
+      "type": "string",
+      "description": "UTC date the ad-reward counter belongs to."
+    },
+    "spend_requests": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Idempotency markers of applied spends. A guarded spend update adds its request id only when it actually applied, which is how a concurrent or retried request is recognised."
+    },
+    "grant_marker": {
+      "type": "string",
+      "description": "The newest purchase-ledger row timestamp this account has already absorbed. A newer ledger row means fresh provider energy landed on the User record mirror, so the mirror is absorbed again (capped by the entitlement ceiling)."
+    },
+    "seeded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this account was first created from the User record mirror."
+    }
+  },
+  "required": [
+    "user_id"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "data.user_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

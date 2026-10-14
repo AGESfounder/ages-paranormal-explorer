@@ -1,11 +1,16 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
-import { getEffectivePlanId } from '../../shared/access.js';
+import { resolveTrustedEntitlement } from '../../shared/entitlement.js';
+import { loadEnergyAccount, setAccountFields } from '../../shared/energy.js';
 
 // Server-authoritative tool-time consumption for Observer ad-gated tools.
 // The client sends a heartbeat every 5 seconds while the tool is open.
 // The server uses its OWN wall clock to compute elapsed time (not the
 // client's report), decrements tool_banks[tool].r, and returns the new
 // remaining value. The client never writes r directly.
+//
+// The bank lives on the server-owned energy account (admin-write-only), so the
+// remaining time cannot be edited from the client; the User record only carries a
+// display mirror. The tier is resolved from the purchase ledger.
 //
 // Always deducts the full elapsed time — NO timeout. This means:
 // - Backgrounding costs the user time (accepted trade-off)
@@ -36,13 +41,8 @@ export default async function(req) {
       return Response.json({ error: 'Tool is not ad-gated' }, { status: 400 });
     }
 
-    // Only Observer (free) users use ad-gated tools. Admins can test.
-    // Resolve through the shared fail-closed helper rather than the raw field:
-    // an unrecognized plan value is never a paid tier, so it resolves to
-    // Observer — the same resolution the client gate uses, so server and client
-    // can never disagree about who sees the ad gate.
-    const planId = getEffectivePlanId(user);
-    if (planId !== 'observer' && user.role !== 'admin') {
+    const entitlement = await resolveTrustedEntitlement(base44, user);
+    if (entitlement.planId !== 'observer' && !entitlement.isAdmin) {
       return Response.json(
         { error: 'Ad-gated tools are only for free (Observer) users' },
         { status: 403 },
@@ -51,17 +51,18 @@ export default async function(req) {
 
     const today = new Date().toISOString().split('T')[0];
     const now = Date.now();
+    const account = await loadEnergyAccount(base44, user, entitlement);
 
-    // Parse existing tool_banks (JSON string on User entity)
+    // Parse existing tool_banks (JSON string on the account)
     let banks = {};
     try {
-      banks = user.tool_banks ? JSON.parse(user.tool_banks) : {};
+      banks = account.tool_banks ? JSON.parse(account.tool_banks) : {};
     } catch {
       banks = {};
     }
 
     // Reset all counters if it's a new day
-    if (user.tool_banks_date !== today) {
+    if (account.tool_banks_date !== today) {
       banks = {};
     }
 
@@ -86,7 +87,7 @@ export default async function(req) {
 
     banks[toolName] = entry;
 
-    await base44.asServiceRole.entities.User.update(user.id, {
+    await setAccountFields(base44, account, {
       tool_banks: JSON.stringify(banks),
       tool_banks_date: today,
     });

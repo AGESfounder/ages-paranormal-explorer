@@ -57,12 +57,36 @@ export async function fetchAppleLedgerRows(userId) {
   }
 }
 
+// Client-only field carrying the SERVER-verified entitlement (plan + balances)
+// from the get-entitlement function. Like the ledger rows it is never posted
+// back to the server — all update paths send explicit field objects.
+export const SERVER_ENTITLEMENT_FIELD = 'server_entitlement';
+
 /**
- * Attach the user's Apple ledger rows to a user record so the ledger-aware
- * helpers in lib/access.js (getEffectivePlanId and everything derived from
- * it) resolve the same effective plan as the backend. Never throws: on any
- * failure the original user object is returned unchanged and resolution
- * falls back to the generic + Google fields only.
+ * Ask the server what it has verified for this account: the effective plan
+ * resolved from the purchase ledger, and the balances held in the server-owned
+ * energy account. Fail-soft: resolves to null when the call fails, in which case
+ * the client falls back to the record's display mirror (the server still decides
+ * every spend).
+ *
+ * @returns {Promise<object | null>}
+ */
+export async function fetchServerEntitlement() {
+  try {
+    const res = await base44.functions.invoke('get-entitlement', {});
+    const data = res?.data;
+    if (!data || data.verified !== true) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Attach the user's Apple ledger rows AND the server-verified entitlement to a
+ * user record, so the helpers in lib/access.js resolve the same effective plan
+ * and balances the backend does. Never throws: on any failure the original user
+ * object is returned unchanged and resolution falls back to the mirror.
  *
  * @param {object | null | undefined} user
  * @returns {Promise<object | null | undefined>}
@@ -70,8 +94,15 @@ export async function fetchAppleLedgerRows(userId) {
 export async function withAppleLedger(user) {
   if (!user?.id) return user;
   try {
-    const rows = await fetchAppleLedgerRows(user.id);
-    return { ...user, [APPLE_LEDGER_ROWS_FIELD]: rows };
+    const [rows, entitlement] = await Promise.all([
+      fetchAppleLedgerRows(user.id),
+      fetchServerEntitlement(),
+    ]);
+    return {
+      ...user,
+      [APPLE_LEDGER_ROWS_FIELD]: rows,
+      [SERVER_ENTITLEMENT_FIELD]: entitlement,
+    };
   } catch {
     return user;
   }

@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
-import { isPaidAccess } from '../../shared/access.js';
+import { resolveTrustedEntitlement } from '../../shared/entitlement.js';
 
 // AdMob rewarded Server-Side Verification (SSV) callback.
 // Google sends an unauthenticated HTTPS GET with a signed query string.
@@ -599,7 +599,9 @@ export default async function (req) {
       });
     }
 
-    const paid = isPaidAccess(user);
+    // Paid status comes from the purchase ledger (trusted resolver), not from the
+    // user-writable plan fields — the same resolution every other paid path uses.
+    const paid = (await resolveTrustedEntitlement(base44, user)).isPaid;
     const processedAt = new Date().toISOString();
     const note = paid
       ? 'Verified SSV audit row only; energy granted via client grant-ad-reward path.'

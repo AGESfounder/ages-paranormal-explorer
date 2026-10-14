@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+import { resetAccount } from '../../shared/energy.js';
 
 // Scheduled tester-access reset. Called every 2 hours (even hours) by the
 // "Tester Access Reset" workflow, and can also be invoked manually by an
@@ -117,6 +118,10 @@ export default async function(req) {
           aura_manifestation_energy: 0,
           aura_save_energy: 0,
         });
+        // Zero the server-owned energy account as well: it is the authority for
+        // balances, tool time and the daily counters, so resetting only the
+        // display mirror would leave a sandbox tester's energy in place.
+        await resetAccount(base44, uid);
         resetCount++;
       } catch (e) {
         console.error('User reset failed for', uid, e?.message || e);
