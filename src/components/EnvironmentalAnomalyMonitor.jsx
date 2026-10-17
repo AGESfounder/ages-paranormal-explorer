@@ -346,6 +346,13 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
       durationRef.current = elapsed;
       setSessionDuration(elapsed);
     }, 1000);
+    // The audio engine was opened on the Start tap, then sat idle through the
+    // 10s calibration. iOS suspends an idle Web Audio context, so the shared
+    // recording destination (created during unlock) can come back degraded —
+    // the room noise in the recording ends up near-silent. Resume the context
+    // (recreating the destination if it was closed) right before the recorder
+    // attaches, so the mic chain is live from the first sample.
+    resumeContext();
     const ok = await startRecording();
     if (ok) {
       recordingRef.current = true;
