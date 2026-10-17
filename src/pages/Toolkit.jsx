@@ -581,6 +581,40 @@ export default function Toolkit() {
           <div className="space-y-2">
             {[
               {
+                name: 'AGES Explorer App',
+                short: 'All-in-One Paranormal Investigation App',
+                detail: `The AGES Explorer App in Ghost Hunting
+
+What Is the AGES Explorer App?
+
+The AGES (Accessible Ghost Exploration Solutions) Explorer App is a self-guided paranormal investigation platform that turns a smartphone into a full ghost-hunting kit. It bundles guided haunted-location tours, an interactive evidence journal, and a rack of sensor- and audio-based investigation tools into one app, so an investigator can run a session, record it, and save the evidence without carrying a bag of separate devices.
+
+What It Contains
+
+• Self-Guided Tours: ranked, location-aware walking and driving tours of haunted sites, each with stop-by-stop history, paranormal lore, and investigation suggestions.
+• Investigation Toolkit: a rack of phone-based tools — anomaly camera, acoustic and term sweepers, vibration communicator, environmental anomaly monitor, and more — each with screen recording and evidence saving.
+• Evidence Journal: a timestamped log of captured audio, video, and notes, with optional GPS location and a community map of shared findings.
+• Energy & Plans: a tiered subscription model (Observer, Seeker, Investigator, Technician) that gates AI narration, custom tour generation, and tool access.
+
+Scientific Theory
+
+The app reads the sensors already built into a modern phone — camera, microphone, accelerometer, gyroscope, magnetometer, barometer — and presents their readings in real time. Each tool measures a physical quantity and reports departures from a measured baseline, so the investigator sees what the device sees, not what expectation suggests.
+
+Paranormal Theory
+
+Investigators use the app to:
+• Run repeatable, recorded sessions at reportedly haunted locations.
+• Correlate multiple sensor readings (EMF, motion, audio, pressure) at the same moment.
+• Build a body of evidence over many visits to the same site.
+
+Best Practices
+• Treat the app as one instrument among several — corroborate with physical equipment.
+• Establish baselines before each session.
+• Save and label evidence immediately so context is preserved.
+• Respect private property and local law at every tour stop.
+• A single reading is never proof — patterns across sessions are stronger.`
+              },
+              {
                 name: 'REM Device',
                 short: 'Radiating Electromagneticity Meters',
                 detail: `REM Devices: Radiating Electromagneticity Meters in Ghost Hunting
@@ -1106,8 +1140,202 @@ Best Practices
 • Record the screen so each captured letter is timestamped.
 • Look for coherent words across a session rather than isolated letters.
 • Treat single letters as suggestive — meaningful spellings are stronger.`
-              },
-            ].map((item, i) => (
+},
+{
+name: 'Audio Recorder',
+short: 'In-App EVP Session Recorder',
+detail: `Audio Recorder (App Tool) in Ghost Hunting
+
+What Is the Audio Recorder?
+
+The in-app Audio Recorder is a phone-based EVP (Electronic Voice Phenomenon) session recorder. It captures audio from the device microphone, timestamps the session, and saves the recording directly to the Evidence Journal with optional GPS location. Unlike a standalone digital voice recorder, it keeps the recording, its location, and its notes in one record.
+
+Scientific Theory
+
+The recorder opens the device microphone and writes a compressed audio file while the session runs. The recording can be played back at increased volume or with noise reduction afterwards to listen for faint voices that were not heard during the session.
+
+Paranormal Theory
+
+Investigators use EVP sessions to:
+• Ask questions and leave silence for responses that may only appear on playback.
+• Capture audio anomalies — whispers, knocks, or voices — with no visible source.
+• Build a timestamped audio log that can be correlated with other readings.
+
+Best Practices
+• Record in the quietest conditions possible; note every known sound source.
+• Speak questions clearly and announce any noise you make (coughs, footsteps).
+• Play back at higher volume and with noise reduction to review.
+• Save the recording to the Evidence Journal immediately with location and notes.
+• A single unclear sound is not evidence — repetition across sessions is stronger.`
+},
+{
+name: 'Environmental Anomaly Monitor',
+short: 'Barometric + Magnetic Field Meter (App Tool)',
+detail: `Environmental Anomaly Monitors in Ghost Hunting
+
+What Is an Environmental Anomaly Monitor?
+
+The in-app Environmental Anomaly Monitor reads two phone sensors at once — the magnetometer and the barometer — and logs departures from a calibrated room baseline. It spends the first ten seconds measuring the room, then plots how far each channel sits above or below that baseline for the rest of the session, and records the screen.
+
+Scientific Theory
+
+• Magnetometer: measures the ambient magnetic field in microtesla. The phone's sensor is sensitive to nearby metal, electronics, and the Earth's field.
+• Barometer: measures atmospheric pressure in hectopascals. Pressure changes slowly with weather and rapidly with doors, HVAC, or altitude changes.
+• The tool calibrates a baseline for each channel, then flags sustained departures — a single blip is not logged; a hold of several samples is.
+
+Paranormal Theory
+
+Some researchers theorize that:
+• Spirit manifestations may produce localized magnetic or pressure disturbances.
+• A simultaneous departure on both channels is stronger than one channel alone.
+• Repeated departures at the same place and time across sessions are notable.
+
+Limitations and False Sources
+• The magnetometer reacts to the phone's own speakers, motors, and any nearby metal or electronics.
+• The barometer reacts to doors opening, HVAC cycling, and weather.
+• A phone held in the hand moves; place it on a stable surface for a clean baseline.
+
+Best Practices
+• Calibrate in silence and leave the room if you can.
+• Place the phone on a stable surface away from vents, appliances, and metal.
+• Note every known environmental source for the session.
+• Correlate departures with other equipment (EMF, audio, temperature).
+• Treat a departure as a marker to investigate, never as proof of what caused it.`
+},
+{
+name: 'SIEG',
+short: 'Septer Inquiry Evidence Gleaner — 7 Tools at Once',
+detail: `SIEG (Septer Inquiry Evidence Gleaner) in Ghost Hunting
+
+What Is SIEG?
+
+SIEG — the Septer Inquiry Evidence Gleaner — is an integrated session tool that runs seven of the rack's tools at once, over one clock, and records the entire screen as a single file. Instead of opening one tool at a time, an investigator starts a SIEG session and lets the acoustic sweeper, term sweeper, alphabet sweeper, yes/no sweeper, vibration communicator, environmental monitor, and anomaly camera all run together for a set duration.
+
+Scientific Theory
+
+SIEG does not add a new sensor; it orchestrates the existing ones. Each lane draws its own trace on a shared console, and a single media recorder captures the whole screen plus the mixed audio, so every channel's reading at any moment is in one timestamped file.
+
+Paranormal Theory
+
+Investigators use SIEG to:
+• Capture simultaneous, correlated readings across many channels at the moment of an event.
+• Avoid the blind spot of running one tool at a time and missing what the others would have shown.
+• Build one recording that can be reviewed lane by lane afterwards.
+
+Best Practices
+• Choose a session length that matches the scenario (a short sweep vs. a long vigil).
+• Place the phone on a stable surface with a clear camera view.
+• Let the baseline settle before expecting meaningful departures.
+• Review the recording lane by lane and correlate departures across channels.
+• A single lane's reading is suggestive; multiple lanes agreeing at the same moment is stronger.`
+},
+{
+name: 'Weather Monitor',
+short: 'Real-Time Local Weather (App Tool)',
+detail: `Weather Monitors in Ghost Hunting
+
+What Is the Weather Monitor?
+
+The in-app Weather Monitor fetches real-time local weather — temperature, wind, humidity, and conditions — for the investigator's current location or a searched city. It is a reference tool: it does not record or detect paranormal activity itself, but it logs the environmental context in which a session takes place.
+
+Scientific Theory
+
+Weather is fetched from a public weather service (Open-Meteo) based on coordinates or a place name. The reading is a snapshot of conditions at the nearest weather station, not a measurement taken on the device.
+
+Paranormal Theory
+
+Some researchers track weather because:
+• Barometric pressure, humidity, and temperature may correlate with reported activity.
+• Thunderstorms and solar activity are sometimes associated with increased reports.
+• Logging weather alongside evidence lets patterns emerge over many sessions.
+
+Best Practices
+• Note the weather at the start of every session.
+• Compare activity across different conditions to look for correlations.
+• Treat weather as context, not cause — a correlation is not proof.
+• Save weather notes with the evidence so the context is preserved.`
+},
+{
+name: 'Moon Phase',
+short: 'Current Moon Phase & Illumination (App Tool)',
+detail: `Moon Phase in Ghost Hunting
+
+What Is the Moon Phase Tool?
+
+The in-app Moon Phase tool shows the current phase of the moon and its illumination percentage. It is a reference tool: it computes the phase from the current date so the investigator knows what the moon is doing during a session.
+
+Scientific Theory
+
+The moon's phase is calculated from the known lunar cycle (about 29.5 days). The tool shows the phase name (new, crescent, quarter, gibbous, full, etc.) and the percentage of the moon's face that is illuminated.
+
+Paranormal Theory
+
+Many investigators track the moon because:
+• A full moon is a long-standing folk association with increased paranormal reports.
+• Lunar phase may correlate with reported activity at some sites.
+• Logging the phase alongside evidence lets patterns emerge over many sessions.
+
+Best Practices
+• Note the moon phase at the start of every session.
+• Compare activity across phases to look for correlations.
+• Treat the phase as context, not cause — a correlation is not proof.
+• Save the phase with the evidence so the context is preserved.`
+},
+{
+name: 'Paranormal Research: Terms',
+short: 'Research Database & Field Manual (App Tool)',
+detail: `Paranormal Research: Terms in Ghost Hunting
+
+What Is the Paranormal Research Database?
+
+The in-app Paranormal Research database is a searchable field manual of paranormal terms, concepts, and investigation methods. It is a reference tool: the investigator looks up a term or method to understand it before or during a session.
+
+What It Contains
+
+• Definitions of common paranormal terms (EVP, EMF, apparition, residual haunting, etc.).
+• Explanations of investigation methods and equipment.
+• A searchable index so a term can be found quickly in the field.
+
+How Investigators Use It
+
+• Look up an unfamiliar term or method during a session.
+• Read up on a technique before trying it.
+• Settle a question about what a reading means without leaving the app.
+
+Best Practices
+• Read the entry for a method before relying on it.
+• Use it to corroborate what a reading does and does not mean.
+• Treat definitions as a starting point, not the final word — field experience matters.`
+},
+{
+name: 'Safety Protocol',
+short: 'Investigation Safety Guidelines (App Tool)',
+detail: `Safety Protocol in Ghost Hunting
+
+What Is the Safety Protocol?
+
+The in-app Safety Protocol is a checklist of investigation safety guidelines. It is a reference tool: it lists the rules an investigator should follow to stay safe during a session.
+
+The Guidelines
+• Always investigate in pairs — never alone.
+• Carry a flashlight with fresh batteries.
+• Inform someone of your location and expected return time.
+• Respect private property and obtain permission.
+• Watch your footing in dark or unfamiliar areas.
+• Stay hydrated and dress for the weather.
+• Trust your instincts — if something feels wrong, leave.
+
+Why It Matters
+
+Ghost hunting often happens at night, in abandoned or unfamiliar buildings, and in uneven terrain. The real hazards are physical — falls, unstable structures, weather, and isolation — not paranormal. The checklist keeps the investigator safe so the session can continue.
+
+Best Practices
+• Review the checklist before every session.
+• Treat each rule as non-negotiable.
+• Keep the phone charged and a flashlight on hand.
+• If a location feels unsafe, leave and return another time.`
+},
+].map((item, i) => (
               <div key={i} className="p-2.5 rounded-lg bg-card/30 border border-border/30">
                 <p className="text-xs font-medium text-foreground">{item.name}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{item.short}</p>
