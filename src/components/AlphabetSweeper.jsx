@@ -429,12 +429,32 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       ctx.fillText('⚠ MOTION DETECTED', w / 2, h - 37);
     }
 
+    // Captured letters band — burned into the canvas so they appear on playback
     ctx.textAlign = 'left';
+    ctx.font = '11px monospace';
+    const durText = 'A → Z · ' + formatDuration(sessionDurRef.current);
+    const durWidth = ctx.measureText(durText).width;
+    const letters = capturedRef.current.join('');
+    if (letters) {
+      ctx.fillStyle = '#22d3ee';
+      ctx.font = 'bold 13px monospace';
+      const maxW = (w - 14) - durWidth - 24;
+      let display = letters;
+      if (ctx.measureText(display).width > maxW) {
+        while (display.length > 1 && ctx.measureText('…' + display).width > maxW) {
+          display = display.slice(1);
+        }
+        display = '…' + display;
+      }
+      ctx.fillText(display, 14, h - 14);
+    } else {
+      ctx.fillStyle = '#64748b';
+      ctx.fillText('CAPTURED: 0', 14, h - 14);
+    }
+    ctx.textAlign = 'right';
     ctx.fillStyle = '#64748b';
     ctx.font = '11px monospace';
-    ctx.fillText('CAPTURED: ' + capturedRef.current.length, 14, h - 14);
-    ctx.textAlign = 'right';
-    ctx.fillText('A → Z · ' + formatDuration(sessionDurRef.current), w - 14, h - 14);
+    ctx.fillText(durText, w - 14, h - 14);
   };
 
   const startDrawing = () => {
