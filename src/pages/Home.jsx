@@ -18,8 +18,6 @@ import { withAppleLedger } from '@/lib/appleLedger';
 const menuItems = [
   { label: 'Favorites', icon: Heart, path: '/favorites', desc: 'Saved Tours' },
   { label: 'Settings', icon: Settings, path: '/settings', desc: 'App Preferences' },
-  { label: 'Investigation Toolkit', icon: Wrench, path: '/toolkit', desc: 'Ghost Hunting Tools' },
-  { label: 'Evidence Journal', icon: BookOpen, path: '/evidence', desc: 'Your Findings' },
   { label: 'Dashboard', icon: Sparkles, path: '/dashboard', desc: 'Subscription & Energy', featured: true },
 ];
 
@@ -258,6 +256,38 @@ export default function Home() {
         )}
 
         <HauntedLocations />
+
+        <motion.div
+          className="w-full max-w-sm px-6 grid grid-cols-2 gap-3 mb-4"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6, duration: 0.4 }}
+        >
+          <Link
+            to="/toolkit"
+            className="flex gap-3 p-4 rounded-xl border border-border/50 bg-card/40 backdrop-blur-sm hover:border-primary/40 hover:bg-card/60 hover:shadow-[0_0_20px_hsl(199,89%,48%,0.08)] transition-all duration-300 group flex-col items-center"
+          >
+            <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <Wrench className="w-6 h-6 text-primary group-hover:drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)] transition-all" />
+            </div>
+            <div className="text-center">
+              <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Investigation Toolkit</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Ghost Hunting Tools</p>
+            </div>
+          </Link>
+          <Link
+            to="/evidence"
+            className="flex gap-3 p-4 rounded-xl border border-border/50 bg-card/40 backdrop-blur-sm hover:border-primary/40 hover:bg-card/60 hover:shadow-[0_0_20px_hsl(199,89%,48%,0.08)] transition-all duration-300 group flex-col items-center"
+          >
+            <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <BookOpen className="w-6 h-6 text-primary group-hover:drop-shadow-[0_0_8px_hsl(199,89%,48%,0.5)] transition-all" />
+            </div>
+            <div className="text-center">
+              <p className="font-heading text-xs font-semibold tracking-wide uppercase text-foreground">Evidence Journal</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Your Findings</p>
+            </div>
+          </Link>
+        </motion.div>
 
         <motion.div
           className="w-full max-w-sm px-6 grid grid-cols-2 gap-3 mb-4"
