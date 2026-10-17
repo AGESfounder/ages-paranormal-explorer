@@ -629,6 +629,18 @@ export default function SiegConsole({ gateSave, refundSave }) {
     }
     phaseRef.current = 'review';
     userStoppedRef.current = true;
+    // Flush a vibration disturbance still in progress when the session ends, so
+    // the last one is never lost — the same finalize the standalone tool does on
+    // stop. Other lanes have already armed/disarmed on their own hold/release
+    // logic and need no end-of-session flush.
+    const ex = excursionRef.current;
+    if (ex) {
+      excursionRef.current = null;
+      const now = Date.now();
+      const secs = Math.max(1, Math.round((now - ex.started) / 1000));
+      const word = ex.peak >= 80 ? 'Strong' : ex.peak >= 50 ? 'Moderate' : 'Minor';
+      logEvent('vibration', `${word} disturbance — peak ${ex.peak} for ${secs}s`, now);
+    }
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       try { recorder.stop(); } catch { releaseOwnTrack(); }
