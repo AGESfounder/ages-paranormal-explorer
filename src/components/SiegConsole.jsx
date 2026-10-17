@@ -59,6 +59,9 @@ const FIGURE_HOLD_MS = 1000;            // a form must stay in view this long
 const FIGURE_RELEASE_MS = 2500;
 const VIBRATION_ENTER = 20;             // the REM tool's "out of the green" level
 const VIBRATION_EXIT = 12;
+const VIBRATION_HOLD_MS = 500;          // disturbance must hold this long to count (matches ENV_HOLD_MS)
+const VIBRATION_RELEASE_MS = 1000;      // level must settle below exit this long to rearm
+const VIBRATION_REARM_COOLDOWN_MS = 2000;
 const ENV_HOLD_MS = 500;
 const ENV_RELEASE_MS = 700;
 const ENV_REARM_COOLDOWN_MS = 2000;
@@ -122,7 +125,11 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const vibBaselineRef = useRef(null);
   const motionSeenRef = useRef(false);
   const motionAnnouncedRef = useRef(false);
-  const excursionRef = useRef(null);
+  // Vibration lane tracker — same hold/release shape as the environmental and
+  // acoustic lanes: armed, since, quietSince, lastEvent, peak. An event fires on
+  // the rise (after VIBRATION_HOLD_MS), not on the fall, so a disturbance charts
+  // an incident the moment it is confirmed — matching the other sensors.
+  const excursionRef = useRef({ armed: true, since: 0, quietSince: 0, lastEvent: 0, peak: 0 });
   const figureRef = useRef({ armed: true, since: 0, quietSince: 0, lastEvent: 0, peak: 0 });
   const figureBoxesRef = useRef(null);
   const acousticRef = useRef({ armed: true, since: 0, quietSince: 0, lastEvent: 0, hold: false });
@@ -432,15 +439,31 @@ export default function SiegConsole({ gateSave, refundSave }) {
     const level = vibrationLevel();
 
     if (phaseRef.current === 'live') {
-      const ex = excursionRef.current;
+      // Hold-and-fire-on-rise, the same model the environmental and acoustic
+      // lanes use: a disturbance charts an incident the moment it is confirmed
+      // (held past VIBRATION_HOLD_MS), not when it later settles. The lane
+      // rearms only after the level settles below VIBRATION_EXIT for
+      // VIBRATION_RELEASE_MS, and a rearm cooldown keeps one disturbance as
+      // one event.
+      const vt = excursionRef.current;
       if (level >= VIBRATION_ENTER) {
-        if (!ex) excursionRef.current = { started: now, peak: level };
-        else ex.peak = Math.max(ex.peak, level);
-      } else if (ex && level <= VIBRATION_EXIT) {
-        excursionRef.current = null;
-        const secs = Math.max(1, Math.round((now - ex.started) / 1000));
-        const word = ex.peak >= 80 ? 'Strong' : ex.peak >= 50 ? 'Moderate' : 'Minor';
-        logEvent('vibration', `${word} disturbance — peak ${ex.peak} for ${secs}s`, now);
+        if (!vt.since) vt.since = now;
+        vt.quietSince = 0;
+        vt.peak = Math.max(vt.peak, level);
+        if (vt.armed && now - vt.since >= VIBRATION_HOLD_MS && now - vt.lastEvent >= VIBRATION_REARM_COOLDOWN_MS) {
+          vt.armed = false;
+          vt.lastEvent = now;
+          const word = vt.peak >= 80 ? 'Strong' : vt.peak >= 50 ? 'Moderate' : 'Minor';
+          logEvent('vibration', `${word} disturbance — peak ${vt.peak}`, now);
+        }
+      } else if (level <= VIBRATION_EXIT) {
+        vt.since = 0;
+        if (!vt.quietSince) vt.quietSince = now;
+        if (now - vt.quietSince >= VIBRATION_RELEASE_MS) {
+          vt.armed = true;
+          vt.quietSince = 0;
+          vt.peak = 0;
+        }
       }
     }
 
@@ -629,18 +652,10 @@ export default function SiegConsole({ gateSave, refundSave }) {
     }
     phaseRef.current = 'review';
     userStoppedRef.current = true;
-    // Flush a vibration disturbance still in progress when the session ends, so
-    // the last one is never lost — the same finalize the standalone tool does on
-    // stop. Other lanes have already armed/disarmed on their own hold/release
-    // logic and need no end-of-session flush.
-    const ex = excursionRef.current;
-    if (ex) {
-      excursionRef.current = null;
-      const now = Date.now();
-      const secs = Math.max(1, Math.round((now - ex.started) / 1000));
-      const word = ex.peak >= 80 ? 'Strong' : ex.peak >= 50 ? 'Moderate' : 'Minor';
-      logEvent('vibration', `${word} disturbance — peak ${ex.peak} for ${secs}s`, now);
-    }
+    // The vibration lane now fires on rise (hold-and-log), like the other
+    // sensors, so a disturbance in progress at session end has already charted
+    // its incident — no end-of-session flush is needed (and none of the other
+    // lanes flush either).
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       try { recorder.stop(); } catch { releaseOwnTrack(); }
@@ -742,7 +757,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     correlationsRef.current = [];
     figureBoxesRef.current = null;
     eventsRef.current = [];
-    excursionRef.current = null;
+    excursionRef.current = { armed: true, since: 0, quietSince: 0, lastEvent: 0, peak: 0 };
     acousticRef.current = { armed: true, since: 0, quietSince: 0, lastEvent: 0, hold: false };
     figureRef.current = { armed: true, since: 0, quietSince: 0, lastEvent: 0, peak: 0 };
     envChannelsRef.current = { magnetic: newEnvChannel(), pressure: newEnvChannel() };
