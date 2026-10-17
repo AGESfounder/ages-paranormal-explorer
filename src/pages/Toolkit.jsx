@@ -191,6 +191,7 @@ export default function Toolkit() {
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const scrollRef = useRef(null);
+  const recordingStartedAtRef = useRef(null);
   const { isSpeaking: narrating, isGenerating, narrate: rawNarrate, stop: stopNarration } = useGhostVoice();
   const { gateNarration, gateManifestation, showUpgrade, setShowUpgrade, gateReason, setGateReason, user: gateUser } = useEnergyGate();
   const { mode: narrationMode, setMode: setNarrationMode } = useNarrationMode(gateUser);
@@ -282,6 +283,7 @@ export default function Toolkit() {
       };
 
       mediaRecorder.start();
+      recordingStartedAtRef.current = new Date();
       setRecording(true);
       setRecordDuration(0);
       setRecordedBlob(null);
@@ -324,6 +326,10 @@ export default function Toolkit() {
       const date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
       const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
       let description = 'Recorded EVP session — ' + formatDuration(recordDuration);
+      const startedAt = recordingStartedAtRef.current;
+      if (startedAt) {
+        description += '\nStarted: ' + startedAt.toLocaleString();
+      }
       if (recorderNotes.trim()) description += '\n\nNotes: ' + recorderNotes.trim();
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSavingRec(false); return; }
