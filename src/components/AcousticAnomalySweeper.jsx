@@ -349,6 +349,9 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
       ctx.font = '11px monospace';
       ctx.textAlign = 'right';
       ctx.fillText('REC ' + formatDuration(durationRef.current), w - 14, 24);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '10px monospace';
+      ctx.fillText(new Date().toLocaleTimeString(), w - 14, 38);
     }
 
     // Chart frame, grid and the baseline the trace is measured against.

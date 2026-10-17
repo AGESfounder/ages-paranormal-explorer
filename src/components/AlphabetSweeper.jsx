@@ -386,6 +386,9 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     ctx.font = '11px monospace';
     ctx.textAlign = 'right';
     ctx.fillText('REC ' + formatDuration(sessionDurRef.current), w - 14, 26);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '10px monospace';
+    ctx.fillText(new Date().toLocaleTimeString(), w - 14, 40);
 
     ctx.textAlign = 'center';
     if (pausedRef.current) {

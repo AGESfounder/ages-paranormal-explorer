@@ -289,6 +289,8 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     ctx.font = '10px monospace';
     ctx.textAlign = 'right';
     ctx.fillText('REC ' + formatDuration(dur), w - 15, 29);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText(new Date().toLocaleTimeString(), w - 15, 43);
 
     // Event log
     ctx.textAlign = 'left';

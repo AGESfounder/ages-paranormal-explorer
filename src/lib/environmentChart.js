@@ -92,6 +92,9 @@ export function drawEnvironmentChart(ctx, canvas, s) {
     ctx.font = '11px monospace';
     ctx.textAlign = 'right';
     ctx.fillText('REC ' + formatDuration(s.duration), w - 14, 24);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '10px monospace';
+    ctx.fillText(new Date().toLocaleTimeString(), w - 14, 38);
     ctx.textAlign = 'left';
   }
 
