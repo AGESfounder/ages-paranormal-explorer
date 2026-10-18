@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Loader2, X } from 'lucide-react';
+import { Camera, Loader2, X, Lock } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { toast } from '@/components/ui/use-toast';
 
@@ -14,13 +14,15 @@ import { toast } from '@/components/ui/use-toast';
  *   onPhotoAdded(photoUrl) so the parent saves just the photo.
  * - Taking a new photo replaces the existing one.
  */
-export default function StopVerificationPhoto({ stop, disabled, onValidateWithPhoto, onValidateOnly, onPhotoAdded }) {
+export default function StopVerificationPhoto({ stop, disabled, isAdmin, onValidateWithPhoto, onValidateOnly, onPhotoAdded }) {
   const [showInstructions, setShowInstructions] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
   const isVerified = stop.user_verified;
   const hasPhoto = !!stop.verification_photo_url;
+  // Once a verified stop has a photo, it's locked — only admins can replace it.
+  const canCapture = !isVerified || !hasPhoto || isAdmin;
 
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
@@ -57,24 +59,33 @@ export default function StopVerificationPhoto({ stop, disabled, onValidateWithPh
         onChange={handleFileSelect}
       />
 
-      <button
-        onClick={() => setShowInstructions(true)}
-        disabled={disabled || uploading}
-        className="w-full flex flex-col items-center gap-1 py-3 rounded-lg bg-primary/15 border border-primary/40 text-primary font-heading text-sm uppercase tracking-wider hover:bg-primary/25 transition-colors disabled:opacity-60"
-      >
-        {uploading ? (
-          <><Loader2 className="w-5 h-5 animate-spin" /> <span>Uploading Photo...</span></>
-        ) : (
-          <><Camera className="w-5 h-5" /> <span>{isVerified ? 'Add Photo' : 'Validate & Add Photo'}</span></>
-        )}
-      </button>
-      <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-        {uploading
-          ? 'Uploading photo...'
-          : isVerified
-            ? 'Take a reference photo from the best vantage point'
-            : 'Point your device at the stop, capture a photo, and mark your GPS location'}
-      </p>
+      {canCapture ? (
+        <>
+          <button
+            onClick={() => setShowInstructions(true)}
+            disabled={disabled || uploading}
+            className="w-full flex flex-col items-center gap-1 py-3 rounded-lg bg-primary/15 border border-primary/40 text-primary font-heading text-sm uppercase tracking-wider hover:bg-primary/25 transition-colors disabled:opacity-60"
+          >
+            {uploading ? (
+              <><Loader2 className="w-5 h-5 animate-spin" /> <span>Uploading Photo...</span></>
+            ) : (
+              <><Camera className="w-5 h-5" /> <span>{isVerified ? 'Add Photo' : 'Validate & Add Photo'}</span></>
+            )}
+          </button>
+          <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+            {uploading
+              ? 'Uploading photo...'
+              : isVerified
+                ? 'Take a reference photo from the best vantage point'
+                : 'Point your device at the stop, capture a photo, and mark your GPS location'}
+          </p>
+        </>
+      ) : (
+        <div className="flex items-center gap-2 py-3 px-3 rounded-lg bg-card/30 border border-border/40">
+          <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+          <p className="text-[10px] text-muted-foreground leading-relaxed">Photo locked — only an admin can replace this stop's reference photo.</p>
+        </div>
+      )}
 
       {showInstructions && (
         <div

@@ -770,6 +770,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             <StopVerificationPhoto
               stop={stop}
               disabled={verifying}
+              isAdmin={isAdmin}
               onValidateWithPhoto={handleMarkVantagePoint}
               onValidateOnly={handleMarkVantagePoint}
               onPhotoAdded={handleAddPhoto}
