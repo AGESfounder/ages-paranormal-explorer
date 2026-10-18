@@ -178,10 +178,15 @@ export default function HauntedLocations() {
   };
 
   const buildLocations = async (lat, lon) => {
-    const [allTours, stops] = await Promise.all([
-      base44.entities.Tour.list('-created_date', 500),
-      base44.entities.TourStop.list('-created_date', 500),
-    ]);
+    // Server-side radius query: returns tours + stops within 32 mi in one
+    // call. A 2-mi buffer over the 30-mi display cutoff ensures boundary stops
+    // are never missing from a cluster, so results are identical to the old
+    // full-table fetch — only the payload and client-side work shrink.
+    const response = await base44.functions.invoke('nearby-tours', {
+      lat, lng: lon, radiusMiles: 32, includeStops: true,
+    });
+    const allTours = response.data.tours || [];
+    const stops = response.data.stops || [];
     const tours = allTours.filter(t => ['landmark', 'area', 'road_trip', 'ship', 'cold_spot'].includes(t.tour_category));
     const tourMap = {};
     tours.forEach(t => { tourMap[t.id] = t; });

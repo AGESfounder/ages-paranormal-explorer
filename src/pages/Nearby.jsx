@@ -168,13 +168,14 @@ export default function Nearby() {
 
   const loadNearby = async () => {
     try {
-      const all = await base44.entities.Tour.list();
-      const withDist = all.map(t => {
-        if (!t.start_latitude || !t.start_longitude) return { ...t, distance: Infinity };
-        const dist = getDistance(coords.lat, coords.lng, t.start_latitude, t.start_longitude);
-        return { ...t, distance: dist };
+      // Server-side radius query: returns only tours within 60 mi (the widest
+      // distance band), with distance precomputed. Tours beyond 60 mi were
+      // never visible in any band, so nothing is lost and the payload stops
+      // growing with the catalog.
+      const response = await base44.functions.invoke('nearby-tours', {
+        lat: coords.lat, lng: coords.lng, radiusMiles: 60,
       });
-      withDist.sort((a, b) => a.distance - b.distance);
+      const withDist = (response.data.tours || []).sort((a, b) => a.distance - b.distance);
       setTours(withDist);
     } catch (err) {
       console.error('loadNearby failed:', err);
