@@ -16,6 +16,8 @@ import { CUE_CHIME } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import { toast } from '@/components/ui/use-toast';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
+import useSweeperSensors from '@/hooks/useSweeperSensors';
+import { drawSweeperBadges } from '@/lib/sweeperBadges';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 // Phonetic spellings so TTS pronounces each letter as a clear letter name
@@ -30,8 +32,6 @@ const LETTER_TEXT = {
 };
 const LETTER_MS = 2000;          // each letter displayed 2 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
-const ACCEL_THRESHOLD = 0.8;
-const ORIENT_THRESHOLD = 6;
 
 function formatDuration(sec) {
   const m = Math.floor(sec / 60);
@@ -51,10 +51,16 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const [sensorError, setSensorError] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
   const [anomalyDetected, setAnomalyDetected] = useState(false);
-  const [motionDetected, setMotionDetected] = useState(false);
   const [paused, setPaused] = useState(false);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
+  // Shared 4-sensor trigger layer (motion, orientation, magnetic, barometric).
+  // triggerLock is assigned to the ref below once defined, so the hook can call
+  // it without a forward-declaration.
+  const triggerLockRef = useRef(null);
+  const sensorFireCountRef = useRef({});
+  const correlatedCountRef = useRef(0);
+  const { start: startSweeperSensors, arm: armSweeperSensors, stop: stopSweeperSensors, sensorStates, sensorStatesRef, getActiveSensors } = useSweeperSensors({ onTrigger: (id) => triggerLockRef.current?.(id), setSensorError });
 
   const { stop: stopVoice, unlock, attachMicToRecording, boostMicStream, resumeContext, playCue } = useGhostVoice();
 
@@ -102,10 +108,6 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const stepRef = useRef(null);
   const drawRef = useRef(null);
   const canvasRef = useRef(null);
-  const motionHandlerRef = useRef(null);
-  const orientHandlerRef = useRef(null);
-  const baselineRef = useRef(9.8);
-  const lastOrientRef = useRef(null);
   const lastTriggerRef = useRef(0);
   const lockedRef = useRef(false);
   const indexRef = useRef(0);
@@ -128,13 +130,11 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const detectCanvasRef = useRef(null);
   const animFrameRef = useRef(null);
   const anomalyTimerRef = useRef(null);
-  const motionTimerRef = useRef(null);
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
   const femaleUrlRef = useRef({});
   const resumeDelayRef = useRef(null);
   const anomalyDetectedRef = useRef(false);
-  const motionDetectedRef = useRef(false);
   const startDelayRef = useRef(null);
   const pausedRef = useRef(false);
   const sessionActiveRef = useRef(false);
@@ -146,7 +146,6 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
   useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
-  useEffect(() => { motionDetectedRef.current = motionDetected; }, [motionDetected]);
 
   // Resume the alphabet from A once the creepy voice has actually started AND
   // finished. We must wait for isGenerating/isSpeaking to go true (speech began)
@@ -195,19 +194,16 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     if (stepRef.current) { clearTimeout(stepRef.current); stepRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
-    if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
+    stopSweeperSensors();
     cleanup();
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
-    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (resumeIntervalRef.current) { clearInterval(resumeIntervalRef.current); resumeIntervalRef.current = null; }
     if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     // Leaving the tool is an implicit session end: hand the phone's audio session
     // back here too, or leaving mid-session leaves the app's own sound quiet.
     releaseToolSpeech();
     releaseAmbience();
-    setMotionDetected(false);
   };
 
   // Self-pacing rotation: each letter's speak is awaited before the next is
@@ -238,10 +234,13 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     scheduleNextLetter();
   };
 
-  const triggerLock = useCallback(() => {
+  const triggerLock = useCallback((sensorId) => {
     const now = Date.now();
     if (lockedRef.current || now - lastTriggerRef.current < TRIGGER_COOLDOWN_MS) return;
     lastTriggerRef.current = now;
+    sensorFireCountRef.current[sensorId] = (sensorFireCountRef.current[sensorId] || 0) + 1;
+    const sensors = getActiveSensors();
+    if (sensors.length > 1) correlatedCountRef.current++;
     const letter = currentLetterRef.current || LETTERS[indexRef.current];
     lockedRef.current = true;
     lockedLetterRef.current = letter;
@@ -265,48 +264,8 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     } else {
       announce();
     }
-  }, [resumeFromLock]);
-
-  const flashMotion = useCallback(() => {
-    setMotionDetected(true);
-    if (motionTimerRef.current) clearTimeout(motionTimerRef.current);
-    motionTimerRef.current = setTimeout(() => setMotionDetected(false), 3000);
-  }, []);
-
-  const requestSensorPermissions = async () => {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-      try {
-        const res = await DeviceMotionEvent.requestPermission();
-        if (res !== 'granted') { setSensorError('Motion sensor permission was denied. Lock-on-trigger needs movement detection — enable Motion & Orientation Access in your browser/Safari settings and reload.'); return false; }
-      } catch { /* desktop works without */ }
-    }
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      try { await DeviceOrientationEvent.requestPermission(); } catch {}
-    }
-    return true;
-  };
-
-  const attachSensorHandlers = () => {
-    const motionHandler = (e) => {
-      const a = e.accelerationIncludingGravity;
-      if (!a) return;
-      const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
-      if (Math.abs(mag - baselineRef.current) > ACCEL_THRESHOLD) { flashMotion(); triggerLock(); }
-      baselineRef.current = baselineRef.current * 0.97 + mag * 0.03;
-    };
-    motionHandlerRef.current = motionHandler;
-    window.addEventListener('devicemotion', motionHandler);
-
-    const orientHandler = (e) => {
-      const cur = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
-      if (lastOrientRef.current == null) { lastOrientRef.current = cur; return; }
-      const lo = lastOrientRef.current;
-      if (Math.abs(cur.a - lo.a) > ORIENT_THRESHOLD || Math.abs(cur.b - lo.b) > ORIENT_THRESHOLD || Math.abs(cur.g - lo.g) > ORIENT_THRESHOLD) { flashMotion(); triggerLock(); }
-      lastOrientRef.current = cur;
-    };
-    orientHandlerRef.current = orientHandler;
-    window.addEventListener('deviceorientation', orientHandler);
-  };
+  }, [resumeFromLock, getActiveSensors]);
+  triggerLockRef.current = triggerLock;
 
   // Camera-based anomaly trigger: runs the same figure detection as the
   // Anomaly Camera. When a humanoid shape is detected, the current letter is
@@ -354,7 +313,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         setAnomalyDetected(true);
         if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
         anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
-        triggerLock();
+        triggerLock('anomaly');
       }
     } catch {}
     animFrameRef.current = requestAnimationFrame(processCameraFrame);
@@ -415,22 +374,13 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     }
 
     // Draw sensor alert badges on the canvas so they appear in the recording
-    if (anomalyDetectedRef.current) {
-      ctx.fillStyle = 'rgba(239,68,68,0.92)';
-      ctx.fillRect(w / 2 - 85, 44, 170, 22);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('⚠ ANOMALY DETECTED', w / 2, 59);
-    }
-    if (motionDetectedRef.current) {
-      ctx.fillStyle = 'rgba(245,158,11,0.92)';
-      ctx.fillRect(w / 2 - 85, h - 52, 170, 22);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('⚠ MOTION DETECTED', w / 2, h - 37);
-    }
+    const ss = sensorStatesRef.current;
+    drawSweeperBadges(ctx, w, h, {
+      anomaly: anomalyDetectedRef.current,
+      motion: ss.motion || ss.orientation,
+      magnetic: ss.magnetic,
+      barometric: ss.barometric,
+    });
 
     // Captured letters band — burned into the canvas so they appear on playback
     ctx.textAlign = 'left';
@@ -475,11 +425,11 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     setError('');
     lockedRef.current = false;
     lockedLetterRef.current = null;
-    baselineRef.current = 9.8;
-    lastOrientRef.current = null;
     lastTriggerRef.current = 0;
     indexRef.current = 0;
     sessionDurRef.current = 0;
+    sensorFireCountRef.current = {};
+    correlatedCountRef.current = 0;
     setSessionDuration(0);
     setPhase('running');
     sessionActiveRef.current = true;
@@ -490,8 +440,9 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     // The directions are spoken next, before the mic prompt, camera and
     // recording — hold the app's music quiet from here.
     holdAmbience();
-    // Request sensor permissions up front (just the permission prompt).
-    await requestSensorPermissions();
+    // Start the sensor layer (permissions + native sensor calibration begins
+    // during the settle pause so magnetic/barometric baselines are ready).
+    await startSweeperSensors();
     startDrawing();
     // Show "Get Ready…" while the directions play. Directions play FIRST,
     // before the mic prompt, camera, or alphabet.
@@ -515,7 +466,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       pausedRef.current = false;
       setPaused(false);
       startStepping();
-      attachSensorHandlers();
+      armSweeperSensors();
       processCameraFrame();
       // Start the session timer only after directions are done and recording
       // has begun, so the REC counter doesn't run during the directions.
@@ -558,18 +509,15 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     if (stepRef.current) { clearTimeout(stepRef.current); stepRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
-    if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
-    if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
+    stopSweeperSensors();
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
-    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (resumeIntervalRef.current) { clearInterval(resumeIntervalRef.current); resumeIntervalRef.current = null; }
     if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     stopRecording();
     setCameraActive(false);
     setAnomalyDetected(false);
-    setMotionDetected(false);
     lockedRef.current = false;
     stopFemaleAudio();
     // End of session, speech stopped: hand the phone's audio session back so the
@@ -602,11 +550,18 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
+      const fireSummary = Object.entries(sensorFireCountRef.current)
+        .filter(([, n]) => n > 0)
+        .map(([s, n]) => `${s}: ${n}`)
+        .join(', ');
+      const triggerLine = fireSummary
+        ? `Triggers — ${fireSummary}${correlatedCountRef.current > 0 ? ` | Correlated locks: ${correlatedCountRef.current}` : ''}. `
+        : '';
       await base44.entities.Evidence.create({
         title: `Alphabet Sweeper — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'alphabet',
-        description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.join('') || 'none'}.`,
+        description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.join('') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (camera).`,
         file_url,
         date,
         time,
@@ -640,7 +595,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary flex items-center gap-1.5"><Info className="w-3 h-3" /> How to Use</p>
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Start Sweep</span>. Letters cycle A → Z, one every 2 seconds, each spoken aloud in your device's narration voice, while the session records.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current letter — it glows bright, the letter finishes speaking, and a brief chime announces it. The camera also watches for anomalies: a detected figure locks the current letter the same way.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or shake locks the current letter — it glows bright, the letter finishes speaking, and a brief chime announces it. The camera also watches for anomalies: a detected figure locks the current letter the same way. The magnetic and barometric sensors also listen for environmental departures from the room's baseline — a sustained shift in the magnetic field or air pressure locks the current letter too. When multiple sensors fire at once, all their badges light up together (a correlated trigger).</li>
             <li>After each letter is locked and the chime sounds, the alphabet restarts from A.</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
@@ -684,11 +639,27 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
               </motion.div>
             </div>
           )}
-          {motionDetected && (
+          {(sensorStates.motion || sensorStates.orientation) && (
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none">
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 className="px-3 py-1 rounded bg-amber-500/90 border border-amber-300/50">
                 <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ MOTION DETECTED</p>
+              </motion.div>
+            </div>
+          )}
+          {sensorStates.barometric && (
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none">
+              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="px-2 py-1 rounded bg-blue-500/90 border border-blue-300/50">
+                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ BAROMETRIC</p>
+              </motion.div>
+            </div>
+          )}
+          {sensorStates.magnetic && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="px-2 py-1 rounded bg-violet-500/90 border border-violet-300/50">
+                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ MAGNETIC</p>
               </motion.div>
             </div>
           )}
@@ -697,7 +668,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         <video ref={camVideoRef} className="hidden" playsInline muted />
         <canvas ref={detectCanvasRef} className="hidden" />
         <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
-          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device — or let the camera catch a figure — to lock a letter
+          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device — or let the camera, magnetic, or barometric sensors trigger — to lock a letter
         </p>
         {paused ? (
           <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
