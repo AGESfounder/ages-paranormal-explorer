@@ -32,12 +32,12 @@ export function drawDepthFrame(ctx, canvas, frame, { figureCount }) {
 
   // Each confirmed figure, in the frame's own 0-1 coordinates: the box, the skeleton
   // the sensor actually found, and the one label this method has earned.
-  (frame?.figures || []).forEach(({ x, y, w: bw, h: bh, joints }) => {
+  // The figure is shown by the body the depth image already draws and the skeleton
+  // over it — no outline rectangle, so the form reads as the body itself rather than
+  // a box around it. The label still marks where a figure was confirmed.
+  (frame?.figures || []).forEach(({ x, y, joints }) => {
     const boxX = dx + x * dw;
     const boxY = dy + y * dh;
-    ctx.strokeStyle = 'rgba(0, 180, 255, 0.8)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(boxX, boxY, bw * dw, bh * dh);
     if (hasSkeleton({ joints })) {
       drawFigureSkeleton(ctx, joints, ([jx, jy]) => [dx + jx * dw, dy + jy * dh]);
     }

@@ -125,12 +125,9 @@ export function drawSiegCameraOverlay(ctx, s, fit) {
   if (fit && boxes?.boxes?.length) {
     const sx = fit.dw / (boxes.width || 320);
     const sy = fit.dh / (boxes.height || 240);
-    ctx.strokeStyle = '#33e0ff';
-    ctx.lineWidth = 2;
+    // No outline rectangle: the form reads as the body the depth image already
+    // draws, with the confirmed skeleton over it — not a box around the figure.
     boxes.boxes.forEach((b) => {
-      ctx.strokeRect(fit.dx + b.x * sx, fit.dy + b.y * sy, b.w * sx, b.h * sy);
-      // A depth figure carries the joints its pose was confirmed on, so the same
-      // skeleton the standalone camera draws is drawn here, in the pane's own fit.
       if (b.joints) drawFigureSkeleton(ctx, b.joints, ([jx, jy]) => [fit.dx + jx * sx, fit.dy + jy * sy]);
     });
   }

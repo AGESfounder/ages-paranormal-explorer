@@ -85,12 +85,11 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     // A joint below this confidence is not reported: a wrong arm is worse than a
     // missing one, and the model finds more than a body ever shows at once.
     private static let jointConfidence: Float = 0.3
-    // Poses are read a few times a second, not on every depth frame — the model is
-    // far heavier than the depth pass, and a body does not change shape at 8 fps.
-    // Between reads the last result is re-reported (see lastBodies), so a figure
-    // stays a figure on every frame instead of blinking in and out.
-    private static let poseInterval: TimeInterval = 0.3
-    private static let poseHold: TimeInterval = 1.0
+    // Poses are read on every depth frame (≈8 fps) so the skeleton follows the
+    // body's movement live. A short hold covers a missed frame without freezing
+    // the skeleton at a stale pose for long.
+    private static let poseInterval: TimeInterval = 0.125
+    private static let poseHold: TimeInterval = 0.25
 
     private var lastPose: TimeInterval = -1
     private var lastBodies: [Body] = []
@@ -460,18 +459,6 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             }
         }
 
-        // The cells a confirmed figure covers are the cells lit in the image, so the
-        // glow in the depth picture is the body the skeleton is drawn on.
-        var lit = [Bool](repeating: false, count: totalCells)
-        for body in figures {
-            guard body.cellMinX <= body.cellMaxX, body.cellMinY <= body.cellMaxY else { continue }
-            for gy in max(0, body.cellMinY)...min(gh - 1, body.cellMaxY) {
-                for gx in max(0, body.cellMinX)...min(gw - 1, body.cellMaxX) {
-                    lit[gy * gw + gx] = true
-                }
-            }
-        }
-
         // ── The colourised depth image, built directly in display space ──
         // Sampled from the sensor's own frame through DisplayTurn, so the picture and
         // the figure coordinates are the same space by construction.
@@ -503,14 +490,6 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
                     r = 6 + t * 54
                     g = 16 + t * 174
                     b = 26 + t * 64
-                }
-                let cell = (y / step) * gw + (x / step)
-                if cell < totalCells && lit[cell] {
-                    // A confirmed figure is lit brighter than its depth alone, so the
-                    // recorded image shows the same body its skeleton marks.
-                    r = 200
-                    g = 255
-                    b = 230
                 }
                 let offset = (oy * outW + ox) * 4
                 pixels[offset] = UInt8(max(0, min(255, r)))
