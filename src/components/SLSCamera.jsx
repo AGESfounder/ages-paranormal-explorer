@@ -136,7 +136,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
       });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
@@ -170,7 +170,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
       });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
