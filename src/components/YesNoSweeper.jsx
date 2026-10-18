@@ -680,7 +680,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
               <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="yesno_sweeper" />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

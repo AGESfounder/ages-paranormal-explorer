@@ -546,7 +546,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
         <div className="space-y-2">
           <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded border border-border/30" style={{ maxHeight: 160 }} />
           <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-          <EvidenceSaveButtons onSave={saveRecording} saving={saving} />
+          <EvidenceSaveButtons onSave={saveRecording} saving={saving} deviceBlob={displayBlob} devicePrefix="anomaly_camera" />
           <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
             <X className="w-3.5 h-3.5" /> Discard
           </button>
