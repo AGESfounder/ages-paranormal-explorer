@@ -1,35 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BarChart3, Waves, ScanFace, Zap, Image, FileText, MapPin, Loader2, ArrowLeft, ClipboardList } from 'lucide-react';
+import { BarChart3, MapPin, Loader2, ArrowLeft, Mic, AudioLines, ScanFace, Activity, Gauge, Crosshair, BookMarked, SpellCheck2, HelpCircle, Image, FileText, Hand } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import PageContainer from '@/components/PageContainer';
 import NavBar from '@/components/NavBar';
 import SectionHeader from '@/components/SectionHeader';
 import { base44 } from '@/api/base44Client';
 import PullToRefresh from '@/components/PullToRefresh';
+import { TOOL_FILTERS, resolveFilterId } from '@/lib/evidenceToolMeta';
 
-const CATEGORIES = [
-  { key: 'EVP', label: 'EVP', icon: Waves, color: '#3b82f6' },
-  { key: 'Anomaly', label: 'Anomaly', icon: ScanFace, color: '#22c55e' },
-  { key: 'Vibration', label: 'Vibration', icon: Zap, color: '#a855f7' },
-  { key: 'Photo', label: 'Photo', icon: Image, color: '#eab308' },
-  { key: 'Note', label: 'Note', icon: FileText, color: '#06b6d4' },
-  { key: 'Other Video', label: 'Other Video', icon: ClipboardList, color: '#64748b' },
-];
+// One lucide icon per tool filter, matching the toolkit tile identities.
+const FILTER_ICONS = {
+  recorder: Mic,
+  audio: AudioLines,
+  sls: ScanFace,
+  rem: Activity,
+  environment: Gauge,
+  sieg: Crosshair,
+  termbank: BookMarked,
+  alphabet: SpellCheck2,
+  yesno: HelpCircle,
+  photo: Image,
+  note: FileText,
+  manual: Hand,
+};
 
-function categorize(ev) {
-  if (ev.type === 'evp') return 'EVP';
-  if (ev.type === 'photo') return 'Photo';
-  if (ev.type === 'note') return 'Note';
-  if (ev.type === 'video') {
-    const t = `${ev.title || ''} ${ev.description || ''}`.toLowerCase();
-    if (/anomaly/.test(t)) return 'Anomaly';
-    if (/vibration/.test(t)) return 'Vibration';
-    return 'Other Video';
-  }
-  return 'Note';
-}
+const CATEGORIES = TOOL_FILTERS.map(f => ({
+  key: f.id,
+  label: f.label,
+  icon: FILTER_ICONS[f.id] || FileText,
+  color: f.color,
+}));
 
 export default function EvidenceDashboard() {
   const [evidence, setEvidence] = useState([]);
@@ -53,7 +55,7 @@ export default function EvidenceDashboard() {
   const byLocation = {};
   evidence.forEach(ev => {
     const loc = (ev.location_name || '').trim() || 'Unspecified Location';
-    const cat = categorize(ev);
+    const cat = resolveFilterId(ev);
     if (!byLocation[loc]) byLocation[loc] = { location: loc, total: 0 };
     byLocation[loc][cat] = (byLocation[loc][cat] || 0) + 1;
     byLocation[loc].total += 1;
@@ -63,7 +65,7 @@ export default function EvidenceDashboard() {
   // Totals per category
   const totals = {};
   evidence.forEach(ev => {
-    const cat = categorize(ev);
+    const cat = resolveFilterId(ev);
     totals[cat] = (totals[cat] || 0) + 1;
   });
 
@@ -135,7 +137,7 @@ export default function EvidenceDashboard() {
                       labelStyle={{ color: 'hsl(210 40% 92%)' }}
                       cursor={{ fill: 'hsl(215 30% 17% / 0.3)' }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <Legend wrapperStyle={{ fontSize: 9, lineHeight: '18px' }} iconSize={8} />
                     {CATEGORIES.map(c => (
                       <Bar key={c.key} dataKey={c.key} stackId="a" fill={c.color} radius={[0, 0, 0, 0]} />
                     ))}
@@ -155,7 +157,7 @@ export default function EvidenceDashboard() {
                     <tr className="bg-card/50 border-b border-border/40">
                       <th className="text-left px-3 py-2 font-heading uppercase tracking-wider text-[10px] text-muted-foreground">Location</th>
                       {CATEGORIES.map(c => (
-                        <th key={c.key} className="text-center px-1.5 py-2 font-heading uppercase tracking-wider text-[10px] text-muted-foreground" title={c.label}>{c.label.slice(0, 4)}</th>
+                        <th key={c.key} className="text-center px-1 py-2 font-heading uppercase tracking-wider text-[9px] text-muted-foreground" title={c.label}>{c.label.slice(0, 3)}</th>
                       ))}
                       <th className="text-center px-2 py-2 font-heading uppercase tracking-wider text-[10px] text-primary">Total</th>
                     </tr>
