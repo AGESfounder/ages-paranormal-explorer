@@ -29,7 +29,7 @@ import ValidateTourCard from '@/components/ValidateTourCard';
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
-import { stripConclusionOpeners, stripStopConclusion, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
+import { stripConclusionOpeners, stripStopConclusion, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
 import { regenerateTourContent } from '@/lib/enrichStops';
 import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
@@ -794,7 +794,7 @@ Include these fields in the parking object:
 - parking_longitude: GPS longitude of the parking spot
 For driving-only tours (no walking cluster), omit the parking object.
 
-Output ONLY a valid JSON object with a "stops" array and optional "parking" object. No markdown fences, no commentary.${CONCLUSION_PHRASE_RULE}`;
+Output ONLY a valid JSON object with a "stops" array and optional "parking" object. No markdown fences, no commentary.${CONCLUSION_PHRASE_RULE}${ADDRESS_RULE}`;
 
       let result = null;
       try {

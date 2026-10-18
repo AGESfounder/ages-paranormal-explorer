@@ -12,7 +12,7 @@
 // re-runs those stops one at a time. A failed batch costs extra calls, never
 // wrong content.
 import { callJson, extractJson } from '@/lib/llmJson';
-import { BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
+import { BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, ADDRESS_RULE } from '@/lib/stopContent';
 
 export const ENRICH_BATCH_SIZE = 2;
 const THIN_THRESHOLD = 600;
@@ -88,7 +88,7 @@ For EACH stop above, produce:
 - people: array of { name, story } covering EVERY notable person mentioned in THAT stop's two text fields. "name" MUST appear verbatim (same spelling/casing) in that stop's text so it can be highlighted. "story": 4-6 detailed sentences — who they were, their role, fate (how they died if relevant), and their paranormal connection.
 
 Each stop is a tour stop — do NOT include any conclusion, wrap-up, or ending statements. The tour has a dedicated Conclusion field for all closing remarks.
-${BRAND_RULE_STOP}${CONCLUSION_PHRASE_RULE}
+${BRAND_RULE_STOP}${CONCLUSION_PHRASE_RULE}${ADDRESS_RULE}
 Return ONE JSON object in exactly this shape, with one entry per stop in the same order and "index" matching the STOP number above:
 { "stops": [ { "index": 0, "historical_info": "...", "paranormal_info": "...", "people": [ { "name": "...", "story": "..." } ] } ] }
 Output ONLY valid JSON. No markdown fences, no commentary.`;

@@ -3,7 +3,7 @@
 // offline users only see the 2-3 sentence skeleton summaries.
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
-import { stripConclusionOpeners, BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, STOP_CONTENT_VERSION } from '@/lib/stopContent';
+import { stripConclusionOpeners, BRAND_RULE_STOP, CONCLUSION_PHRASE_RULE, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
 import { checkManifestationGate } from '@/hooks/useEnergyGate';
 import { estimateStopTime, estimateTourDuration } from '@/lib/estimateTimes';
 import { ENRICH_BATCH_SIZE, enrichStopBatch } from '@/lib/enrichBatch';
@@ -50,6 +50,7 @@ REWRITE INSTRUCTIONS — FOLLOW EXACTLY:
 3. Start with a sentence about "${stop.name}" specifically, not about the property.
 4. If most of the content is general property history with little stop-specific detail, keep whatever stop-specific details exist and expand on them to fill 3-4 paragraphs.
 5. Do not add new historical facts — just remove the redundant property history and keep/expand the stop-specific content.
+6. Remove any street addresses, street numbers, or specific address lines from the text. The stop's official address is displayed separately and may differ from addresses mentioned in the text. You may keep references to the general area, neighborhood, city, or region.
 
 Return JSON: { "historical_info": "...", "paranormal_info": "..." }
 Output ONLY valid JSON. No markdown fences.`;
@@ -147,7 +148,7 @@ Produce a JSON object with:
 - historical_info: 3-4 DETAILED paragraphs covering the history SPECIFIC TO THIS STOP${histRule}. Include specific dates, full names, and documented events. Do not merely mention people — explain who they were, what happened to them, and why it matters. Every paragraph must be about THIS stop, not the property as a whole.
 - paranormal_info: 3-4 DETAILED paragraphs covering specific ghost sightings (with dates and eyewitness names when known), EVP recordings and their content, apparition descriptions (clothing, behavior, exact location), shadow figures, cold spots, poltergeist activity, residual vs intelligent hauntings, and local folklore${paraRuleSuffix}. Include investigator testimonies and well-known paranormal events. Tell full ghost stories, not just names. Every paragraph must be about paranormal activity in THIS specific stop, not the property in general.
 - people: array of { name, story }. Include EVERY notable person mentioned in historical_info or paranormal_info. "name" MUST appear verbatim (same spelling/casing) in the text so it can be highlighted. "story": 4-6 detailed sentences — who they were, their role, fate (how they died if relevant), and their paranormal connection (sightings, apparitions, EVPs, phenomena).
-${BRAND_RULE_STOP}${CONCLUSION_PHRASE_RULE}
+${BRAND_RULE_STOP}${CONCLUSION_PHRASE_RULE}${ADDRESS_RULE}
 Use real history and paranormal lore for this location. Output ONLY a valid JSON object. No markdown fences, no commentary.`;
     let data = null;
     try { data = await callJson(prompt, { useWeb: true }); } catch (e) { console.error('Enrich (web) failed:', e); }

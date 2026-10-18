@@ -178,10 +178,15 @@ export const BRAND_RULE_TOUR = `\nBRAND RULE: The app is branded AGES, which sta
 // Conclusion field is the ONLY place closing statements belong.
 export const CONCLUSION_PHRASE_RULE = `\nCONCLUSION PHRASE RULE — FOLLOW EXACTLY: Do NOT include ANY conclusion, wrap-up, or ending statements in ANY stop's narration_text, paranormal_info, or historical_info — not even the last stop. The tour has a dedicated Conclusion field where all closing remarks belong. This means: no "as we end our tour", no "we conclude", no "final stop", no "last stop", no "finish", no "wrapping up", no "to conclude", no "in conclusion", no "bringing our investigation to a close", no "our tour ends here", no "as we wrap up", and no similar phrasing ANYWHERE in the text — beginning, middle, or end. Each stop must focus ENTIRELY on its own haunted history and paranormal activity as if it is a standalone story. The tour's Conclusion field handles all wrap-up language.`;
 
+// Address rule for stop/tour content. The stop's official address is shown
+// separately — LLM-generated addresses often differ from the geocoded address
+// and confuse visitors who try to match them.
+export const ADDRESS_RULE = `\nADDRESS RULE — FOLLOW EXACTLY: Do NOT include street addresses, street numbers, or specific address lines (e.g. "123 Main Street", "at the corner of X and Y") in narration_text, paranormal_info, historical_info, introduction, or conclusion. The stop's official address is displayed separately to the user and may differ from addresses that appear in historical records. Including conflicting addresses confuses visitors who try to match them. You may reference the general area, neighborhood, city, or region, but NEVER a specific street address, street number, or intersection.`;
+
 // Version of the stop-content enrichment prompt. Bump when the prompt rules
 // change (e.g. the stop-focus directive that prevents repeating tour-level
 // history in every stop). Tours with content_version < STOP_CONTENT_VERSION
 // are auto-regenerated with the improved prompt when a paid user or admin
 // opens them (one-time, at their energy expense). Once stamped, the tour's
 // stops are permanently upgraded for all users.
-export const STOP_CONTENT_VERSION = 3;
+export const STOP_CONTENT_VERSION = 4;

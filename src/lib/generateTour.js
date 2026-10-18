@@ -1,7 +1,7 @@
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { US_STATES } from '@/lib/statesData';
-import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_TOUR, STOP_CONTENT_VERSION } from '@/lib/stopContent';
+import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_TOUR, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
 import { enforceWalkingDistance } from '@/lib/routeOptimizer';
 import { getVerifiedCoordsForStops, applyVerifiedCoords } from '@/lib/reuseVerifiedCoords';
 
@@ -243,7 +243,7 @@ ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations
 
 ${BRAND_RULE_TOUR}
 ${specificLocationsText}${existingStopsText}
-Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_PHRASE_RULE}${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a COLD SPOT tour, every stop uses these same coordinates (areas within one site). For a PROPERTY tour, use these as a reference but look up the ACTUAL distinct coordinates for each specific area/building within the property — each stop must reflect its real location within the site. For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
+Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_PHRASE_RULE}${ADDRESS_RULE}${useCoords ? `\n\nCOORDINATES HINT: The searched point is latitude ${coords.lat}, longitude ${coords.lng}. Use these for start_latitude/start_longitude. For a COLD SPOT tour, every stop uses these same coordinates (areas within one site). For a PROPERTY tour, use these as a reference but look up the ACTUAL distinct coordinates for each specific area/building within the property — each stop must reflect its real location within the site. For AREA or ROAD TRIP tours, place each stop at its OWN real coordinates within ~30 miles of this point, spread across the area.` : ''}`;
 
   // Coerce LLM output into the exact types/enums the schema expects. The LLM
   // often returns capitalized enums ("Moderate", "Walking") or tags as a string,
