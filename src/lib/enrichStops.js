@@ -10,6 +10,13 @@ import { ENRICH_BATCH_SIZE, enrichStopBatch } from '@/lib/enrichBatch';
 
 const THIN_THRESHOLD = 600;
 
+// Module-level guard: prevents duplicate regeneration when the user navigates
+// away and back before the DB stamp (content_version) lands. The stamp is
+// written at the START of the job, but the write is async — this closes the
+// small race window where a second mount reads the old DB value and fires a
+// second round that re-charges the user's manifestation energy.
+const activeRegenerations = new Set();
+
 // Second-pass LLM rewrite: takes generated content and removes general
 // property history, keeping only what's specific to this stop. The LLM is
 // much better at EDITING existing content to remove redundancy than at
@@ -338,14 +345,27 @@ export async function enrichTourStops(tour, stops, onProgress) {
 // preserved. Calls onProgress(completed, total, stopName) as each stop is
 // processed. Returns { enrichedStops, energySpent }.
 export async function regenerateTourContent(tour, stops, onProgress) {
-  const { enrichedStops, energySpent } = await runEnrichment(tour, stops, { force: true }, onProgress);
-
-  // Stamp the tour with the current content version.
-  try {
-    await base44.entities.Tour.update(tour.id, { content_version: STOP_CONTENT_VERSION });
-  } catch (e) {
-    console.error('Failed to stamp content_version:', e);
+  if (activeRegenerations.has(tour.id)) {
+    // Already running from a prior mount — return the stops unchanged so the
+    // caller's .then() doesn't crash. The first run persists enriched stops
+    // to the DB as it goes; a later visit picks them up.
+    return { enrichedStops: stops, energySpent: 0 };
   }
-
-  return { enrichedStops, energySpent };
+  activeRegenerations.add(tour.id);
+  try {
+    // Stamp FIRST so a re-mount sees the current version and skips. This
+    // prevents duplicate energy charges when the user navigates away and back
+    // before all stops finish. The enrichment loop continues running in the
+    // background after navigation; each stop is persisted to the DB
+    // individually as it completes.
+    try {
+      await base44.entities.Tour.update(tour.id, { content_version: STOP_CONTENT_VERSION });
+    } catch (e) {
+      console.error('Failed to stamp content_version:', e);
+    }
+    const { enrichedStops, energySpent } = await runEnrichment(tour, stops, { force: true }, onProgress);
+    return { enrichedStops, energySpent };
+  } finally {
+    activeRegenerations.delete(tour.id);
+  }
 }

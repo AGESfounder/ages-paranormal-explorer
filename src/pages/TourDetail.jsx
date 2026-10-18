@@ -50,6 +50,12 @@ import { addStopByName } from '@/lib/addTourStops';
 // energy cost to the user (system maintenance bypasses energy gating).
 const STOPS_VALIDATION_VERSION = 20;
 
+// Module-level guard: prevents duplicate background coordinate jobs when the
+// user navigates away and back before the DB stamp (stops_regenerated) lands.
+// The stamp is written at the START of each job, but the write is async — this
+// closes the small race window where a second mount reads the old DB value.
+const activeCoordJobs = new Set();
+
 // Walking threshold for stop clustering. Single-site tours (landmark/ship/
 // cold_spot) are large properties where you walk between structures that can
 // be 0.5+ miles apart — use 1.0-mile threshold so they form a walking cluster
@@ -268,30 +274,33 @@ export default function TourDetail() {
     // existing coordinates with a new guess.
     const needsVerification = stopsList.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' && s.geocoded === false);
     if (needsVerification.length === 0) return;
+    if (activeCoordJobs.has(tourData.id)) return; // already running from a prior mount
+    activeCoordJobs.add(tourData.id);
     try {
       await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered || tourData.manual_reorder, verifyAll: false });
+      // Reload stops with corrected coordinates
+      const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourData.id });
+      // Don't overwrite stops the user has manually placed via marker drag
+      if (userDraggedRef.current) return;
+      // fix-collapsed-coords only updates coordinates (and geocoded status) —
+      // it does NOT reclassify travel_method. The self-heal that just ran set
+      // the correct walking/driving classification, and the reloaded stops
+      // retain it. Re-running enforceWalkingDistance here would reclassify ALL
+      // stops from whatever Overpass/LLM handed back, letting one bad unverified
+      // coordinate revert the self-heal's work (the Savannah bug: self-heal
+      // fixes all-walking, then this step reverts 4 stops to driving). Instead,
+      // just display the coordinate-corrected stops in their existing order;
+      // the NEXT load's self-heal reclassifies if the new coords warrant it.
+      const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
+      const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
+      const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
+      const sorted = tourStopsOnly.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
     } catch (e) {
       console.error('Coordinate verification failed:', e);
-      return;
+    } finally {
+      activeCoordJobs.delete(tourData.id);
     }
-    // Reload stops with corrected coordinates
-    const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourData.id });
-    // Don't overwrite stops the user has manually placed via marker drag
-    if (userDraggedRef.current) return;
-    // fix-collapsed-coords only updates coordinates (and geocoded status) —
-    // it does NOT reclassify travel_method. The self-heal that just ran set
-    // the correct walking/driving classification, and the reloaded stops
-    // retain it. Re-running enforceWalkingDistance here would reclassify ALL
-    // stops from whatever Overpass/LLM handed back, letting one bad unverified
-    // coordinate revert the self-heal's work (the Savannah bug: self-heal
-    // fixes all-walking, then this step reverts 4 stops to driving). Instead,
-    // just display the coordinate-corrected stops in their existing order;
-    // the NEXT load's self-heal reclassifies if the new coords warrant it.
-    const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
-    const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
-    const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-    const sorted = tourStopsOnly.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-    setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
   };
 
   // Background validation — runs fix-collapsed-coords (verifyAll) WITHOUT
@@ -301,36 +310,45 @@ export default function TourDetail() {
   // appearing stuck when opening a tour whose validation version is
   // outdated (fix-collapsed-coords can take 30-60+ seconds for 10 stops).
   const runBackgroundValidation = async (tourId, tourData) => {
-    // SAFETY: Do NOT re-verify all stops. Background OSM/LLM search can return
-    // WRONG coordinates, overwriting correct ones and sending users to the
-    // wrong location at night. Only fix collapsed/missing/water stops.
+    if (activeCoordJobs.has(tourId)) return; // already running from a prior mount
+    activeCoordJobs.add(tourId);
     try {
+      // Stamp FIRST so a re-mount sees the current version and skips. The
+      // coordinate work runs to completion in the background; if it fails
+      // partway, geocodeExistingStops picks up any remaining unverified stops
+      // on the next visit.
+      try {
+        await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
+      } catch (e) { console.error('Failed to pre-stamp stops_regenerated:', e); }
+      // SAFETY: Do NOT re-verify all stops. Background OSM/LLM search can return
+      // WRONG coordinates, overwriting correct ones and sending users to the
+      // wrong location at night. Only fix collapsed/missing/water stops.
       await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData.user_reordered || tourData.manual_reorder, verifyAll: false });
+      // Reload stops with corrected coordinates
+      const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
+      const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
+      const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
+      let tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
+      // Validate — log issues but never delete stops (needs_placement handles
+      // unverified stops instead of destructive regeneration)
+      const validation = validateStops(tourStopsOnly, tourData);
+      if (!validation.compliant) {
+        console.warn(`Tour ${tourId} validation: ${validation.reason}. Stops preserved.`);
+      }
+      // Don't overwrite stops the user has manually placed via marker drag
+      if (userDraggedRef.current) return;
+      // fix-collapsed-coords only updates coordinates — it does NOT reclassify
+      // travel_method (same rationale as geocodeExistingStops: re-running
+      // enforceWalkingDistance here would let one bad Overpass result revert
+      // the self-heal's classification). Just display the coordinate-corrected
+      // stops in their existing order; the NEXT load's self-heal reclassifies.
+      const sorted = tourStopsOnly.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
     } catch (e) {
       console.error('Coordinate verification failed:', e);
-      return;
+    } finally {
+      activeCoordJobs.delete(tourId);
     }
-    // Reload stops with corrected coordinates
-    const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
-    const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
-    const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
-    let tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-    // Validate — log issues but never delete stops (needs_placement handles
-    // unverified stops instead of destructive regeneration)
-    const validation = validateStops(tourStopsOnly, tourData);
-    if (!validation.compliant) {
-      console.warn(`Tour ${tourId} validation: ${validation.reason}. Stops preserved.`);
-    }
-    await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
-    // Don't overwrite stops the user has manually placed via marker drag
-    if (userDraggedRef.current) return;
-    // fix-collapsed-coords only updates coordinates — it does NOT reclassify
-    // travel_method (same rationale as geocodeExistingStops: re-running
-    // enforceWalkingDistance here would let one bad Overpass result revert
-    // the self-heal's classification). Just display the coordinate-corrected
-    // stops in their existing order; the NEXT load's self-heal reclassifies.
-    const sorted = tourStopsOnly.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-    setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
   };
 
   const [narrationLength, setNarrationLengthState] = useState(getNarrationLength());
