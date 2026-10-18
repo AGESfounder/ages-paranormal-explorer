@@ -67,5 +67,6 @@ class AgesBridgeViewController: CAPBridgeViewController {
         super.capacitorDidLoad()
         bridge?.registerPluginInstance(AgesSensorsPlugin())
         bridge?.registerPluginInstance(AgesDepthPlugin())
+        bridge?.registerPluginInstance(AgesSaveToDevicePlugin())
     }
 }

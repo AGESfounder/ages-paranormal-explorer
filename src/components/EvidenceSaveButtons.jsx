@@ -1,25 +1,39 @@
 import React, { useState } from 'react';
-import { Lock, Globe, Loader2, Download, Check } from 'lucide-react';
+import { Lock, Globe, Loader2, Download, Check, AlertCircle } from 'lucide-react';
 import { saveBlobToDevice, buildDeviceFilename } from '@/lib/saveToDevice';
+import { Capacitor } from '@capacitor/core';
 
 /**
  * Save destination picker for evidence.
  * onSave(true)   → Journal Only (private)
  * onSave(false)  → Journal + Community Map (public)
- * deviceBlob     → when provided, a third "Save to Device" button downloads
- *                  the recording locally (no network, no upload) so it can be
- *                  kept during field investigations with poor service and
+ * deviceBlob     → when provided, a third "Save to Device" button saves the
+ *                  recording to the device's Photo Library / Gallery (native)
+ *                  or downloads it (web) — no network, no upload — so it can
+ *                  be kept during field investigations with poor service and
  *                  uploaded to the Journal later.
  */
 export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, devicePrefix }) {
+  const [deviceSaving, setDeviceSaving] = useState(false);
   const [savedToDevice, setSavedToDevice] = useState(false);
+  const [deviceError, setDeviceError] = useState('');
 
-  const handleDevice = () => {
-    if (!deviceBlob) return;
-    saveBlobToDevice(deviceBlob, buildDeviceFilename(devicePrefix || 'evidence', deviceBlob));
-    setSavedToDevice(true);
-    setTimeout(() => setSavedToDevice(false), 2500);
+  const handleDevice = async () => {
+    if (!deviceBlob || deviceSaving) return;
+    setDeviceSaving(true);
+    setDeviceError('');
+    try {
+      await saveBlobToDevice(deviceBlob, buildDeviceFilename(devicePrefix || 'evidence', deviceBlob));
+      setSavedToDevice(true);
+      setTimeout(() => setSavedToDevice(false), 2500);
+    } catch (e) {
+      setDeviceError('Save failed. Please try again.');
+    } finally {
+      setDeviceSaving(false);
+    }
   };
+
+  const nativeLabel = Capacitor.isNativePlatform() ? 'Photos / Gallery' : 'Downloads';
 
   return (
     <div className="space-y-2">
@@ -44,14 +58,21 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, device
         <>
           <button
             onClick={handleDevice}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 font-heading text-xs uppercase tracking-wider hover:bg-amber-500/20 transition-colors"
+            disabled={deviceSaving}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 font-heading text-xs uppercase tracking-wider hover:bg-amber-500/20 transition-colors disabled:opacity-50"
           >
-            {savedToDevice ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
-            {savedToDevice ? 'Saved to Device' : 'Save to Device'}
+            {deviceSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : savedToDevice ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
+            {deviceSaving ? 'Saving…' : savedToDevice ? 'Saved to Device' : 'Save to Device'}
           </button>
-          <p className="text-[9px] text-muted-foreground/60 text-center leading-relaxed">
-            Downloads the recording to your device now — no service needed. Save to your Journal later once you're back in range.
-          </p>
+          {deviceError ? (
+            <p className="text-[9px] text-red-400/80 text-center leading-relaxed flex items-center justify-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {deviceError}
+            </p>
+          ) : (
+            <p className="text-[9px] text-muted-foreground/60 text-center leading-relaxed">
+              Saves the recording to your device's {nativeLabel} now — no service needed. Save to your Journal later once you're back in range.
+            </p>
+          )}
         </>
       )}
     </div>

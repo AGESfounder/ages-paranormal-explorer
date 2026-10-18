@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AgesSettingsPlugin.class);
         registerPlugin(AgesDepthPlugin.class);
         registerPlugin(AgesSensorsPlugin.class);
+        registerPlugin(AgesSaveToDevicePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
