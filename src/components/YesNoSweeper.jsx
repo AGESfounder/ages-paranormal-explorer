@@ -554,6 +554,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
       await base44.entities.Evidence.create({
         title: `Yes/No/IDK Sweeper — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
+        source_tool: 'yesno',
         description: `Yes/No/IDK Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} answer(s) captured via environment trigger: ${captured.join(', ') || 'none'}.`,
         file_url,
         date,

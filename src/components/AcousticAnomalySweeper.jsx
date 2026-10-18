@@ -536,6 +536,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
       await base44.entities.Evidence.create({
         title: `Acoustic Anomaly Sweeper — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
+        source_tool: 'audio',
         description: `Acoustic Anomaly Sweeper session — ${formatDuration(sessionDuration)} — ${eventCountRef.current} acoustic event(s) above the room baseline, ${marked} marked moment(s). Room baseline measured in-device; levels are relative, not calibrated sound pressure.`,
         file_url,
         date,

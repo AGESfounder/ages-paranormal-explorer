@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { motion } from 'framer-motion';
-import { Ghost, Loader2, FileText, Image, Video, ClipboardList, Users, Flag, Eye } from 'lucide-react';
+import { Ghost, Loader2, Users, Waves, Volume2, ScanFace, Zap, Gauge, Library, Type, MessageCircle, Image, FileText, ClipboardList } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -12,19 +12,27 @@ import ReportContentDialog from '@/components/ReportContentDialog';
 import { getBlockedIds } from '@/lib/userBlocks';
 import EvidenceViewerDialog from '@/components/EvidenceViewerDialog';
 import StackedEvidencePopup from '@/components/StackedEvidencePopup';
+import { TOOL_FILTERS, resolveFilterId, getToolColor, getToolLabel } from '@/lib/evidenceToolMeta';
 
-const typeIcons = { evp: ClipboardList, photo: Image, video: Video, note: FileText };
-const typeLabel = { evp: 'EVP', photo: 'Photograph', video: 'Video', note: 'Note' };
-
-const typeColors = {
-  evp: '#a78bfa',
-  photo: '#38bdf8',
-  video: '#f472b6',
-  note: '#4ade80',
+// Icon per filter — matches the toolkit tile icons so a filter pill reads
+// as the same tool the user tapped in the rack.
+const filterIcons = {
+  recorder: Waves,
+  audio: Volume2,
+  sls: ScanFace,
+  rem: Zap,
+  environment: Gauge,
+  sieg: Gauge,
+  termbank: Library,
+  alphabet: Type,
+  yesno: MessageCircle,
+  photo: Image,
+  note: FileText,
+  manual: ClipboardList,
 };
 
-function createPin(type) {
-  const color = typeColors[type] || '#38bdf8';
+function createPin(evidence) {
+  const color = getToolColor(evidence);
   return L.divIcon({
     className: '',
     html: `<div style="width:28px;height:28px;border-radius:50% 50% 50% 0;background:${color};border:2px solid rgba(255,255,255,0.3);transform:rotate(-45deg);box-shadow:0 0 10px ${color}88;"></div>`,
@@ -36,8 +44,8 @@ function createPin(type) {
 
 function createStackPin(group) {
   const count = group.length;
-  const types = [...new Set(group.map(p => p.type))];
-  const color = types.length === 1 ? (typeColors[types[0]] || '#38bdf8') : '#38bdf8';
+  const filterIds = [...new Set(group.map(p => resolveFilterId(p)))];
+  const color = filterIds.length === 1 ? getToolColor(group[0]) : '#38bdf8';
   return L.divIcon({
     className: '',
     html: `<div style="position:relative;width:28px;height:28px;">
@@ -88,7 +96,7 @@ export default function CommunityMap() {
   // Hide pins authored by blocked users.
   const visiblePins = pins.filter(p => !blockedIds.includes(p.created_by_id));
 
-  const filtered = filter === 'all' ? visiblePins : visiblePins.filter(p => p.type === filter);
+  const filtered = filter === 'all' ? visiblePins : visiblePins.filter(p => resolveFilterId(p) === filter);
 
   // Cluster evidence by proximity so stacked markers show all items at the
   // same property — even when GPS jitter places captures a few feet apart.
@@ -118,8 +126,7 @@ export default function CommunityMap() {
       ]
     : [39.5, -98.35];
 
-  const filterTypes = ['all', 'note', 'photo', 'video', 'evp'];
-  const filterLabels = { all: 'All', note: 'Notes', photo: 'Photos', video: 'Videos', evp: 'EVP' };
+  const filterTypes = ['all', ...TOOL_FILTERS.map(t => t.id)];
 
   return (
     <PageContainer>
@@ -131,7 +138,10 @@ export default function CommunityMap() {
       <div className="px-4 pt-3 pb-2 flex gap-2 overflow-x-auto scrollbar-hide">
         {filterTypes.map(t => {
           const isActive = filter === t;
-          const color = typeColors[t];
+          const tool = TOOL_FILTERS.find(f => f.id === t);
+          const color = tool?.color;
+          const Icon = tool ? filterIcons[t] : null;
+          const label = t === 'all' ? 'All' : (tool?.label || t);
           return (
             <button
               key={t}
@@ -149,10 +159,10 @@ export default function CommunityMap() {
                   : ''
               }`}
             >
-              {t !== 'all' && (
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+              {t !== 'all' && Icon && (
+                <Icon className="w-3 h-3 shrink-0" style={{ color: isActive ? color : `${color}bb` }} />
               )}
-              {filterLabels[t]}
+              {label}
             </button>
           );
         })}
@@ -170,7 +180,7 @@ export default function CommunityMap() {
           <div className="px-4 pb-2">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Users className="w-3.5 h-3.5" />
-              <span>{filtered.length} public {filter === 'all' ? 'sighting' : filterLabels[filter].toLowerCase()}{filtered.length !== 1 ? 's' : ''} on the map</span>
+              <span>{filtered.length} public {filter === 'all' ? 'sighting' : getToolLabel(filter).toLowerCase()}{filtered.length !== 1 ? 's' : ''} on the map</span>
             </div>
           </div>
 
@@ -198,7 +208,7 @@ export default function CommunityMap() {
                 {groupedPins.map(group => {
                   const isStack = group.length > 1;
                   const first = group[0];
-                  const icon = isStack ? createStackPin(group) : createPin(first.type);
+                  const icon = isStack ? createStackPin(group) : createPin(first);
                   return (
                     <Marker
                       key={isStack ? `stack-${first.latitude.toFixed(4)},${first.longitude.toFixed(4)}` : first.id}

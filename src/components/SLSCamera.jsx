@@ -407,6 +407,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       await base44.entities.Evidence.create({
         title: `Anomaly Camera Session ${now.toISOString().split('T')[0]}`,
         type: recordedBlob.type.startsWith('audio') ? 'evp' : 'video',
+        source_tool: 'sls',
         description: `Anomaly Camera session — ${formatDuration(recordDuration)} recorded.`,
         file_url,
         date: now.toISOString().split('T')[0],

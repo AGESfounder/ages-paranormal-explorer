@@ -346,6 +346,7 @@ export default function Toolkit() {
       await base44.entities.Evidence.create({
         title: 'EVP Session ' + date,
         type: 'evp',
+        source_tool: 'recorder',
         description,
         file_url: uploadRes.file_url,
         date,

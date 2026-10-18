@@ -505,6 +505,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
       await base44.entities.Evidence.create({
         title: `Environmental Anomaly Monitor — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
+        source_tool: 'environment',
         description: `Environmental Anomaly Monitor session — ${formatDuration(sessionDuration)} — ${magnetic} magnetic departure(s), ${pressure} pressure departure(s), ${together} with both sensors departing together. Both channels measured against the in-device baseline; readings are relative, not calibrated measurements.`,
         file_url,
         date,

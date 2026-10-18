@@ -302,6 +302,13 @@ export default function Evidence() {
     if (!payload.location_source) {
       payload.location_source = (payload.latitude != null && payload.longitude != null) ? 'GPS' : 'NONE';
     }
+    // Tag the source tool for Community Map filtering: manual photos and
+    // notes get their own filter; manual EVP/video uploads go under "Manual".
+    if (!payload.source_tool) {
+      payload.source_tool = payload.type === 'photo' ? 'photo'
+        : payload.type === 'note' ? 'note'
+        : 'manual';
+    }
     // Community Map publishing requires a location established at save time
     // (GPS or TOUR_STOP). NONE cannot be made public. Never re-capture GPS here.
     if (!payload.is_private && (payload.latitude == null || payload.longitude == null || payload.location_source === 'NONE')) {

@@ -605,6 +605,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       await base44.entities.Evidence.create({
         title: `Alphabet Sweeper — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
+        source_tool: 'alphabet',
         description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.join('') || 'none'}.`,
         file_url,
         date,

@@ -1071,6 +1071,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       await base44.entities.Evidence.create({
         title: `SIEG Session ${date}`,
         type: blob.type.startsWith('audio') ? 'evp' : 'video',
+        source_tool: 'sieg',
         description,
         file_url: upload.file_url,
         date,

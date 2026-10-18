@@ -72,6 +72,10 @@
     "is_private": {
       "type": "boolean",
       "default": false
+    },
+    "source_tool": {
+      "type": "string",
+      "description": "The toolkit tool that produced this evidence, stored as the tool's type slug (e.g. 'recorder', 'audio', 'sls', 'rem', 'environment', 'sieg', 'termbank', 'alphabet', 'yesno'). Manual saves from the Evidence page use 'photo', 'note', or 'manual' (for EVP/video uploads). Legacy records without this field are treated as manual. Used by the Community Map to filter and color markers by tool."
     }
   },
   "required": [

@@ -630,6 +630,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       await base44.entities.Evidence.create({
         title: `Vibration Communicator Session ${date}`,
         type: blob.type.startsWith('audio') ? 'evp' : 'video',
+        source_tool: 'rem',
         description: `Vibration Communicator session — ${formatDuration(sessionDuration)} — ${events.length} disturbance event(s) detected${events.length ? `, strongest peak ${Math.max(...events.map((e) => e.level))}` : ''}.`,
         file_url,
         date,
