@@ -17,6 +17,8 @@ import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import useSweeperSensors from '@/hooks/useSweeperSensors';
 import { drawSweeperBadges } from '@/lib/sweeperBadges';
 import { toast } from '@/components/ui/use-toast';
+import RecordTrimPicker from './RecordTrimPicker';
+import { TRIM_OPTIONS } from '@/lib/recordTrim';
 
 // "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
 // appear once in rotation (4 sec each). If no trigger, the asking phase repeats.
@@ -118,7 +120,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
   const timerRef = useRef(null);
-  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, getTrimmedBlob } = useSweeperRecorder({
     canvasRef,
     attachMicToRecording,
     boostMicStream,
@@ -126,6 +128,9 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     setSensorError,
     componentName: 'YesNoSweeper',
   });
+  const [trimMode, setTrimMode] = useState('full');
+  const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
+  const displayBlob = videoBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || videoBlob) : videoBlob;
   const camVideoRef = useRef(null);
   const detectCanvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -476,14 +481,14 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!videoBlob) return;
+    if (!displayBlob) return;
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
-      const file = new File([videoBlob], `yes_no_idk_session.${ext}`, { type: videoBlob.type });
+      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([displayBlob], `yes_no_idk_session.${ext}`, { type: displayBlob.type });
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
       const date = now.toISOString().split('T')[0];
@@ -509,7 +514,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
         title: `Yes/No/IDK Sweeper — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'yesno',
-        description: `Yes/No/IDK Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} answer(s) captured via environment trigger: ${captured.join(', ') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (camera).`,
+        description: `Yes/No/IDK Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} answer(s) captured via environment trigger: ${captured.join(', ') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (camera).${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         file_url,
         date,
         time,
@@ -672,8 +677,9 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              <video src={URL.createObjectURL(videoBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
+              <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
             </div>
+            <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
             <EvidenceSaveButtons onSave={saveSession} saving={saving} />
           </div>
         ) : (

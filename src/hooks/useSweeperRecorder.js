@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { buildTrimmedBlob } from '@/lib/recordTrim';
 
 // Shared MediaRecorder lifecycle for the canvas-based sweeper tools (Terms,
 // Alphabet, Yes/No/IDK). All three recorded a <canvas> + mic into a
@@ -190,7 +191,7 @@ export default function useSweeperRecorder({
       const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = mr;
 
-      mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
+      mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push({ blob: e.data, t: Date.now() }); };
       mr.onerror = (e) => {
         diag('error', `${componentName} recorder onerror`, {
           elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
@@ -213,7 +214,7 @@ export default function useSweeperRecorder({
         if (userStoppedRef.current) {
           // User-initiated stop — assemble the final blob from every chunk
           // collected across the whole session (including restarts).
-          const blob = new Blob(videoChunksRef.current, {
+          const blob = new Blob(videoChunksRef.current.map((c) => c.blob), {
             type: mimeTypeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm'),
           });
           diag('info', `${componentName} recorder stopped (user)`, {
@@ -282,5 +283,15 @@ export default function useSweeperRecorder({
     stopTracks();
   }, [stopHeartbeat, stopTracks]);
 
-  return { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup };
+  // Build a blob from the session's timestamped chunks, optionally trimmed to
+  // the last N seconds. Returns null if no chunks were collected. Called from
+  // the component's save handler with the selected trim option's seconds.
+  const getTrimmedBlob = useCallback((trimSeconds) => {
+    const chunks = videoChunksRef.current;
+    if (!chunks || chunks.length === 0) return null;
+    const fallbackType = mimeTypeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm');
+    return buildTrimmedBlob(chunks, trimSeconds, fallbackType);
+  }, []);
+
+  return { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, getTrimmedBlob };
 }

@@ -7,6 +7,8 @@ import EvidenceSaveButtons from './EvidenceSaveButtons';
 import { toast } from '@/components/ui/use-toast';
 import { buildMicChain } from '@/lib/micRecordChain';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
+import RecordTrimPicker from './RecordTrimPicker';
+import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 
 // Quiet window the sensor baseline is measured over, before the session — and
 // its recording — begin.
@@ -59,6 +61,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   const [videoBlob, setVideoBlob] = useState(null);
   const [saving, setSaving] = useState(false);
   const [sensorError, setSensorError] = useState(null);
+  const [trimMode, setTrimMode] = useState('full');
 
   // Sensor baselines
   const baselineRef = useRef({ ax: 0, ay: 0, az: 9.8, gx: 0, gy: 0, gz: 0, mx: 0, my: 0, mz: 0 });
@@ -98,6 +101,14 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   // This session's own hold on the app's background music (ref-guarded, so the
   // ambience is never released more often than it was held).
   const ambienceHeldRef = useRef(false);
+
+  const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
+  const getTrimmedBlob = (ts) => {
+    const chunks = videoChunksRef.current;
+    if (!chunks || chunks.length === 0) return null;
+    return buildTrimmedBlob(chunks, ts, 'video/webm');
+  };
+  const displayBlob = videoBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || videoBlob) : videoBlob;
 
   // Sensor handlers
   const handleMotion = (e) => {
@@ -401,9 +412,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
       mediaRecorderRef.current = mr;
       videoChunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
+      mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push({ blob: e.data, t: Date.now() }); };
       mr.onstop = () => {
-        const blob = new Blob(videoChunksRef.current, { type: mimeType || (canvasCapture ? 'video/webm' : 'audio/mp4') });
+        const blob = new Blob(videoChunksRef.current.map((c) => c.blob), { type: mimeType || (canvasCapture ? 'video/webm' : 'audio/mp4') });
         videoBlobRef.current = blob;
         setVideoBlob(blob);
         canvasStream.getTracks().forEach(t => t.stop());
@@ -604,15 +615,14 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   };
 
   const saveSession = async (isPrivate = true) => {
-    const blob = videoBlobRef.current || videoBlob;
-    if (!blob) return;
+    if (!displayBlob) return;
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
-      const file = new File([blob], `rem_session.${ext}`, { type: blob.type });
+      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([displayBlob], `rem_session.${ext}`, { type: displayBlob.type });
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
       const date = now.toISOString().split('T')[0];
@@ -629,9 +639,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Vibration Communicator Session ${date}`,
-        type: blob.type.startsWith('audio') ? 'evp' : 'video',
+        type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'rem',
-        description: `Vibration Communicator session — ${formatDuration(sessionDuration)} — ${events.length} disturbance event(s) detected${events.length ? `, strongest peak ${Math.max(...events.map((e) => e.level))}` : ''}.`,
+        description: `Vibration Communicator session — ${formatDuration(sessionDuration)} — ${events.length} disturbance event(s) detected${events.length ? `, strongest peak ${Math.max(...events.map((e) => e.level))}` : ''}.${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         file_url,
         date,
         time,
@@ -859,12 +869,13 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
               <video
-                src={URL.createObjectURL(videoBlob)}
+                src={URL.createObjectURL(displayBlob)}
                 controls
                 className="w-full rounded"
                 style={{ maxHeight: 180 }}
               />
             </div>
+            <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
             <EvidenceSaveButtons onSave={saveSession} saving={saving} />
           </div>
         ) : (

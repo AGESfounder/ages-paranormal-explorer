@@ -28,6 +28,8 @@ import { synthesizeCue, CUE_CHIME } from '@/lib/toolCues';
 import { fetchWeatherByCoords } from '@/lib/openMeteo';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { toast } from '@/components/ui/use-toast';
+import RecordTrimPicker from '@/components/RecordTrimPicker';
+import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 
 // SIEG — one integrated session, seven tools at once.
 //
@@ -93,6 +95,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const [blob, setBlob] = useState(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [trimMode, setTrimMode] = useState('full');
   // Which camera the figure scan runs on: the camera-image reader everywhere, the
   // depth sensor where the device carries one. Chosen before a session starts.
   const [cameraMode, setCameraMode] = useState('contrast');
@@ -151,6 +154,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const ownTrackRef = useRef(null);
   const frameTrackRef = useRef(null);
   const chunksRef = useRef([]);
+  const mimeRef = useRef('');
   const userStoppedRef = useRef(true);
   const ambienceHeldRef = useRef(false);
   const autoSaveRef = useRef(false);
@@ -166,6 +170,14 @@ export default function SiegConsole({ gateSave, refundSave }) {
     });
     return () => { cancelled = true; };
   }, []);
+
+  const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
+  const getTrimmedBlob = (ts) => {
+    const chunks = chunksRef.current;
+    if (!chunks || chunks.length === 0) return null;
+    return buildTrimmedBlob(chunks, ts, mimeRef.current || 'video/webm');
+  };
+  const displayBlob = blob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || blob) : blob;
 
   const moonNow = moonPhase();
   const conditionsLine = `${moonNow.name} · ${moonNow.illumination}%${weather ? ` · ${weather}` : ''}`;
@@ -563,6 +575,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
       : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
     const mime = candidates.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+    mimeRef.current = mime;
     console.log(`[SIEG] recording ${useCanvas ? 'composite canvas' : picture ? 'camera' : 'audio only'} · ${mime || 'browser default'}`);
     let mr;
     try {
@@ -571,12 +584,12 @@ export default function SiegConsole({ gateSave, refundSave }) {
       return false;
     }
     recorderRef.current = mr;
-    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
       if (userStoppedRef.current) {
         const actual = (mr.mimeType || mime || 'video/webm').split(';')[0];
         releaseOwnTrack();
-        const finished = new Blob(chunksRef.current, { type: actual });
+        const finished = new Blob(chunksRef.current.map((c) => c.blob), { type: actual });
         console.log(`[SIEG] recording stopped after ${Math.round((Date.now() - startedAtRef.current) / 1000)}s · ${chunksRef.current.length} chunks · ${Math.round(finished.size / 1024)} kB`);
         setBlob(finished);
         return;
@@ -1027,18 +1040,18 @@ export default function SiegConsole({ gateSave, refundSave }) {
   };
 
   const saveRecording = async (isPrivate = true) => {
-    if (!blob || saving) return;
+    if (!displayBlob || saving) return;
     setSaving(true);
     let gateSucceeded = false;
     try {
       // The extension follows what was actually recorded rather than a default:
       // audio in a video container is one more still frame for whoever reviews it.
-      const recordedType = (blob.type || '').split(';')[0];
+      const recordedType = (displayBlob.type || '').split(';')[0];
       const ext = recordedType === 'video/mp4' ? 'mp4'
         : recordedType === 'audio/mp4' ? 'm4a'
           : recordedType === 'audio/webm' ? 'weba'
             : 'webm';
-      const file = new File([blob], `sieg_session.${ext}`, { type: blob.type });
+      const file = new File([displayBlob], `sieg_session.${ext}`, { type: displayBlob.type });
       const upload = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
       const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -1052,6 +1065,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       description += `\nEvents: ${eventsRef.current.length} (${laneCounts}) · Correlated pairs: ${correlatedRef.current}`;
       description += `\nConditions: ${conditionsLine}`;
       if (logLines) description += `\n\nSession log:\n${logLines}`;
+      if (trimMode !== 'full') description += `\nSaved: last ${trimSeconds} seconds.`;
 
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
@@ -1133,7 +1147,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     return (
       <div className="space-y-3">
         <SiegReview
-          blob={blob}
+          blob={displayBlob}
           session={session}
           events={events}
           counts={counts}
@@ -1143,6 +1157,8 @@ export default function SiegConsole({ gateSave, refundSave }) {
           saved={saved}
           onSave={saveRecording}
           onDiscard={discard}
+          trimMode={trimMode}
+          onTrimChange={setTrimMode}
         />
         {gpsDialog}
         {trackingOffDialog}

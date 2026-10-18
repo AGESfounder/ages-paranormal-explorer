@@ -20,6 +20,8 @@ import { CUE_CYMBAL } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import useSweeperSensors from '@/hooks/useSweeperSensors';
 import { drawSweeperBadges } from '@/lib/sweeperBadges';
+import RecordTrimPicker from './RecordTrimPicker';
+import { TRIM_OPTIONS } from '@/lib/recordTrim';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
 const TRIGGER_COOLDOWN_MS = 3500;
@@ -210,7 +212,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
   const timerRef = useRef(null);
-  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, getTrimmedBlob } = useSweeperRecorder({
     canvasRef,
     attachMicToRecording,
     boostMicStream,
@@ -218,6 +220,9 @@ export default function LocationTermBank({ gateSave, refundSave }) {
     setSensorError,
     componentName: 'TermsSweeper',
   });
+  const [trimMode, setTrimMode] = useState('full');
+  const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
+  const displayBlob = videoBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || videoBlob) : videoBlob;
   const cameraStreamRef = useRef(null);
   const camVideoRef = useRef(null);
   const detectCanvasRef = useRef(null);
@@ -645,14 +650,14 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!videoBlob) return;
+    if (!displayBlob) return;
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
-      const file = new File([videoBlob], `term_bank_session.${ext}`, { type: videoBlob.type });
+      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([displayBlob], `term_bank_session.${ext}`, { type: displayBlob.type });
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
       const date = now.toISOString().split('T')[0];
@@ -678,7 +683,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         title: `Term Sweeper — ${locationLabel} — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'termbank',
-        description: `Term Sweeper session at ${locationLabel} — ${formatDuration(sessionDuration)} — ${captured.length} term(s) captured via environment trigger: ${captured.map(c => c.word).join(', ') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (camera).`,
+        description: `Term Sweeper session at ${locationLabel} — ${formatDuration(sessionDuration)} — ${captured.length} term(s) captured via environment trigger: ${captured.map(c => c.word).join(', ') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (camera).${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         file_url,
         date,
         time,
@@ -876,8 +881,9 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              <video src={URL.createObjectURL(videoBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
+              <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
             </div>
+            <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
             <EvidenceSaveButtons onSave={saveSession} saving={saving} />
           </div>
         ) : (

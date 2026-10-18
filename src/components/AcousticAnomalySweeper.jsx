@@ -9,6 +9,8 @@ import { buildMicChain } from '@/lib/micRecordChain';
 import { toast } from '@/components/ui/use-toast';
 import { ACOUSTIC_BANDS, createBaselineTracker, measureLevels, eventThresholdDb, dominantBand } from '@/lib/acousticAnalysis';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
+import RecordTrimPicker from './RecordTrimPicker';
+import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 
 // Listen-only acoustic monitor. It never emits sound: it listens through the
 // device microphone, measures the room's own baseline first, then watches for
@@ -49,6 +51,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [trimMode, setTrimMode] = useState('full');
 
   const canvasRef = useRef(null);
   const ctxRef = useRef(null);
@@ -89,6 +92,14 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
 
   useEffect(() => () => stopEverything(), []);
+
+  const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
+  const getTrimmedBlob = (ts) => {
+    const chunks = chunksRef.current;
+    if (!chunks || chunks.length === 0) return null;
+    return buildTrimmedBlob(chunks, ts, mimeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm'));
+  };
+  const displayBlob = videoBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || videoBlob) : videoBlob;
 
   const closeAudio = () => {
     if (canvasStreamRef.current) {
@@ -197,9 +208,9 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
     mediaRecorderRef.current = mr;
     chunksRef.current = [];
-    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: mimeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm') });
+      const blob = new Blob(chunksRef.current.map((c) => c.blob), { type: mimeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm') });
       setVideoBlob(blob);
       // Release the microphone and the audio context only once the recorder has
       // flushed its final chunk — stopping the tracks first can drop it.
@@ -510,14 +521,14 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!videoBlob) return;
+    if (!displayBlob) return;
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
-      const file = new File([videoBlob], `acoustic_anomaly_session.${ext}`, { type: videoBlob.type });
+      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([displayBlob], `acoustic_anomaly_session.${ext}`, { type: displayBlob.type });
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
       const date = now.toISOString().split('T')[0];
@@ -537,7 +548,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
         title: `Acoustic Anomaly Sweeper — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'audio',
-        description: `Acoustic Anomaly Sweeper session — ${formatDuration(sessionDuration)} — ${eventCountRef.current} acoustic event(s) above the room baseline, ${marked} marked moment(s). Room baseline measured in-device; levels are relative, not calibrated sound pressure.`,
+        description: `Acoustic Anomaly Sweeper session — ${formatDuration(sessionDuration)} — ${eventCountRef.current} acoustic event(s) above the room baseline, ${marked} marked moment(s). Room baseline measured in-device; levels are relative, not calibrated sound pressure.${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         file_url,
         date,
         time,
@@ -703,12 +714,13 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              {videoBlob.type.startsWith('audio') ? (
-                <audio src={URL.createObjectURL(videoBlob)} controls className="w-full" />
+              {displayBlob.type.startsWith('audio') ? (
+                <audio src={URL.createObjectURL(displayBlob)} controls className="w-full" />
               ) : (
-                <video src={URL.createObjectURL(videoBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
+                <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
               )}
             </div>
+            <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
             <EvidenceSaveButtons onSave={saveSession} saving={saving} />
           </div>
         ) : (

@@ -15,6 +15,8 @@ import useDepthDetection from '@/hooks/useDepthDetection';
 import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
+import RecordTrimPicker from './RecordTrimPicker';
+import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 
 export default function SLSCamera({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
@@ -34,6 +36,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordDuration, setRecordDuration] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [trimMode, setTrimMode] = useState('full');
   // Which method the camera uses. The depth layer is only ever offered on a device
   // that actually has a depth sensor, so the tool is unchanged everywhere else.
   const [mode, setMode] = useState('contrast');
@@ -52,6 +55,14 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // The depth method's own two gates (stand-out distance, smallest figure), pushed
   // to the native module so a change applies to the next frame.
   const depthDetection = useDepthDetection();
+
+  const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
+  const getTrimmedBlob = (ts) => {
+    const chunks = chunksRef.current;
+    if (!chunks || chunks.length === 0) return null;
+    return buildTrimmedBlob(chunks, ts, 'video/webm');
+  };
+  const displayBlob = recordedBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || recordedBlob) : recordedBlob;
 
   const formatDuration = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 
@@ -104,13 +115,13 @@ export default function SLSCamera({ gateSave, refundSave }) {
     const mr = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
     mediaRecorderRef.current = mr;
     chunksRef.current = [];
-    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
       // Name the file after the format the recorder actually produced. It reports
       // its real container in .mimeType, so a device that silently used a
       // different one still saves under the right extension.
       const actualType = (mr.mimeType || mimeType || 'video/webm').split(';')[0];
-      setRecordedBlob(new Blob(chunksRef.current, { type: actualType }));
+      setRecordedBlob(new Blob(chunksRef.current.map((c) => c.blob), { type: actualType }));
       recordStream.getTracks().forEach(t => t.stop());
       if (onFinish) onFinish();
     };
@@ -417,14 +428,14 @@ export default function SLSCamera({ gateSave, refundSave }) {
   };
 
   const saveRecording = async (isPrivate = true) => {
-    if (!recordedBlob) return;
+    if (!displayBlob) return;
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = recordedBlob.type.includes('mp4') ? 'mp4' : 'webm';
-      const file = new File([recordedBlob], `anomaly_session.${ext}`, { type: recordedBlob.type });
+      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([displayBlob], `anomaly_session.${ext}`, { type: displayBlob.type });
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
       const gpsResult = await captureGpsForSave();
@@ -441,7 +452,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
         title: `Anomaly Camera Session ${now.toISOString().split('T')[0]}`,
         type: recordedBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'sls',
-        description: `Anomaly Camera session — ${formatDuration(recordDuration)} recorded.`,
+        description: `Anomaly Camera session — ${formatDuration(recordDuration)} recorded.${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         file_url,
         date: now.toISOString().split('T')[0],
         time: now.toTimeString().slice(0, 5),
@@ -533,7 +544,8 @@ export default function SLSCamera({ gateSave, refundSave }) {
       {/* Post-session save controls */}
       {!active && recordedBlob && (
         <div className="space-y-2">
-          <video src={URL.createObjectURL(recordedBlob)} controls className="w-full rounded border border-border/30" style={{ maxHeight: 160 }} />
+          <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded border border-border/30" style={{ maxHeight: 160 }} />
+          <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
           <EvidenceSaveButtons onSave={saveRecording} saving={saving} />
           <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
             <X className="w-3.5 h-3.5" /> Discard
