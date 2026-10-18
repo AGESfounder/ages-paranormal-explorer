@@ -4,8 +4,8 @@ import { base44 } from '@/api/base44Client';
 // Called after either GPS marking (paid user) or marker drag (admin).
 // Updates the stop with verified coordinates, then checks all sibling stops
 // — if every stop is user_verified, the tour's `verified` flag is set to true.
-export async function verifyStopLocation(stopId, tourId, latitude, longitude, userId) {
-  await base44.entities.TourStop.update(stopId, {
+export async function verifyStopLocation(stopId, tourId, latitude, longitude, userId, photoUrl) {
+  const update = {
     latitude,
     longitude,
     user_verified: true,
@@ -13,7 +13,9 @@ export async function verifyStopLocation(stopId, tourId, latitude, longitude, us
     needs_placement: false,
     verified_by_id: userId,
     verified_date: new Date().toISOString(),
-  });
+  };
+  if (photoUrl) update.verification_photo_url = photoUrl;
+  await base44.entities.TourStop.update(stopId, update);
 
   const siblings = await base44.entities.TourStop.filter({ tour_id: tourId });
   // The just-updated stop may not yet reflect user_verified: true in the

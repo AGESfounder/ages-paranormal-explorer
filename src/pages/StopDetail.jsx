@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car, Info, DollarSign, ChevronDown, Crosshair, CheckCircle2, Plus } from 'lucide-react';
+import { MapPin, Clock, Volume2, VolumeX, Zap, Thermometer, Radio, Camera, ChevronLeft, ChevronRight, Ghost, Loader2, BookOpen, Navigation, Car, Info, DollarSign, ChevronDown, Crosshair, CheckCircle2, Plus, Image as ImageIcon, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import PageContainer from '../components/PageContainer';
 import SectionHeader from '../components/SectionHeader';
@@ -23,6 +23,7 @@ import { getNarrationLength, truncateText } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { toast } from '@/components/ui/use-toast';
 import { verifyStopLocation } from '@/lib/verifyStop';
+import StopVerificationPhoto from '@/components/StopVerificationPhoto';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION } from '@/lib/stopContent';
@@ -71,6 +72,7 @@ export default function StopDetail() {
   const [showDeleteStop, setShowDeleteStop] = useState(false);
   const [deletingStop, setDeletingStop] = useState(false);
   const [addingShuttle, setAddingShuttle] = useState(false);
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
   const [tour, setTour] = useState(null);
 
   // Gated narration wrapper — checks for pre-generated offline audio first,
@@ -399,7 +401,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
 
   // Paid users mark their current GPS position as the best vantage point.
   // Admins can also drag the map marker to set the exact location.
-  const handleMarkVantagePoint = async () => {
+  const handleMarkVantagePoint = async (photoUrl) => {
     if (!navigator.geolocation) {
       toast({ title: 'GPS Unavailable', description: 'Your device does not support GPS.', variant: 'destructive' });
       return;
@@ -455,9 +457,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       // don't fire multiple toasts from repeated GPS updates.
       saved = true;
       navigator.geolocation.clearWatch(watchId);
-      verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id)
+      verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id, photoUrl)
         .then((result) => {
-          setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false }));
+          setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false, ...(photoUrl ? { verification_photo_url: photoUrl } : {}) }));
           autoNameParking(latitude, longitude);
           toast({
             title: 'Vantage Point Marked!',
@@ -524,6 +526,18 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       toast({ title: 'Failed to add shuttle', description: e?.message || 'Please try again.', variant: 'destructive' });
     }
     setAddingShuttle(false);
+  };
+
+  // Add or replace the reference photo on an already-verified stop. Verified
+  // stops don't need GPS re-validation — just persist the new public photo URL.
+  const handleAddPhoto = async (photoUrl) => {
+    try {
+      await base44.entities.TourStop.update(stop.id, { verification_photo_url: photoUrl });
+      setStop(prev => ({ ...prev, verification_photo_url: photoUrl }));
+      toast({ title: 'Photo Added', description: 'The stop photo has been updated.' });
+    } catch (e) {
+      toast({ title: 'Update Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
+    }
   };
 
   if (loading || !stop) {
@@ -751,22 +765,15 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             </div>
           </div>
         )}
-        {isPaid && !stop.user_verified && (
+        {isPaid && (
           <div className="p-3 rounded-xl border border-primary/30 bg-primary/5">
-            <button
-              onClick={handleMarkVantagePoint}
+            <StopVerificationPhoto
+              stop={stop}
               disabled={verifying}
-              className="w-full flex flex-col items-center gap-1 py-3 rounded-lg bg-primary/15 border border-primary/40 text-primary font-heading text-sm uppercase tracking-wider hover:bg-primary/25 transition-colors disabled:opacity-60"
-            >
-              {verifying ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> <span>Getting GPS Location...</span></>
-              ) : (
-                <><Crosshair className="w-5 h-5" /> <span>Mark Best Vantage Point</span></>
-              )}
-            </button>
-            <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-              {verifying ? 'Locking onto your GPS signal...' : 'Stand at the best viewing spot, then tap to mark your exact location'}
-            </p>
+              onValidateWithPhoto={handleMarkVantagePoint}
+              onValidateOnly={handleMarkVantagePoint}
+              onPhotoAdded={handleAddPhoto}
+            />
           </div>
         )}
         {stop.user_verified && (
@@ -819,17 +826,32 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         )}
 
         {stop.narration_text && (
-          <div className="p-3 rounded-lg border border-primary/20 bg-primary/5">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Ghost className="w-4 h-4 text-primary" />
-                <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Ghost Story</span>
+          <div className="relative rounded-lg border border-primary/20 overflow-hidden">
+            {stop.verification_photo_url && (
+              <>
+                <img src={stop.verification_photo_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/75 to-black/85" />
+              </>
+            )}
+            <div className="relative p-3 bg-primary/5">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Ghost className="w-4 h-4 text-primary" />
+                  <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Ghost Story</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {stop.verification_photo_url && (
+                    <button onClick={() => setShowPhotoViewer(true)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-black/40 border border-white/20 text-white/80 text-[10px] font-heading uppercase tracking-wider hover:bg-black/60 transition-colors">
+                      <ImageIcon className="w-3 h-3" /> View Photo
+                    </button>
+                  )}
+                  <button onClick={() => narrate(displayNarrationText, { audioKey: `stop:${stop.id}` })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
+                    {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" mode={narrationMode} text={displayNarrationText} /></>}
+                  </button>
+                </div>
               </div>
-              <button onClick={() => narrate(displayNarrationText, { audioKey: `stop:${stop.id}` })} className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[10px] font-heading uppercase tracking-wider hover:bg-primary/20 transition-colors">
-                {isGenerating ? <><Loader2 className="w-3 h-3 animate-spin" /> <BePatient /></> : isSpeaking ? <><VolumeX className="w-3 h-3" /> Stop</> : <><Volume2 className="w-3 h-3" /> Play <EnergyCostBadge type="narration" mode={narrationMode} text={displayNarrationText} /></>}
-              </button>
+              <p className="text-log text-xs text-foreground/70 leading-relaxed italic">"<LinkifiedText text={displayNarrationText} />"</p>
             </div>
-            <p className="text-log text-xs text-foreground/70 leading-relaxed italic">"<LinkifiedText text={displayNarrationText} />"</p>
           </div>
         )}
 
@@ -954,6 +976,14 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         onConfirm={handleDeleteStop}
         deleting={deletingStop}
       />
+      {showPhotoViewer && stop.verification_photo_url && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4" onClick={() => setShowPhotoViewer(false)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white z-10" onClick={() => setShowPhotoViewer(false)}>
+            <X className="w-6 h-6" />
+          </button>
+          <img src={stop.verification_photo_url} alt={stop.name} className="max-w-full max-h-full rounded-lg object-contain" />
+        </div>
+      )}
       {narrationAdGateEl}
     </PageContainer>
   );

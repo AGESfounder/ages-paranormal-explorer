@@ -135,6 +135,10 @@
       "type": "string",
       "format": "date-time",
       "description": "When this stop's coordinates were user-verified."
+    },
+    "verification_photo_url": {
+      "type": "string",
+      "description": "Public URL of a reference photo taken from the stop's best vantage point. Captured by a paid user or admin during validation (or added later to an already-verified stop). Visible to all users as a dimmed backdrop behind the stop's narration text, with a button to view full-size. A new photo replaces the old one. Stored publicly via UploadPublicFile."
     }
   },
   "required": [
