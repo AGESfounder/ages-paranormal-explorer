@@ -52,12 +52,6 @@ public class AgesSaveToDevicePlugin extends Plugin {
             displayName = "AGES_" + System.currentTimeMillis();
         }
 
-        // Audio goes through the web-style download fallback, not MediaStore.
-        if ("audio".equals(mediaType)) {
-            call.reject("Audio is not saved through MediaStore in this build");
-            return;
-        }
-
         File file;
         if (filePath.startsWith("file://")) {
             file = new File(Uri.parse(filePath).getPath());
@@ -71,21 +65,28 @@ public class AgesSaveToDevicePlugin extends Plugin {
         }
 
         boolean isImage = "image".equals(mediaType);
-        String subDir = isImage
-                ? Environment.DIRECTORY_PICTURES + "/AGES"
-                : Environment.DIRECTORY_MOVIES + "/AGES";
-        Uri collection = isImage
-                ? MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-                : MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+        boolean isAudio = "audio".equals(mediaType);
+        String subDir;
+        Uri collection;
+        if (isImage) {
+            subDir = Environment.DIRECTORY_PICTURES + "/AGES";
+            collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+        } else if (isAudio) {
+            subDir = Environment.DIRECTORY_MUSIC + "/AGES";
+            collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+        } else {
+            subDir = Environment.DIRECTORY_MOVIES + "/AGES";
+            collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+        }
 
         // Detect mime type from the file extension for accuracy.
         String mimeType;
         if (displayName.endsWith(".webm")) {
-            mimeType = isImage ? "image/webp" : "video/webm";
-        } else if (displayName.endsWith(".mp4")) {
-            mimeType = isImage ? "image/jpeg" : "video/mp4";
+            mimeType = isAudio ? "audio/webm" : (isImage ? "image/webp" : "video/webm");
+        } else if (displayName.endsWith(".mp4") || displayName.endsWith(".m4a")) {
+            mimeType = isAudio ? "audio/mp4" : (isImage ? "image/jpeg" : "video/mp4");
         } else {
-            mimeType = isImage ? "image/jpeg" : "video/mp4";
+            mimeType = isAudio ? "audio/mp4" : (isImage ? "image/jpeg" : "video/mp4");
         }
 
         try {

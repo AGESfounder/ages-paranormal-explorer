@@ -33,7 +33,7 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, device
     }
   };
 
-  const nativeLabel = Capacitor.isNativePlatform() ? 'Photos / Gallery' : 'Downloads';
+  const nativeLabel = Capacitor.isNativePlatform() ? 'Photos / Gallery / Files' : 'Downloads';
 
   return (
     <div className="space-y-2">

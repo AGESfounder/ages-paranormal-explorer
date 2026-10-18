@@ -70,6 +70,10 @@
 	<string>AGES Paranormal Explorer uses the microphone for EVP recording, spirit box sessions, and investigation audio evidence.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>AGES Paranormal Explorer saves your investigation recordings to your Photo Library when you choose "Save to Device," so you can keep evidence captured in the field even without cell service.</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSMotionUsageDescription</key>
 	<string>AGES Paranormal Explorer uses motion sensors for the vibration communicator and environment-triggered investigation tools.</string>
 	<key>SKAdNetworkItems</key>

@@ -35,13 +35,6 @@ public class AgesSaveToDevicePlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let mediaType = call.getString("mediaType") ?? "video"
 
-        // The Photo Library holds no audio — reject so the JS layer falls back
-        // to the web-style download for EVP/audio recordings.
-        if mediaType == "audio" {
-            call.reject("Audio cannot be saved to the Photo Library")
-            return
-        }
-
         // Capacitor Filesystem returns a "file://" URI; accept bare paths too.
         let fileURL: URL
         if path.hasPrefix("file://") {
@@ -56,6 +49,27 @@ public class AgesSaveToDevicePlugin: CAPPlugin, CAPBridgedPlugin {
 
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             call.reject("File not found at path: \(fileURL.path)")
+            return
+        }
+
+        // Audio can't go to the Photo Library — save it to the app's Documents
+        // directory instead, which is visible in the Files app under the app name
+        // (requires UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace in
+        // Info.plist).
+        if mediaType == "audio" {
+            let displayName = call.getString("displayName") ?? "AGES_\(Int(Date().timeIntervalSince1970)).m4a"
+            do {
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+                    ?? FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
+                let dest = docs.appendingPathComponent(displayName)
+                if FileManager.default.fileExists(atPath: dest.path) {
+                    try FileManager.default.removeItem(at: dest)
+                }
+                try FileManager.default.copyItem(at: fileURL, to: dest)
+                call.resolve(["success": true])
+            } catch {
+                call.reject("Could not save audio to Documents: \(error.localizedDescription)")
+            }
             return
         }
 

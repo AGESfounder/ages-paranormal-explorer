@@ -43,28 +43,24 @@ export async function saveBlobToDevice(blob, filename) {
   if (Capacitor.isNativePlatform()) {
     const isAudio = blob.type.startsWith('audio');
     const isImage = blob.type.startsWith('image');
-    const mediaType = isImage ? 'image' : 'video';
+    const mediaType = isAudio ? 'audio' : (isImage ? 'image' : 'video');
 
-    // Audio can't go to the Photo Library / MediaStore image-video collections —
-    // fall back to the web-style download on both platforms.
-    if (!isAudio) {
-      try {
-        const ext = filename.split('.').pop() || 'mp4';
-        const tempPath = `ages_temp_${Date.now()}.${ext}`;
-        const base64 = await blobToBase64(blob);
-        await Filesystem.writeFile({
-          data: base64,
-          path: tempPath,
-          directory: Directory.Cache,
-          encoding: 'base64',
-        });
-        const { uri } = await Filesystem.getUri({ path: tempPath, directory: Directory.Cache });
-        await AgesSaveToDevice.saveMedia({ filePath: uri, mediaType, displayName: filename });
-        try { await Filesystem.deleteFile({ path: tempPath, directory: Directory.Cache }); } catch {}
-        return;
-      } catch (e) {
-        console.warn('Native save failed, falling back to download:', e);
-      }
+    try {
+      const ext = filename.split('.').pop() || (isAudio ? 'm4a' : 'mp4');
+      const tempPath = `ages_temp_${Date.now()}.${ext}`;
+      const base64 = await blobToBase64(blob);
+      await Filesystem.writeFile({
+        data: base64,
+        path: tempPath,
+        directory: Directory.Cache,
+        encoding: 'base64',
+      });
+      const { uri } = await Filesystem.getUri({ path: tempPath, directory: Directory.Cache });
+      await AgesSaveToDevice.saveMedia({ filePath: uri, mediaType, displayName: filename });
+      try { await Filesystem.deleteFile({ path: tempPath, directory: Directory.Cache }); } catch {}
+      return;
+    } catch (e) {
+      console.warn('Native save failed, falling back to download:', e);
     }
   }
 
