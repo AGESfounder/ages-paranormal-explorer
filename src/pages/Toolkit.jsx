@@ -452,7 +452,7 @@ export default function Toolkit() {
                     className="w-full px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 resize-none"
                   />
                 </div>
-                <EvidenceSaveButtons onSave={saveRecording} saving={savingRec} />
+                <EvidenceSaveButtons onSave={saveRecording} saving={savingRec} deviceBlob={recordedBlob} devicePrefix="evp_session" />
                 <p className="text-[10px] text-muted-foreground/60 text-center">Saves automatically with date & time</p>
                 <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); setRecorderNotes(''); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
                   <X className="w-3.5 h-3.5" /> Discard

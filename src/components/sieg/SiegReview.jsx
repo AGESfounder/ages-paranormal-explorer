@@ -102,7 +102,7 @@ export default function SiegReview({ blob, session, events, counts, correlatedCo
       {src && !saved && (
         <>
           <RecordTrimPicker value={trimMode} onChange={onTrimChange} />
-          <EvidenceSaveButtons onSave={onSave} saving={saving} />
+          <EvidenceSaveButtons onSave={onSave} saving={saving} deviceBlob={blob} devicePrefix="sieg_session" />
         </>
       )}
 

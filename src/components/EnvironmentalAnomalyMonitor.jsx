@@ -734,7 +734,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
                 <video src={URL.createObjectURL(videoBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
               )}
             </div>
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={videoBlob} devicePrefix="environment_monitor" />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">
