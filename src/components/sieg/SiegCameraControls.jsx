@@ -21,13 +21,13 @@ export default function SiegCameraControls({
       <AnomalyModePicker mode={mode} onChange={onModeChange} depthAvailable={depthAvailable} />
       {mode === 'contrast' ? (
         <SensitivityControl sensitivity={sensitivity} onChange={onSensitivityChange} />
-      ) : (
+      ) : mode === 'depth' ? (
         <DepthSensitivityControl
           protrusion={depthDetection.protrusion}
           minSize={depthDetection.minSize}
           onChange={depthDetection.update}
         />
-      )}
+      ) : null}
     </div>
   );
 }

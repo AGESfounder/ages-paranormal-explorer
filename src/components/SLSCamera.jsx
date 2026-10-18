@@ -118,10 +118,43 @@ export default function SLSCamera({ gateSave, refundSave }) {
     setRecording(true);
   };
 
+  // Device Camera mode: records a standard video from the device camera with no
+  // figure detection or overlay. The raw camera stream (video + audio) is
+  // recorded directly — no canvas, no processing loop.
+  const startDeviceCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true,
+      });
+      streamRef.current = stream;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      setActive(true);
+      startSessionRecorder(stream, () => {
+        streamRef.current = null;
+      });
+      setRecordDuration(0);
+      timerRef.current = setInterval(() => setRecordDuration(prev => prev + 1), 1000);
+    } catch (e) {
+      const name = e?.name || '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setError('Camera access denied. Allow camera and microphone permissions in your device settings, then try again.');
+      } else if (name === 'NotFoundError') {
+        setError('No camera was found on this device.');
+      } else if (name === 'NotReadableError') {
+        setError('Camera is in use by another app. Close other camera apps and try again.');
+      } else {
+        setError('Could not start the camera. Please try again.');
+      }
+    }
+  };
+
   const startCamera = async () => {
     setError('');
     setRecordedBlob(null);
     setRecordDuration(0);
+    if (mode === 'device') { await startDeviceCamera(); return; }
     if (mode === 'depth' && depthAvailable) { await startDepthCamera(); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -428,8 +461,8 @@ export default function SLSCamera({ gateSave, refundSave }) {
   return (
     <div className="space-y-3">
       <div className="relative rounded-lg overflow-hidden bg-black border border-green-500/30" style={{ aspectRatio: '4/3' }}>
-        <AnomalyCameraSource videoRef={videoRef} />
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover" />
+        <AnomalyCameraSource videoRef={videoRef} visible={mode === 'device'} />
+        <canvas ref={canvasRef} className={`absolute inset-0 w-full h-full object-cover ${mode === 'device' ? 'opacity-0' : ''}`} />
 
         {!active && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80">
@@ -476,7 +509,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
             {active
               ? mode === 'depth'
                 ? `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''}${centerDepth ? ` · ${centerDepth.toFixed(1)} m centre` : ''}`
-                : `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''} detected`
+                : mode === 'device'
+                  ? 'LIVE · RECORDING'
+                  : `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''} detected`
               : 'STANDBY'}
           </span>
         </div>
@@ -510,7 +545,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           {mode === 'depth'
             ? 'Depth analysis marks human figures only: the phone\'s own body recognition confirms a person-shaped body standing in front of the surface behind it, and only then is it outlined, with the skeleton it found drawn over it. Everything else the sensor sees stays as the room\'s own depth image, so furniture and doorways are never labelled. Both gates can be tuned above: how far a figure must stand out, and the smallest figure counted. The figure needs some light on it; the depth reading itself does not. Session is recorded — save to your Evidence Journal when done.'
-            : 'The live camera image is scanned for human-shaped patches of skin-toned colour, and any it finds are outlined. It can only flag what the camera can actually see — no infrared or depth sensing. Session is recorded — save to your Evidence Journal when done.'}
+            : mode === 'device'
+              ? 'Records a standard video from the device camera with no figure detection or overlay. Use this when you prefer a plain video recording. Session is recorded — save to your Evidence Journal when done.'
+              : 'The live camera image is scanned for human-shaped patches of skin-toned colour, and any it finds are outlined. It can only flag what the camera can actually see — no infrared or depth sensing. Session is recorded — save to your Evidence Journal when done.'}
         </p>
       </div>
       {gpsDialog}

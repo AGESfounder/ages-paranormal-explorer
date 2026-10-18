@@ -1,9 +1,10 @@
 import React from 'react';
-import { ScanFace, Layers } from 'lucide-react';
+import { ScanFace, Layers, Video } from 'lucide-react';
 
-// The Anomaly Camera's two methods. Contrast Scan is the camera-image reader that
-// runs everywhere; Depth Scan is the LiDAR reader and is only ever offered on a
-// device that actually has a depth sensor.
+// The Anomaly Camera's three methods. Contrast Scan is the camera-image reader
+// that runs everywhere; Depth Scan is the LiDAR reader and is only ever offered
+// on a device that actually has a depth sensor; Device Camera records a standard
+// video with no figure detection or overlay.
 const MODES = [
   {
     id: 'contrast',
@@ -16,11 +17,18 @@ const MODES = [
     label: 'Depth Scan',
     icon: Layers,
     desc: 'Reads the phone\'s depth sensor — LiDAR where the device carries one, Google\'s AR depth estimation on supported Android phones — and marks human figures: the phone\'s own body recognition confirms a person-shaped body standing in front of the surface behind it, and only then is it outlined, with the skeleton it found drawn over it. Everything else the sensor sees stays as the room\'s own depth image, so furniture and doorways are never labelled. The figure needs some light on it; the depth reading itself does not. Where there is no LiDAR sensor the map builds over the first few seconds: slowly sweep the phone across the room to start it.',
+    requiresDepth: true,
+  },
+  {
+    id: 'device',
+    label: 'Device Camera',
+    icon: Video,
+    desc: 'Records a standard video from the device camera with no figure detection or overlay. Use this when you prefer a plain video recording.',
   },
 ];
 
 export default function AnomalyModePicker({ mode, onChange, depthAvailable }) {
-  const modes = depthAvailable ? MODES : MODES.slice(0, 1);
+  const modes = MODES.filter((m) => !m.requiresDepth || depthAvailable);
   const current = modes.find((m) => m.id === mode) || modes[0];
 
   return (

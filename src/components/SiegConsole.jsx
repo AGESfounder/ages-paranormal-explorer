@@ -482,7 +482,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     const pres = envDev.pressure;
     readoutsRef.current = {
       acoustic: Number.isFinite(acousticDev) ? `${acousticDev >= 0 ? '+' : ''}${acousticDev.toFixed(1)} dB` : 'quiet',
-      figure: figureActive ? 'IN VIEW' : 'clear',
+      figure: cameraMode === 'device' ? 'standard' : (figureActive ? 'IN VIEW' : 'clear'),
       vibration: `${level}`,
       environment: Number.isFinite(mag)
         ? `${mag >= 0 ? '+' : ''}${mag.toFixed(1)} µT`
@@ -917,7 +917,9 @@ export default function SiegConsole({ gateSave, refundSave }) {
       frameRef.current = requestAnimationFrame(paintLoop);
     };
     frameRef.current = requestAnimationFrame(paintLoop);
-    figureTimerRef.current = setInterval(figureTick, 250);
+    if (cameraMode !== 'device') {
+      figureTimerRef.current = setInterval(figureTick, 250);
+    }
     clockTimerRef.current = setInterval(clockTick, 250);
   };
 

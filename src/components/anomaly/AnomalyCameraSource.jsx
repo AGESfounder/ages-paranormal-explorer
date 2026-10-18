@@ -2,7 +2,7 @@ import React, { useLayoutEffect } from 'react';
 
 // This is only the frame source. The existing green-and-blue canvas remains
 // the visible camera view and the recording surface.
-export default function AnomalyCameraSource({ videoRef }) {
+export default function AnomalyCameraSource({ videoRef, visible }) {
   useLayoutEffect(() => {
     const video = videoRef.current;
     video.muted = true;
@@ -27,5 +27,5 @@ export default function AnomalyCameraSource({ videoRef }) {
     };
   }, [videoRef]);
 
-  return <video ref={videoRef} playsInline muted controls={false} disablePictureInPicture disableRemotePlayback className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none" />;
+  return <video ref={videoRef} playsInline muted controls={false} disablePictureInPicture disableRemotePlayback className={`absolute inset-0 w-full h-full object-cover ${visible ? 'opacity-100' : 'opacity-0'} pointer-events-none`} />;
 }
