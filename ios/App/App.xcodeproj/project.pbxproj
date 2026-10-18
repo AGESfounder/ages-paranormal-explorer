@@ -12,6 +12,7 @@
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		E4D1A7B30F5C4E6A9B2D7C10 /* AgesDepthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D1A7B30F5C4E6A9B2D7C11 /* AgesDepthPlugin.swift */; };
 		E4D1A7B30F5C4E6A9B2D7C12 /* AgesSensorsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D1A7B30F5C4E6A9B2D7C13 /* AgesSensorsPlugin.swift */; };
+		E4D1A7B30F5C4E6A9B2D7C14 /* AgesSaveToDevicePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D1A7B30F5C4E6A9B2D7C15 /* AgesSaveToDevicePlugin.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
@@ -26,6 +27,7 @@
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		E4D1A7B30F5C4E6A9B2D7C11 /* AgesDepthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgesDepthPlugin.swift; sourceTree = "<group>"; };
 		E4D1A7B30F5C4E6A9B2D7C13 /* AgesSensorsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgesSensorsPlugin.swift; sourceTree = "<group>"; };
+		E4D1A7B30F5C4E6A9B2D7C15 /* AgesSaveToDevicePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgesSaveToDevicePlugin.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -81,6 +83,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				E4D1A7B30F5C4E6A9B2D7C11 /* AgesDepthPlugin.swift */,
 				E4D1A7B30F5C4E6A9B2D7C13 /* AgesSensorsPlugin.swift */,
+				E4D1A7B30F5C4E6A9B2D7C15 /* AgesSaveToDevicePlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -218,6 +221,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				E4D1A7B30F5C4E6A9B2D7C10 /* AgesDepthPlugin.swift in Sources */,
 				E4D1A7B30F5C4E6A9B2D7C12 /* AgesSensorsPlugin.swift in Sources */,
+				E4D1A7B30F5C4E6A9B2D7C14 /* AgesSaveToDevicePlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
