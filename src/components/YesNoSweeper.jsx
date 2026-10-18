@@ -14,6 +14,8 @@ import { primeToolSpeech, speakToolText, stopToolSpeech, releaseToolSpeech } fro
 import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
 import { CUE_XYLOPHONE } from '@/lib/toolCues';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
+import useSweeperSensors from '@/hooks/useSweeperSensors';
+import { drawSweeperBadges } from '@/lib/sweeperBadges';
 import { toast } from '@/components/ui/use-toast';
 
 // "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
@@ -28,8 +30,6 @@ const PHRASES = [
 ];
 const PHRASE_MS = 4000;
 const TRIGGER_COOLDOWN_MS = 3500;
-const ACCEL_THRESHOLD = 0.8;
-const ORIENT_THRESHOLD = 6;
 
 function formatDuration(sec) {
   const m = Math.floor(sec / 60);
@@ -48,11 +48,14 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
   const [anomalyDetected, setAnomalyDetected] = useState(false);
-  const [motionDetected, setMotionDetected] = useState(false);
   const [askingNext, setAskingNext] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
+  const triggerLockRef = useRef(null);
+  const sensorFireCountRef = useRef({});
+  const correlatedCountRef = useRef(0);
+  const { start: startSweeperSensors, arm: armSweeperSensors, stop: stopSweeperSensors, sensorStates, sensorStatesRef, getActiveSensors } = useSweeperSensors({ onTrigger: (id) => triggerLockRef.current?.(id), setSensorError });
 
   // Web Audio–based voice (unlocked on the Start tap) so the spoken answer
   // plays reliably on iOS even though it's triggered by a sensor event. Called
@@ -106,10 +109,6 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const stepRef = useRef(null);
   const drawRef = useRef(null);
   const canvasRef = useRef(null);
-  const motionHandlerRef = useRef(null);
-  const orientHandlerRef = useRef(null);
-  const baselineRef = useRef(9.8);
-  const lastOrientRef = useRef(null);
   const lastTriggerRef = useRef(0);
   const lockedRef = useRef(false);
   const indexRef = useRef(0);
@@ -132,7 +131,6 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const animFrameRef = useRef(null);
   const cameraStreamRef = useRef(null);
   const anomalyTimerRef = useRef(null);
-  const motionTimerRef = useRef(null);
   const askingNextTimerRef = useRef(null);
   const askingNextRef = useRef(false);
   const lastAnomalyTriggerRef = useRef(0);
@@ -144,11 +142,9 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const sessionActiveRef = useRef(false);
   const resumeDelayRef = useRef(null);
   const anomalyDetectedRef = useRef(false);
-  const motionDetectedRef = useRef(false);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
   useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
-  useEffect(() => { motionDetectedRef.current = motionDetected; }, [motionDetected]);
   useEffect(() => () => stopEverything(), []);
 
   const stopEverything = () => {
@@ -157,18 +153,15 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
-    if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
-    if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
+    stopSweeperSensors();
     cleanup();
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
-    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     setCameraActive(false);
     setAnomalyDetected(false);
-    setMotionDetected(false);
     setAskingNext(false);
     askingNextRef.current = false;
     sweepingRef.current = false;
@@ -233,10 +226,13 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     });
   };
 
-  const triggerLock = useCallback(() => {
+  const triggerLock = useCallback((sensorId) => {
     const now = Date.now();
     if (lockedRef.current || !sweepingRef.current || now - lastTriggerRef.current < TRIGGER_COOLDOWN_MS) return;
     lastTriggerRef.current = now;
+    sensorFireCountRef.current[sensorId] = (sensorFireCountRef.current[sensorId] || 0) + 1;
+    const sensors = getActiveSensors();
+    if (sensors.length > 1) correlatedCountRef.current++;
     const idx = indexRef.current;
     const phrase = PHRASES[idx];
     lockedRef.current = true;
@@ -266,50 +262,8 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     } else {
       announce();
     }
-  }, []);
-
-  const requestSensorPermissions = async () => {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-      try {
-        const res = await DeviceMotionEvent.requestPermission();
-        if (res !== 'granted') { setSensorError('Motion sensor permission was denied. Lock-on-trigger needs movement detection — enable Motion & Orientation Access in your browser/Safari settings and reload.'); return false; }
-      } catch {}
-    }
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      try { await DeviceOrientationEvent.requestPermission(); } catch {}
-    }
-    return true;
-  };
-
-  const flashMotion = useCallback(() => {
-    setMotionDetected(true);
-    if (motionTimerRef.current) clearTimeout(motionTimerRef.current);
-    motionTimerRef.current = setTimeout(() => setMotionDetected(false), 3000);
-  }, []);
-
-  const startSensors = async () => {
-    const ok = await requestSensorPermissions();
-    if (!ok) return;
-    const motionHandler = (e) => {
-      const a = e.accelerationIncludingGravity;
-      if (!a) return;
-      const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
-      if (Math.abs(mag - baselineRef.current) > ACCEL_THRESHOLD) { flashMotion(); triggerLock(); }
-      baselineRef.current = baselineRef.current * 0.97 + mag * 0.03;
-    };
-    motionHandlerRef.current = motionHandler;
-    window.addEventListener('devicemotion', motionHandler);
-
-    const orientHandler = (e) => {
-      const cur = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
-      if (lastOrientRef.current == null) { lastOrientRef.current = cur; return; }
-      const lo = lastOrientRef.current;
-      if (Math.abs(cur.a - lo.a) > ORIENT_THRESHOLD || Math.abs(cur.b - lo.b) > ORIENT_THRESHOLD || Math.abs(cur.g - lo.g) > ORIENT_THRESHOLD) { flashMotion(); triggerLock(); }
-      lastOrientRef.current = cur;
-    };
-    orientHandlerRef.current = orientHandler;
-    window.addEventListener('deviceorientation', orientHandler);
-  };
+  }, [getActiveSensors]);
+  triggerLockRef.current = triggerLock;
 
   // Camera-based anomaly trigger: runs the same figure detection as the
   // Anomaly Camera. When a humanoid shape is detected, the current phrase is
@@ -358,7 +312,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
         setAnomalyDetected(true);
         if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
         anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
-        triggerLock();
+        triggerLock('anomaly');
       }
     } catch {}
     animFrameRef.current = requestAnimationFrame(processCameraFrame);
@@ -422,22 +376,13 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     }
 
     // Draw sensor alert badges on the canvas so they appear in the recording
-    if (anomalyDetectedRef.current) {
-      ctx.fillStyle = 'rgba(239,68,68,0.92)';
-      ctx.fillRect(w / 2 - 85, 44, 170, 22);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('⚠ ANOMALY DETECTED', w / 2, 59);
-    }
-    if (motionDetectedRef.current) {
-      ctx.fillStyle = 'rgba(245,158,11,0.92)';
-      ctx.fillRect(w / 2 - 85, h - 52, 170, 22);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('⚠ MOTION DETECTED', w / 2, h - 37);
-    }
+    const ss = sensorStatesRef.current;
+    drawSweeperBadges(ctx, w, h, {
+      anomaly: anomalyDetectedRef.current,
+      motion: ss.motion || ss.orientation,
+      magnetic: ss.magnetic,
+      barometric: ss.barometric,
+    });
 
     ctx.textAlign = 'left';
     ctx.fillStyle = '#64748b';
@@ -461,11 +406,11 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     setError('');
     lockedRef.current = false;
     lockedIdxRef.current = null;
-    baselineRef.current = 9.8;
-    lastOrientRef.current = null;
     lastTriggerRef.current = 0;
     indexRef.current = 0;
     sessionDurRef.current = 0;
+    sensorFireCountRef.current = {};
+    correlatedCountRef.current = 0;
     setSessionDuration(0);
     setAskingNext(false);
     askingNextRef.current = false;
@@ -482,11 +427,16 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     // native this pre-loads the voice list.
     primeToolSpeech();
     startAskingPhase();
-    await startSensors();
+    // Start the sensor layer (permissions + native sensor calibration begins
+    // during the settle pause so magnetic/barometric baselines are ready).
+    await startSweeperSensors();
     await startCamera();
     await new Promise(r => setTimeout(r, 80));
     startDrawing();
     await startRecording();
+    // Arm sensors after the device has settled so tapping the permission
+    // prompts doesn't fire a false lock.
+    armSweeperSensors();
     // Length from the clock, not from the timer callbacks that happened to fire:
     // a phone throttles timers while it is recording, and the session log has to
     // show the session's true length.
@@ -503,11 +453,9 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
-    if (motionHandlerRef.current) { window.removeEventListener('devicemotion', motionHandlerRef.current); motionHandlerRef.current = null; }
-    if (orientHandlerRef.current) { window.removeEventListener('deviceorientation', orientHandlerRef.current); orientHandlerRef.current = null; }
+    stopSweeperSensors();
     if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
     if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
-    if (motionTimerRef.current) { clearTimeout(motionTimerRef.current); motionTimerRef.current = null; }
     if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
@@ -515,7 +463,6 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
     setCameraActive(false);
     setAnomalyDetected(false);
-    setMotionDetected(false);
     setAskingNext(false);
     askingNextRef.current = false;
     sweepingRef.current = false;
@@ -551,11 +498,18 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
+      const fireSummary = Object.entries(sensorFireCountRef.current)
+        .filter(([, n]) => n > 0)
+        .map(([s, n]) => `${s}: ${n}`)
+        .join(', ');
+      const triggerLine = fireSummary
+        ? `Triggers — ${fireSummary}${correlatedCountRef.current > 0 ? ` | Correlated locks: ${correlatedCountRef.current}` : ''}. `
+        : '';
       await base44.entities.Evidence.create({
         title: `Yes/No/IDK Sweeper — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'yesno',
-        description: `Yes/No/IDK Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} answer(s) captured via environment trigger: ${captured.join(', ') || 'none'}.`,
+        description: `Yes/No/IDK Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} answer(s) captured via environment trigger: ${captured.join(', ') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (camera).`,
         file_url,
         date,
         time,
@@ -589,7 +543,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
           <ol className="text-[11px] text-foreground/70 leading-relaxed list-decimal pl-4 space-y-0.5">
             <li>Tap <span className="text-primary font-medium">Start</span>. "Asking Next Question…" appears for 10 seconds (no dictation) — THIS IS WHEN YOU ASK A QUESTION — then the phrases <span className="text-foreground">YES</span>, <span className="text-foreground">NO</span>, and <span className="text-foreground">I DON'T KNOW</span> appear once, one every 4 seconds, each spoken aloud in your device's narration voice, while the session records.</li>
             <li>If no trigger occurs during the rotation, "Asking Next Question…" appears again for 10 seconds and the cycle repeats. If the device is triggered, the phrase on screen finishes speaking, then xylophone notes announce the answer: <span className="text-foreground">1 note = YES</span>, <span className="text-foreground">2 notes = NO</span>, <span className="text-foreground">3 notes = I DON'T KNOW</span>. The phrase stays lit on screen and in the recording.</li>
-            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and the xylophone plays the answer. The camera also watches for anomalies: a detected figure locks the current phrase the same way.</li>
+            <li>For best accuracy and functionality, place your device on a stand or prop it up so it faces an area where no "living things" are visible……. OR…… hold your device still. Any sudden movement, tilt, or vibration locks the current phrase — it glows and the xylophone plays the answer. The camera also watches for anomalies: a detected figure locks the current phrase the same way. The magnetic and barometric sensors also listen for environmental departures from the room's baseline — a sustained shift in the magnetic field or air pressure locks the current phrase too. When multiple sensors fire at once, all their badges light up together (a correlated trigger).</li>
             <li>Tap <span className="text-primary font-medium">Stop</span>, review the recording, then <span className="text-primary font-medium">Save</span> it to your Evidence Journal.</li>
           </ol>
           <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>
@@ -631,11 +585,27 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
               </motion.div>
             </div>
           )}
-          {motionDetected && (
+          {(sensorStates.motion || sensorStates.orientation) && (
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none">
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                 className="px-3 py-1 rounded bg-amber-500/90 border border-amber-300/50">
                 <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ MOTION DETECTED</p>
+              </motion.div>
+            </div>
+          )}
+          {sensorStates.barometric && (
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none">
+              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="px-2 py-1 rounded bg-blue-500/90 border border-blue-300/50">
+                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ BAROMETRIC</p>
+              </motion.div>
+            </div>
+          )}
+          {sensorStates.magnetic && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="px-2 py-1 rounded bg-violet-500/90 border border-violet-300/50">
+                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ MAGNETIC</p>
               </motion.div>
             </div>
           )}
@@ -644,7 +614,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
         <video ref={camVideoRef} className="hidden" playsInline muted />
         <canvas ref={detectCanvasRef} className="hidden" />
         <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
-          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or vibrate the device — or let the camera catch a figure — to lock an answer
+          <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or vibrate the device — or let the camera, magnetic, or barometric sensors trigger — to lock an answer
         </p>
         {lockedPhrase ? (
           <motion.p initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
