@@ -7,10 +7,8 @@ export default function SectionHeader({ title, subtitle, showBack = false, onBac
   const navigate = useNavigate();
 
   return (
-    <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <GhostFootsteps />
-      </div>
+    <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 overflow-hidden">
+      <GhostFootsteps />
       <div className="relative z-10 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {showBack && (
