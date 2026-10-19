@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { buildTrimmedBlob } from '@/lib/recordTrim';
+import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 
 // Shared MediaRecorder lifecycle for the canvas-based sweeper tools (Terms,
 // Alphabet, Yes/No/IDK). All three recorded a <canvas> + mic into a
@@ -65,6 +66,7 @@ export default function useSweeperRecorder({
   const audioOnlyRef = useRef(false);
   const userStoppedRef = useRef(false);
   const heartbeatRef = useRef(null);
+  const chunkPumpRef = useRef(null);
   const restartCountRef = useRef(0);
   const startedAtRef = useRef(0);
   const [videoBlob, setVideoBlob] = useState(null);
@@ -211,6 +213,7 @@ export default function useSweeperRecorder({
       if (audioTrack) audioTrack.addEventListener('ended', onTrackEnded('audio'));
 
       mr.onstop = () => {
+        stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
         if (userStoppedRef.current) {
           // User-initiated stop — assemble the final blob from every chunk
           // collected across the whole session (including restarts).
@@ -243,6 +246,7 @@ export default function useSweeperRecorder({
       };
 
       mr.start(1000);
+      chunkPumpRef.current = startChunkPump(mr);
       return true;
     } catch (e) {
       setSensorError?.('Microphone access denied. Grant permission to record the session.');
@@ -277,6 +281,7 @@ export default function useSweeperRecorder({
   const cleanup = useCallback(() => {
     userStoppedRef.current = true;
     stopHeartbeat();
+    stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try { mediaRecorderRef.current.stop(); } catch {}
     }

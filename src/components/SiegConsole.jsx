@@ -30,6 +30,7 @@ import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { toast } from '@/components/ui/use-toast';
 import RecordTrimPicker from '@/components/RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
+import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 
 // SIEG — one integrated session, seven tools at once.
 //
@@ -156,6 +157,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const frameTrackRef = useRef(null);
   const chunksRef = useRef([]);
   const mimeRef = useRef('');
+  const chunkPumpRef = useRef(null);
   const userStoppedRef = useRef(true);
   const ambienceHeldRef = useRef(false);
   const autoSaveRef = useRef(false);
@@ -582,6 +584,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     recorderRef.current = mr;
     mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
+      stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
       if (userStoppedRef.current) {
         const actual = (mr.mimeType || mime || 'video/webm').split(';')[0];
         releaseOwnTrack();
@@ -603,6 +606,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     } catch {
       return false;
     }
+    chunkPumpRef.current = startChunkPump(mr);
     return true;
   };
 
@@ -615,6 +619,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   };
 
   const teardownDevices = () => {
+    stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
     frameTrackRef.current = null;
     if (frameRef.current) { cancelAnimationFrame(frameRef.current); frameRef.current = null; }
     [figureTimerRef, clockTimerRef, heartbeatRef].forEach((r) => {

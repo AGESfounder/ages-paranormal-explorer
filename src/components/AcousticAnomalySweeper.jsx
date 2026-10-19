@@ -11,6 +11,7 @@ import { ACOUSTIC_BANDS, createBaselineTracker, measureLevels, eventThresholdDb,
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
+import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 
 // Listen-only acoustic monitor. It never emits sound: it listens through the
 // device microphone, measures the room's own baseline first, then watches for
@@ -82,6 +83,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   const sessionStartRef = useRef(0);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const chunkPumpRef = useRef(null);
   const canvasStreamRef = useRef(null);
   const mimeRef = useRef('');
   const audioOnlyRef = useRef(false);
@@ -210,6 +212,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     chunksRef.current = [];
     mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
+      stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
       const blob = new Blob(chunksRef.current.map((c) => c.blob), { type: mimeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm') });
       setVideoBlob(blob);
       // Release the microphone and the audio context only once the recorder has
@@ -217,6 +220,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
       closeAudio();
     };
     mr.start(1000);
+    chunkPumpRef.current = startChunkPump(mr);
     recordingRef.current = true;
     setRecording(true);
   };
