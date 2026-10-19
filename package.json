@@ -13,6 +13,7 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
     "verify:native-plugins": "node verify-ios-native-plugins.mjs",
+    "verify:android-native-plugins": "node verify-android-native-plugins.mjs",
     "preview": "vite preview",
     "postinstall": "patch-package"
   },

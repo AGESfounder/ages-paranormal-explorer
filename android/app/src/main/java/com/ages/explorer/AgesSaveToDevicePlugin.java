@@ -1,5 +1,6 @@
 package com.ages.explorer;
 
+import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.net.Uri;
@@ -8,10 +9,13 @@ import android.os.Environment;
 import android.provider.MediaStore;
 
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -35,11 +39,32 @@ import java.io.OutputStream;
  * permission is needed on modern devices. Audio is rejected (the JS layer
  * falls back to the web-style download for audio recordings).
  */
-@CapacitorPlugin(name = "AgesSaveToDevice")
+@CapacitorPlugin(
+    name = "AgesSaveToDevice",
+    permissions = {
+        @Permission(alias = "legacyStorage", strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE })
+    }
+)
 public class AgesSaveToDevicePlugin extends Plugin {
+
+    @PermissionCallback
+    private void legacyStoragePermissionCallback(PluginCall call) {
+        if (getPermissionState("legacyStorage") != PermissionState.GRANTED) {
+            call.reject("Storage permission was denied. Allow storage access in app settings to save to the Gallery.");
+            return;
+        }
+        saveMedia(call);
+    }
 
     @PluginMethod
     public void saveMedia(PluginCall call) {
+        // Only API 24–28 needs a runtime write grant; API 29+ keeps scoped storage.
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+                && getPermissionState("legacyStorage") != PermissionState.GRANTED) {
+            requestPermissionForAlias("legacyStorage", call, "legacyStoragePermissionCallback");
+            return;
+        }
+
         String filePath = call.getString("filePath");
         String mediaType = call.getString("mediaType");
         String displayName = call.getString("displayName");

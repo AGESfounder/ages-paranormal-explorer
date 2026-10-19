@@ -19,6 +19,11 @@ workflows:
         script: npm run build
       - name: Sync the existing web app into Capacitor Android
         script: npx cap sync android
+      - name: Verify Android Version 21 and native plugin wiring before Gradle
+        script: |
+          set -eu
+          cd "$CM_BUILD_DIR"
+          npm run verify:android-native-plugins
       - name: Set the Android SDK location
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
