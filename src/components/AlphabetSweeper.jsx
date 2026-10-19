@@ -693,7 +693,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         {captured.length > 0 && (
           <div className="space-y-1.5">
             <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Spelling ({captured.length} letters)</p>
-            <div className="px-3 py-2 rounded-lg bg-cyan-glow/10 border border-cyan-glow/30 text-cyan-glow font-mono text-lg tracking-[0.25em] break-all leading-relaxed">
+            <div className="px-3 py-2.5 rounded-lg bg-cyan-glow/10 border border-cyan-glow/30 text-cyan-glow font-mono text-2xl tracking-[0.25em] break-all leading-relaxed">
               {captured.join('')}
             </div>
           </div>
@@ -720,7 +720,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         {captured.length > 0 && (
           <div className="space-y-1.5">
             <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground">Spelling ({captured.length} letters)</p>
-            <div className="px-3 py-2 rounded-lg bg-cyan-glow/10 border border-cyan-glow/30 text-cyan-glow font-mono text-lg tracking-[0.25em] break-all leading-relaxed">
+            <div className="px-3 py-2.5 rounded-lg bg-cyan-glow/10 border border-cyan-glow/30 text-cyan-glow font-mono text-2xl tracking-[0.25em] break-all leading-relaxed">
               {captured.join('')}
             </div>
           </div>
