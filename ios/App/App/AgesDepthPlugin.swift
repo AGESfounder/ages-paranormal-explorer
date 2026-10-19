@@ -88,8 +88,8 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     // Poses are read on every depth frame (≈8 fps) so the skeleton follows the
     // body's movement live. A short hold covers a missed frame without freezing
     // the skeleton at a stale pose for long.
-    private static let poseInterval: TimeInterval = 0.3
-    private static let poseHold: TimeInterval = 1.0
+    private static let poseInterval: TimeInterval = 0.125
+    private static let poseHold: TimeInterval = 0.25
 
     private var lastPose: TimeInterval = -1
     private var lastBodies: [Body] = []
@@ -534,6 +534,12 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             centerDepth = Double(cellDepth[centerCell])
         }
 
+        // Depth diagnostic: which gate is failing for a body in view. poseCount is
+        // the held confirmed poses, formCount the depth forms that passed the size
+        // gates, figureCount the poses that overlap a form. bodyHeight is the tallest
+        // confirmed pose's box height (fraction of the frame), so a sub-gate pose is
+        // visible. The two gate values are echoed so the readout stays honest.
+        let maxBodyHeight = held.map { $0.height }.max() ?? 0.0
         let payload: [String: Any] = [
             "image": "data:image/jpeg;base64," + jpeg.base64EncodedString(),
             "figures": figures.map { $0.payload },
@@ -541,7 +547,13 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             "nearest": Double(nearest),
             "centerDepth": centerDepth,
             "width": Double(rendered.size.width),
-            "height": Double(rendered.size.height)
+            "height": Double(rendered.size.height),
+            "poseCount": held.count,
+            "formCount": forms.count,
+            "figureCount": figures.count,
+            "bodyHeight": maxBodyHeight,
+            "protrusion": Double(liveProtrusion),
+            "minHeight": liveFigureHeight
         ]
         DispatchQueue.main.async { [weak self] in
             self?.notifyListeners("frame", data: payload)
