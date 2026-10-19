@@ -6,7 +6,7 @@ import { getCategory } from '@/lib/amenityCategories';
 // spoon for food, droplet for restroom, camera for site, fuel pump for gas,
 // bed for lodging, pin for other — instead of a letter.
 const ICON_SVG = {
-  restroom: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+  restroom: '<rect x="7" y="2.5" width="10" height="5" rx="1"/><path d="M5 7.5h14v3.5a7 7 0 0 1-7 7H12a7 7 0 0 1-7-7z"/><path d="M9 18h6v3H9z"/>',
   food: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
   site: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
   gas: '<path d="M3 22h12V4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v18z"/><path d="M3 12h12"/><path d="M15 6h2a2 2 0 0 1 2 2v8a2 2 0 1 0 4 0V8l-3-3"/>',
