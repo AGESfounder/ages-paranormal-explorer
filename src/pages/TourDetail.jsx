@@ -1292,31 +1292,31 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         title={tour.title}
         subtitle={`${tour.city}, ${tour.state}`}
         showBack
-        badge={<TourCategoryBadge category={tour.tour_category} />}
         rightAction={
           <button onClick={toggleFavorite} className="p-2">
             <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`} />
           </button>
         }
         belowSubtitle={
-          <>
-            <div>
-              {(tour.tour_category === 'landmark' || tour.tour_category === 'cold_spot') && (
-                <TourTypeSelector value={tour.access_type} onChange={handleAccessTypeChange} />
-              )}
+          <div className="w-full space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <TourCategoryBadge category={tour.tour_category} />
+              <button
+                onClick={() => setAmenitySheetOpen(true)}
+                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1.5 rounded-full border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                title="Field Stops — community-shared restrooms, food, gas & more"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                <span className="text-[11px] font-heading uppercase tracking-wider">Field Stops</span>
+                {amenities.length > 0 && (
+                  <span className="text-[9px] font-mono bg-primary/20 px-1.5 rounded-full">{amenities.length}</span>
+                )}
+              </button>
             </div>
-            <button
-              onClick={() => setAmenitySheetOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-              title="Field Stops — community-shared restrooms, food, gas & more"
-            >
-              <MapPin className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-heading uppercase tracking-wider">Field Stops</span>
-              {amenities.length > 0 && (
-                <span className="text-[9px] font-mono bg-primary/20 px-1.5 rounded-full">{amenities.length}</span>
-              )}
-            </button>
-          </>
+            {(tour.tour_category === 'landmark' || tour.tour_category === 'cold_spot') && (
+              <TourTypeSelector value={tour.access_type} onChange={handleAccessTypeChange} />
+            )}
+          </div>
         }
       />
 
