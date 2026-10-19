@@ -1294,7 +1294,17 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         showBack
         badge={<TourCategoryBadge category={tour.tour_category} />}
         rightAction={
-          <div className="flex items-center gap-1.5">
+          <button onClick={toggleFavorite} className="p-2">
+            <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`} />
+          </button>
+        }
+        belowSubtitle={
+          <>
+            <div>
+              {(tour.tour_category === 'landmark' || tour.tour_category === 'cold_spot') && (
+                <TourTypeSelector value={tour.access_type} onChange={handleAccessTypeChange} />
+              )}
+            </div>
             <button
               onClick={() => setAmenitySheetOpen(true)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
@@ -1306,10 +1316,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
                 <span className="text-[9px] font-mono bg-primary/20 px-1.5 rounded-full">{amenities.length}</span>
               )}
             </button>
-            <button onClick={toggleFavorite} className="p-2">
-              <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`} />
-            </button>
-          </div>
+          </>
         }
       />
 
@@ -1342,9 +1349,6 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           </div>
           {tour.best_time && <p className="text-xs text-primary flex items-center gap-1"><Zap className="w-3 h-3" /> Best time: {tour.best_time}</p>}
           <NarrationLengthSelector value={narrationLength} onChange={handleNarrationLengthChange} estimatedDuration={tour.estimated_duration} />
-          {(tour.tour_category === 'landmark' || tour.tour_category === 'cold_spot') && (
-            <TourTypeSelector value={tour.access_type} onChange={handleAccessTypeChange} />
-          )}
           {hasDrivingStops && <TravelModeSelector value={travelMode} onChange={setTravelMode} />}
         </div>
 

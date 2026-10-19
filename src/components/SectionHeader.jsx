@@ -3,7 +3,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GhostFootsteps from './GhostFootsteps';
 
-export default function SectionHeader({ title, subtitle, showBack = false, onBack, rightAction, badge }) {
+export default function SectionHeader({ title, subtitle, showBack = false, onBack, rightAction, badge, belowSubtitle }) {
   const navigate = useNavigate();
 
   return (
@@ -26,6 +26,11 @@ export default function SectionHeader({ title, subtitle, showBack = false, onBac
         </div>
         {rightAction && <div>{rightAction}</div>}
       </div>
+      {belowSubtitle && (
+        <div className="relative z-10 flex items-center justify-between gap-2 mt-2">
+          {belowSubtitle}
+        </div>
+      )}
     </div>
   );
 }
