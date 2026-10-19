@@ -358,7 +358,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           className="absolute top-2 right-2 z-[1000] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-card/90 border border-border/60 text-[10px] font-heading uppercase tracking-wider backdrop-blur-sm hover:bg-card transition-colors"
         >
           <span className="w-2 h-2 rounded-full bg-primary" />
-          {amenities.length} Add-On{amenities.length !== 1 ? 's' : ''}
+          {amenities.length} Field Stop{amenities.length !== 1 ? 's' : ''}
           <span className="text-muted-foreground">{showAmenities ? 'on' : 'off'}</span>
         </button>
       )}

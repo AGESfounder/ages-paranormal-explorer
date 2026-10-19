@@ -31,7 +31,7 @@ export default function AmenitySheet({ open, onOpenChange, tourId, amenities, on
   const handleDelete = async (amenity) => {
     try {
       await base44.entities.TourAmenity.delete(amenity.id);
-      toast({ title: 'Add-on removed' });
+      toast({ title: 'Field Stop removed' });
       onAmenitiesChanged?.();
     } catch (e) {
       toast({ title: 'Could not remove', variant: 'destructive' });
@@ -49,10 +49,10 @@ export default function AmenitySheet({ open, onOpenChange, tourId, amenities, on
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-primary" /> Community Add-Ons
+              <MapPin className="w-4 h-4 text-primary" /> Field Stops
             </DialogTitle>
             <DialogDescription>
-              Restrooms, food, sites to see and more, shared by explorers like you. Add-ons appear on the tour map for everyone.
+              Restrooms, food, sites to see and more, shared by explorers like you. Field Stops appear on the tour map for everyone.
             </DialogDescription>
           </DialogHeader>
 
@@ -65,12 +65,12 @@ export default function AmenitySheet({ open, onOpenChange, tourId, amenities, on
           ) : (
             <div className="space-y-2">
               <Button onClick={() => setAdding(true)} className="w-full">
-                <Plus className="w-4 h-4 mr-2" /> Add an Add-On
+                <Plus className="w-4 h-4 mr-2" /> Add a Field Stop
               </Button>
 
               {sorted.length === 0 ? (
                 <p className="text-center text-xs text-muted-foreground py-8">
-                  No add-ons yet. Be the first to add one!
+                  No Field Stops yet. Be the first to add one!
                 </p>
               ) : (
                 sorted.map((a) => {

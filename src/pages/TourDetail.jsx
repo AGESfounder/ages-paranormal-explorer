@@ -1294,15 +1294,16 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         showBack
         badge={<TourCategoryBadge category={tour.tour_category} />}
         rightAction={
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setAmenitySheetOpen(true)}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-border/50 bg-card/40 hover:bg-card/70 transition-colors"
-              title="Community Add-Ons"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              title="Field Stops — community-shared restrooms, food, gas & more"
             >
-              <MapPin className="w-4 h-4 text-primary" />
+              <MapPin className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-heading uppercase tracking-wider">Field Stops</span>
               {amenities.length > 0 && (
-                <span className="text-[10px] font-heading text-foreground">{amenities.length}</span>
+                <span className="text-[9px] font-mono bg-primary/20 px-1.5 rounded-full">{amenities.length}</span>
               )}
             </button>
             <button onClick={toggleFavorite} className="p-2">
