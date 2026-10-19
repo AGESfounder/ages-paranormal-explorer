@@ -88,8 +88,8 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     // Poses are read on every depth frame (≈8 fps) so the skeleton follows the
     // body's movement live. A short hold covers a missed frame without freezing
     // the skeleton at a stale pose for long.
-    private static let poseInterval: TimeInterval = 0.125
-    private static let poseHold: TimeInterval = 0.25
+    private static let poseInterval: TimeInterval = 0.3
+    private static let poseHold: TimeInterval = 1.0
 
     private var lastPose: TimeInterval = -1
     private var lastBodies: [Body] = []
