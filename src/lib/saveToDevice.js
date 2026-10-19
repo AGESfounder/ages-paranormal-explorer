@@ -49,10 +49,14 @@ export async function saveBlobToDevice(blob, filename) {
       const ext = filename.split('.').pop() || (isAudio ? 'm4a' : 'mp4');
       const tempPath = `ages_temp_${Date.now()}.${ext}`;
       const base64 = await blobToBase64(blob);
+      // encoding: 'base64' is required — without it Capacitor writes the base64
+      // string as UTF-8 text, so the file on disk is the text, not the binary
+      // audio/video, and the native save hands a text file to Photos/Documents.
       await Filesystem.writeFile({
         data: base64,
         path: tempPath,
         directory: Directory.Cache,
+        encoding: 'base64',
       });
       const { uri } = await Filesystem.getUri({ path: tempPath, directory: Directory.Cache });
       await AgesSaveToDevice.saveMedia({ filePath: uri, mediaType, displayName: filename });
