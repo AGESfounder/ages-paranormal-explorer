@@ -488,9 +488,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
     setTimeout(() => navigator.geolocation.clearWatch(watchId), 20000);
   };
 
-  const handleMarkerDragEnd = async (latlng) => {
+  const handleMarkerDragEnd = async (stopId, latlng) => {
     try {
-      const result = await verifyStopLocation(stop.id, stop.tour_id, latlng.lat, latlng.lng, user?.id);
+      const result = await verifyStopLocation(stopId, stop.tour_id, latlng.lat, latlng.lng, user?.id);
       setStop(prev => ({ ...prev, latitude: latlng.lat, longitude: latlng.lng, user_verified: true, needs_placement: false }));
       autoNameParking(latlng.lat, latlng.lng);
       toast({

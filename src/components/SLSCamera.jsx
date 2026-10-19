@@ -18,6 +18,8 @@ import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 
+const DEPTH_UNSUPPORTED_MESSAGE = 'Depth Scan is unavailable on this device/camera configuration. Choose Contrast Scan or Device Camera.';
+
 export default function SLSCamera({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
   const videoRef = useRef(null);
@@ -37,10 +39,10 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const [recordDuration, setRecordDuration] = useState(0);
   const [saving, setSaving] = useState(false);
   const [trimMode, setTrimMode] = useState('full');
-  // Which method the camera uses. The depth layer is only ever offered on a device
-  // that actually has a depth sensor, so the tool is unchanged everywhere else.
+  // Availability is preliminary; the native session checks the depth mode at start.
   const [mode, setMode] = useState('contrast');
   const [depthAvailable, setDepthAvailable] = useState(false);
+  const [depthUnavailable, setDepthUnavailable] = useState(false);
   const [centerDepth, setCenterDepth] = useState(null);
   const [depthHint, setDepthHint] = useState(null);
   const anomalyTimerRef = useRef(null);
@@ -100,7 +102,12 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // Ask the native module once whether this device can do a depth scan at all.
   useEffect(() => {
     let cancelled = false;
-    depthSupport().then((result) => { if (!cancelled) setDepthAvailable(result.supported); });
+    depthSupport().then((result) => {
+      if (!cancelled) {
+        setDepthAvailable(result.supported);
+        setDepthUnavailable(!result.supported);
+      }
+    });
     return () => { cancelled = true; };
   }, []);
 
@@ -166,7 +173,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
     setRecordedBlob(null);
     setRecordDuration(0);
     if (mode === 'device') { await startDeviceCamera(); return; }
-    if (mode === 'depth' && depthAvailable) { await startDepthCamera(); return; }
+    if (mode === 'depth') {
+      if (depthAvailable) await startDepthCamera();
+      else setError(DEPTH_UNSUPPORTED_MESSAGE);
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -236,10 +247,14 @@ export default function SLSCamera({ gateSave, refundSave }) {
     // lands the session in the usual Stop & Save state — the recorder and the
     // native session never outlive a depth lane that has already failed.
     depthErrorUnsubRef.current = onDepthError((failure) => {
+      if (failure?.category === 'unsupported') {
+        setDepthAvailable(false);
+        setDepthUnavailable(true);
+      }
       setError(failure?.category === 'permission'
         ? 'The depth session stopped — camera access is denied. Allow camera access for the app in Settings, then start again.'
         : failure?.category === 'unsupported'
-          ? 'The depth session stopped — this device or its current configuration cannot run a depth scan.'
+          ? DEPTH_UNSUPPORTED_MESSAGE
           : `The depth session failed: ${failure?.message || 'the native depth session ended.'}`);
       stopCamera();
     });
@@ -248,12 +263,16 @@ export default function SLSCamera({ gateSave, refundSave }) {
       await startDepthStream(8);
     } catch (e) {
       if (depthErrorUnsubRef.current) { depthErrorUnsubRef.current(); depthErrorUnsubRef.current = null; }
+      if (e?.category === 'unsupported') {
+        setDepthAvailable(false);
+        setDepthUnavailable(true);
+      }
       // Coded rejections: say which of the distinct failures actually happened
       // instead of a generic "could not start".
       setError(e?.category === 'permission'
         ? 'Camera access is denied. Allow camera access for the app in Settings, then try again.'
         : e?.category === 'unsupported'
-          ? 'The depth module reports this device has no depth sensor, so a depth scan cannot run.'
+          ? DEPTH_UNSUPPORTED_MESSAGE
           : e?.category === 'unavailable'
             ? 'The depth module did not respond in this build of the app — update the app and try again.'
             : 'The depth sensor could not start. Close other camera apps and try again.');
@@ -497,6 +516,10 @@ export default function SLSCamera({ gateSave, refundSave }) {
         )}
       </div>
 
+      {depthUnavailable && (
+        <p role="status" className="text-xs text-muted-foreground text-pretty px-2">{DEPTH_UNSUPPORTED_MESSAGE}</p>
+      )}
+
       {!active && (
         <div className="space-y-3">
           <AnomalyModePicker mode={mode} onChange={setMode} depthAvailable={depthAvailable} />
@@ -531,7 +554,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
             <CameraOff className="w-3 h-3" /> Stop & Save
           </button>
         ) : (
-          <button onClick={startCamera} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-[10px] uppercase tracking-wider hover:bg-green-500/20 transition-colors">
+          <button onClick={startCamera} disabled={mode === 'depth' && !depthAvailable} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-[10px] uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <Video className="w-3 h-3" /> Activate
           </button>
         )}

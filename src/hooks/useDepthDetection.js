@@ -18,6 +18,7 @@ const RANGE = { protrusion: [0.1, 1.2], minSize: [15, 60] };
 export const DEPTH_DETECTION_DEFAULTS = { protrusion: 0.35, minSize: 30 };
 const STORAGE_KEY = 'ages_depth_detection';
 
+/** @param {number} value @param {number[]} range */
 const clamp = (value, [min, max]) => Math.min(max, Math.max(min, value));
 
 export default function useDepthDetection() {

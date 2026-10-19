@@ -53,7 +53,6 @@ export async function saveBlobToDevice(blob, filename) {
         data: base64,
         path: tempPath,
         directory: Directory.Cache,
-        encoding: 'base64',
       });
       const { uri } = await Filesystem.getUri({ path: tempPath, directory: Directory.Cache });
       await AgesSaveToDevice.saveMedia({ filePath: uri, mediaType, displayName: filename });

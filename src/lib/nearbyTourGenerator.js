@@ -211,7 +211,7 @@ function dedupeToursById(tours) {
  *   3. If that also fails, return existing eligible tours for the UI to suggest.
  *
  * @param {string} locationContext — e.g. "within a 30-mile radius of ..."
- * @param {NearbyOriginOpts} [originOpts] — origin lat/lng + radius or min/max band
+ * @param {NearbyOriginOpts} [originOpts] - origin lat/lng + radius or min/max band
  * @returns {Promise<{status: 'created', tour: object, existingTours: array} | {status: 'none', existingTours: array}>}
  */
 export async function generateNewNearbyTour(locationContext, originOpts = null) {

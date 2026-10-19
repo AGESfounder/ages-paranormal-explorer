@@ -66,6 +66,19 @@ for (const plugin of ['AgesSaveToDevicePlugin', 'AgesSettingsPlugin', 'AgesDepth
 const sensors = java(`${nativePath}AgesSensorsPlugin.java`);
 check('Sensors load remains @Override public void load()', /@Override\s+public void load\(\)\s*\{/.test(sensors));
 
+const depth = java(`${nativePath}AgesDepthPlugin.java`);
+const depthGuard = /if\s*\(!session\.isDepthModeSupported\(Config\.DepthMode\.AUTOMATIC\)\)\s*\{\s*stopSession\(\);\s*call\.reject\("[^"\n]+",\s*"depth_unsupported"\);\s*return;\s*\}/;
+const guardAt = depth.search(depthGuard);
+const sessionAt = depth.indexOf('session = new Session(getActivity());');
+const enableAt = depth.indexOf('config.setDepthMode(Config.DepthMode.AUTOMATIC);');
+const configureAt = depth.indexOf('session.configure(config);');
+const resumeAt = depth.indexOf('session.resume();');
+check('Installed session checks AUTOMATIC support before enabling/configuring/resuming depth', sessionAt >= 0 && guardAt > sessionAt && enableAt > guardAt && configureAt > enableAt && resumeAt > configureAt);
+check('Unsupported depth closes the session and rejects depth_unsupported before returning', depthGuard.test(depth) && /private void stopSession\(\)\s*\{\s*streaming = false;/.test(depth) && depth.includes('session.close();') && depth.includes('session = null;'));
+check('ARCore and camera remain optional install features', /<meta-data\s+android:name="com.google.ar.core"\s+android:value="optional"/.test(manifest) && /<uses-feature\s+android:name="android.hardware.camera.ar"\s+android:required="false"/.test(manifest) && /<uses-feature\s+android:name="android.hardware.camera"\s+android:required="false"/.test(manifest));
+const sls = read('src/components/SLSCamera.jsx');
+check('Anomaly Camera keeps a persistent unsupported fallback and explicit depth routing', sls.includes('Choose Contrast Scan or Device Camera.') && sls.includes('{depthUnavailable && (') && sls.includes('setDepthAvailable(false)') && /if \(mode === 'depth'\)\s*\{[^}]+return;/s.test(sls));
+
 const pkg = JSON.parse(read('package.json') || '{}');
 check('Both verifier scripts map to local read-only Node files', pkg.scripts?.['verify:android-native-plugins'] === 'node verify-android-native-plugins.mjs' && pkg.scripts?.['verify:native-plugins'] === 'node verify-ios-native-plugins.mjs');
 const settings = read('android/capacitor.settings.gradle');

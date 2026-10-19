@@ -15,6 +15,12 @@
 import { Capacitor } from '@capacitor/core';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 
+// Added by the local iOS patch; not part of the Android/web plugin contract.
+const iosAudioSession = /** @type {typeof TextToSpeech & {
+  prepareAudioSession: () => Promise<void>,
+  releaseAudioSession: () => Promise<void>
+}} */ (TextToSpeech);
+
 /** True when running inside the Capacitor native shell (iOS/Android). */
 export function isNativeToolSpeech() {
   try {
@@ -282,11 +288,11 @@ export function stopToolSpeech() {
  * speech + microphone and — without this — it stayed that way for the rest of
  * the app run, which left the app's own background ambience (and everything
  * else) quiet after a Sweeper session until the app was restarted. Called at
- * session end only, never between utterances. No-op on web.
+ * session end only, never between utterances. No-op on Android and web.
  */
 export function releaseToolSpeech() {
-  if (!isNativeToolSpeech()) return;
-  try { TextToSpeech.releaseAudioSession().catch(() => {}); } catch {}
+  if (!isIosNative()) return;
+  try { iosAudioSession.releaseAudioSession().catch(() => {}); } catch {}
 }
 
 /**
@@ -294,7 +300,7 @@ export function releaseToolSpeech() {
  * Web: primes speechSynthesis (iOS WKWebView requires speech to start within a
  * user gesture) and warms the voice list.
  * Native: pre-loads the voice list so the first speak does not wait on
- * enumeration, and re-activates the phone's audio session once, here, before the
+ * enumeration; iOS also re-activates its audio session once, here, before the
  * session's microphone opens. The session is never touched again until the
  * session ends (releaseToolSpeech): a session call made while the microphone is
  * recording tears the audio graph down and leaves the rest of the recording
@@ -303,7 +309,9 @@ export function releaseToolSpeech() {
 export function primeToolSpeech() {
   try { getToolVoices(); } catch {}
   if (isNativeToolSpeech()) {
-    try { TextToSpeech.prepareAudioSession().catch(() => {}); } catch {}
+    if (isIosNative()) {
+      try { iosAudioSession.prepareAudioSession().catch(() => {}); } catch {}
+    }
     return;
   }
   try {

@@ -34,7 +34,7 @@ export default function StopVerificationPhoto({ stop, disabled, isAdmin, onValid
     }
     setUploading(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadPublicFile({ file });
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
       setUploading(false);
       setShowInstructions(false);
       if (isVerified) {

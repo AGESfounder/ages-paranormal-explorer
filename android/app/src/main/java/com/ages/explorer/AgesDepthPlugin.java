@@ -189,12 +189,17 @@ public class AgesDepthPlugin extends Plugin {
                             call.reject("Google Play Services for AR is needed for the depth scan and could not be installed.");
                         }
                     } else {
-                        call.reject("This device has no depth support.");
+                        call.reject("Depth Scan is not supported on this device. Choose Contrast Scan or Device Camera.", "depth_unsupported");
                     }
                     return;
                 }
                 if (session == null) {
                     session = new Session(getActivity());
+                }
+                if (!session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
+                    stopSession();
+                    call.reject("Depth Scan is not supported on this device/camera configuration. Choose Contrast Scan or Device Camera.", "depth_unsupported");
+                    return;
                 }
                 Config config = new Config(session);
                 config.setDepthMode(Config.DepthMode.AUTOMATIC);
@@ -209,6 +214,7 @@ public class AgesDepthPlugin extends Plugin {
                 call.resolve(result);
             } catch (Exception e) {
                 Log.w(TAG, "Depth session could not start", e);
+                stopSession();
                 call.reject("The depth sensor could not start on this device.");
             }
         });

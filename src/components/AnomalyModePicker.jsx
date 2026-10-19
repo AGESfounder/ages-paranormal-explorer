@@ -2,8 +2,8 @@ import React from 'react';
 import { ScanFace, Layers, Video } from 'lucide-react';
 
 // The Anomaly Camera's three methods. Contrast Scan is the camera-image reader
-// that runs everywhere; Depth Scan is the LiDAR reader and is only ever offered
-// on a device that actually has a depth sensor; Device Camera records a standard
+// that runs everywhere; Depth Scan uses LiDAR or supported ARCore depth;
+// Device Camera records a standard
 // video with no figure detection or overlay.
 const MODES = [
   {
@@ -28,7 +28,7 @@ const MODES = [
 ];
 
 export default function AnomalyModePicker({ mode, onChange, depthAvailable }) {
-  const modes = MODES.filter((m) => !m.requiresDepth || depthAvailable);
+  const modes = MODES.filter((m) => !m.requiresDepth || depthAvailable || m.id === mode);
   const current = modes.find((m) => m.id === mode) || modes[0];
 
   return (
@@ -42,7 +42,9 @@ export default function AnomalyModePicker({ mode, onChange, depthAvailable }) {
               <button
                 key={m.id}
                 onClick={() => onChange(m.id)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors ${
+                disabled={m.requiresDepth && !depthAvailable}
+                aria-pressed={isActive}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[10px] font-heading uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   isActive
                     ? 'bg-primary/20 border border-primary/40 text-primary'
                     : 'bg-card/30 border border-border/40 text-muted-foreground'
