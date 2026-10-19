@@ -113,7 +113,7 @@ function makeNeedsPlacementIcon(stopNumber) {
 }
 
 export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd, amenities = [] }) {
-  const [showAmenities, setShowAmenities] = useState(true);
+  const [showAmenities, setShowAmenities] = useState(false);
   if (!stops || stops.length === 0) return null;
 
   // Find parking stop (from stops list, fallback to tour entity for legacy tours)
