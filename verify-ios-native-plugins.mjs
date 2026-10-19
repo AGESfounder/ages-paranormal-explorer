@@ -4,9 +4,9 @@
 // It asserts the ACTUAL registration path — the storyboard -> custom bridge
 // controller -> capacitorDidLoad() instance registration lifecycle — plus the
 // JS/native name, method, and event contracts the Environment Monitor and the
-// LiDAR/Anomaly Camera depend on. It deliberately does NOT re-implement the old
-// "AgesSensorsPlugin.swift in Sources" Compile Sources grep that codemagic.yaml
-// already owns: this file checks wiring and contracts, not Xcode build phases.
+// LiDAR/Anomaly Camera and Save to Device depend on. It also follows Xcode file,
+// build-file, App group and App target Sources references; Codemagic retains its
+// separate Compile Sources guard. This verifier only reads source files.
 //
 // Usage: node verify-ios-native-plugins.mjs   (exits 1 with every failure listed)
 
@@ -38,20 +38,22 @@ check('Main.storyboard resolves the controller from module App', !!storyboard &&
   'Swift classes need customModule="App" for storyboard lookup');
 check('Main.storyboard no longer instantiates stock CAPBridgeViewController', !!storyboard && !storyboard.includes('customClass="CAPBridgeViewController"'));
 
-// ── 2. The controller registers both plugin instances inside capacitorDidLoad()
+// ── 2. The controller registers all three plugin instances inside capacitorDidLoad()
 const appDelegate = read('ios/App/App/AppDelegate.swift');
 check('AppDelegate.swift declares AgesBridgeViewController as a CAPBridgeViewController', !!appDelegate && /class\s+AgesBridgeViewController:\s*CAPBridgeViewController/.test(appDelegate));
 check('AppDelegate.swift overrides capacitorDidLoad()', !!appDelegate && /override\s+(?:open\s+)?func\s+capacitorDidLoad\(\)/.test(appDelegate));
 check('capacitorDidLoad calls super first', !!appDelegate && /capacitorDidLoad\(\)\s*\{[^}]*super\.capacitorDidLoad\(\)/s.test(appDelegate));
 check('AgesSensorsPlugin instance is registered with the bridge', !!appDelegate && /registerPluginInstance\(\s*AgesSensorsPlugin\(\)\s*\)/.test(appDelegate));
 check('AgesDepthPlugin instance is registered with the bridge', !!appDelegate && /registerPluginInstance\(\s*AgesDepthPlugin\(\)\s*\)/.test(appDelegate));
+check('AgesSaveToDevicePlugin instance is registered with the bridge', !!appDelegate && /registerPluginInstance\(\s*AgesSaveToDevicePlugin\(\)\s*\)/.test(appDelegate));
 {
   // Registration must live INSIDE the capacitorDidLoad hook (registration after
   // the bridge exists, before the web app loads), not somewhere else in the file.
-  const hook = appDelegate?.indexOf('capacitorDidLoad()') ?? -1;
-  const sensorsReg = appDelegate?.indexOf('registerPluginInstance(AgesSensorsPlugin())') ?? -1;
-  const depthReg = appDelegate?.indexOf('registerPluginInstance(AgesDepthPlugin())') ?? -1;
-  check('Both registrations run after the capacitorDidLoad hook', hook >= 0 && sensorsReg > hook && depthReg > hook);
+  const hookBody = appDelegate?.match(/override\s+(?:open\s+)?func\s+capacitorDidLoad\(\)\s*\{([^}]*)\}/s)?.[1] ?? '';
+  for (const plugin of ['AgesSensorsPlugin', 'AgesDepthPlugin', 'AgesSaveToDevicePlugin']) {
+    const registrations = [...hookBody.matchAll(new RegExp(`registerPluginInstance\\(\\s*${plugin}\\(\\)\\s*\\)`, 'g'))];
+    check(`${plugin} is registered once inside capacitorDidLoad after super`, registrations.length === 1 && hookBody.indexOf('super.capacitorDidLoad()') >= 0 && registrations[0].index > hookBody.indexOf('super.capacitorDidLoad()'));
+  }
 }
 
 // ── 3. Native plugin identities, methods, and events are unchanged or additive
@@ -77,6 +79,13 @@ check('AgesDepthPlugin gates depth on LiDAR frame semantics', !!depthSwift && de
 check('AgesDepthPlugin checks camera permission before running ARKit', !!depthSwift && depthSwift.includes('authorizationStatus(for: .video)') && depthSwift.includes('"camera_permission_denied"'));
 check('AgesDepthPlugin classifies ARKit session failures', !!depthSwift && depthSwift.includes('.cameraUnauthorized') && depthSwift.includes('.sensorUnavailable') && depthSwift.includes('.unsupportedConfiguration'));
 
+const saveSwift = read('ios/App/App/AgesSaveToDevicePlugin.swift');
+check('AgesSaveToDevicePlugin keeps its bridged class and identifier', !!saveSwift && /@objc\(AgesSaveToDevicePlugin\)/.test(saveSwift) && /class\s+AgesSaveToDevicePlugin:\s*CAPPlugin,\s*CAPBridgedPlugin/.test(saveSwift) && saveSwift.includes('identifier = "AgesSaveToDevicePlugin"'));
+check('AgesSaveToDevicePlugin keeps jsName "AgesSaveToDevice"', !!saveSwift && saveSwift.includes('jsName = "AgesSaveToDevice"'));
+check('AgesSaveToDevicePlugin exposes saveMedia() as a promise', !!saveSwift && /CAPPluginMethod\(name: "saveMedia", returnType: CAPPluginReturnPromise\)/.test(saveSwift) && saveSwift.includes('func saveMedia(_ call: CAPPluginCall)'));
+check('AgesSaveToDevicePlugin keeps filePath/mediaType/displayName inputs', !!saveSwift && ['filePath', 'mediaType', 'displayName'].every((key) => saveSwift.includes(`call.getString("${key}")`)));
+check('AgesSaveToDevicePlugin keeps Photos image/video and Documents audio paths', !!saveSwift && saveSwift.includes('PHPhotoLibrary.shared().performChanges') && saveSwift.includes('with: .photo') && saveSwift.includes('with: .video') && saveSwift.includes('mediaType == "audio"') && saveSwift.includes('.documentDirectory') && saveSwift.includes('FileManager.default.copyItem'));
+
 // ── 4. JS seams register the same names and expose the same steps/events
 const sensorsJs = read('src/lib/nativeSensors.js');
 check("nativeSensors.js registers JS plugin 'AgesSensors'", !!sensorsJs && sensorsJs.includes("registerPlugin('AgesSensors')"));
@@ -92,6 +101,9 @@ check('nativeDepth.js exposes the error subscription (onDepthError)', !!depthJs 
 check('nativeDepth.js distinguishes web / unregistered / connected', !!depthJs && depthJs.includes("status: 'web'") && depthJs.includes("status: 'unregistered'") && depthJs.includes("status: 'connected'"));
 check('nativeDepth.js normalises coded start rejections', !!depthJs && depthJs.includes("'camera_permission_denied'") && depthJs.includes("'depth_unsupported'") && depthJs.includes("'plugin_unavailable'"));
 check('nativeDepth.js keeps start/stop/setDetection seams', !!depthJs && /export async function startDepthStream/.test(depthJs) && /export async function stopDepthStream/.test(depthJs) && /export async function setDepthDetection/.test(depthJs));
+
+const saveJs = read('src/lib/saveToDevice.js');
+check("saveToDevice.js registers JS plugin 'AgesSaveToDevice' and calls saveMedia", !!saveJs && saveJs.includes("registerPlugin('AgesSaveToDevice')") && saveJs.includes('AgesSaveToDevice.saveMedia('));
 
 // ── 5. The three consumers actually wire the error seams in
 const eam = read('src/components/EnvironmentalAnomalyMonitor.jsx');
@@ -112,13 +124,38 @@ const infoPlist = read('ios/App/App/Info.plist');
 for (const key of ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription', 'NSMotionUsageDescription']) {
   check(`Info.plist keeps ${key}`, !!infoPlist && infoPlist.includes(key));
 }
+check('Info.plist declares a nonempty Photos add-only usage description', /<key>NSPhotoLibraryAddUsageDescription<\/key>\s*<string>[^<\s][^<]*<\/string>/.test(infoPlist ?? ''));
+for (const key of ['UIFileSharingEnabled', 'LSSupportsOpeningDocumentsInPlace']) {
+  check(`Info.plist enables ${key}`, new RegExp(`<key>${key}</key>\\s*<true\\s*/>`).test(infoPlist ?? ''));
+}
 
-// ── 7. Protected version guards (regression tripwires only — nothing here edits)
+// ── 7. Follow Xcode membership references, not just matching Sources comments
+const pbxproj = read('ios/App/App.xcodeproj/project.pbxproj');
+const objects = [...(pbxproj ?? '').matchAll(/^\t\t([A-F0-9]{24})(?: \/\* [^\n]*? \*\/)? = \{([^\n]*\};|[\s\S]*?^\t\t\};)/gm)].map((match) => ({ id: match[1], body: match[2] }));
+const appGroup = objects.find((object) => /isa = PBXGroup;/.test(object.body) && /path = App;/.test(object.body));
+const appTarget = objects.find((object) => /isa = PBXNativeTarget;/.test(object.body) && /name = App;/.test(object.body));
+const sources = objects.find((object) => /isa = PBXSourcesBuildPhase;/.test(object.body) && appTarget?.body.includes(object.id));
+check('App target references its Sources build phase', !!sources);
+for (const plugin of ['AgesSensorsPlugin', 'AgesDepthPlugin', 'AgesSaveToDevicePlugin']) {
+  const files = objects.filter((object) => /isa = PBXFileReference;/.test(object.body) && object.body.includes(`path = ${plugin}.swift;`));
+  const file = files[0];
+  const builds = objects.filter((object) => /isa = PBXBuildFile;/.test(object.body) && file && object.body.includes(`fileRef = ${file.id} `));
+  check(`${plugin}.swift has one Xcode file reference`, files.length === 1);
+  check(`${plugin}.swift belongs to the App group`, !!file && !!appGroup?.body.includes(file.id));
+  check(`${plugin}.swift has one build-file reference in App Sources`, builds.length === 1 && !!sources?.body.includes(builds[0].id));
+}
+
+// ── 8. Protected version guards (regression tripwires only — nothing here edits)
 const androidGradle = read('android/app/build.gradle');
 check('Android remains versionCode 20', !!androidGradle && androidGradle.includes('versionCode 20'));
-const pbxproj = read('ios/App/App.xcodeproj/project.pbxproj');
-check('iOS build settings remain CURRENT_PROJECT_VERSION = 27', !!pbxproj && (pbxproj.match(/CURRENT_PROJECT_VERSION = 27;/g) || []).length >= 2);
-check('iOS project has no unreleased Build 28 stamp', !!pbxproj && !pbxproj.includes('CURRENT_PROJECT_VERSION = 28;'));
+const appConfigurationList = objects.find((object) => /isa = XCConfigurationList;/.test(object.body) && appTarget?.body.includes(`buildConfigurationList = ${object.id} `));
+const appConfigurations = objects.filter((object) => /isa = XCBuildConfiguration;/.test(object.body) && appConfigurationList?.body.includes(object.id));
+check('App target has Debug and Release build configurations', appConfigurations.length === 2 && ['Debug', 'Release'].every((name) => appConfigurations.some((object) => object.body.includes(`name = ${name};`))));
+for (const name of ['Debug', 'Release']) {
+  const settings = appConfigurations.find((object) => object.body.includes(`name = ${name};`))?.body ?? '';
+  check(`iOS ${name} is com.ages.explorer 1.0 (28)`, /CURRENT_PROJECT_VERSION = 28;/.test(settings) && /MARKETING_VERSION = 1\.0;/.test(settings) && /PRODUCT_BUNDLE_IDENTIFIER = com\.ages\.explorer;/.test(settings));
+}
+check('iOS has exactly two Build 28 stamps and no other build number', (pbxproj?.match(/CURRENT_PROJECT_VERSION = 28;/g) ?? []).length === 2 && (pbxproj?.match(/CURRENT_PROJECT_VERSION = [^;]+;/g) ?? []).length === 2);
 
 // ── Report
 const width = Math.max(...results.map((r) => r.label.length));
@@ -130,4 +167,4 @@ if (failures > 0) {
   console.error(`iOS native plugin verification FAILED — ${failures} check${failures === 1 ? '' : 's'} broken.`);
   process.exit(1);
 }
-console.log(`iOS native plugin verification passed — ${results.length} checks (storyboard lifecycle, native/JS contracts, consumer wiring, privacy keys, version guards).`);
+console.log(`iOS native plugin verification passed — ${results.length} checks (storyboard lifecycle, native/JS contracts, consumer wiring, privacy keys, Xcode membership, version guards).`);
