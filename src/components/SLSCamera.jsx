@@ -17,6 +17,7 @@ import { toast } from '@/components/ui/use-toast';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
+import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 
 const DEPTH_UNSUPPORTED_MESSAGE = 'Depth Scan is unavailable on this device/camera configuration. Choose Contrast Scan or Device Camera.';
 
@@ -28,6 +29,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const streamRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const chunkPumpRef = useRef(null);
   const timerRef = useRef(null);
 
   const [active, setActive] = useState(false);
@@ -124,6 +126,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     chunksRef.current = [];
     mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
+      stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
       // Name the file after the format the recorder actually produced. It reports
       // its real container in .mimeType, so a device that silently used a
       // different one still saves under the right extension.
@@ -133,6 +136,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       if (onFinish) onFinish();
     };
     mr.start(1000);
+    chunkPumpRef.current = startChunkPump(mr);
     setRecording(true);
   };
 

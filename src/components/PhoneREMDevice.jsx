@@ -9,6 +9,7 @@ import { buildMicChain } from '@/lib/micRecordChain';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
+import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 
 // Quiet window the sensor baseline is measured over, before the session — and
 // its recording — begin.
@@ -85,6 +86,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   const beepIntervalRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const videoChunksRef = useRef([]);
+  const chunkPumpRef = useRef(null);
   const videoBlobRef = useRef(null);
   const canvasRef = useRef(null);
   const canvasIntervalRef = useRef(null);
@@ -414,6 +416,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       videoChunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push({ blob: e.data, t: Date.now() }); };
       mr.onstop = () => {
+        stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
         const blob = new Blob(videoChunksRef.current.map((c) => c.blob), { type: mimeType || (canvasCapture ? 'video/webm' : 'audio/mp4') });
         videoBlobRef.current = blob;
         setVideoBlob(blob);
@@ -422,6 +425,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
         audioStreamRef.current = null;
       };
       mr.start(1000);
+      chunkPumpRef.current = startChunkPump(mr);
       return true;
     } catch (e) {
       setSensorError('Microphone access denied. Grant permission to record the session.');
