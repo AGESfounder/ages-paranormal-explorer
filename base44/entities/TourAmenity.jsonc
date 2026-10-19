@@ -1,0 +1,74 @@
+{
+  "name": "TourAmenity",
+  "type": "object",
+  "description": "Community-shared amenity add-ons for a tour (restrooms, food, sites to see, gas, lodging, other). Any logged-in user can create; everyone sees them. Markers render on the tour map in a category-colored layer behind a 'Show amenities' toggle.",
+  "properties": {
+    "tour_id": {
+      "type": "string",
+      "description": "ID of the Tour this amenity belongs to."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name, e.g. 'Public Restroom at Visitor Center'."
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "restroom",
+        "food",
+        "site",
+        "gas",
+        "lodging",
+        "other"
+      ],
+      "description": "restroom = restroom/bathroom, food = good eats/restaurant, site = site to see/landmark/viewpoint, gas = gas station, lodging = hotel/inn/lodging, other = anything else."
+    },
+    "latitude": {
+      "type": "number"
+    },
+    "longitude": {
+      "type": "number"
+    },
+    "note": {
+      "type": "string",
+      "description": "Optional short note from the contributor (hours, tips, etc.)."
+    }
+  },
+  "required": [
+    "tour_id",
+    "name",
+    "category",
+    "latitude",
+    "longitude"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

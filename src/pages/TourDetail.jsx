@@ -25,6 +25,7 @@ import TourTypeSelector from '@/components/TourTypeSelector';
 import { classifyStopAccess } from '@/lib/stopAccess';
 import TourStopRow from '@/components/TourStopRow';
 import ValidateTourCard from '@/components/ValidateTourCard';
+import AmenitySheet from '@/components/amenities/AmenitySheet';
 
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
@@ -203,6 +204,8 @@ export default function TourDetail() {
   const [isOfflineCached, setIsOfflineCached] = useState(false);
   const [regeneratingContent, setRegeneratingContent] = useState(false);
   const [regenerationProgress, setRegenerationProgress] = useState(null);
+  const [amenities, setAmenities] = useState([]);
+  const [amenitySheetOpen, setAmenitySheetOpen] = useState(false);
 
   const handleRemoveOffline = async () => {
     await clearTourAudio(tourId);
@@ -433,6 +436,20 @@ export default function TourDetail() {
       setConclusionRead(true);
     }
   }, [tourId]);
+
+  // Community amenity add-ons (restrooms, food, sites to see, etc.) — loaded
+  // once per tour and refreshed after a create/delete via onAmenitiesChanged.
+  const loadAmenities = async () => {
+    if (!tourId) return;
+    try {
+      const res = await base44.entities.TourAmenity.filter({ tour_id: tourId }, { sort: '-created_date', limit: 200 });
+      const arr = res.items || res;
+      setAmenities(Array.isArray(arr) ? arr : []);
+    } catch (e) {
+      setAmenities([]);
+    }
+  };
+  useEffect(() => { loadAmenities(); }, [tourId]);
 
   const loadTour = async () => {
     setLoading(true);
@@ -1277,9 +1294,21 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         showBack
         badge={<TourCategoryBadge category={tour.tour_category} />}
         rightAction={
-          <button onClick={toggleFavorite} className="p-2">
-            <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setAmenitySheetOpen(true)}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-border/50 bg-card/40 hover:bg-card/70 transition-colors"
+              title="Community Add-Ons"
+            >
+              <MapPin className="w-4 h-4 text-primary" />
+              {amenities.length > 0 && (
+                <span className="text-[10px] font-heading text-foreground">{amenities.length}</span>
+              )}
+            </button>
+            <button onClick={toggleFavorite} className="p-2">
+              <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`} />
+            </button>
+          </div>
         }
       />
 
@@ -1367,7 +1396,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           </div>
         </div>
 
-        {stops.length > 0 && <TourMap stops={mapStops} tour={tour} height="h-72" draggable={user?.role === 'admin' || isPaid} onMarkerDragEnd={handleMarkerDragEnd} />}
+        {stops.length > 0 && <TourMap stops={mapStops} tour={tour} amenities={amenities} height="h-72" draggable={user?.role === 'admin' || isPaid} onMarkerDragEnd={handleMarkerDragEnd} />}
 
         <div>
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
@@ -1559,6 +1588,13 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         )}
       </div>
 
+      <AmenitySheet
+        open={amenitySheetOpen}
+        onOpenChange={setAmenitySheetOpen}
+        tourId={tourId}
+        amenities={amenities}
+        onAmenitiesChanged={loadAmenities}
+      />
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
       {narrationAdGateEl}
       <NavBar />

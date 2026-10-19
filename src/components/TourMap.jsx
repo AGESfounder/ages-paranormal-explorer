@@ -1,7 +1,9 @@
-import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, Popup, Polyline, useMap } from 'react-leaflet';
+import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import LongPressMarker from './LongPressMarker';
+import { makeAmenityIcon } from './amenities/AmenityMarkerIcon';
+import { getCategory } from '@/lib/amenityCategories';
 
 // Auto-fit the map to show all stops. Without this the map uses a fixed zoom
 // centered on the midpoint, so stops at the edges fall off-screen.
@@ -110,7 +112,8 @@ function makeNeedsPlacementIcon(stopNumber) {
   });
 }
 
-export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd }) {
+export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd, amenities = [] }) {
+  const [showAmenities, setShowAmenities] = useState(true);
   if (!stops || stops.length === 0) return null;
 
   // Find parking stop (from stops list, fallback to tour entity for legacy tours)
@@ -207,7 +210,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   }));
 
   return (
-    <div className={`${height} rounded-xl overflow-hidden border border-border/40`}>
+    <div className={`${height} rounded-xl overflow-hidden border border-border/40 relative`}>
       <MapContainer
         center={center}
         zoom={14}
@@ -328,7 +331,37 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
             </Popup>
           </LongPressMarker>
         ))}
+
+        {showAmenities && amenities.filter(a => a.latitude != null && a.longitude != null).map(a => {
+          const cat = getCategory(a.category);
+          return (
+            <Marker
+              key={a.id}
+              position={[a.latitude, a.longitude]}
+              icon={makeAmenityIcon(a.category)}
+            >
+              <Popup>
+                <div className="text-xs font-heading">
+                  <strong>{a.name}</strong>
+                  <div className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: `hsl(${cat?.color || '220, 8%, 58%'})` }}>{cat?.label}</div>
+                  {a.note && <p className="text-[10px] text-muted-foreground mt-1 font-body leading-relaxed">{a.note}</p>}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
+
+      {amenities.length > 0 && (
+        <button
+          onClick={() => setShowAmenities(s => !s)}
+          className="absolute top-2 right-2 z-[1000] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-card/90 border border-border/60 text-[10px] font-heading uppercase tracking-wider backdrop-blur-sm hover:bg-card transition-colors"
+        >
+          <span className="w-2 h-2 rounded-full bg-primary" />
+          {amenities.length} Add-On{amenities.length !== 1 ? 's' : ''}
+          <span className="text-muted-foreground">{showAmenities ? 'on' : 'off'}</span>
+        </button>
+      )}
     </div>
   );
 }

@@ -6,7 +6,8 @@
       "type": "string",
       "enum": [
         "comment",
-        "evidence"
+        "evidence",
+        "amenity"
       ]
     },
     "target_id": {
