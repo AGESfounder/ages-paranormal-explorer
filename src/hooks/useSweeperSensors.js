@@ -76,6 +76,10 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
   const orientChanRef = useRef(newChannel());
   const envChannelsRef = useRef({ magnetic: newChannel(), pressure: newChannel() });
   const envTrackerRef = useRef(null);
+  // Which environmental sensors the device actually has, from the support
+  // probe. Defaults to "both" so calibration waits (rather than skipping) until
+  // the probe resolves.
+  const supportedEnvRef = useRef({ magnetic: true, pressure: true });
   const latestSensorRef = useRef({ magnetic: null, pressure: null, movement: 0 });
   const flashTimersRef = useRef({});
   const attributionRef = useRef(new Set());
@@ -150,8 +154,15 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
     const tr = envTrackerRef.current;
     if (!tr) return;
     const now = Date.now();
-    // Calibrate until the tracker has enough samples, then switch to deviation.
-    if (!tr.calibrated) {
+    // Calibrate until EVERY supported channel has a trusted baseline. The
+    // tracker's `calibrated` flag is an OR (either channel ready), which would
+    // stop calibration as soon as the fast channel (pressure, 6 samples ~0.6s)
+    // is ready — starving the slow channel (magnetic, 25 samples ~2.5s) so its
+    // baseline never becomes trusted and it never triggers. Wait for both.
+    const sup = supportedEnvRef.current;
+    const magReady = !sup.magnetic || tr.has('magnetic');
+    const presReady = !sup.pressure || tr.has('pressure');
+    if (!magReady || !presReady) {
       tr.calibrate({ magnetic: s.magnetic, pressure: s.pressure });
       return;
     }
@@ -212,6 +223,7 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
     // Start native environmental sensors so calibration begins during the settle.
     try {
       const support = await sensorSupport();
+      supportedEnvRef.current = { magnetic: !!support.magnetometer, pressure: !!support.barometer };
       setAvailability((prev) => ({ ...prev, magnetic: support.magnetometer, barometric: support.barometer }));
       if (support.magnetometer || support.barometer) {
         envUnsubRef.current = onSensorReading(handleSensorReading);
