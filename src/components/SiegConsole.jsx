@@ -61,8 +61,6 @@ const FIGURE_HOLD_MS = 1000;            // a form must stay in view this long
 const FIGURE_RELEASE_MS = 2500;
 const VIBRATION_ENTER = 20;             // the REM tool's "out of the green" level
 const VIBRATION_EXIT = 12;
-const VIBRATION_HOLD_MS = 500;          // disturbance must hold this long to count (matches ENV_HOLD_MS)
-const VIBRATION_RELEASE_MS = 1000;      // level must settle below exit this long to rearm
 const VIBRATION_REARM_COOLDOWN_MS = 2000;
 const ENV_HOLD_MS = 500;
 const ENV_RELEASE_MS = 700;
@@ -128,10 +126,12 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const vibBaselineRef = useRef(null);
   const motionSeenRef = useRef(false);
   const motionAnnouncedRef = useRef(false);
-  // Vibration lane tracker — same hold/release shape as the environmental and
-  // acoustic lanes: armed, since, quietSince, lastEvent, peak. An event fires on
-  // the rise (after VIBRATION_HOLD_MS), not on the fall, so a disturbance charts
-  // an incident the moment it is confirmed — matching the other sensors.
+  // Vibration lane tracker — fire-on-settle, the same model the standalone
+  // Vibration Communicator uses: the excursion opens the moment the level
+  // leaves the green, its peak is tracked while it lasts, and the event (with
+  // that peak) is logged the moment the level settles back below the exit line.
+  // A transient spike — a knock or tap — registers, because nothing is required
+  // to hold.
   const excursionRef = useRef({ armed: true, since: 0, quietSince: 0, lastEvent: 0, peak: 0 });
   const figureRef = useRef({ armed: true, since: 0, quietSince: 0, lastEvent: 0, peak: 0 });
   const figureBoxesRef = useRef(null);
@@ -451,31 +451,26 @@ export default function SiegConsole({ gateSave, refundSave }) {
     const level = vibrationLevel();
 
     if (phaseRef.current === 'live') {
-      // Hold-and-fire-on-rise, the same model the environmental and acoustic
-      // lanes use: a disturbance charts an incident the moment it is confirmed
-      // (held past VIBRATION_HOLD_MS), not when it later settles. The lane
-      // rearms only after the level settles below VIBRATION_EXIT for
-      // VIBRATION_RELEASE_MS, and a rearm cooldown keeps one disturbance as
-      // one event.
+      // Fire-on-settle, the same model the standalone Vibration Communicator
+      // uses: the excursion opens the moment the level leaves the green and
+      // its peak is tracked while it lasts. The event — labelled by that peak
+      // — is logged the moment the level settles back below the exit line, so
+      // a transient spike (a knock or tap) registers without having to
+      // sustain. A rearm cooldown keeps one disturbance as one event.
       const vt = excursionRef.current;
       if (level >= VIBRATION_ENTER) {
-        if (!vt.since) vt.since = now;
-        vt.quietSince = 0;
-        vt.peak = Math.max(vt.peak, level);
-        if (vt.armed && now - vt.since >= VIBRATION_HOLD_MS && now - vt.lastEvent >= VIBRATION_REARM_COOLDOWN_MS) {
-          vt.armed = false;
-          vt.lastEvent = now;
-          const word = vt.peak >= 80 ? 'Strong' : vt.peak >= 50 ? 'Moderate' : 'Minor';
-          logEvent('vibration', `${word} disturbance — peak ${vt.peak}`, now);
+        if (!vt.since && now - vt.lastEvent >= VIBRATION_REARM_COOLDOWN_MS) {
+          vt.since = now;
+          vt.peak = level;
+        } else if (vt.since) {
+          vt.peak = Math.max(vt.peak, level);
         }
-      } else if (level <= VIBRATION_EXIT) {
+      } else if (level <= VIBRATION_EXIT && vt.since) {
+        const word = vt.peak >= 80 ? 'Strong' : vt.peak >= 50 ? 'Moderate' : 'Minor';
+        logEvent('vibration', `${word} disturbance — peak ${vt.peak}`, now);
+        vt.lastEvent = now;
         vt.since = 0;
-        if (!vt.quietSince) vt.quietSince = now;
-        if (now - vt.quietSince >= VIBRATION_RELEASE_MS) {
-          vt.armed = true;
-          vt.quietSince = 0;
-          vt.peak = 0;
-        }
+        vt.peak = 0;
       }
     }
 
@@ -665,10 +660,16 @@ export default function SiegConsole({ gateSave, refundSave }) {
     }
     phaseRef.current = 'review';
     userStoppedRef.current = true;
-    // The vibration lane now fires on rise (hold-and-log), like the other
-    // sensors, so a disturbance in progress at session end has already charted
-    // its incident — no end-of-session flush is needed (and none of the other
-    // lanes flush either).
+    // The vibration lane fires on settle, so a disturbance still in progress
+    // when the session ends would be lost — flush it here with the peak it
+    // reached, the same way the standalone Vibration Communicator does.
+    const vt = excursionRef.current;
+    if (vt.since) {
+      const word = vt.peak >= 80 ? 'Strong' : vt.peak >= 50 ? 'Moderate' : 'Minor';
+      logEvent('vibration', `${word} disturbance — peak ${vt.peak}`);
+      vt.since = 0;
+      vt.peak = 0;
+    }
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       try { recorder.stop(); } catch { releaseOwnTrack(); }

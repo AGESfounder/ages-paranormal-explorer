@@ -31,8 +31,8 @@ import {
 
 const ACCEL_THRESHOLD = 0.8;
 const ORIENT_THRESHOLD = 6;
-const MOTION_HOLD_MS = 150;
-const ORIENT_HOLD_MS = 150;
+const MOTION_HOLD_MS = 100;   // short enough to catch a transient spike (knock/tap), long enough to reject a single jitter frame
+const ORIENT_HOLD_MS = 100;
 const MOTION_REARM_MS = 1000;
 const MOTION_RELEASE_MS = 300;
 const ENV_HOLD_MS = 500;
