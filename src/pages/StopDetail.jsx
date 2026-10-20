@@ -765,7 +765,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             </div>
           </div>
         )}
-        {isPaid && (
+        {(isPaid || isAdmin) && (
           <div className="p-3 rounded-xl border border-primary/30 bg-primary/5">
             <StopVerificationPhoto
               stop={stop}
