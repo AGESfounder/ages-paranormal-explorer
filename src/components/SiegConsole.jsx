@@ -31,6 +31,7 @@ import { toast } from '@/components/ui/use-toast';
 import RecordTrimPicker from '@/components/RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
+import { createDepthDiagTracker, updateDepthDiag, finalizeDepthDiag, setDepthDiagError } from '@/lib/depthDiagnostic';
 
 // SIEG — one integrated session, seven tools at once.
 //
@@ -104,6 +105,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
   const depthFrameRef = useRef(null);
+  const depthDiagRef = useRef(null);
   const depthUnsubRef = useRef(null);
   const depthErrorUnsubRef = useRef(null);
   const analysisCanvasRef = useRef(null);
@@ -657,6 +659,11 @@ export default function SiegConsole({ gateSave, refundSave }) {
     // goes back to the picker rather than opening a review screen with no recording.
     if (phaseRef.current === 'calibrating' && reason === 'manual') {
       phaseRef.current = 'idle';
+      if (depthDiagRef.current) {
+        const record = finalizeDepthDiag(depthDiagRef.current);
+        depthDiagRef.current = null;
+        if (record) base44.entities.DepthCameraDiagnostic.create(record).catch(() => {});
+      }
       teardownDevices();
       sessionRef.current = null;
       setSession(null);
@@ -675,6 +682,11 @@ export default function SiegConsole({ gateSave, refundSave }) {
       logEvent('vibration', `${word} disturbance — peak ${vt.peak}`);
       vt.since = 0;
       vt.peak = 0;
+    }
+    if (depthDiagRef.current) {
+      const record = finalizeDepthDiag(depthDiagRef.current);
+      depthDiagRef.current = null;
+      if (record) base44.entities.DepthCameraDiagnostic.create(record).catch(() => {});
     }
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
@@ -719,6 +731,10 @@ export default function SiegConsole({ gateSave, refundSave }) {
   // sensor's own forms rather than scanning the image.
   const startDepthCamera = async () => {
     depthFrameRef.current = null;
+    depthDiagRef.current = createDepthDiagTracker('sieg', `d_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, {
+      protrusion: depthDetection.protrusion,
+      minHeight: depthDetection.minSize,
+    });
     // A native depth failure mid-session is reported as a lane failure: the error
     // banner says what happened, the depth feeds are released, and every other
     // lane — and the session recording — keeps running.
@@ -729,6 +745,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
         : failure?.category === 'unsupported'
           ? 'The depth scan stopped — this device cannot run a depth scan. The other lanes are still running.'
           : `The depth scan stopped: ${failure?.message || 'the native depth session ended.'} The other lanes are still running.`);
+      setDepthDiagError(depthDiagRef.current, failure?.message || failure?.category || 'native depth error');
       if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
       stopDepthStream();
     });
@@ -747,6 +764,12 @@ export default function SiegConsole({ gateSave, refundSave }) {
         bodyHeight: data.bodyHeight ?? 0,
         protrusion: data.protrusion,
         minHeight: data.minHeight,
+      });
+      updateDepthDiag(depthDiagRef.current, {
+        poseCount: data.poseCount ?? 0,
+        formCount: data.formCount ?? 0,
+        figureCount: data.figureCount ?? 0,
+        bodyHeight: data.bodyHeight ?? 0,
       });
       const image = new Image();
       image.onload = () => {
@@ -799,6 +822,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     latestSensorRef.current = { magnetic: null, pressure: null, movement: 0 };
     if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
     depthFrameRef.current = null;
+    depthDiagRef.current = null;
     sessionRef.current = preset;
     setSession(preset);
 
@@ -1021,6 +1045,11 @@ export default function SiegConsole({ gateSave, refundSave }) {
 
   useEffect(() => () => {
     userStoppedRef.current = true;
+    if (depthDiagRef.current) {
+      const record = finalizeDepthDiag(depthDiagRef.current);
+      depthDiagRef.current = null;
+      if (record) base44.entities.DepthCameraDiagnostic.create(record).catch(() => {});
+    }
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       try { recorder.stop(); } catch { /* already stopped */ }

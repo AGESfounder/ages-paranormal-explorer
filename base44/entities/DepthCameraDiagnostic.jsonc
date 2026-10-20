@@ -1,0 +1,93 @@
+{
+  "name": "DepthCameraDiagnostic",
+  "type": "object",
+  "description": "Diagnostic record for native depth camera sessions (Anomaly Camera depth mode and SIEG depth mode). Captures the peak gate state during a session so the builder can investigate when the depth camera fails to acknowledge figures that are clearly there. Written by the frontend on session end; admin-only reads. One record per depth session.",
+  "properties": {
+    "tool": {
+      "type": "string",
+      "enum": [
+        "sls",
+        "sieg"
+      ],
+      "description": "Which camera tool produced this diagnostic: sls = Anomaly Camera depth mode, sieg = SIEG Console depth mode."
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Opaque random id per depth session, for correlation."
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "figures_detected",
+        "no_figures",
+        "no_frames",
+        "error"
+      ],
+      "description": "figures_detected = at least one figure was confirmed during the session. no_figures = depth frames arrived but no figure was ever confirmed. no_frames = no depth frames arrived at all. error = the session failed with a native error."
+    },
+    "peak_pose_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Highest body-pose count seen in any single depth frame during the session. 0 means Vision never found a human body shape in any frame."
+    },
+    "peak_form_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Highest depth-form count seen in any single frame. 0 means ARKit never found a connected depth form standing out from the background."
+    },
+    "peak_figure_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Highest confirmed-figure count seen in any single frame. A figure requires a body pose overlapping a depth form."
+    },
+    "max_body_height": {
+      "type": "number",
+      "description": "Highest body-height percentage seen (0-1). How much of the frame height the detected body occupied. Null if no body was ever found."
+    },
+    "protrusion": {
+      "type": "number",
+      "description": "The protrusion gate setting at session time (how far a figure must stand out from the background, in meters)."
+    },
+    "min_height": {
+      "type": "number",
+      "description": "The min-height gate setting at session time (smallest figure counted, as a fraction of frame height)."
+    },
+    "frame_count": {
+      "type": "number",
+      "default": 0,
+      "description": "How many depth frames were received during the session."
+    },
+    "failure_reason": {
+      "type": "string",
+      "description": "Plain-text explanation of why no figure was confirmed, or the native error message. Null when figures were detected (no failure)."
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the session occurred (client-side timestamp)."
+    }
+  },
+  "required": [
+    "tool",
+    "session_id",
+    "outcome"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {},
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

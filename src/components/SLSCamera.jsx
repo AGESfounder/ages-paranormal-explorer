@@ -18,6 +18,7 @@ import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
+import { createDepthDiagTracker, updateDepthDiag, finalizeDepthDiag, setDepthDiagError } from '@/lib/depthDiagnostic';
 const DEPTH_UNSUPPORTED_MESSAGE = 'Depth Scan is unavailable on this device/camera configuration. Choose Contrast Scan or Device Camera.';
 
 export default function SLSCamera({ gateSave, refundSave }) {
@@ -53,6 +54,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const depthTimeoutRef = useRef(null);
   const depthFrameRef = useRef(null);
   const depthAudioRef = useRef(null);
+  const depthDiagRef = useRef(null);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
   // The depth method's own two gates (stand-out distance, smallest figure), pushed
@@ -93,6 +95,13 @@ export default function SLSCamera({ gateSave, refundSave }) {
     setRecording(false);
     setFigureCount(0);
     setAnomalyDetected(false);
+    if (depthDiagRef.current) {
+      const record = finalizeDepthDiag(depthDiagRef.current);
+      depthDiagRef.current = null;
+      if (record) {
+        base44.entities.DepthCameraDiagnostic.create(record).catch(e => console.error('[Anomaly Camera] diag save failed', e));
+      }
+    }
   }, []);
 
   useEffect(() => () => {
@@ -243,6 +252,10 @@ export default function SLSCamera({ gateSave, refundSave }) {
     canvas.width = 640;
     canvas.height = 480;
     depthFrameRef.current = null;
+    depthDiagRef.current = createDepthDiagTracker('sls', `d_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, {
+      protrusion: depthDetection.protrusion,
+      minHeight: depthDetection.minSize,
+    });
 
     // The failure listener goes up before the session starts, so an ARKit fault
     // at startup can never arrive unobserved. A fatal native error ends the
@@ -259,6 +272,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
         : failure?.category === 'unsupported'
           ? DEPTH_UNSUPPORTED_MESSAGE
           : `The depth session failed: ${failure?.message || 'the native depth session ended.'}`);
+      setDepthDiagError(depthDiagRef.current, failure?.message || failure?.category || 'native depth error');
       stopCamera();
     });
 
@@ -288,6 +302,12 @@ export default function SLSCamera({ gateSave, refundSave }) {
       setCenterDepth(data.centerDepth ?? null);
       setDepthHint(null);
       console.log('[Anomaly Camera] DEPTH DIAG', {
+        poseCount: data.poseCount ?? 0,
+        formCount: data.formCount ?? 0,
+        figureCount: data.figureCount ?? 0,
+        bodyHeight: data.bodyHeight ?? 0,
+      });
+      updateDepthDiag(depthDiagRef.current, {
         poseCount: data.poseCount ?? 0,
         formCount: data.formCount ?? 0,
         figureCount: data.figureCount ?? 0,
