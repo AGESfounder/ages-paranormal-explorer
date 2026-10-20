@@ -28,6 +28,7 @@ import { synthesizeCue, CUE_CHIME } from '@/lib/toolCues';
 import { fetchWeatherByCoords } from '@/lib/openMeteo';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { toast } from '@/components/ui/use-toast';
+import { useAuth } from '@/lib/AuthContext';
 import RecordTrimPicker from '@/components/RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
@@ -100,6 +101,8 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const [cameraMode, setCameraMode] = useState('contrast');
   const [depthAvailable, setDepthAvailable] = useState(false);
   const [depthDiag, setDepthDiag] = useState(null);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
@@ -1198,7 +1201,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
         </div>
       )}
 
-      {cameraMode === 'depth' && (phase === 'calibrating' || phase === 'live') && depthDiag && (
+      {isAdmin && cameraMode === 'depth' && (phase === 'calibrating' || phase === 'live') && depthDiag && (
         <div className="p-2 rounded-lg bg-card/40 border border-primary/20">
           <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
             <span className="text-primary/80">DEPTH DIAG</span>

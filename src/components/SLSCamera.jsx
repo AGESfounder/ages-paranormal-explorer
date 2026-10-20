@@ -18,11 +18,14 @@ import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
+import { useAuth } from '@/lib/AuthContext';
 
 const DEPTH_UNSUPPORTED_MESSAGE = 'Depth Scan is unavailable on this device/camera configuration. Choose Contrast Scan or Device Camera.';
 
 export default function SLSCamera({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -35,6 +38,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const [active, setActive] = useState(false);
   const [error, setError] = useState('');
   const [figureCount, setFigureCount] = useState(0);
+  const [depthDiag, setDepthDiag] = useState(null);
   const [anomalyDetected, setAnomalyDetected] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState(null);
@@ -94,6 +98,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     setRecording(false);
     setFigureCount(0);
     setAnomalyDetected(false);
+    setDepthDiag(null);
   }, []);
 
   useEffect(() => () => {
@@ -288,6 +293,12 @@ export default function SLSCamera({ gateSave, refundSave }) {
       imageEl.src = data.image;
       setCenterDepth(data.centerDepth ?? null);
       setDepthHint(null);
+      setDepthDiag({
+        poseCount: data.poseCount ?? 0,
+        formCount: data.formCount ?? 0,
+        figureCount: data.figureCount ?? 0,
+        bodyHeight: data.bodyHeight ?? 0,
+      });
     });
 
     setFigureCount(0);
@@ -566,6 +577,25 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
       {depthHint && (
         <p className="text-[10px] text-amber-400/90 text-center px-2">{depthHint}</p>
+      )}
+
+      {isAdmin && mode === 'depth' && active && depthDiag && (
+        <div className="p-2 rounded-lg bg-card/40 border border-primary/20">
+          <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+            <span className="text-primary/80">DEPTH DIAG</span>
+            {' · pose '}{depthDiag.poseCount}
+            {' · forms '}{depthDiag.formCount}
+            {' · figure '}{depthDiag.figureCount}
+            {depthDiag.bodyHeight > 0 && ` · body ${Math.round(depthDiag.bodyHeight * 100)}%`}
+            {depthDiag.figureCount > 0
+              ? ' — FIGURE CONFIRMED'
+              : depthDiag.poseCount === 0
+                ? ' — no body pose found (need light on subject)'
+                : depthDiag.formCount === 0
+                  ? ' — no depth form (stand farther from the wall)'
+                  : ' — pose and form not overlapping'}
+          </p>
+        </div>
       )}
 
       {/* Post-session save controls */}
