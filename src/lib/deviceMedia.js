@@ -1,4 +1,4 @@
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { registerPlugin } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 export const deviceMedia = registerPlugin('AgesSaveToDevice');
@@ -31,16 +31,27 @@ export async function removeMediaTempFile(uri) {
   if (uri) await Filesystem.deleteFile({ path: uri });
 }
 
+// The finished file is read back through the filesystem plugin, which returns its
+// bytes directly. Never with fetch() on a converted file URL: iOS serves a media
+// file to the page with a non-HTTP response (so a <video> can stream it instead of
+// downloading it whole), and fetch() reports a non-HTTP response as not-ok — so a
+// fetch here fails for exactly the .mp4/.m4a files this export produces.
+function base64ToBytes(data) {
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 export async function exportNativeRecording(blob, trimSeconds) {
   const input = await writeMediaTempFile(blob);
   let output;
   try {
     const result = await deviceMedia.prepareMedia({ filePath: input, mediaType: blob.type.startsWith('audio') ? 'audio' : 'video', trimSeconds });
     output = result.filePath;
-    const response = await fetch(Capacitor.convertFileSrc(output));
-    if (!response.ok) throw new Error('The prepared recording could not be opened.');
-    const bytes = await response.arrayBuffer();
-    if (!bytes.byteLength) throw new Error('The prepared recording is empty.');
+    const { data } = await Filesystem.readFile({ path: output });
+    const bytes = base64ToBytes(data);
+    if (!bytes.length) throw new Error('The prepared recording is empty.');
     return new Blob([bytes], { type: result.mimeType });
   } finally {
     await Promise.all([input, output].filter(Boolean).map((uri) => removeMediaTempFile(uri).catch(() => {})));
