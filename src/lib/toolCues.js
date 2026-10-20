@@ -32,6 +32,14 @@ export const CUE_MAGNETIC = 'magnetic';
 export const CUE_PRESSURE = 'pressure';
 export const CUE_COMBINED = 'combined';
 
+// The cues loud enough to disturb this phone's own sensors: the Term Sweeper
+// crash, and the three-note I DON'T KNOW bell. The one- and two-note rings and
+// the sweeper chimes are quieter and were never seen to set a sensor off, so they
+// must not mute anything.
+export function isLoudCue(kind, { rings = 1 } = {}) {
+  return kind === CUE_CYMBAL || (kind === CUE_XYLOPHONE && Math.round(rings) >= 3);
+}
+
 const BUS_GAIN = 0.95;
 
 const XYLO_NOTES = [2093, 2637, 3136, 4186, 5274]; // C7 · E7 · G7 · C8 · E8

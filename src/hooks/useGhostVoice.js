@@ -3,7 +3,8 @@ import { paidSpeech } from '@/lib/paidAi';
 import { toast } from '@/components/ui/use-toast';
 import { audioAcquire, audioRelease, getMusicSettings } from '@/lib/hauntedAudio';
 import { isNativeToolSpeech, getToolVoices, speakToolText, stopToolSpeech } from '@/lib/toolSpeech';
-import { synthesizeCue } from '@/lib/toolCues';
+import { synthesizeCue, isLoudCue } from '@/lib/toolCues';
+import { markLoudCue } from '@/lib/sensorQuiet';
 import { buildMicChain } from '@/lib/micRecordChain';
 
 // A saved Device Voice Picker selection (localStorage
@@ -694,7 +695,13 @@ export default function useGhostVoice() {
       // phone's own speaker and microphone happened to pass on.
       if (micOnlyDestRef.current) nodes.push(micOnlyDestRef.current);
       const ms = synthesizeCue(ctx, nodes, kind, opts);
-      if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms));
+      if (ms > 0) {
+        // A cue loud enough to move the phone's own sensors mutes them for as
+        // long as that cue rings — the crash and the three-note bell are the only
+        // two. Spoken items and the quieter chimes leave the sensors listening.
+        if (isLoudCue(kind, opts)) markLoudCue(ms);
+        await new Promise((resolve) => setTimeout(resolve, ms));
+      }
     } catch {}
   }, []);
 

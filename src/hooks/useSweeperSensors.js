@@ -4,7 +4,7 @@ import {
   createEnvironmentTracker, magneticThreshold, pressureThreshold,
   SENSITIVITY, MOVEMENT_LIMIT,
 } from '@/lib/environmentAnalysis';
-import { onAudioBusyChange } from '@/lib/hauntedAudio';
+import { isSensorQuiet } from '@/lib/sensorQuiet';
 
 // Shared 4-sensor trigger layer for the three Sweeper tools (Alphabet, Terms,
 // Yes/No/IDK). Replaces the per-tool motion/orientation handlers with one
@@ -24,6 +24,11 @@ import { onAudioBusyChange } from '@/lib/hauntedAudio';
 // ready. The barometric channel is held silent while the phone is moving
 // (pressure changes with height — a lifted phone reads as movement, not a room
 // anomaly).
+//
+// LOUD CUES: the phone's own speaker can move the magnetometer and shake the
+// chassis, so the magnetic and vibration channels are muted while an announce cue
+// loud enough to do it is ringing — armed by that cue, for its own length (see
+// sensorQuiet.js). Spoken items and the quieter chimes never arm it.
 //
 // ATTRIBUTION: when a sensor fires, every sensor that has confirmed within a
 // short window is attributed to the same lock, so the tool can show correlated
@@ -78,11 +83,10 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
   // Per-axis acceleration baseline (EMA-adapted), so a horizontal shake shows
   // as a real deviation instead of being buried in gravity's magnitude.
   const baselineRef = useRef({ ax: 0, ay: 0, az: 9.8 });
-  // Magnetic channel is suppressed for this long after any app sound plays —
-  // the phone's speaker magnet sits beside the magnetometer and a cue or
-  // narration burst can cause a magnetic spike that fires a false lock.
-  const magneticSuppressedUntilRef = useRef(0);
-  const audioBusyUnsubRef = useRef(null);
+  // The magnetic and vibration channels are muted while the app's own loud
+  // announce cue rings (see sensorQuiet.js). The window is armed by that cue, for
+  // its own length — never by the app merely having audio open, which the
+  // recording tools hold for a whole session.
   const lastOrientRef = useRef(null);
   const motionChanRef = useRef(newChannel());
   const orientChanRef = useRef(newChannel());
@@ -146,6 +150,11 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
     const b = baselineRef.current;
     const dev = Math.sqrt((ax - b.ax) ** 2 + (ay - b.ay) ** 2 + (az - b.az) ** 2);
     const now = Date.now();
+    // While the app's own loud cue rings, the chassis it shakes is exactly what
+    // this channel would be measuring. Drop the reading AND leave the baseline
+    // alone: adapting it to the speaker's own vibration would make the return to
+    // rest read as a movement the moment the window lifted.
+    if (isSensorQuiet(now)) return;
     stepChannel(motionChanRef.current, dev, ACCEL_THRESHOLD, now, MOTION_HOLD_MS, MOTION_REARM_MS, MOTION_RELEASE_MS, 'motion', fire);
     // Slow EMA so the baseline tracks the phone's recent rest state without
     // absorbing a brief shake.
@@ -195,10 +204,9 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
       { magnetic: s.magnetic, pressure: s.pressure },
       { magnetic: chans.magnetic.since > 0, pressure: chans.pressure.since > 0 || moving },
     );
-    // The magnetic channel is suppressed for 2 seconds after any app sound
-    // plays — the phone's speaker magnet can cause a magnetic spike that
-    // would fire a false lock.
-    if (Number.isFinite(dev.magnetic) && now >= magneticSuppressedUntilRef.current) {
+    // The magnetic channel is muted while the app's own loud cue rings — the
+    // speaker's magnet can spike the field and fire a false lock.
+    if (Number.isFinite(dev.magnetic) && !isSensorQuiet(now)) {
       stepChannel(chans.magnetic, Math.abs(dev.magnetic), magneticThreshold(dev.magSd, SENSITIVITY.normal), now, ENV_HOLD_MS, ENV_REARM_MS, ENV_RELEASE_MS, 'magnetic', fire);
     }
     // Pressure channel is held silent while the phone moves — a phone being
@@ -237,21 +245,11 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
     orientChanRef.current = newChannel();
     envChannelsRef.current = { magnetic: newChannel(), pressure: newChannel() };
     baselineRef.current = { ax: 0, ay: 0, az: 9.8 };
-    magneticSuppressedUntilRef.current = 0;
     lastOrientRef.current = null;
     envTrackerRef.current = createEnvironmentTracker();
     latestSensorRef.current = { magnetic: null, pressure: null, movement: 0 };
     attributionRef.current.clear();
     if (attributionWindowRef.current) { clearTimeout(attributionWindowRef.current); attributionWindowRef.current = null; }
-
-    // Subscribe to audio busy changes: when any app sound plays (cue,
-    // narration, haunted music), suppress the magnetic channel for 2 seconds
-    // so the speaker's magnet cannot fire a false lock.
-    if (!audioBusyUnsubRef.current) {
-      audioBusyUnsubRef.current = onAudioBusyChange((busy) => {
-        if (busy) magneticSuppressedUntilRef.current = Date.now() + 2000;
-      });
-    }
 
     const permOk = await requestPermissions();
     setAvailability((prev) => ({ ...prev, motion: permOk, orientation: permOk }));
@@ -302,7 +300,6 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
     flashTimersRef.current = {};
     if (attributionWindowRef.current) { clearTimeout(attributionWindowRef.current); attributionWindowRef.current = null; }
     attributionRef.current.clear();
-    if (audioBusyUnsubRef.current) { audioBusyUnsubRef.current(); audioBusyUnsubRef.current = null; }
     setSensorStates({ motion: false, orientation: false, magnetic: false, barometric: false });
     sensorStatesRef.current = { motion: false, orientation: false, magnetic: false, barometric: false };
   }, []);
