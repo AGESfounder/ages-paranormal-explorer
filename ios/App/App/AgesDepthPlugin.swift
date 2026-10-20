@@ -8,18 +8,18 @@ import Vision
 // AGES depth module.
 //
 // Reads the iPhone's LiDAR depth sensor through ARKit (sceneDepth) and hands the
-// web layer colourised depth frames plus the FIGURES confirmed in them. A figure is
-// a human body pose — found by the phone's own body-pose recognition on the same
-// frame's camera image — standing as a form in front of the surface behind it. The
-// web layer draws those frames onto the canvas the Anomaly Camera already records,
+// web layer colourised depth frames plus the FIGURES confirmed in them. A figure
+// requires a human body pose seen within the last second AND a figure-sized depth
+// form present now. The two do not need to overlap spatially or be detected in the
+// same frame. The web layer draws those frames onto the canvas the Anomaly Camera already records,
 // so a depth session saves as evidence through exactly the same path as a contrast
 // session: one recording pipeline, both methods.
 //
 // What the pose layer fixes: depth on its own can only say "something is here, and
 // it is closer than the wall behind it", which is a chair, a doorway, a cabinet. A
-// figure is now reported only when a body pose is confirmed on it, so an outline
-// means a person-shaped body and never a piece of furniture. Everything else the
-// sensor sees stays what it is — the room's own depth image.
+// depth form alone is never enough to report a figure: recent human-pose
+// confirmation is also required. This temporal gate does not prove that the pose
+// and depth form belong to the same object. Everything else stays the room's depth image.
 //
 // One space for both: the colourised image and every coordinate that comes with it
 // are built in the upright space the phone is held in, so a skeleton and its box
@@ -70,8 +70,8 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     private static let maxBodies = 4
 
     // ── The pose layer ──────────────────────────────────────────────────────
-    // The phone's own body-pose recognition, reading the camera image of the SAME
-    // frame the depth map came from, so a pose and a depth form can be lined up.
+    // The phone's own body-pose recognition reads the camera image. A successful
+    // result is buffered independently of the current depth forms for one second.
     private static let jointNames: [(VNHumanBodyPoseObservation.JointName, String)] = [
         (.nose, "nose"),
         (.neck, "neck"),
@@ -85,16 +85,11 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     // A joint below this confidence is not reported: a wrong arm is worse than a
     // missing one, and the model finds more than a body ever shows at once.
     private static let jointConfidence: Float = 0.25
-    // Poses are read on every depth frame (≈8 fps) so the skeleton follows the
-    // body's movement live. A short hold covers a missed frame without freezing
-    // the skeleton at a stale pose for long.
+    // Refresh at approximately 8 fps so the skeleton follows the body.
     private static let poseInterval: TimeInterval = 0.125
-    // The pose is held for 1 full second after it was last confirmed, so a
-    // body that was recognized on one frame still counts when the depth form
-    // appears on a later frame. The old 0.25s hold was too short — the pose
-    // and the form rarely overlapped in the same 0.25s window, so a real
-    // person standing in view was rejected as "not overlapping."
-    private static let poseHold: TimeInterval = 1.0
+    // Keep the last successful human-pose result for one second. An empty pose
+    // result must not clear this buffer or refresh its timestamp.
+    private static let poseConfirmationWindow: TimeInterval = 1.0
 
     private var lastPose: TimeInterval = -1
     private var lastBodies: [Body] = []
@@ -173,9 +168,9 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
         }
     }
 
-    // One confirmed body: its box and joints as the investigator sees them (0-1 from
-    // the top-left of the frame), and the depth-grid cells it covers, which is how it
-    // is checked against the forms the depth pass found.
+    // One recognized body: its display-space box and joints (0-1, top-left origin).
+    // Raw depth-grid cell ranges are retained for diagnostics only; they no longer
+    // gate confirmation by spatial overlap.
     private struct Body {
         var x: Double
         var y: Double
@@ -391,9 +386,9 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
         let span = max(0.25, background - nearest)
 
         // ── Forms standing out in front of that surface ──
-        // These are not reported as figures. They are the depth layer's own reading
-        // of what comes forward, and a confirmed body has to be sitting on one of
-        // them to count — which is what the stand-out distance control decides.
+        // These are the depth layer's own readings of what comes forward. They
+        // must pass the existing distance and size gates; at least one must be
+        // present now, alongside a human pose seen within the last second.
         var mask = [Bool](repeating: false, count: totalCells)
         for i in 0..<totalCells where cellValid[i] {
             if cellDepth[i] < background - liveProtrusion { mask[i] = true }
@@ -447,36 +442,21 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             forms.append((minX, minY, maxX, maxY))
         }
 
-        // ── Bodies: the pose layer decides what a figure is ──
-        // Re-read a few times a second, and re-reported between reads, so a figure
-        // stays a figure on every frame. The depth overlap is re-checked every frame
-        // against the forms above, because the room can change in between.
+        // ── Temporal confirmation: recent human pose AND a current depth form ──
         if lastPose < 0 || frame.timestamp - lastPose >= AgesDepthPlugin.poseInterval {
             lastPose = frame.timestamp
-            lastBodies = confirmedBodies(frame: frame, display: display, gw: gw, gh: gh)
-            lastBodiesAt = frame.timestamp
-        }
-        let held = (lastBodiesAt >= 0 && frame.timestamp - lastBodiesAt <= AgesDepthPlugin.poseHold) ? lastBodies : []
-        let figures = held.filter { body in
-            // 1-cell padding on the body's cell range before the overlap check:
-            // pose detection and depth detection have slightly different spatial
-            // accuracy on the coarse 4:1 grid, so a real person can have a pose
-            // box and a depth form that just miss each other. The padding closes
-            // that gap without merging distinct figures.
-            // 2-cell padding on the body's cell range before the overlap check:
-            // pose detection and depth detection have different spatial accuracy
-            // on the coarse 4:1 grid, and the pose may be held from up to 1 second
-            // ago, so its position can drift from the current depth form. The
-            // extra padding bridges that gap without merging distinct figures.
-            let pMinX = max(0, body.cellMinX - 2)
-            let pMaxX = min(gw - 1, body.cellMaxX + 2)
-            let pMinY = max(0, body.cellMinY - 2)
-            let pMaxY = min(gh - 1, body.cellMaxY + 2)
-            return forms.contains { form in
-                form.minX <= pMaxX && form.maxX >= pMinX
-                    && form.minY <= pMaxY && form.maxY >= pMinY
+            let detectedBodies = confirmedBodies(frame: frame, display: display, gw: gw, gh: gh)
+            if !detectedBodies.isEmpty {
+                lastBodies = detectedBodies
+                lastBodiesAt = frame.timestamp
             }
         }
+        let poseAge = frame.timestamp - lastBodiesAt
+        let recentBodies = (lastBodiesAt >= 0 && poseAge >= 0
+            && poseAge <= AgesDepthPlugin.poseConfirmationWindow) ? lastBodies : []
+        // No spatial intersection or overlap padding: the two detectors may
+        // succeed on different frames. Without either condition, report no figures.
+        let figures = forms.isEmpty ? [] : recentBodies
 
         // ── The colourised depth image, built directly in display space ──
         // Sampled from the sensor's own frame through DisplayTurn, so the picture and
@@ -553,20 +533,13 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             centerDepth = Double(cellDepth[centerCell])
         }
 
-        // Depth diagnostic: which gate is failing for a body in view. poseCount is
-        // the held confirmed poses, formCount the depth forms that passed the size
-        // gates, figureCount the poses that overlap a form. bodyHeight is the tallest
-        // confirmed pose's box height (fraction of the frame), so a sub-gate pose is
-        // visible. The two gate values are echoed so the readout stays honest.
-        let maxBodyHeight = held.map { $0.height }.max() ?? 0.0
+        // poseCount includes human poses confirmed within the last second;
+        // formCount is current size-qualified depth forms. figureCount requires
+        // both, without a spatial-overlap test.
+        let maxBodyHeight = recentBodies.map { $0.height }.max() ?? 0.0
 
-        // Diagnostic: the first held body's box (display space) and cell range
-        // (raw grid space), plus every form's cell range, so a pose-form
-        // mismatch can be seen directly. Without this, poseCount and formCount
-        // are both > 0 but figureCount is 0 and there is no way to tell whether
-        // the two are in different parts of the grid (coordinate space bug) or
-        // just barely missing each other (padding too small).
-        let firstBody = held.first
+        // Positions remain available for diagnostics, not as confirmation gates.
+        let firstBody = recentBodies.first
         let bodyDiag: [String: Any] = firstBody.map { b in [
             "box": ["x": b.x, "y": b.y, "w": b.width, "h": b.height],
             "cells": ["minX": b.cellMinX, "minY": b.cellMinY, "maxX": b.cellMaxX, "maxY": b.cellMaxY],
@@ -583,7 +556,7 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             "centerDepth": centerDepth,
             "width": Double(rendered.size.width),
             "height": Double(rendered.size.height),
-            "poseCount": held.count,
+            "poseCount": recentBodies.count,
             "formCount": forms.count,
             "figureCount": figures.count,
             "bodyHeight": maxBodyHeight,
@@ -602,9 +575,8 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
 
     // Reads the camera image for human bodies and returns those that are at least
     // the smallest figure the investigator asked for, with the joints the model
-    // actually confirmed. Everything is reported in display space, and the same box
-    // is taken back into the depth grid's space so the depth pass can be asked
-    // whether that body stands out from the surface behind it.
+    // actually confirmed. Everything is reported in display space. The raw-grid
+    // box is retained for diagnostic positions only, not for spatial matching.
     private func confirmedBodies(frame: ARFrame, display: DisplayTurn, gw: Int, gh: Int) -> [Body] {
         let request = VNDetectHumanBodyPoseRequest()
         let handler = VNImageRequestHandler(

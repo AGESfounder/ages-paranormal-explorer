@@ -55,7 +55,7 @@ export function finalizeDepthDiag(tracker) {
     failureReason = 'No depth form found — ARKit found no connected depth form standing out from the background. The subject may be too close to the wall.';
   } else {
     outcome = 'no_figures';
-    failureReason = 'Pose and form not overlapping — a body pose and a depth form were found but never overlapped in the same frame.';
+    failureReason = 'No temporal confirmation — a body pose and a depth form were found during the session, but no depth form was present within one second after a confirmed body pose.';
   }
   return {
     tool: tracker.tool,
