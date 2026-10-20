@@ -8,7 +8,10 @@ import { toast } from '@/components/ui/use-toast';
 import { buildMicChain } from '@/lib/micRecordChain';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 import RecordTrimPicker from './RecordTrimPicker';
-import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
+import { TRIM_OPTIONS } from '@/lib/recordTrim';
+import usePreparedRecording from '@/hooks/usePreparedRecording';
+import RecordingPreparation from '@/components/RecordingPreparation';
+import RecordingPreview from '@/components/RecordingPreview';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 
 // Quiet window the sensor baseline is measured over, before the session — and
@@ -105,12 +108,8 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   const ambienceHeldRef = useRef(false);
 
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const getTrimmedBlob = (ts) => {
-    const chunks = videoChunksRef.current;
-    if (!chunks || chunks.length === 0) return null;
-    return buildTrimmedBlob(chunks, ts, 'video/webm');
-  };
-  const displayBlob = videoBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || videoBlob) : videoBlob;
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const displayBlob = preparedRecording.blob;
 
   // Sensor handlers
   const handleMotion = (e) => {
@@ -232,13 +231,12 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   // recording starting after the baseline it played through the session too.
   const holdAmbience = () => {
     if (ambienceHeldRef.current) return;
-    ambienceHeldRef.current = true;
-    audioAcquire();
+    ambienceHeldRef.current = audioAcquire('Vibration Communicator');
   };
   const releaseAmbience = () => {
     if (!ambienceHeldRef.current) return;
-    ambienceHeldRef.current = false;
-    audioRelease();
+    audioRelease(ambienceHeldRef.current);
+    ambienceHeldRef.current = null;
   };
 
   // Canvas drawing — renders the REM device visualization for recording
@@ -872,15 +870,11 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              <video
-                src={URL.createObjectURL(displayBlob)}
-                controls
-                className="w-full rounded"
-                style={{ maxHeight: 180 }}
-              />
+              <RecordingPreview blob={displayBlob} />
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="vibration_communicator" deviceTrimSeconds={trimMode !== 'full' ? trimSeconds : null} />
+            <RecordingPreparation {...preparedRecording} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="vibration_communicator" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

@@ -5,27 +5,27 @@
 // 2) A live in-memory store for the music enabled/volume settings, kept in sync
 //    with the persisted user settings by the Settings page.
 
-// Duck holds are counted per owner rather than as one anonymous counter, so a
-// hold whose owner no longer exists can be reconciled away instead of ducking
-// the ambience forever:
-//   narrationHolds — narration / tool speech (useGhostVoice)
-//   liveRecorders  — MediaRecorder instances currently started
-//   liveMedia      — playing <audio>/<video> elements
-let narrationHolds = 0;
+// Manual holds have unique owners. A tool can release only its own token,
+// including on cancellation/unmount, without decrementing another tool's hold.
+const manualHolds = new Map();
 const liveRecorders = new Set();
 const liveMedia = new Set();
 const busyListeners = new Set();
 
-export function audioAcquire() {
-  narrationHolds += 1;
+export function audioAcquire(label = 'Audio') {
+  const token = Symbol(label);
+  manualHolds.set(token, label);
   notifyBusy();
+  return token;
 }
-export function audioRelease() {
-  narrationHolds = Math.max(0, narrationHolds - 1);
-  notifyBusy();
+export function audioRelease(token) {
+  if (manualHolds.delete(token)) notifyBusy();
 }
 export function isAudioBusy() {
-  return narrationHolds > 0 || liveRecorders.size > 0 || liveMedia.size > 0;
+  return manualHolds.size > 0 || liveRecorders.size > 0 || liveMedia.size > 0;
+}
+function isInternalMedia(el) {
+  return el._hauntedMusic || el._agesSilentMedia || (el.srcObject && el.muted);
 }
 export function onAudioBusyChange(cb) {
   busyListeners.add(cb);
@@ -65,7 +65,7 @@ export function syncLiveMediaBusy() {
   if (typeof document === 'undefined') return;
   const playing = new Set();
   document.querySelectorAll('audio, video').forEach((el) => {
-    if (el._hauntedMusic || el.paused || el.ended || !el.isConnected) return;
+    if (isInternalMedia(el) || el.paused || el.ended || !el.isConnected) return;
     playing.add(el);
   });
   let changed = false;
@@ -161,7 +161,7 @@ if (typeof window !== 'undefined' && window.MediaRecorder && !window.MediaRecord
 if (typeof window !== 'undefined' && !window.__hauntedMediaDelegated) {
   const onPlay = (e) => {
     const el = e.target;
-    if (!el || el._hauntedMusic || !(el instanceof HTMLMediaElement)) return;
+    if (!el || !(el instanceof HTMLMediaElement) || isInternalMedia(el)) return;
     if (!liveMedia.has(el)) {
       liveMedia.add(el);
       try { notifyBusy(); } catch {}
@@ -169,7 +169,7 @@ if (typeof window !== 'undefined' && !window.__hauntedMediaDelegated) {
   };
   const onStop = (e) => {
     const el = e.target;
-    if (!el || el._hauntedMusic || !(el instanceof HTMLMediaElement)) return;
+    if (!el || !(el instanceof HTMLMediaElement) || isInternalMedia(el)) return;
     if (liveMedia.delete(el)) {
       try { notifyBusy(); } catch {}
     }

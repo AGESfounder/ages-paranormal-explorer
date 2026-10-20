@@ -44,7 +44,8 @@ check('Permission callback rejects denial and resumes save only after grant', /@
 check('Save preserves filePath/mediaType/displayName inputs and result', ['filePath', 'mediaType', 'displayName'].every((key) => save.includes(`call.getString("${key}")`)) && save.includes('result.put("success", true)') && save.includes('result.put("uri", uri.toString())') && save.includes('call.resolve(result)'));
 check('Save retains modern scoped MediaStore insert/copy behavior', /if\s*\(Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.Q\)\s*\{\s*values\.put\(MediaStore\.MediaColumns\.RELATIVE_PATH, subDir\);\s*\}/.test(save) && ['MediaStore.Images.Media.EXTERNAL_CONTENT_URI', 'MediaStore.Video.Media.EXTERNAL_CONTENT_URI', 'MediaStore.Audio.Media.EXTERNAL_CONTENT_URI', 'resolver.insert(collection, values)', 'resolver.openOutputStream(uri)', 'out.write(buf, 0, len)'].every((value) => save.includes(value)));
 const saveJs = read('src/lib/saveToDevice.js');
-check('JS Save seam registers AgesSaveToDevice and calls saveMedia', saveJs.includes("registerPlugin('AgesSaveToDevice')") && saveJs.includes('AgesSaveToDevice.saveMedia('));
+const deviceMediaJs = read('src/lib/deviceMedia.js');
+check('Shared JS Save seam registers AgesSaveToDevice and calls saveMedia', deviceMediaJs.includes("registerPlugin('AgesSaveToDevice')") && saveJs.includes("from '@/lib/deviceMedia'") && saveJs.includes('deviceMedia.saveMedia('));
 
 const manifest = read('android/app/src/main/AndroidManifest.xml').replace(/<!--[\s\S]*?-->/g, '');
 const permissions = manifest.match(/<uses-permission\b[^>]*>/g) ?? [];

@@ -143,13 +143,12 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
 
   const holdAmbience = () => {
     if (ambienceHeldRef.current) return;
-    ambienceHeldRef.current = true;
-    audioAcquire();
+    ambienceHeldRef.current = audioAcquire('Environmental Anomaly Monitor');
   };
   const releaseAmbience = () => {
     if (!ambienceHeldRef.current) return;
-    ambienceHeldRef.current = false;
-    audioRelease();
+    audioRelease(ambienceHeldRef.current);
+    ambienceHeldRef.current = null;
   };
 
   const stopEverything = () => {

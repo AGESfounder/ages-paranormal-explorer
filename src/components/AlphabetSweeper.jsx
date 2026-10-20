@@ -19,6 +19,9 @@ import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 import useSweeperSensors from '@/hooks/useSweeperSensors';
 import { drawSweeperBadges } from '@/lib/sweeperBadges';
 import RecordTrimPicker from './RecordTrimPicker';
+import usePreparedRecording from '@/hooks/usePreparedRecording';
+import RecordingPreparation from '@/components/RecordingPreparation';
+import RecordingPreview from '@/components/RecordingPreview';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -119,7 +122,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
   const timerRef = useRef(null);
-  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, getTrimmedBlob } = useSweeperRecorder({
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
     canvasRef,
     attachMicToRecording,
     boostMicStream,
@@ -129,7 +132,8 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   });
   const [trimMode, setTrimMode] = useState('full');
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const displayBlob = videoBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || videoBlob) : videoBlob;
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const displayBlob = preparedRecording.blob;
   const cameraStreamRef = useRef(null);
   const camVideoRef = useRef(null);
   const detectCanvasRef = useRef(null);
@@ -178,13 +182,12 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   // quiet across the mic/camera prompts, with no blip between the two holds.
   const holdAmbience = () => {
     if (ambienceHeldRef.current) return;
-    ambienceHeldRef.current = true;
-    audioAcquire();
+    ambienceHeldRef.current = audioAcquire('Alphabet Sweeper');
   };
   const releaseAmbience = () => {
     if (!ambienceHeldRef.current) return;
-    ambienceHeldRef.current = false;
-    audioRelease();
+    audioRelease(ambienceHeldRef.current);
+    ambienceHeldRef.current = null;
   };
 
   useEffect(() => () => stopEverything(), []);
@@ -732,10 +735,11 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
+              <RecordingPreview blob={displayBlob} />
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="alphabet_sweeper" />
+            <RecordingPreparation {...preparedRecording} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="alphabet_sweeper" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

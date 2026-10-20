@@ -2,6 +2,7 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import { X, Check, Video, Maximize2 } from 'lucide-react';
 import EvidenceSaveButtons from '@/components/EvidenceSaveButtons';
 import RecordTrimPicker from '@/components/RecordTrimPicker';
+import RecordingPreparation from '@/components/RecordingPreparation';
 import SiegEventLog from '@/components/sieg/SiegEventLog';
 import { SIEG_LANES } from '@/lib/siegDisplay';
 
@@ -20,7 +21,7 @@ function formatDuration(sec) {
 // A session that ended on its own has already saved itself by the time anyone
 // gets back to the phone, so this screen then says so and keeps the recording and
 // the log on screen rather than emptying itself.
-export default function SiegReview({ blob, session, events, counts, correlatedCount, duration, saving, saved, onSave, onDiscard, trimMode, onTrimChange, trimSeconds }) {
+export default function SiegReview({ blob, session, events, counts, correlatedCount, duration, saving, saved, onSave, onDiscard, trimMode, onTrimChange, preparation }) {
   const mediaRef = useRef(null);
   const src = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
 
@@ -99,10 +100,11 @@ export default function SiegReview({ blob, session, events, counts, correlatedCo
         </div>
       </div>
 
-      {src && !saved && (
+      {(src || preparation?.preparing || preparation?.error) && !saved && (
         <>
           <RecordTrimPicker value={trimMode} onChange={onTrimChange} />
-          <EvidenceSaveButtons onSave={onSave} saving={saving} deviceBlob={blob} devicePrefix="sieg_session" deviceTrimSeconds={trimSeconds} />
+          <RecordingPreparation {...preparation} />
+          <EvidenceSaveButtons onSave={onSave} saving={saving} deviceBlob={blob} devicePrefix="sieg_session" preparing={preparation?.preparing} preparationError={preparation?.error} />
         </>
       )}
 

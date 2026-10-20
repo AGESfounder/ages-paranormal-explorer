@@ -18,6 +18,7 @@ import useSensitivity, { isTorchActive } from '@/hooks/useSensitivity';
 import useDepthDetection from '@/hooks/useDepthDetection';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame, onDepthError } from '@/lib/nativeDepth';
+import { stampDepthFrame, liveDepthFigures } from '@/lib/depthFreshness';
 import { detectFigures } from '@/lib/anomalyDetect';
 import { sensorSupport, startSensors, stopSensors, onSensorReading, onSensorError } from '@/lib/nativeSensors';
 import {
@@ -28,8 +29,8 @@ import { synthesizeCue, CUE_CHIME } from '@/lib/toolCues';
 import { fetchWeatherByCoords } from '@/lib/openMeteo';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { toast } from '@/components/ui/use-toast';
-import RecordTrimPicker from '@/components/RecordTrimPicker';
-import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
+import { TRIM_OPTIONS } from '@/lib/recordTrim';
+import usePreparedRecording from '@/hooks/usePreparedRecording';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 import { createDepthDiagTracker, updateDepthDiag, finalizeDepthDiag, setDepthDiagError } from '@/lib/depthDiagnostic';
 
@@ -177,12 +178,8 @@ export default function SiegConsole({ gateSave, refundSave }) {
   }, []);
 
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const getTrimmedBlob = (ts) => {
-    const chunks = chunksRef.current;
-    if (!chunks || chunks.length === 0) return null;
-    return buildTrimmedBlob(chunks, ts, mimeRef.current || 'video/webm');
-  };
-  const displayBlob = blob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || blob) : blob;
+  const preparedRecording = usePreparedRecording(blob, trimSeconds);
+  const displayBlob = preparedRecording.blob;
 
   const moonNow = moonPhase();
   const conditionsLine = `${moonNow.name} · ${moonNow.illumination}%${weather ? ` · ${weather}` : ''}`;
@@ -207,13 +204,12 @@ export default function SiegConsole({ gateSave, refundSave }) {
   // microphone, and the baseline is measuring exactly how quiet the room is.
   const holdAmbience = () => {
     if (ambienceHeldRef.current) return;
-    ambienceHeldRef.current = true;
-    audioAcquire();
+    ambienceHeldRef.current = audioAcquire('SIEG');
   };
   const releaseAmbience = () => {
     if (!ambienceHeldRef.current) return;
-    ambienceHeldRef.current = false;
-    audioRelease();
+    audioRelease(ambienceHeldRef.current);
+    ambienceHeldRef.current = null;
   };
 
   // ── Event log ──────────────────────────────────────────────────────────────
@@ -404,10 +400,10 @@ export default function SiegConsole({ gateSave, refundSave }) {
   };
 
   // ── Figure lane ────────────────────────────────────────────────────────────
-  // A form has to hold in view before it counts, then the view has to stay clear
-  // before the lane can report again. Both camera methods feed this same logic, so
-  // a session judges the room the same way whichever one it ran on.
-  const stepFigureLane = (count) => {
+  // Contrast candidates must hold before counting. Native depth has already
+  // confirmed a body, so it logs immediately rather than imposing another hold.
+  // Both methods still require a clear interval before logging the next event.
+  const stepFigureLane = (count, confirmedByDepth = false) => {
     if (phaseRef.current !== 'live') return;
     const st = figureRef.current;
     const now = Date.now();
@@ -415,7 +411,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       st.quietSince = 0;
       if (!st.since) st.since = now;
       st.peak = Math.max(st.peak, count);
-      if (st.armed && now - st.since >= FIGURE_HOLD_MS && now - st.lastEvent >= FIGURE_RELEASE_MS) {
+      if (st.armed && (confirmedByDepth || now - st.since >= FIGURE_HOLD_MS) && now - st.lastEvent >= FIGURE_RELEASE_MS) {
         st.armed = false;
         st.lastEvent = now;
         logEvent('figure', `${st.peak} figure${st.peak === 1 ? '' : 's'} in view`, now);
@@ -462,6 +458,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   // ── One sampling tick drives every lane, then redraws the composite ────────
   const sampleTick = () => {
     const now = Date.now();
+    if (cameraMode === 'depth') stepFigureLane(liveDepthFigures(depthFrameRef.current, now).length, true);
     const acousticDev = evaluateAcoustic(now);
     const envDev = evaluateEnvironment(now);
     const level = vibrationLevel();
@@ -544,7 +541,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       samples: samplesRef.current,
       markers: markersRef.current,
       correlations: correlationsRef.current,
-      figureBoxes: figureBoxesRef.current,
+      figureBoxes: cameraMode === 'depth' ? { boxes: liveDepthFigures(depthFrameRef.current, now), width: 1, height: 1 } : figureBoxesRef.current,
       depthFrame: depthFrameRef.current,
       readouts: readoutsRef.current,
       eventCount: eventsRef.current.length,
@@ -779,26 +776,16 @@ export default function SiegConsole({ gateSave, refundSave }) {
         body: data.bodyDiag,
         forms: data.formDiag,
       });
-      updateDepthDiag(depthDiagRef.current, {
-        poseCount: data.poseCount ?? 0,
-        formCount: data.formCount ?? 0,
-        figureCount: data.figureCount ?? 0,
-        bodyHeight: data.bodyHeight ?? 0,
-      });
+      updateDepthDiag(depthDiagRef.current, data);
+      const receivedAt = Date.now();
       const image = new Image();
       image.onload = () => {
-        depthFrameRef.current = { imageEl: image, figures };
+        if ((depthFrameRef.current?.receivedAt || 0) > receivedAt) return;
+        depthFrameRef.current = stampDepthFrame(data, image, receivedAt);
         setAvailability((a) => (a.camera ? a : { ...a, camera: true }));
       };
       image.src = data.image;
-      // The sensor reports its boxes as fractions of the frame, which is how the
-      // composite's overlay reads them.
-      figureBoxesRef.current = {
-        boxes: figures.map((f) => ({ x: f.x, y: f.y, w: f.w, h: f.h, joints: f.joints })),
-        width: 1,
-        height: 1,
-      };
-      stepFigureLane(figures.length);
+      stepFigureLane(figures.length, true);
     });
     setTimeout(() => {
       if (!depthFrameRef.current && depthUnsubRef.current) {
@@ -983,7 +970,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       frameRef.current = requestAnimationFrame(paintLoop);
     };
     frameRef.current = requestAnimationFrame(paintLoop);
-    if (cameraMode !== 'device') {
+    if (cameraMode === 'contrast') {
       figureTimerRef.current = setInterval(figureTick, 250);
     }
     clockTimerRef.current = setInterval(clockTick, 250);
@@ -1028,7 +1015,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   // phone's speaker sits right beside the microphone that is listening to it.
   useEffect(() => {
     holdAmbience();
-    return () => releaseAmbience();
+    // The device cleanup below releases this hold after the microphone closes.
   }, []);
 
   // Local conditions come up on their own: the moon phase is computed locally, and
@@ -1069,16 +1056,17 @@ export default function SiegConsole({ gateSave, refundSave }) {
       try { recorder.stop(); } catch { /* already stopped */ }
     }
     teardownDevices();
+    releaseAmbience();
   }, []);
 
   // A session that ended on its own saves itself, privately, without anyone
   // standing at the phone. The gate is still honoured: if the save has to be
   // confirmed, the review screen is there waiting with the buttons.
   useEffect(() => {
-    if (phase !== 'review' || !blob || !autoSaveRef.current) return;
+    if (phase !== 'review' || !displayBlob || !autoSaveRef.current) return;
     autoSaveRef.current = false;
     saveRecording(true);
-  }, [phase, blob]);
+  }, [phase, displayBlob]);
 
   const discard = () => {
     autoSaveRef.current = false;
@@ -1144,7 +1132,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `SIEG Session ${date}`,
-        type: blob.type.startsWith('audio') ? 'evp' : 'video',
+        type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'sieg',
         description,
         file_url: upload.file_url,
@@ -1217,7 +1205,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
           onDiscard={discard}
           trimMode={trimMode}
           onTrimChange={setTrimMode}
-          trimSeconds={trimMode !== 'full' ? trimSeconds : null}
+          preparation={preparedRecording}
         />
         {gpsDialog}
         {trackingOffDialog}

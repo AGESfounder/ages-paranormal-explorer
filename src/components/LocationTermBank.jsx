@@ -21,6 +21,9 @@ import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import useSweeperSensors from '@/hooks/useSweeperSensors';
 import { drawSweeperBadges } from '@/lib/sweeperBadges';
 import RecordTrimPicker from './RecordTrimPicker';
+import usePreparedRecording from '@/hooks/usePreparedRecording';
+import RecordingPreparation from '@/components/RecordingPreparation';
+import RecordingPreview from '@/components/RecordingPreview';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
@@ -212,7 +215,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
   const timerRef = useRef(null);
-  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, getTrimmedBlob } = useSweeperRecorder({
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
     canvasRef,
     attachMicToRecording,
     boostMicStream,
@@ -222,7 +225,8 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   });
   const [trimMode, setTrimMode] = useState('full');
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const displayBlob = videoBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || videoBlob) : videoBlob;
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const displayBlob = preparedRecording.blob;
   const cameraStreamRef = useRef(null);
   const camVideoRef = useRef(null);
   const detectCanvasRef = useRef(null);
@@ -881,10 +885,11 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
+              <RecordingPreview blob={displayBlob} />
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="term_sweeper" />
+            <RecordingPreparation {...preparedRecording} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="term_sweeper" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

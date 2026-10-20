@@ -10,13 +10,17 @@ import { enableTorch, disableTorch } from '@/lib/torchControl';
 import SensitivityControl from './SensitivityControl';
 import AnomalyModePicker from './AnomalyModePicker';
 import { drawDepthFrame } from '@/lib/depthFrame';
+import { stampDepthFrame, liveDepthFigures } from '@/lib/depthFreshness';
 import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame, onDepthError } from '@/lib/nativeDepth';
 import useDepthDetection from '@/hooks/useDepthDetection';
 import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import RecordTrimPicker from './RecordTrimPicker';
-import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
+import { TRIM_OPTIONS } from '@/lib/recordTrim';
+import usePreparedRecording from '@/hooks/usePreparedRecording';
+import RecordingPreparation from '@/components/RecordingPreparation';
+import RecordingPreview from '@/components/RecordingPreview';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 import { createDepthDiagTracker, updateDepthDiag, finalizeDepthDiag, setDepthDiagError } from '@/lib/depthDiagnostic';
 const DEPTH_UNSUPPORTED_MESSAGE = 'Depth Scan is unavailable on this device/camera configuration. Choose Contrast Scan or Device Camera.';
@@ -62,12 +66,8 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const depthDetection = useDepthDetection();
 
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const getTrimmedBlob = (ts) => {
-    const chunks = chunksRef.current;
-    if (!chunks || chunks.length === 0) return null;
-    return buildTrimmedBlob(chunks, ts, 'video/webm');
-  };
-  const displayBlob = recordedBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || recordedBlob) : recordedBlob;
+  const preparedRecording = usePreparedRecording(recordedBlob, trimSeconds);
+  const displayBlob = preparedRecording.blob;
 
   const formatDuration = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 
@@ -296,8 +296,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
       return;
     }
     depthUnsubRef.current = onDepthFrame((data) => {
+      const receivedAt = Date.now();
       const imageEl = new Image();
-      imageEl.onload = () => { depthFrameRef.current = { ...data, imageEl }; };
+      imageEl.onload = () => {
+        if ((depthFrameRef.current?.receivedAt || 0) <= receivedAt) depthFrameRef.current = stampDepthFrame(data, imageEl, receivedAt);
+      };
       imageEl.src = data.image;
       setCenterDepth(data.centerDepth ?? null);
       setDepthHint(null);
@@ -307,12 +310,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
         figureCount: data.figureCount ?? 0,
         bodyHeight: data.bodyHeight ?? 0,
       });
-      updateDepthDiag(depthDiagRef.current, {
-        poseCount: data.poseCount ?? 0,
-        formCount: data.formCount ?? 0,
-        figureCount: data.figureCount ?? 0,
-        bodyHeight: data.bodyHeight ?? 0,
-      });
+      updateDepthDiag(depthDiagRef.current, data);
     });
 
     setFigureCount(0);
@@ -366,7 +364,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const frame = depthFrameRef.current;
-    const count = frame?.figures?.length || 0;
+    const count = liveDepthFigures(frame).length;
     setFigureCount(count);
     if (count > 0 && !anomalyDetected) {
       setAnomalyDetected(true);
@@ -596,9 +594,10 @@ export default function SLSCamera({ gateSave, refundSave }) {
       {/* Post-session save controls */}
       {!active && recordedBlob && (
         <div className="space-y-2">
-          <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded border border-border/30" style={{ maxHeight: 160 }} />
+          <RecordingPreview blob={displayBlob} className="w-full rounded border border-border/30" maxHeight={160} />
           <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-          <EvidenceSaveButtons onSave={saveRecording} saving={saving} deviceBlob={displayBlob} devicePrefix="anomaly_camera" deviceTrimSeconds={trimMode !== 'full' ? trimSeconds : null} />
+          <RecordingPreparation {...preparedRecording} />
+          <EvidenceSaveButtons onSave={saveRecording} saving={saving} deviceBlob={displayBlob} devicePrefix="anomaly_camera" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
           <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
             <X className="w-3.5 h-3.5" /> Discard
           </button>

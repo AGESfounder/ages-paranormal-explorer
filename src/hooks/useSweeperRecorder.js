@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from 'react';
-import { buildTrimmedBlob } from '@/lib/recordTrim';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 
 // Shared MediaRecorder lifecycle for the canvas-based sweeper tools (Terms,
@@ -28,10 +27,10 @@ import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 // setSensorError, and call startRecording()/stopRecording()/cleanup().
 
 const MIME_CANDIDATES = [
+  'video/mp4',
   'video/webm;codecs=vp9,opus',
   'video/webm;codecs=vp8,opus',
   'video/webm',
-  'video/mp4',
 ];
 
 // iPhone's web view cannot record a canvas, so the sweepers there record the
@@ -288,15 +287,5 @@ export default function useSweeperRecorder({
     stopTracks();
   }, [stopHeartbeat, stopTracks]);
 
-  // Build a blob from the session's timestamped chunks, optionally trimmed to
-  // the last N seconds. Returns null if no chunks were collected. Called from
-  // the component's save handler with the selected trim option's seconds.
-  const getTrimmedBlob = useCallback((trimSeconds) => {
-    const chunks = videoChunksRef.current;
-    if (!chunks || chunks.length === 0) return null;
-    const fallbackType = mimeTypeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm');
-    return buildTrimmedBlob(chunks, trimSeconds, fallbackType);
-  }, []);
-
-  return { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, getTrimmedBlob };
+  return { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup };
 }

@@ -22,6 +22,7 @@ export default function useWakeLock(active, { mediaFallback = true } = {}) {
     const ensureVideo = () => {
       if (videoRef.current) return videoRef.current;
       const v = document.createElement('video');
+      v._agesSilentMedia = true;
       v.src = NOSLEEP_MP4;
       v.setAttribute('playsinline', '');
       v.setAttribute('loop', '');

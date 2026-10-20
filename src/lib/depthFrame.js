@@ -1,4 +1,5 @@
 import { drawFigureSkeleton, hasSkeleton } from '@/lib/figureSkeleton';
+import { liveDepthFigures } from '@/lib/depthFreshness';
 
 // Draws a native depth frame and the figures confirmed in it onto the Anomaly
 // Camera's canvas, in the same house style as the contrast view (grid, header,
@@ -35,7 +36,7 @@ export function drawDepthFrame(ctx, canvas, frame, { figureCount }) {
   // The figure is shown by the body the depth image already draws and the skeleton
   // over it — no outline rectangle, so the form reads as the body itself rather than
   // a box around it. The label still marks where a figure was confirmed.
-  (frame?.figures || []).forEach(({ x, y, joints }) => {
+  liveDepthFigures(frame).forEach(({ x, y, joints }) => {
     const boxX = dx + x * dw;
     const boxY = dy + y * dh;
     if (hasSkeleton({ joints })) {

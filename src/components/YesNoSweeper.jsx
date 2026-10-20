@@ -18,6 +18,9 @@ import useSweeperSensors from '@/hooks/useSweeperSensors';
 import { drawSweeperBadges } from '@/lib/sweeperBadges';
 import { toast } from '@/components/ui/use-toast';
 import RecordTrimPicker from './RecordTrimPicker';
+import usePreparedRecording from '@/hooks/usePreparedRecording';
+import RecordingPreparation from '@/components/RecordingPreparation';
+import RecordingPreview from '@/components/RecordingPreview';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 
 // "Asking Next Question…" shows for 10 seconds (no dictation), then the phrases
@@ -120,7 +123,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
   const timerRef = useRef(null);
-  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, getTrimmedBlob } = useSweeperRecorder({
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
     canvasRef,
     attachMicToRecording,
     boostMicStream,
@@ -130,7 +133,8 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   });
   const [trimMode, setTrimMode] = useState('full');
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const displayBlob = videoBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || videoBlob) : videoBlob;
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const displayBlob = preparedRecording.blob;
   const camVideoRef = useRef(null);
   const detectCanvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -677,10 +681,11 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
+              <RecordingPreview blob={displayBlob} />
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="yesno_sweeper" />
+            <RecordingPreparation {...preparedRecording} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="yesno_sweeper" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

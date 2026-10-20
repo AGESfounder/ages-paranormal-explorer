@@ -53,8 +53,8 @@ export default function useGhostVoice() {
     };
   }, []);
 
-  const acquireNarration = () => { if (!busyRef.current) { audioAcquire(); busyRef.current = true; } };
-  const releaseNarration = () => { if (busyRef.current) { audioRelease(); busyRef.current = false; } };
+  const acquireNarration = () => { if (!busyRef.current) busyRef.current = audioAcquire('Narration'); };
+  const releaseNarration = () => { audioRelease(busyRef.current); busyRef.current = null; };
 
   const playChime = (ctx, masterGain) => {
     try {

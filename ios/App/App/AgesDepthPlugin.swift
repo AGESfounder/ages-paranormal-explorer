@@ -4,13 +4,14 @@ import ARKit
 import UIKit
 import AVFoundation
 import Vision
+import CoreImage
 
 // AGES depth module.
 //
 // Reads the iPhone's LiDAR depth sensor through ARKit (sceneDepth) and hands the
 // web layer colourised depth frames plus the FIGURES confirmed in them. A figure
 // requires a human body pose seen within the last second AND a figure-sized depth
-// form present now. The two do not need to overlap spatially or be detected in the
+// form now or within a bounded three-frame grace window. The two do not need to overlap spatially or be detected in the
 // same frame. The web layer draws those frames onto the canvas the Anomaly Camera already records,
 // so a depth session saves as evidence through exactly the same path as a contrast
 // session: one recording pipeline, both methods.
@@ -91,9 +92,24 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     // result must not clear this buffer or refresh its timestamp.
     private static let poseConfirmationWindow: TimeInterval = 1.0
 
+    private struct BodyTrack {
+        var body: Body
+        var seenAt: TimeInterval
+    }
     private var lastPose: TimeInterval = -1
-    private var lastBodies: [Body] = []
-    private var lastBodiesAt: TimeInterval = -1
+    private var bodyTracks: [BodyTrack] = []
+    private var nextBodyID = 1
+    private var lastFormAt: TimeInterval = -1
+    private static let formGraceWindow: TimeInterval = 0.375
+    private let frameGate = DispatchSemaphore(value: 1)
+    private let poseImageContext = CIContext(options: [.cacheIntermediates: false])
+    private var lastEnhancedPose: TimeInterval = -1
+    private var poseCandidates = 0
+    private var rejectedPoseSize = 0
+    private var rejectedPoseJoints = 0
+    private var largestPoseHeight = 0.0
+    private var poseInput = "camera"
+    private var poseError = ""
 
     private var session: ARSession?
     private var streaming = false
@@ -172,6 +188,7 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     // Raw depth-grid cell ranges are retained for diagnostics only; they no longer
     // gate confirmation by spatial overlap.
     private struct Body {
+        var trackID: Int = 0
         var x: Double
         var y: Double
         var width: Double
@@ -183,7 +200,7 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
         var cellMaxY: Int
 
         var payload: [String: Any] {
-            ["x": x, "y": y, "w": width, "h": height, "joints": joints]
+            ["trackId": trackID, "x": x, "y": y, "w": width, "h": height, "joints": joints]
         }
     }
 
@@ -259,9 +276,13 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             config.frameSemantics = [.sceneDepth]
             self.streaming = true
             self.lastSent = 0
-            self.lastPose = -1
-            self.lastBodies = []
-            self.lastBodiesAt = -1
+            self.renderQueue.sync {
+                self.lastPose = -1
+                self.bodyTracks = []
+                self.lastFormAt = -1
+                self.nextBodyID = 1
+                self.lastEnhancedPose = -1
+            }
             session.run(config, options: [.resetTracking, .removeExistingAnchors])
             call.resolve(["running": true])
         }
@@ -272,8 +293,10 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             self.streaming = false
             self.session?.pause()
             self.session = nil
-            self.lastBodies = []
-            self.lastBodiesAt = -1
+            self.renderQueue.async {
+                self.bodyTracks = []
+                self.lastFormAt = -1
+            }
             call.resolve(["running": false])
         }
     }
@@ -290,8 +313,14 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
         // colourised and the camera image is read for body poses, and both must come
         // from the same frame. ARFrame keeps its own buffers alive while it is held,
         // and the render queue is serial, so one frame is processed at a time.
+        // Never queue retained ARFrames behind slow pose recognition. Old frames
+        // starve ARKit's camera buffers and make detections arrive long after view.
+        guard frameGate.wait(timeout: .now()) == .success else { return }
         renderQueue.async { [weak self] in
-            self?.render(frame: frame)
+            guard let self = self else { return }
+            defer { self.frameGate.signal() }
+            guard self.streaming, self.session === session else { return }
+            self.render(frame: frame, session: session)
         }
     }
 
@@ -321,7 +350,7 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
 
     // ── Frame rendering and detection ───────────────────────────────────────
 
-    private func render(frame: ARFrame) {
+    private func render(frame: ARFrame, session: ARSession) {
         guard let sceneDepth = frame.sceneDepth else { return }
         let depthMap = sceneDepth.depthMap
         let confidence = sceneDepth.confidenceMap
@@ -442,21 +471,18 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             forms.append((minX, minY, maxX, maxY))
         }
 
-        // ── Temporal confirmation: recent human pose AND a current depth form ──
+        // Each body keeps its own last actual pose time. An empty result never
+        // refreshes it. A missed depth frame gets only three frames of grace;
+        // neither source can keep a figure alive indefinitely.
+        if !forms.isEmpty { lastFormAt = frame.timestamp }
         if lastPose < 0 || frame.timestamp - lastPose >= AgesDepthPlugin.poseInterval {
             lastPose = frame.timestamp
-            let detectedBodies = confirmedBodies(frame: frame, display: display, gw: gw, gh: gh)
-            if !detectedBodies.isEmpty {
-                lastBodies = detectedBodies
-                lastBodiesAt = frame.timestamp
-            }
+            updateBodyTracks(confirmedBodies(frame: frame, display: display, gw: gw, gh: gh), at: frame.timestamp)
         }
-        let poseAge = frame.timestamp - lastBodiesAt
-        let recentBodies = (lastBodiesAt >= 0 && poseAge >= 0
-            && poseAge <= AgesDepthPlugin.poseConfirmationWindow) ? lastBodies : []
-        // No spatial intersection or overlap padding: the two detectors may
-        // succeed on different frames. Without either condition, report no figures.
-        let figures = forms.isEmpty ? [] : recentBodies
+        bodyTracks.removeAll { frame.timestamp - $0.seenAt > AgesDepthPlugin.poseConfirmationWindow }
+        let recentBodies = bodyTracks.map { $0.body }
+        let hasRecentForm = lastFormAt >= 0 && frame.timestamp - lastFormAt <= AgesDepthPlugin.formGraceWindow
+        let figures = hasRecentForm ? recentBodies : []
 
         // ── The colourised depth image, built directly in display space ──
         // Sampled from the sensor's own frame through DisplayTurn, so the picture and
@@ -550,7 +576,14 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
 
         let payload: [String: Any] = [
             "image": "data:image/jpeg;base64," + jpeg.base64EncodedString(),
-            "figures": figures.map { $0.payload },
+            "figures": figures.map { body -> [String: Any] in
+                var figure = body.payload
+                let seenAt = bodyTracks.first { $0.body.trackID == body.trackID }?.seenAt ?? frame.timestamp
+                let poseLeft = AgesDepthPlugin.poseConfirmationWindow - (frame.timestamp - seenAt)
+                let formLeft = AgesDepthPlugin.formGraceWindow - (frame.timestamp - lastFormAt)
+                figure["validForMs"] = max(0, min(poseLeft, formLeft)) * 1000
+                return figure
+            },
             "background": Double(background),
             "nearest": Double(nearest),
             "centerDepth": centerDepth,
@@ -562,13 +595,49 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             "bodyHeight": maxBodyHeight,
             "protrusion": Double(liveProtrusion),
             "minHeight": liveFigureHeight,
+            "poseCandidates": poseCandidates,
+            "rejectedPoseSize": rejectedPoseSize,
+            "rejectedPoseJoints": rejectedPoseJoints,
+            "candidateHeight": largestPoseHeight,
+            "poseInput": poseInput,
+            "poseError": poseError,
             "gridSize": ["w": gw, "h": gh],
             "bodyDiag": bodyDiag,
             "formDiag": formDiag
         ]
         DispatchQueue.main.async { [weak self] in
-            self?.notifyListeners("frame", data: payload)
+            guard let self = self, self.streaming, self.session === session else { return }
+            self.notifyListeners("frame", data: payload)
         }
+    }
+
+    private func updateBodyTracks(_ bodies: [Body], at timestamp: TimeInterval) {
+        bodyTracks.removeAll { timestamp - $0.seenAt > AgesDepthPlugin.poseConfirmationWindow }
+        var matched = Set<Int>()
+        for var body in bodies {
+            let candidate = bodyTracks.indices.filter { !matched.contains(bodyTracks[$0].body.trackID) }.min { a, b in
+                let ca = bodyTracks[a].body
+                let cb = bodyTracks[b].body
+                return hypot(ca.x + ca.width / 2 - body.x - body.width / 2, ca.y + ca.height / 2 - body.y - body.height / 2)
+                    < hypot(cb.x + cb.width / 2 - body.x - body.width / 2, cb.y + cb.height / 2 - body.y - body.height / 2)
+            }
+            if let index = candidate {
+                let old = bodyTracks[index].body
+                let distance = hypot(old.x + old.width / 2 - body.x - body.width / 2, old.y + old.height / 2 - body.y - body.height / 2)
+                if distance < max(0.15, max(old.height, body.height) * 0.4) {
+                    body.trackID = old.trackID
+                    bodyTracks[index] = BodyTrack(body: body, seenAt: timestamp)
+                    matched.insert(body.trackID)
+                    continue
+                }
+            }
+            body.trackID = nextBodyID
+            nextBodyID += 1
+            bodyTracks.append(BodyTrack(body: body, seenAt: timestamp))
+            matched.insert(body.trackID)
+        }
+        bodyTracks.sort { $0.seenAt > $1.seenAt }
+        bodyTracks = Array(bodyTracks.prefix(AgesDepthPlugin.maxBodies))
     }
 
     // ── Body poses ──────────────────────────────────────────────────────────
@@ -579,18 +648,38 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     // box is retained for diagnostic positions only, not for spatial matching.
     private func confirmedBodies(frame: ARFrame, display: DisplayTurn, gw: Int, gh: Int) -> [Body] {
         let request = VNDetectHumanBodyPoseRequest()
-        let handler = VNImageRequestHandler(
-            cvPixelBuffer: frame.capturedImage,
-            orientation: display.visionOrientation,
-            options: [:]
-        )
+        let handler = VNImageRequestHandler(cvPixelBuffer: frame.capturedImage, orientation: display.visionOrientation, options: [:])
+        poseCandidates = 0
+        rejectedPoseSize = 0
+        rejectedPoseJoints = 0
+        largestPoseHeight = 0
+        poseInput = "camera"
+        poseError = ""
         do {
             try handler.perform([request])
         } catch {
+            poseError = error.localizedDescription
             return []
         }
-        guard let observations = request.results else { return [] }
-
+        var observations = request.results ?? []
+        // Recognition still needs real camera information. If the raw image
+        // yields nothing, try a brighter local copy at most twice per second.
+        // Confidence/size gates stay unchanged; no skeleton is manufactured.
+        if observations.isEmpty && (lastEnhancedPose < 0 || frame.timestamp - lastEnhancedPose >= 0.5) {
+            lastEnhancedPose = frame.timestamp
+            let image = CIImage(cvPixelBuffer: frame.capturedImage)
+                .applyingFilter("CIExposureAdjust", parameters: [kCIInputEVKey: 1.0])
+                .applyingFilter("CIColorControls", parameters: [kCIInputContrastKey: 1.1])
+            if let enhanced = poseImageContext.createCGImage(image, from: image.extent) {
+                let fallback = VNDetectHumanBodyPoseRequest()
+                do {
+                    try VNImageRequestHandler(cgImage: enhanced, orientation: display.visionOrientation, options: [:]).perform([fallback])
+                    observations = fallback.results ?? []
+                    poseInput = "enhanced_camera"
+                } catch { poseError = error.localizedDescription }
+            }
+        }
+        poseCandidates = observations.count
         var bodies: [Body] = []
         for observation in observations {
             guard bodies.count < AgesDepthPlugin.maxBodies else { break }
@@ -606,7 +695,7 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
                     ((1 - Double(point.location.y)) * 10000).rounded() / 10000,
                 ]
             }
-            guard !joints.isEmpty else { continue }
+            guard !joints.isEmpty else { rejectedPoseJoints += 1; continue }
 
             // The body's own extent, taken from the joints that were actually
             // confirmed: the joints are what is measured on the body, so a box built
@@ -623,8 +712,9 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             }
             let boxW = boxMaxX - boxX
             let boxHeight = boxMaxY - boxY
+            largestPoseHeight = max(largestPoseHeight, boxHeight)
             // The smallest figure the investigator asked to count.
-            guard boxHeight >= liveFigureHeight else { continue }
+            guard boxHeight >= liveFigureHeight else { rejectedPoseSize += 1; continue }
 
             let cornerA = display.rawPoint(x: boxX, y: boxY)
             let cornerB = display.rawPoint(x: boxX + boxW, y: boxY + boxHeight)

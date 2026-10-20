@@ -13,6 +13,10 @@ export function createDepthDiagTracker(tool, sessionId, { protrusion, minHeight 
     protrusion: protrusion ?? null,
     minHeight: minHeight ?? null,
     peakPose: 0,
+    peakCandidates: 0,
+    sizeRejections: 0,
+    jointRejections: 0,
+    poseError: '',
     peakForm: 0,
     peakFigure: 0,
     maxHeight: 0,
@@ -21,8 +25,12 @@ export function createDepthDiagTracker(tool, sessionId, { protrusion, minHeight 
   };
 }
 
-export function updateDepthDiag(tracker, { poseCount, formCount, figureCount, bodyHeight }) {
+export function updateDepthDiag(tracker, { poseCount, formCount, figureCount, bodyHeight, poseCandidates, rejectedPoseSize, rejectedPoseJoints, poseError }) {
   if (!tracker) return;
+  tracker.peakCandidates = Math.max(tracker.peakCandidates, poseCandidates || 0);
+  tracker.sizeRejections += rejectedPoseSize || 0;
+  tracker.jointRejections += rejectedPoseJoints || 0;
+  if (poseError) tracker.poseError = poseError;
   tracker.frameCount += 1;
   tracker.peakPose = Math.max(tracker.peakPose, poseCount || 0);
   tracker.peakForm = Math.max(tracker.peakForm, formCount || 0);
@@ -49,13 +57,16 @@ export function finalizeDepthDiag(tracker) {
     failureReason = null;
   } else if (tracker.peakPose === 0) {
     outcome = 'no_figures';
-    failureReason = 'No body pose found — Vision never detected a human shape. The subject may need more light, or may be partially out of frame.';
+    failureReason = tracker.poseError ? `Body recognition failed: ${tracker.poseError}`
+      : tracker.sizeRejections > 0 ? 'Body candidates were found but rejected by the minimum figure-height setting.'
+        : tracker.jointRejections > 0 ? 'Body candidates were found but their joints did not meet the confidence threshold.'
+          : 'No body candidates were found in either the camera image or the brighter fallback. The subject may need more light or may be partially out of frame.';
   } else if (tracker.peakForm === 0) {
     outcome = 'no_figures';
     failureReason = 'No depth form found — ARKit found no connected depth form standing out from the background. The subject may be too close to the wall.';
   } else {
     outcome = 'no_figures';
-    failureReason = 'No temporal confirmation — a body pose and a depth form were found during the session, but no depth form was present within one second after a confirmed body pose.';
+    failureReason = 'No temporal confirmation — body poses and depth forms were found, but their confirmations did not coincide within their freshness windows.';
   }
   return {
     tool: tracker.tool,
@@ -66,7 +77,7 @@ export function finalizeDepthDiag(tracker) {
     peak_figure_count: tracker.peakFigure,
     max_body_height: tracker.maxHeight || null,
     protrusion: tracker.protrusion,
-    min_height: tracker.minHeight,
+    min_height: tracker.minHeight > 1 ? tracker.minHeight / 100 : tracker.minHeight,
     frame_count: tracker.frameCount,
     failure_reason: failureReason,
     occurred_at: new Date().toISOString(),

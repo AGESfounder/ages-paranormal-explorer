@@ -84,7 +84,10 @@ check('AgesSaveToDevicePlugin keeps its bridged class and identifier', !!saveSwi
 check('AgesSaveToDevicePlugin keeps jsName "AgesSaveToDevice"', !!saveSwift && saveSwift.includes('jsName = "AgesSaveToDevice"'));
 check('AgesSaveToDevicePlugin exposes saveMedia() as a promise', !!saveSwift && /CAPPluginMethod\(name: "saveMedia", returnType: CAPPluginReturnPromise\)/.test(saveSwift) && saveSwift.includes('func saveMedia(_ call: CAPPluginCall)'));
 check('AgesSaveToDevicePlugin keeps filePath/mediaType/displayName inputs', !!saveSwift && ['filePath', 'mediaType', 'displayName'].every((key) => saveSwift.includes(`call.getString("${key}")`)));
-check('AgesSaveToDevicePlugin keeps Photos image/video and Documents audio paths', !!saveSwift && saveSwift.includes('PHPhotoLibrary.shared().performChanges') && saveSwift.includes('with: .photo') && saveSwift.includes('with: .video') && saveSwift.includes('mediaType == "audio"') && saveSwift.includes('.documentDirectory') && saveSwift.includes('FileManager.default.copyItem'));
+check('AgesSaveToDevicePlugin keeps Photos image/video and Documents audio paths', !!saveSwift && saveSwift.includes('PHPhotoLibrary.shared().performChanges') && saveSwift.includes('with: image ? .photo : .video') && saveSwift.includes('type == "audio"') && saveSwift.includes('saveToDocuments(source: source') && saveSwift.includes('.documentDirectory') && saveSwift.includes('FileManager.default.copyItem'));
+check('Recording preparation is a registered native promise', !!saveSwift && saveSwift.includes('CAPPluginMethod(name: "prepareMedia", returnType: CAPPluginReturnPromise)') && saveSwift.includes('func prepareMedia(_ call: CAPPluginCall)'));
+check('Native export reads precise duration, trims the full asset and validates output duration', !!saveSwift && saveSwift.includes('AVURLAssetPreferPreciseDurationAndTimingKey: true') && saveSwift.includes('duration - kept') && saveSwift.includes('exporter.timeRange = CMTimeRange') && saveSwift.includes('abs(actual - kept) < 0.75'));
+check('Photos requests add-only access and reports its true destination', !!saveSwift && saveSwift.includes('requestAuthorization(for: .addOnly') && saveSwift.includes('"destination": "photos"') && saveSwift.includes('"destination": "files"') && saveSwift.includes('photos_permission_denied'));
 
 // ── 4. JS seams register the same names and expose the same steps/events
 const sensorsJs = read('src/lib/nativeSensors.js');
@@ -103,7 +106,28 @@ check('nativeDepth.js normalises coded start rejections', !!depthJs && depthJs.i
 check('nativeDepth.js keeps start/stop/setDetection seams', !!depthJs && /export async function startDepthStream/.test(depthJs) && /export async function stopDepthStream/.test(depthJs) && /export async function setDepthDetection/.test(depthJs));
 
 const saveJs = read('src/lib/saveToDevice.js');
-check("saveToDevice.js registers JS plugin 'AgesSaveToDevice' and calls saveMedia", !!saveJs && saveJs.includes("registerPlugin('AgesSaveToDevice')") && saveJs.includes('AgesSaveToDevice.saveMedia('));
+const deviceMediaJs = read('src/lib/deviceMedia.js');
+check("Shared device media registers 'AgesSaveToDevice' and saveToDevice calls saveMedia", !!saveJs && !!deviceMediaJs && deviceMediaJs.includes("registerPlugin('AgesSaveToDevice')") && saveJs.includes("from '@/lib/deviceMedia'") && saveJs.includes('deviceMedia.saveMedia('));
+check('Binary copies omit text encoding and verify the byte count', !!deviceMediaJs && deviceMediaJs.includes('Filesystem.writeFile({ data, path, directory: Directory.Cache })') && deviceMediaJs.includes('stat.size !== blob.size'));
+check('All seven trim-enabled tools use finished-recording preparation', ['SLSCamera', 'SiegConsole', 'PhoneREMDevice', 'AcousticAnomalySweeper', 'AlphabetSweeper', 'YesNoSweeper', 'LocationTermBank'].every((name) => { const source = read(`src/components/${name}.jsx`); return source?.includes('usePreparedRecording(') && !source.includes('getTrimmedBlob'); }));
+check('Depth work cannot queue old camera frames and body tracks expire', !!depthSwift && depthSwift.includes('frameGate.wait(timeout: .now())') && depthSwift.includes('bodyTracks.removeAll') && depthSwift.includes('poseConfirmationWindow: TimeInterval = 1.0'));
+const { audioAcquire, audioRelease, isAudioBusy } = await import('./src/lib/hauntedAudio.js');
+const ownerA = audioAcquire('regression A');
+const ownerB = audioAcquire('regression B');
+audioRelease(ownerA);
+audioRelease(ownerA);
+check('Releasing one audio owner twice cannot release another owner', isAudioBusy());
+audioRelease(ownerB);
+check('Music is unblocked when every audio owner releases', !isAudioBusy());
+const { createDepthDiagTracker, updateDepthDiag, finalizeDepthDiag } = await import('./src/lib/depthDiagnostic.js');
+const diagnostic = createDepthDiagTracker('sieg', 'regression', { minHeight: 20 });
+updateDepthDiag(diagnostic, { poseCount: 0, poseCandidates: 1, rejectedPoseSize: 1 });
+const diagnosticRecord = finalizeDepthDiag(diagnostic);
+check('Depth diagnostics distinguish rejected body size and store fractional height', diagnosticRecord.min_height === 0.2 && diagnosticRecord.failure_reason.includes('minimum figure-height'));
+const { stampDepthFrame, liveDepthFigures } = await import('./src/lib/depthFreshness.js');
+const stamped = stampDepthFrame({ figures: [{ trackId: 1, validForMs: 250 }] }, null, 1000);
+check('Depth skeletons expire even when no further sensor frame arrives', liveDepthFigures(stamped, 1100).length === 1 && liveDepthFigures(stamped, 1250).length === 0);
+check('A frame cannot extend a confirmed body beyond one second', liveDepthFigures(stampDepthFrame({ figures: [{ validForMs: 5000 }] }, null, 1000), 2001).length === 0);
 
 // ── 5. The three consumers actually wire the error seams in
 const eam = read('src/components/EnvironmentalAnomalyMonitor.jsx');

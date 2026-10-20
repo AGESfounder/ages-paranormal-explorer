@@ -10,7 +10,10 @@ import { toast } from '@/components/ui/use-toast';
 import { ACOUSTIC_BANDS, createBaselineTracker, measureLevels, eventThresholdDb, dominantBand } from '@/lib/acousticAnalysis';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 import RecordTrimPicker from './RecordTrimPicker';
-import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
+import { TRIM_OPTIONS } from '@/lib/recordTrim';
+import usePreparedRecording from '@/hooks/usePreparedRecording';
+import RecordingPreparation from '@/components/RecordingPreparation';
+import RecordingPreview from '@/components/RecordingPreview';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
 
 // Listen-only acoustic monitor. It never emits sound: it listens through the
@@ -96,12 +99,8 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   useEffect(() => () => stopEverything(), []);
 
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const getTrimmedBlob = (ts) => {
-    const chunks = chunksRef.current;
-    if (!chunks || chunks.length === 0) return null;
-    return buildTrimmedBlob(chunks, ts, mimeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm'));
-  };
-  const displayBlob = videoBlob && trimMode !== 'full' ? (getTrimmedBlob(trimSeconds) || videoBlob) : videoBlob;
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const displayBlob = preparedRecording.blob;
 
   const closeAudio = () => {
     if (canvasStreamRef.current) {
@@ -123,13 +122,12 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   // microphone, and the calibration is measuring exactly how quiet the room is.
   const holdAmbience = () => {
     if (ambienceHeldRef.current) return;
-    ambienceHeldRef.current = true;
-    audioAcquire();
+    ambienceHeldRef.current = audioAcquire('Acoustic Anomaly Sweeper');
   };
   const releaseAmbience = () => {
     if (!ambienceHeldRef.current) return;
-    ambienceHeldRef.current = false;
-    audioRelease();
+    audioRelease(ambienceHeldRef.current);
+    ambienceHeldRef.current = null;
   };
 
   const stopEverything = () => {
@@ -718,14 +716,11 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              {displayBlob.type.startsWith('audio') ? (
-                <audio src={URL.createObjectURL(displayBlob)} controls className="w-full" />
-              ) : (
-                <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
-              )}
+              <RecordingPreview blob={displayBlob} />
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="acoustic_anomaly" deviceTrimSeconds={trimMode !== 'full' ? trimSeconds : null} />
+            <RecordingPreparation {...preparedRecording} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="acoustic_anomaly" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

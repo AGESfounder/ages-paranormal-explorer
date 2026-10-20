@@ -147,7 +147,7 @@ export default function HauntedMusic() {
 
     const wavUrl = buildHauntedWavUrl();
     window.__hauntedAudioUrl = wavUrl;
-    const audio = new Audio(wavUrl);
+    let audio = new Audio(wavUrl);
     audio._hauntedMusic = true; // don't let the busy-bus listeners acquire against itself
     audio.loop = true;
     audio.preload = 'auto';
@@ -178,19 +178,38 @@ export default function HauntedMusic() {
       }
     };
 
-    // Pause/play + volume in one place so the Settings toggle is obvious.
+    let recovery = null;
+    let lastTime = 0;
+    let lastProgress = Date.now();
+    const rebuildPlayer = () => {
+      audio.pause();
+      mediaSrc?.disconnect();
+      gainNode?.disconnect();
+      audioCtx = null; gainNode = null; mediaSrc = null; recovery = null;
+      audio = new Audio(wavUrl);
+      audio._hauntedMusic = true;
+      audio.loop = true;
+      audio.preload = 'auto';
+      audio.volume = 0;
+      audioRef.current = audio;
+      window.__hauntedAudioEl = audio;
+      setupWebAudio();
+      lastTime = 0; lastProgress = Date.now();
+    };
+
+    // Resume only when the microphone, narration and evidence playback are free.
     const applyVolume = () => {
-      const a = audioRef.current || window.__hauntedAudioEl;
-      if (!a) return;
-      // The phone's speech/mic session can leave this engine suspended while the
-      // element still reports "playing" — that was the silent ambience that only
-      // a trip out of the app used to clear. Re-check the engine on the existing
-      // poll so the music comes back on its own once a tool stops using audio.
-      if (audioCtx && audioCtx.state !== 'running' && !document.hidden) {
-        audioCtx.resume().catch(() => {});
-      }
       const { hauntedEnabled, hauntedVolume } = getMusicSettings();
       const shouldPlay = hauntedEnabled && !isAudioBusy() && !document.hidden;
+      if (shouldPlay && audioCtx?.state === 'closed') rebuildPlayer();
+      const a = audioRef.current;
+      if (!a) return;
+      if (shouldPlay && audioCtx && audioCtx.state !== 'running' && !recovery) {
+        setHauntedPlaybackState({ status: 'resuming', error: null });
+        recovery = audioCtx.resume().then(() => {
+          if (audioCtx?.state !== 'running') setHauntedPlaybackState({ status: 'interrupted', error: 'The audio engine has not resumed yet.' });
+        }).catch((error) => setHauntedPlaybackState({ status: 'blocked', error: error.message || 'Tap once to restore music.' })).finally(() => { recovery = null; });
+      }
       const vol = shouldPlay ? hauntedVolume / 100 : 0;
       if (gainNode) {
         a.volume = 1; // element at full; the gain node controls the level
@@ -199,8 +218,9 @@ export default function HauntedMusic() {
         a.volume = vol * 0.9; // fallback before Web Audio is set up
       }
       if (shouldPlay && a.paused) {
+        lastProgress = Date.now();
         a.play()
-          .then(() => setHauntedPlaybackState({ status: 'playing', error: null }))
+          .then(() => setHauntedPlaybackState({ status: !audioCtx || audioCtx.state === 'running' ? 'playing' : 'interrupted', error: null }))
           .catch((err) => {
             setHauntedPlaybackState({
               status: 'blocked',
@@ -210,8 +230,16 @@ export default function HauntedMusic() {
       } else if (!shouldPlay && !a.paused) {
         a.pause();
         setHauntedPlaybackState({ status: hauntedEnabled ? 'ducked' : 'paused', error: null });
-      } else if (shouldPlay && !a.paused) {
-        setHauntedPlaybackState({ status: 'playing', error: null });
+      } else if (shouldPlay && !a.paused && (!audioCtx || audioCtx.state === 'running')) {
+        const now = Date.now();
+        if (a.currentTime !== lastTime) { lastTime = a.currentTime; lastProgress = now; }
+        if (now - lastProgress > 3000) {
+          a.pause();
+          lastProgress = now;
+          setHauntedPlaybackState({ status: 'resuming', error: 'Music playback stalled; restarting it.' });
+        } else setHauntedPlaybackState({ status: 'playing', error: null });
+      } else if (!shouldPlay) {
+        lastProgress = Date.now();
       }
     };
 
@@ -222,10 +250,12 @@ export default function HauntedMusic() {
     // recording that was playing back, and competed with it.
     let unlocked = false;
     const unlock = () => {
-      const a = audioRef.current;
+      let a = audioRef.current;
       if (!a) return;
+      if (isAudioBusy() || document.hidden) return;
+      if (audioCtx?.state === 'closed') { rebuildPlayer(); a = audioRef.current; }
       setupWebAudio();
-      if (audioCtx && audioCtx.state === 'suspended') {
+      if (audioCtx && audioCtx.state !== 'running') {
         audioCtx.resume()
           .then(() => setHauntedPlaybackState({ status: 'ready', error: null }))
           .catch((err) => setHauntedPlaybackState({ status: 'error', error: err?.message || 'AudioContext resume failed' }));
@@ -262,8 +292,7 @@ export default function HauntedMusic() {
       import('@capacitor/app').then(({ App }) => {
         App.addListener('appStateChange', ({ isActive }) => {
           if (isActive) {
-            setupWebAudio();
-            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+            if (!isAudioBusy()) setupWebAudio();
             applyVolume();
           } else {
             audioRef.current?.pause();
