@@ -559,6 +559,22 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
         // confirmed pose's box height (fraction of the frame), so a sub-gate pose is
         // visible. The two gate values are echoed so the readout stays honest.
         let maxBodyHeight = held.map { $0.height }.max() ?? 0.0
+
+        // Diagnostic: the first held body's box (display space) and cell range
+        // (raw grid space), plus every form's cell range, so a pose-form
+        // mismatch can be seen directly. Without this, poseCount and formCount
+        // are both > 0 but figureCount is 0 and there is no way to tell whether
+        // the two are in different parts of the grid (coordinate space bug) or
+        // just barely missing each other (padding too small).
+        let firstBody = held.first
+        let bodyDiag: [String: Any] = firstBody.map { b in [
+            "box": ["x": b.x, "y": b.y, "w": b.width, "h": b.height],
+            "cells": ["minX": b.cellMinX, "minY": b.cellMinY, "maxX": b.cellMaxX, "maxY": b.cellMaxY],
+        ] } ?? [:]
+        let formDiag = forms.map { f in
+            ["minX": f.minX, "minY": f.minY, "maxX": f.maxX, "maxY": f.maxY]
+        }
+
         let payload: [String: Any] = [
             "image": "data:image/jpeg;base64," + jpeg.base64EncodedString(),
             "figures": figures.map { $0.payload },
@@ -572,7 +588,10 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             "figureCount": figures.count,
             "bodyHeight": maxBodyHeight,
             "protrusion": Double(liveProtrusion),
-            "minHeight": liveFigureHeight
+            "minHeight": liveFigureHeight,
+            "gridSize": ["w": gw, "h": gh],
+            "bodyDiag": bodyDiag,
+            "formDiag": formDiag
         ]
         DispatchQueue.main.async { [weak self] in
             self?.notifyListeners("frame", data: payload)

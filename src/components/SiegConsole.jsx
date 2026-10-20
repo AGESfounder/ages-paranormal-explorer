@@ -775,6 +775,9 @@ export default function SiegConsole({ gateSave, refundSave }) {
         bodyHeight: data.bodyHeight ?? 0,
         protrusion: data.protrusion,
         minHeight: data.minHeight,
+        grid: data.gridSize,
+        body: data.bodyDiag,
+        forms: data.formDiag,
       });
       updateDepthDiag(depthDiagRef.current, {
         poseCount: data.poseCount ?? 0,
