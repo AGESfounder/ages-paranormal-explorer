@@ -4,6 +4,7 @@ import {
   createEnvironmentTracker, magneticThreshold, pressureThreshold,
   SENSITIVITY, MOVEMENT_LIMIT,
 } from '@/lib/environmentAnalysis';
+import { onAudioBusyChange } from '@/lib/hauntedAudio';
 
 // Shared 4-sensor trigger layer for the three Sweeper tools (Alphabet, Terms,
 // Yes/No/IDK). Replaces the per-tool motion/orientation handlers with one
@@ -29,7 +30,11 @@ import {
 // triggers (e.g. motion + magnetic) without false correlations — only sensors
 // that genuinely held a departure are ever in the set.
 
-const ACCEL_THRESHOLD = 0.8;
+// Per-axis deviation threshold (m/s²). Matches the standalone Vibration
+// Communicator's sensitivity: the slightest movement triggers. The old
+// magnitude-based approach needed 0.8 m/s² because gravity dominated the
+// magnitude, making horizontal shakes nearly invisible.
+const ACCEL_THRESHOLD = 0.15;
 const ORIENT_THRESHOLD = 6;
 const MOTION_HOLD_MS = 100;   // short enough to catch a transient spike (knock/tap), long enough to reject a single jitter frame
 const ORIENT_HOLD_MS = 100;
@@ -70,7 +75,14 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
   const orientHandlerRef = useRef(null);
   const envUnsubRef = useRef(null);
   const envErrorUnsubRef = useRef(null);
-  const baselineRef = useRef(9.8);
+  // Per-axis acceleration baseline (EMA-adapted), so a horizontal shake shows
+  // as a real deviation instead of being buried in gravity's magnitude.
+  const baselineRef = useRef({ ax: 0, ay: 0, az: 9.8 });
+  // Magnetic channel is suppressed for this long after any app sound plays —
+  // the phone's speaker magnet sits beside the magnetometer and a cue or
+  // narration burst can cause a magnetic spike that fires a false lock.
+  const magneticSuppressedUntilRef = useRef(0);
+  const audioBusyUnsubRef = useRef(null);
   const lastOrientRef = useRef(null);
   const motionChanRef = useRef(newChannel());
   const orientChanRef = useRef(newChannel());
@@ -122,15 +134,26 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
 
   const getActiveSensors = useCallback(() => Array.from(attributionRef.current), []);
 
-  // ── Motion (accelerometer) — EMA baseline + hold-and-fire ──
+  // ── Motion (accelerometer) — per-axis EMA baseline + hold-and-fire ──
+  // Uses the same per-axis vector deviation as the standalone Vibration
+  // Communicator: sqrt((ax-bx)² + (ay-by)² + (az-bz)²). This catches
+  // horizontal shakes that the old magnitude-based approach missed (gravity
+  // dominates the magnitude, so a horizontal shake barely changes it).
   const handleMotion = useCallback((e) => {
-    const a = e.accelerationIncludingGravity;
+    const a = e.acceleration || e.accelerationIncludingGravity;
     if (!a) return;
-    const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
-    const dev = Math.abs(mag - baselineRef.current);
+    const ax = a.x || 0, ay = a.y || 0, az = a.z || 0;
+    const b = baselineRef.current;
+    const dev = Math.sqrt((ax - b.ax) ** 2 + (ay - b.ay) ** 2 + (az - b.az) ** 2);
     const now = Date.now();
     stepChannel(motionChanRef.current, dev, ACCEL_THRESHOLD, now, MOTION_HOLD_MS, MOTION_REARM_MS, MOTION_RELEASE_MS, 'motion', fire);
-    baselineRef.current = baselineRef.current * 0.97 + mag * 0.03;
+    // Slow EMA so the baseline tracks the phone's recent rest state without
+    // absorbing a brief shake.
+    baselineRef.current = {
+      ax: b.ax * 0.97 + ax * 0.03,
+      ay: b.ay * 0.97 + ay * 0.03,
+      az: b.az * 0.97 + az * 0.03,
+    };
   }, [fire]);
 
   // ── Orientation (gyro) — last-value + hold-and-fire ──
@@ -172,7 +195,10 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
       { magnetic: s.magnetic, pressure: s.pressure },
       { magnetic: chans.magnetic.since > 0, pressure: chans.pressure.since > 0 || moving },
     );
-    if (Number.isFinite(dev.magnetic)) {
+    // The magnetic channel is suppressed for 2 seconds after any app sound
+    // plays — the phone's speaker magnet can cause a magnetic spike that
+    // would fire a false lock.
+    if (Number.isFinite(dev.magnetic) && now >= magneticSuppressedUntilRef.current) {
       stepChannel(chans.magnetic, Math.abs(dev.magnetic), magneticThreshold(dev.magSd, SENSITIVITY.normal), now, ENV_HOLD_MS, ENV_REARM_MS, ENV_RELEASE_MS, 'magnetic', fire);
     }
     // Pressure channel is held silent while the phone moves — a phone being
@@ -210,12 +236,22 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
     motionChanRef.current = newChannel();
     orientChanRef.current = newChannel();
     envChannelsRef.current = { magnetic: newChannel(), pressure: newChannel() };
-    baselineRef.current = 9.8;
+    baselineRef.current = { ax: 0, ay: 0, az: 9.8 };
+    magneticSuppressedUntilRef.current = 0;
     lastOrientRef.current = null;
     envTrackerRef.current = createEnvironmentTracker();
     latestSensorRef.current = { magnetic: null, pressure: null, movement: 0 };
     attributionRef.current.clear();
     if (attributionWindowRef.current) { clearTimeout(attributionWindowRef.current); attributionWindowRef.current = null; }
+
+    // Subscribe to audio busy changes: when any app sound plays (cue,
+    // narration, haunted music), suppress the magnetic channel for 2 seconds
+    // so the speaker's magnet cannot fire a false lock.
+    if (!audioBusyUnsubRef.current) {
+      audioBusyUnsubRef.current = onAudioBusyChange((busy) => {
+        if (busy) magneticSuppressedUntilRef.current = Date.now() + 2000;
+      });
+    }
 
     const permOk = await requestPermissions();
     setAvailability((prev) => ({ ...prev, motion: permOk, orientation: permOk }));
@@ -266,6 +302,7 @@ export default function useSweeperSensors({ onTrigger, setSensorError }) {
     flashTimersRef.current = {};
     if (attributionWindowRef.current) { clearTimeout(attributionWindowRef.current); attributionWindowRef.current = null; }
     attributionRef.current.clear();
+    if (audioBusyUnsubRef.current) { audioBusyUnsubRef.current(); audioBusyUnsubRef.current = null; }
     setSensorStates({ motion: false, orientation: false, magnetic: false, barometric: false });
     sensorStatesRef.current = { motion: false, orientation: false, magnetic: false, barometric: false };
   }, []);

@@ -407,7 +407,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       if (audioTrack) canvasStream.addTrack(audioTrack);
 
       const mimeType = (canvasCapture
-        ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+        ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
         : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'])
         .find(t => MediaRecorder.isTypeSupported(t)) || '';
 
@@ -880,7 +880,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
               />
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="vibration_communicator" />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="vibration_communicator" deviceTrimSeconds={trimMode !== 'full' ? trimSeconds : null} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

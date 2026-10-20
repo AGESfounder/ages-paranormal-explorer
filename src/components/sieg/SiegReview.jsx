@@ -20,7 +20,7 @@ function formatDuration(sec) {
 // A session that ended on its own has already saved itself by the time anyone
 // gets back to the phone, so this screen then says so and keeps the recording and
 // the log on screen rather than emptying itself.
-export default function SiegReview({ blob, session, events, counts, correlatedCount, duration, saving, saved, onSave, onDiscard, trimMode, onTrimChange }) {
+export default function SiegReview({ blob, session, events, counts, correlatedCount, duration, saving, saved, onSave, onDiscard, trimMode, onTrimChange, trimSeconds }) {
   const mediaRef = useRef(null);
   const src = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob]);
 
@@ -102,7 +102,7 @@ export default function SiegReview({ blob, session, events, counts, correlatedCo
       {src && !saved && (
         <>
           <RecordTrimPicker value={trimMode} onChange={onTrimChange} />
-          <EvidenceSaveButtons onSave={onSave} saving={saving} deviceBlob={blob} devicePrefix="sieg_session" />
+          <EvidenceSaveButtons onSave={onSave} saving={saving} deviceBlob={blob} devicePrefix="sieg_session" deviceTrimSeconds={trimSeconds} />
         </>
       )}
 

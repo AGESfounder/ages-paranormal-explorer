@@ -61,8 +61,8 @@ const RELEASE_HYSTERESIS_DB = 2;
 const REARM_COOLDOWN_MS = 2000;
 const FIGURE_HOLD_MS = 1000;            // a form must stay in view this long
 const FIGURE_RELEASE_MS = 2500;
-const VIBRATION_ENTER = 20;             // the REM tool's "out of the green" level
-const VIBRATION_EXIT = 12;
+const VIBRATION_ENTER = 8;              // sensitive enough to catch the slightest movement, like the standalone Vibration Communicator
+const VIBRATION_EXIT = 5;
 const VIBRATION_REARM_COOLDOWN_MS = 2000;
 const ENV_HOLD_MS = 500;
 const ENV_RELEASE_MS = 700;
@@ -253,7 +253,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   // ── Vibration lane ─────────────────────────────────────────────────────────
   const handleMotion = useCallback((e) => {
     motionSeenRef.current = true;
-    const a = e.accelerationIncludingGravity || e.acceleration || {};
+    const a = e.acceleration || e.accelerationIncludingGravity || {};
     const m = motionRef.current;
     m.ax = a.x || 0;
     m.ay = a.y || 0;
@@ -289,6 +289,17 @@ export default function SiegConsole({ gateSave, refundSave }) {
     }
     const b = vibBaselineRef.current;
     if (!b) return 0;
+    // Continuously adapt the baseline during the live phase (same as the
+    // standalone Vibration Communicator) so the sensitivity stays matched to
+    // the phone's recent rest state — a phone that was held during calibration
+    // and then set down still detects the slightest new movement.
+    const adapt = 0.02;
+    b.ax += (m.ax - b.ax) * adapt;
+    b.ay += (m.ay - b.ay) * adapt;
+    b.az += (m.az - b.az) * adapt;
+    b.gx += (m.gx - b.gx) * adapt;
+    b.gy += (m.gy - b.gy) * adapt;
+    b.gz += (m.gz - b.gz) * adapt;
     const dA = Math.sqrt((m.ax - b.ax) ** 2 + (m.ay - b.ay) ** 2 + (m.az - b.az) ** 2);
     const dG = Math.sqrt((m.gx - b.gx) ** 2 + (m.gy - b.gy) ** 2 + (m.gz - b.gz) ** 2);
     const accelScore = Math.min(dA / (0.12 * 5), 1);
@@ -572,7 +583,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     // session is recorded as audio: a video file with no moving frames plays back as
     // one frozen frame, which is worth less than an honest audio recording.
     const candidates = picture
-      ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+      ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
       : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
     const mime = candidates.find((t) => MediaRecorder.isTypeSupported(t)) || '';
     mimeRef.current = mime;
@@ -1203,6 +1214,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
           onDiscard={discard}
           trimMode={trimMode}
           onTrimChange={setTrimMode}
+          trimSeconds={trimMode !== 'full' ? trimSeconds : null}
         />
         {gpsDialog}
         {trackingOffDialog}

@@ -127,7 +127,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // evidence blob when the session stops. onFinish releases whatever that session
   // was holding — the camera stream, or the session's microphone.
   const startSessionRecorder = (recordStream, onFinish) => {
-    const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+    const mimeType = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
     const mr = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
     mediaRecorderRef.current = mr;
@@ -598,7 +598,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
         <div className="space-y-2">
           <video src={URL.createObjectURL(displayBlob)} controls className="w-full rounded border border-border/30" style={{ maxHeight: 160 }} />
           <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-          <EvidenceSaveButtons onSave={saveRecording} saving={saving} deviceBlob={displayBlob} devicePrefix="anomaly_camera" />
+          <EvidenceSaveButtons onSave={saveRecording} saving={saving} deviceBlob={displayBlob} devicePrefix="anomaly_camera" deviceTrimSeconds={trimMode !== 'full' ? trimSeconds : null} />
           <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
             <X className="w-3.5 h-3.5" /> Discard
           </button>

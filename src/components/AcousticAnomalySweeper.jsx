@@ -203,7 +203,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     if (!audioTrack) audioTrack = micStream.getAudioTracks()[0] || null;
     if (audioTrack) stream.addTrack(audioTrack);
     const candidates = canvasCapture
-      ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+      ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
       : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
     const mime = candidates.find((t) => MediaRecorder.isTypeSupported(t)) || '';
     mimeRef.current = mime;
@@ -725,7 +725,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
               )}
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="acoustic_anomaly" />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="acoustic_anomaly" deviceTrimSeconds={trimMode !== 'full' ? trimSeconds : null} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

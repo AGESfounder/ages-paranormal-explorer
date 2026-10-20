@@ -89,7 +89,12 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     // body's movement live. A short hold covers a missed frame without freezing
     // the skeleton at a stale pose for long.
     private static let poseInterval: TimeInterval = 0.125
-    private static let poseHold: TimeInterval = 0.25
+    // The pose is held for 1 full second after it was last confirmed, so a
+    // body that was recognized on one frame still counts when the depth form
+    // appears on a later frame. The old 0.25s hold was too short — the pose
+    // and the form rarely overlapped in the same 0.25s window, so a real
+    // person standing in view was rejected as "not overlapping."
+    private static let poseHold: TimeInterval = 1.0
 
     private var lastPose: TimeInterval = -1
     private var lastBodies: [Body] = []
@@ -458,10 +463,15 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
             // accuracy on the coarse 4:1 grid, so a real person can have a pose
             // box and a depth form that just miss each other. The padding closes
             // that gap without merging distinct figures.
-            let pMinX = max(0, body.cellMinX - 1)
-            let pMaxX = min(gw - 1, body.cellMaxX + 1)
-            let pMinY = max(0, body.cellMinY - 1)
-            let pMaxY = min(gh - 1, body.cellMaxY + 1)
+            // 2-cell padding on the body's cell range before the overlap check:
+            // pose detection and depth detection have different spatial accuracy
+            // on the coarse 4:1 grid, and the pose may be held from up to 1 second
+            // ago, so its position can drift from the current depth form. The
+            // extra padding bridges that gap without merging distinct figures.
+            let pMinX = max(0, body.cellMinX - 2)
+            let pMaxX = min(gw - 1, body.cellMaxX + 2)
+            let pMinY = max(0, body.cellMinY - 2)
+            let pMaxY = min(gh - 1, body.cellMaxY + 2)
             return forms.contains { form in
                 form.minX <= pMaxX && form.maxX >= pMinX
                     && form.minY <= pMaxY && form.maxY >= pMinY

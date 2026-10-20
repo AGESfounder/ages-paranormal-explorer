@@ -13,7 +13,7 @@ import { Capacitor } from '@capacitor/core';
  *                  be kept during field investigations with poor service and
  *                  uploaded to the Journal later.
  */
-export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, devicePrefix }) {
+export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, devicePrefix, deviceTrimSeconds }) {
   const [deviceSaving, setDeviceSaving] = useState(false);
   const [savedToDevice, setSavedToDevice] = useState(false);
   const [deviceError, setDeviceError] = useState('');
@@ -23,7 +23,7 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, device
     setDeviceSaving(true);
     setDeviceError('');
     try {
-      await saveBlobToDevice(deviceBlob, buildDeviceFilename(devicePrefix || 'evidence', deviceBlob));
+      await saveBlobToDevice(deviceBlob, buildDeviceFilename(devicePrefix || 'evidence', deviceBlob), deviceTrimSeconds);
       setSavedToDevice(true);
       setTimeout(() => setSavedToDevice(false), 2500);
     } catch (e) {

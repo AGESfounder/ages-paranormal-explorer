@@ -37,13 +37,21 @@ function webDownload(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export async function saveBlobToDevice(blob, filename) {
+export async function saveBlobToDevice(blob, filename, trimSeconds) {
   if (!blob) return;
 
   if (Capacitor.isNativePlatform()) {
     const isAudio = blob.type.startsWith('audio');
     const isImage = blob.type.startsWith('image');
     const mediaType = isAudio ? 'audio' : (isImage ? 'image' : 'video');
+
+    // On iOS the recording may be webM, which Photos cannot play. The native
+    // plugin transcodes to MP4 before saving, so the display name should be
+    // .mp4 for video files.
+    let displayName = filename;
+    if (Capacitor.getPlatform() === 'ios' && !isAudio && !isImage) {
+      displayName = filename.replace(/\.\w+$/, '.mp4');
+    }
 
     try {
       const ext = filename.split('.').pop() || (isAudio ? 'm4a' : 'mp4');
@@ -59,7 +67,7 @@ export async function saveBlobToDevice(blob, filename) {
         encoding: 'base64',
       });
       const { uri } = await Filesystem.getUri({ path: tempPath, directory: Directory.Cache });
-      await AgesSaveToDevice.saveMedia({ filePath: uri, mediaType, displayName: filename });
+      await AgesSaveToDevice.saveMedia({ filePath: uri, mediaType, displayName, trimSeconds: trimSeconds || null });
       try { await Filesystem.deleteFile({ path: tempPath, directory: Directory.Cache }); } catch {}
       return;
     } catch (e) {
