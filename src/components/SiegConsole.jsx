@@ -28,7 +28,6 @@ import { synthesizeCue, CUE_CHIME } from '@/lib/toolCues';
 import { fetchWeatherByCoords } from '@/lib/openMeteo';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { toast } from '@/components/ui/use-toast';
-import { useAuth } from '@/lib/AuthContext';
 import RecordTrimPicker from '@/components/RecordTrimPicker';
 import { TRIM_OPTIONS, buildTrimmedBlob } from '@/lib/recordTrim';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
@@ -100,9 +99,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
   // depth sensor where the device carries one. Chosen before a session starts.
   const [cameraMode, setCameraMode] = useState('contrast');
   const [depthAvailable, setDepthAvailable] = useState(false);
-  const [depthDiag, setDepthDiag] = useState(null);
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+
 
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
@@ -743,7 +740,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     }
     depthUnsubRef.current = onDepthFrame((data) => {
       const figures = data.figures || [];
-      setDepthDiag({
+      console.log('[SIEG] DEPTH DIAG', {
         poseCount: data.poseCount ?? 0,
         formCount: data.formCount ?? 0,
         figureCount: data.figureCount ?? 0,
@@ -802,7 +799,6 @@ export default function SiegConsole({ gateSave, refundSave }) {
     latestSensorRef.current = { magnetic: null, pressure: null, movement: 0 };
     if (depthUnsubRef.current) { depthUnsubRef.current(); depthUnsubRef.current = null; }
     depthFrameRef.current = null;
-    setDepthDiag(null);
     sessionRef.current = preset;
     setSession(preset);
 
@@ -1198,25 +1194,6 @@ export default function SiegConsole({ gateSave, refundSave }) {
       {error && (
         <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10">
           <p className="text-[10px] text-amber-300 leading-relaxed">{error}</p>
-        </div>
-      )}
-
-      {isAdmin && cameraMode === 'depth' && (phase === 'calibrating' || phase === 'live') && depthDiag && (
-        <div className="p-2 rounded-lg bg-card/40 border border-primary/20">
-          <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
-            <span className="text-primary/80">DEPTH DIAG</span>
-            {' · pose '}{depthDiag.poseCount}
-            {' · forms '}{depthDiag.formCount}
-            {' · figure '}{depthDiag.figureCount}
-            {depthDiag.bodyHeight > 0 && ` · body ${Math.round(depthDiag.bodyHeight * 100)}%`}
-            {depthDiag.figureCount > 0
-              ? ' — FIGURE CONFIRMED'
-              : depthDiag.poseCount === 0
-                ? ' — no body pose found (need light on subject)'
-                : depthDiag.formCount === 0
-                  ? ' — no depth form (stand farther from the wall)'
-                  : ' — pose and form not overlapping'}
-          </p>
         </div>
       )}
 
