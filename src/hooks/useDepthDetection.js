@@ -15,7 +15,7 @@ import { setDepthDetection } from '@/lib/nativeDepth';
 // when the tool opens, so last session's setting is in force before the first
 // frame arrives.
 const RANGE = { protrusion: [0.1, 1.2], minSize: [15, 60] };
-export const DEPTH_DETECTION_DEFAULTS = { protrusion: 0.35, minSize: 30 };
+export const DEPTH_DETECTION_DEFAULTS = { protrusion: 0.20, minSize: 20 };
 const STORAGE_KEY = 'ages_depth_detection';
 
 /** @param {number} value @param {number[]} range */

@@ -60,8 +60,8 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     // the view height. The width and cell gates follow the height gate, so that one
     // slider is the whole size control. All of them are judged on screen, in display
     // space, so they mean what their controls say in portrait and in landscape alike.
-    private var liveProtrusion: Float = 0.35
-    private var liveFigureHeight: Double = 0.30
+    private var liveProtrusion: Float = 0.20
+    private var liveFigureHeight: Double = 0.20
     private var liveFigureWidth: Double = 0.08
     private var liveFigureCells: Int = 10
     // Not view-wide.
@@ -84,7 +84,7 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
     ]
     // A joint below this confidence is not reported: a wrong arm is worse than a
     // missing one, and the model finds more than a body ever shows at once.
-    private static let jointConfidence: Float = 0.3
+    private static let jointConfidence: Float = 0.25
     // Poses are read on every depth frame (≈8 fps) so the skeleton follows the
     // body's movement live. A short hold covers a missed frame without freezing
     // the skeleton at a stale pose for long.
@@ -199,7 +199,7 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
         }
         if let minHeight = call.getDouble("minHeight") {
             liveFigureHeight = min(0.8, max(0.12, minHeight))
-            let scale = liveFigureHeight / 0.30
+            let scale = liveFigureHeight / 0.20
             liveFigureWidth = 0.08 * scale
             liveFigureCells = max(4, Int((10.0 * scale).rounded()))
         }
@@ -453,9 +453,18 @@ public class AgesDepthPlugin: CAPPlugin, CAPBridgedPlugin, ARSessionDelegate {
         }
         let held = (lastBodiesAt >= 0 && frame.timestamp - lastBodiesAt <= AgesDepthPlugin.poseHold) ? lastBodies : []
         let figures = held.filter { body in
-            forms.contains { form in
-                form.minX <= body.cellMaxX && form.maxX >= body.cellMinX
-                    && form.minY <= body.cellMaxY && form.maxY >= body.cellMinY
+            // 1-cell padding on the body's cell range before the overlap check:
+            // pose detection and depth detection have slightly different spatial
+            // accuracy on the coarse 4:1 grid, so a real person can have a pose
+            // box and a depth form that just miss each other. The padding closes
+            // that gap without merging distinct figures.
+            let pMinX = max(0, body.cellMinX - 1)
+            let pMaxX = min(gw - 1, body.cellMaxX + 1)
+            let pMinY = max(0, body.cellMinY - 1)
+            let pMaxY = min(gh - 1, body.cellMaxY + 1)
+            return forms.contains { form in
+                form.minX <= pMaxX && form.maxX >= pMinX
+                    && form.minY <= pMaxY && form.maxY >= pMinY
             }
         }
 

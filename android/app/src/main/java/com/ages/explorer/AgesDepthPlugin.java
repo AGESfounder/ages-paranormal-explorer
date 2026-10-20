@@ -71,8 +71,8 @@ public class AgesDepthPlugin extends Plugin {
     // setDetection); the width and cell gates follow the height gate, so that one
     // slider is the whole size control.
     private static final int GRID_STEP = 4;
-    private float liveProtrusion = 0.35f;
-    private float liveFigureHeight = 0.30f;
+    private float liveProtrusion = 0.20f;
+    private float liveFigureHeight = 0.20f;
     private float liveFigureWidth = 0.08f;
     private int liveFigureCells = 10;
     // Not wall-wide, and no more than this many forms per frame.
@@ -102,7 +102,7 @@ public class AgesDepthPlugin extends Plugin {
         Double minHeight = call.getDouble("minHeight");
         if (minHeight != null) {
             liveFigureHeight = (float) Math.min(0.8, Math.max(0.12, minHeight));
-            float scale = liveFigureHeight / 0.30f;
+            float scale = liveFigureHeight / 0.20f;
             liveFigureWidth = 0.08f * scale;
             liveFigureCells = Math.max(4, Math.round(10f * scale));
         }
