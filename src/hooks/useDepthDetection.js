@@ -16,7 +16,10 @@ import { setDepthDetection } from '@/lib/nativeDepth';
 // frame arrives.
 const RANGE = { protrusion: [0.1, 1.2], minSize: [15, 60] };
 export const DEPTH_DETECTION_DEFAULTS = { protrusion: 0.20, minSize: 20 };
-const STORAGE_KEY = 'ages_depth_detection';
+// Bumped from ages_depth_detection: a new key discards every previously saved
+// setting so the new, more permissive defaults (protrusion 0.20, minSize 20)
+// take effect for everyone, including users who already used the depth camera.
+const STORAGE_KEY = 'ages_depth_detection_v2';
 
 /** @param {number} value @param {number[]} range */
 const clamp = (value, [min, max]) => Math.min(max, Math.max(min, value));
