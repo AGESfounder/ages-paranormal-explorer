@@ -638,7 +638,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           {isPaid && !stop.user_verified && (
             <div className="p-3 rounded-xl border border-primary/30 bg-primary/5">
               <button
-                onClick={handleMarkVantagePoint}
+                onClick={() => handleMarkVantagePoint()}
                 disabled={verifying}
                 className="w-full flex flex-col items-center gap-1 py-3 rounded-lg bg-primary/15 border border-primary/40 text-primary font-heading text-sm uppercase tracking-wider hover:bg-primary/25 transition-colors disabled:opacity-60"
               >
