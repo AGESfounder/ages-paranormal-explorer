@@ -197,9 +197,9 @@ const appConfigurations = objects.filter((object) => /isa = XCBuildConfiguration
 check('App target has Debug and Release build configurations', appConfigurations.length === 2 && ['Debug', 'Release'].every((name) => appConfigurations.some((object) => object.body.includes(`name = ${name};`))));
 for (const name of ['Debug', 'Release']) {
   const settings = appConfigurations.find((object) => object.body.includes(`name = ${name};`))?.body ?? '';
-  check(`iOS ${name} is com.ages.explorer 1.0 (30)`, /CURRENT_PROJECT_VERSION = 30;/.test(settings) && /MARKETING_VERSION = 1\.0;/.test(settings) && /PRODUCT_BUNDLE_IDENTIFIER = com\.ages\.explorer;/.test(settings));
+  check(`iOS ${name} is com.ages.explorer 1.0 (31)`, /CURRENT_PROJECT_VERSION = 31;/.test(settings) && /MARKETING_VERSION = 1\.0;/.test(settings) && /PRODUCT_BUNDLE_IDENTIFIER = com\.ages\.explorer;/.test(settings));
 }
-check('iOS has exactly two Build 30 stamps and no other build number', (pbxproj?.match(/CURRENT_PROJECT_VERSION = 30;/g) ?? []).length === 2 && (pbxproj?.match(/CURRENT_PROJECT_VERSION = [^;]+;/g) ?? []).length === 2);
+check('iOS has exactly two Build 31 stamps and no other build number', (pbxproj?.match(/CURRENT_PROJECT_VERSION = 31;/g) ?? []).length === 2 && (pbxproj?.match(/CURRENT_PROJECT_VERSION = [^;]+;/g) ?? []).length === 2);
 
 // ── Report
 const width = Math.max(...results.map((r) => r.label.length));
