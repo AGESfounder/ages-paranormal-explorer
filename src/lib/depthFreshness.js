@@ -1,11 +1,15 @@
+import { annotateFigureMotion } from '@/lib/figureMotion';
+
 // Expiry is checked on every paint, not just when a new native frame arrives.
 // A stopped/stalled sensor must never leave a confirmed skeleton on screen.
-export function stampDepthFrame(data, imageEl, receivedAt = Date.now()) {
+// Movement is measured against the frame this one replaces, so a figure's movement
+// confirmation travels with the figure and expires on its own.
+export function stampDepthFrame(data, imageEl, receivedAt = Date.now(), previous = null) {
   return {
     ...data,
     imageEl,
     receivedAt,
-    figures: (data.figures || []).map((figure) => ({
+    figures: annotateFigureMotion(data.figures, previous?.figures, receivedAt).map((figure) => ({
       ...figure,
       expiresAt: receivedAt + Math.max(0, Math.min(1000, Number.isFinite(figure.validForMs) ? figure.validForMs : 1000)),
     })),

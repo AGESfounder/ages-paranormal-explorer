@@ -19,6 +19,7 @@ import useDepthDetection from '@/hooks/useDepthDetection';
 import { enableTorch, disableTorch } from '@/lib/torchControl';
 import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame, onDepthError } from '@/lib/nativeDepth';
 import { stampDepthFrame, liveDepthFigures } from '@/lib/depthFreshness';
+import { movingFigureCount } from '@/lib/figureMotion';
 import { detectFigures } from '@/lib/anomalyDetect';
 import { sensorSupport, startSensors, stopSensors, onSensorReading, onSensorError } from '@/lib/nativeSensors';
 import {
@@ -423,6 +424,19 @@ export default function SiegConsole({ gateSave, refundSave }) {
     }
   };
 
+  // Movement is the stronger confirmation, so it upgrades the figure event that is
+  // already in the log rather than adding a second entry for the same body: the event
+  // keeps its time and gains the confirmation the moment the tracked skeleton is seen
+  // travelling. Only the current excursion is upgraded — a new one logs on its own.
+  const confirmFigureMovement = (movingCount) => {
+    const newest = eventsRef.current[0];
+    if (!newest || newest.lane !== 'figure' || newest.movement) return;
+    if (Date.now() - newest.tMs > FIGURE_RELEASE_MS) return;
+    newest.movement = true;
+    newest.label = `Movement confirmed — ${movingCount} figure${movingCount === 1 ? '' : 's'} moving`;
+    setEvents([...eventsRef.current]);
+  };
+
   // The camera method runs off the live camera frame on a slower cadence than the
   // other lanes: the scan is a per-pixel pass over the frame, and the room does not
   // change shape four times a second.
@@ -458,7 +472,13 @@ export default function SiegConsole({ gateSave, refundSave }) {
   // ── One sampling tick drives every lane, then redraws the composite ────────
   const sampleTick = () => {
     const now = Date.now();
-    if (cameraMode === 'depth') stepFigureLane(liveDepthFigures(depthFrameRef.current, now).length, true);
+    // The depth method's figures carry the movement the sensor measured between
+    // frames; the contrast method has no skeleton to measure, so it stays at the
+    // base detection.
+    const depthFigures = cameraMode === 'depth' ? liveDepthFigures(depthFrameRef.current, now) : [];
+    const movingFigures = movingFigureCount(depthFigures, now);
+    if (cameraMode === 'depth') stepFigureLane(depthFigures.length, true);
+    if (movingFigures > 0) confirmFigureMovement(movingFigures);
     const acousticDev = evaluateAcoustic(now);
     const envDev = evaluateEnvironment(now);
     const level = vibrationLevel();
@@ -502,7 +522,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     const pres = envDev.pressure;
     readoutsRef.current = {
       acoustic: Number.isFinite(acousticDev) ? `${acousticDev >= 0 ? '+' : ''}${acousticDev.toFixed(1)} dB` : 'quiet',
-      figure: cameraMode === 'device' ? 'standard' : (figureActive ? 'IN VIEW' : 'clear'),
+      figure: cameraMode === 'device' ? 'standard' : (figureActive ? (movingFigures > 0 ? 'MOVING' : 'IN VIEW') : 'clear'),
       vibration: `${level}`,
       environment: Number.isFinite(mag)
         ? `${mag >= 0 ? '+' : ''}${mag.toFixed(1)} µT`
@@ -781,7 +801,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       const image = new Image();
       image.onload = () => {
         if ((depthFrameRef.current?.receivedAt || 0) > receivedAt) return;
-        depthFrameRef.current = stampDepthFrame(data, image, receivedAt);
+        depthFrameRef.current = stampDepthFrame(data, image, receivedAt, depthFrameRef.current);
         setAvailability((a) => (a.camera ? a : { ...a, camera: true }));
       };
       image.src = data.image;

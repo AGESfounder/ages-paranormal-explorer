@@ -1,5 +1,6 @@
 import { drawFigureSkeleton, hasSkeleton } from '@/lib/figureSkeleton';
 import { liveDepthFigures } from '@/lib/depthFreshness';
+import { figureIsMoving, movingFigureCount } from '@/lib/figureMotion';
 
 // Draws a native depth frame and the figures confirmed in it onto the Anomaly
 // Camera's canvas, in the same house style as the contrast view (grid, header,
@@ -36,23 +37,38 @@ export function drawDepthFrame(ctx, canvas, frame, { figureCount }) {
   // The figure is shown by the body the depth image already draws and the skeleton
   // over it — no outline rectangle, so the form reads as the body itself rather than
   // a box around it. The label still marks where a figure was confirmed.
-  liveDepthFigures(frame).forEach(({ x, y, joints }) => {
+  const now = Date.now();
+  const live = liveDepthFigures(frame, now);
+  live.forEach((figure) => {
+    const { x, y, joints } = figure;
+    const figureMoving = figureIsMoving(figure, now);
     const boxX = dx + x * dw;
     const boxY = dy + y * dh;
+    const labelY = Math.max(22, boxY - 22);
     if (hasSkeleton({ joints })) {
-      drawFigureSkeleton(ctx, joints, ([jx, jy]) => [dx + jx * dw, dy + jy * dh]);
+      drawFigureSkeleton(ctx, joints, ([jx, jy]) => [dx + jx * dw, dy + jy * dh], {
+        moving: figureMoving,
+        previousJoints: figure.previousJoints,
+      });
     }
-    ctx.fillStyle = 'rgba(0, 180, 255, 0.9)';
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('FIGURE DETECTED', boxX, Math.max(12, boxY - 8));
+    ctx.fillStyle = 'rgba(0, 180, 255, 0.9)';
+    ctx.fillText('FIGURE DETECTED', boxX, labelY);
+    // A body seen moving is the stronger confirmation, and it says so on the frame
+    // itself — the one that gets recorded, not only in the live view.
+    if (figureMoving) {
+      ctx.fillStyle = '#eafeff';
+      ctx.fillText('MOVEMENT CONFIRMED', boxX, labelY + 13);
+    }
   });
 
+  const moving = movingFigureCount(live, now);
   ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';
   ctx.font = '10px monospace';
   ctx.textAlign = 'left';
   ctx.fillText('ANOMALY CAM · DEPTH SCAN', 8, 16);
-  ctx.fillText(`FIGURES: ${figureCount}`, 8, 30);
+  ctx.fillText(`FIGURES: ${figureCount}${moving ? ` · ${moving} MOVING` : ''}`, 8, 30);
   if (!figureCount) ctx.fillText('SCANNING FOR A FIGURE', 8, 44);
   ctx.textAlign = 'right';
   ctx.fillText(new Date().toLocaleTimeString(), w - 8, 16);

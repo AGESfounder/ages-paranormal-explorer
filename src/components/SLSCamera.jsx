@@ -11,6 +11,7 @@ import SensitivityControl from './SensitivityControl';
 import AnomalyModePicker from './AnomalyModePicker';
 import { drawDepthFrame } from '@/lib/depthFrame';
 import { stampDepthFrame, liveDepthFigures } from '@/lib/depthFreshness';
+import { movingFigureCount } from '@/lib/figureMotion';
 import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame, onDepthError } from '@/lib/nativeDepth';
 import useDepthDetection from '@/hooks/useDepthDetection';
 import DepthSensitivityControl from './DepthSensitivityControl';
@@ -39,6 +40,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const [active, setActive] = useState(false);
   const [error, setError] = useState('');
   const [figureCount, setFigureCount] = useState(0);
+  const [movingCount, setMovingCount] = useState(0);
   const [anomalyDetected, setAnomalyDetected] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState(null);
@@ -299,7 +301,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       const receivedAt = Date.now();
       const imageEl = new Image();
       imageEl.onload = () => {
-        if ((depthFrameRef.current?.receivedAt || 0) <= receivedAt) depthFrameRef.current = stampDepthFrame(data, imageEl, receivedAt);
+        if ((depthFrameRef.current?.receivedAt || 0) <= receivedAt) depthFrameRef.current = stampDepthFrame(data, imageEl, receivedAt, depthFrameRef.current);
       };
       imageEl.src = data.image;
       setCenterDepth(data.centerDepth ?? null);
@@ -364,8 +366,10 @@ export default function SLSCamera({ gateSave, refundSave }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const frame = depthFrameRef.current;
-    const count = liveDepthFigures(frame).length;
+    const figures = liveDepthFigures(frame);
+    const count = figures.length;
     setFigureCount(count);
+    setMovingCount(movingFigureCount(figures));
     if (count > 0 && !anomalyDetected) {
       setAnomalyDetected(true);
       if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
@@ -448,6 +452,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     });
 
     setFigureCount(figures.length);
+    setMovingCount(0);
     if (figures.length > 0 && !anomalyDetected) {
       setAnomalyDetected(true);
       if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
@@ -569,7 +574,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
           <span className="text-[10px] font-mono text-muted-foreground">
             {active
               ? mode === 'depth'
-                ? `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''}${centerDepth ? ` · ${centerDepth.toFixed(1)} m centre` : ''}`
+                ? `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''}${movingCount ? ` · ${movingCount} MOVING` : ''}${centerDepth ? ` · ${centerDepth.toFixed(1)} m centre` : ''}`
                 : mode === 'device'
                   ? 'LIVE · RECORDING'
                   : `LIVE · ${figureCount} figure${figureCount !== 1 ? 's' : ''} detected`
@@ -607,7 +612,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       <div className="p-2.5 rounded-lg bg-card/30 border border-border/30">
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           {mode === 'depth'
-            ? 'Depth analysis marks human figures only: the phone\'s own body recognition confirms a person-shaped body standing in front of the surface behind it, and only then is it outlined, with the skeleton it found drawn over it. Everything else the sensor sees stays as the room\'s own depth image, so furniture and doorways are never labelled. Both gates can be tuned above: how far a figure must stand out, and the smallest figure counted. The figure needs some light on it; the depth reading itself does not. Session is recorded — save to your Evidence Journal when done.'
+            ? 'Depth analysis marks human figures only: the phone\'s own body recognition confirms a person-shaped body standing in front of the surface behind it, and only then is it outlined, with the skeleton it found drawn over it. Everything else the sensor sees stays as the room\'s own depth image, so furniture and doorways are never labelled. Both gates can be tuned above: how far a figure must stand out, and the smallest figure counted. The figure needs some light on it; the depth reading itself does not. A figure whose tracked body actually moves is labelled MOVEMENT CONFIRMED on top of that — movement is the stronger confirmation, while a form that stands still is still detected. Session is recorded — save to your Evidence Journal when done.'
             : mode === 'device'
               ? 'Records a standard video from the device camera with no figure detection or overlay. Use this when you prefer a plain video recording. Session is recorded — save to your Evidence Journal when done.'
               : 'The live camera image is scanned for human-shaped patches of skin-toned colour, and any it finds are outlined. It can only flag what the camera can actually see — no infrared or depth sensing. Session is recorded — save to your Evidence Journal when done.'}

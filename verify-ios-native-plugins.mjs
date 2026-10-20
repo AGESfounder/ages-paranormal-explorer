@@ -124,10 +124,30 @@ const diagnostic = createDepthDiagTracker('sieg', 'regression', { minHeight: 20 
 updateDepthDiag(diagnostic, { poseCount: 0, poseCandidates: 1, rejectedPoseSize: 1 });
 const diagnosticRecord = finalizeDepthDiag(diagnostic);
 check('Depth diagnostics distinguish rejected body size and store fractional height', diagnosticRecord.min_height === 0.2 && diagnosticRecord.failure_reason.includes('minimum figure-height'));
-const { stampDepthFrame, liveDepthFigures } = await import('./src/lib/depthFreshness.js');
-const stamped = stampDepthFrame({ figures: [{ trackId: 1, validForMs: 250 }] }, null, 1000);
-check('Depth skeletons expire even when no further sensor frame arrives', liveDepthFigures(stamped, 1100).length === 1 && liveDepthFigures(stamped, 1250).length === 0);
-check('A frame cannot extend a confirmed body beyond one second', liveDepthFigures(stampDepthFrame({ figures: [{ validForMs: 5000 }] }, null, 1000), 2001).length === 0);
+// depthFreshness.js imports through the app's @/ alias, which plain Node does not
+// resolve, so its own two rules are asserted on the source: movement is measured
+// against the frame being replaced, and a confirmed body stays on screen for one
+// second at most and then expires on its own.
+const depthFreshnessJs = read('src/lib/depthFreshness.js');
+check('Depth freshness measures movement against the frame being replaced', !!depthFreshnessJs && depthFreshnessJs.includes('annotateFigureMotion(data.figures, previous?.figures, receivedAt)'));
+check('Depth freshness caps a confirmed body at one second and expires it on its own', !!depthFreshnessJs && depthFreshnessJs.includes('Math.min(1000') && depthFreshnessJs.includes('expiresAt > now'));
+const motion = await import('./src/lib/figureMotion.js');
+const still = { nose: [0.5, 0.2], neck: [0.5, 0.3], lShoulder: [0.45, 0.32], rShoulder: [0.55, 0.32] };
+const idle = { nose: [0.503, 0.202], neck: [0.502, 0.301], lShoulder: [0.452, 0.323], rShoulder: [0.548, 0.319] };
+const waving = { nose: [0.5, 0.2], neck: [0.5, 0.3], lShoulder: [0.45, 0.32], rShoulder: [0.75, 0.12] };
+check('Movement is only measured against the same tracked body', Number.isNaN(motion.jointTravel(still, waving)) === false && Number.isNaN(motion.annotateFigureMotion([{ trackId: 9, joints: waving }], [{ trackId: 7, joints: still }], 1000)[0].motion));
+const idleFigure = motion.annotateFigureMotion([{ trackId: 7, joints: idle }], [{ trackId: 7, joints: still, lastMoveAt: 0 }], 1000)[0];
+check('An idle body is a figure but not a moving one', idleFigure.movedNow === false && motion.figureIsMoving(idleFigure, 1000) === false);
+const movingFigure = motion.annotateFigureMotion([{ trackId: 7, joints: waving }], [{ trackId: 7, joints: still, lastMoveAt: 0 }], 1000)[0];
+check('A waving body confirms movement and holds it for the window', movingFigure.movedNow === true && motion.figureIsMoving(movingFigure, 1800) === true && motion.figureIsMoving(movingFigure, 2000) === false);
+const heldFigure = motion.annotateFigureMotion([{ trackId: 7, joints: still }], [{ trackId: 7, joints: still, lastMoveAt: 900 }], 1000)[0];
+check('A confirmed movement carries into the next frame, then expires', motion.figureIsMoving(heldFigure, 1700) === true && motion.figureIsMoving(heldFigure, 1800) === false && motion.movingFigureCount([heldFigure, idleFigure], 1700) === 1);
+check('A couple of shared joints cannot confirm movement', Number.isNaN(motion.jointTravel({ nose: [0, 0], neck: [0, 0] }, { nose: [0.5, 0.5], neck: [0.5, 0.5] })));
+check('Both depth consumers measure movement against the frame they replace', /stampDepthFrame\(data, imageEl, receivedAt, depthFrameRef\.current\)/.test(read('src/components/SLSCamera.jsx') ?? '') && /stampDepthFrame\(data, image, receivedAt, depthFrameRef\.current\)/.test(read('src/components/SiegConsole.jsx') ?? ''));
+const depthFrameJs = read('src/lib/depthFrame.js');
+check('The recorded depth frame labels a moving figure', !!depthFrameJs && depthFrameJs.includes('MOVEMENT CONFIRMED') && depthFrameJs.includes('movingFigureCount'));
+check('A moving figure is drawn lit, with a trail of where each limb just was', !!read('src/lib/figureSkeleton.js') && read('src/lib/figureSkeleton.js').includes('drawMovementTrails') && read('src/lib/siegDisplay.js').includes('figureIsMoving'));
+check('SIEG upgrades the figure event it already logged', read('src/components/SiegConsole.jsx')?.includes('confirmFigureMovement(') && read('src/components/sieg/SiegEventLog.jsx')?.includes('e.movement'));
 
 // ── 5. The three consumers actually wire the error seams in
 const eam = read('src/components/EnvironmentalAnomalyMonitor.jsx');

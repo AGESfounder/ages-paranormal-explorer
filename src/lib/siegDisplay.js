@@ -17,6 +17,7 @@
 
 import { drawSiegAnomalyScan } from '@/components/sieg/anomalyScanDisplay';
 import { drawFigureSkeleton } from '@/lib/figureSkeleton';
+import { figureIsMoving } from '@/lib/figureMotion';
 
 export const SIEG_LANES = [
   { id: 'acoustic', label: 'ACOUSTIC', color: '#a3e635', unit: 'dB from baseline' },
@@ -127,8 +128,27 @@ export function drawSiegCameraOverlay(ctx, s, fit) {
     const sy = fit.dh / (boxes.height || 240);
     // No outline rectangle: the form reads as the body the depth image already
     // draws, with the confirmed skeleton over it — not a box around the figure.
+    // A body the movement tier confirmed is lit brighter and labelled, so the
+    // stronger confirmation is on the composite that gets recorded.
     boxes.boxes.forEach((b) => {
-      if (b.joints) drawFigureSkeleton(ctx, b.joints, ([jx, jy]) => [fit.dx + jx * sx, fit.dy + jy * sy]);
+      if (!b.joints) return;
+      const moving = figureIsMoving(b, s.now);
+      drawFigureSkeleton(ctx, b.joints, ([jx, jy]) => [fit.dx + jx * sx, fit.dy + jy * sy], {
+        moving,
+        previousJoints: b.previousJoints,
+      });
+      if (!moving) return;
+      const xs = Object.values(b.joints).map((j) => j[0]);
+      const ys = Object.values(b.joints).map((j) => j[1]);
+      if (!xs.length) return;
+      ctx.fillStyle = '#eafeff';
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(
+        'MOVEMENT CONFIRMED',
+        fit.dx + Math.min(...xs) * sx,
+        Math.max(fit.dy + 11, fit.dy + Math.min(...ys) * sy - 6),
+      );
     });
   }
   if (s.calibrating) {
