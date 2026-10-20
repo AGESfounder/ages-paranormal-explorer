@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Square, Zap, Info, X, Activity, Video, AlertTriangle, Type, Camera } from 'lucide-react';
+import { Play, Square, Zap, Info, X, Activity, Video, AlertTriangle, Type, Camera, Layers } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import useGhostVoice from '../hooks/useGhostVoice';
-import { detectFigures } from '@/lib/anomalyDetect';
-import useSensitivity, { isTorchActive } from '../hooks/useSensitivity';
-import { enableTorch, disableTorch } from '@/lib/torchControl';
-import SensitivityControl from './SensitivityControl';
+import useSensitivity from '../hooks/useSensitivity';
+import useDepthDetection from '@/hooks/useDepthDetection';
+import useAnomalyTrigger from '@/hooks/useAnomalyTrigger';
+import SweeperTriggerControl from './SweeperTriggerControl';
+import AnomalyFigureBadge from './AnomalyFigureBadge';
 import { primeToolSpeech, speakToolText, stopToolSpeech, releaseToolSpeech } from '@/lib/toolSpeech';
 import { getDeviceVoiceOptions } from '@/lib/deviceVoicePrefs';
 import { CUE_CHIME } from '@/lib/toolCues';
@@ -54,11 +55,10 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState('');
-  const [cameraActive, setCameraActive] = useState(false);
-  const [anomalyDetected, setAnomalyDetected] = useState(false);
   const [paused, setPaused] = useState(false);
 
-  const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
+  const { sensitivity, setSensitivity } = useSensitivity();
+  const depthDetection = useDepthDetection();
   // Shared 4-sensor trigger layer (motion, orientation, magnetic, barometric).
   // triggerLock is assigned to the ref below once defined, so the hook can call
   // it without a forward-declaration.
@@ -66,6 +66,13 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const sensorFireCountRef = useRef({});
   const correlatedCountRef = useRef(0);
   const { start: startSweeperSensors, arm: armSweeperSensors, stop: stopSweeperSensors, sensorStates, sensorStatesRef, getActiveSensors } = useSweeperSensors({ onTrigger: (id) => triggerLockRef.current?.(id), setSensorError });
+  // The anomaly trigger: the depth sensor where this phone has one, the camera-image
+  // scan everywhere else — and whenever the torch is up (see useAnomalyTrigger).
+  const trigger = useAnomalyTrigger({
+    sensitivity,
+    onFire: () => triggerLockRef.current?.('anomaly'),
+    setSensorError,
+  });
 
   const { stop: stopVoice, unlock, attachMicToRecording, boostMicStream, resumeContext, playCue } = useGhostVoice();
 
@@ -134,16 +141,10 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
   const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
   const displayBlob = preparedRecording.blob;
-  const cameraStreamRef = useRef(null);
-  const camVideoRef = useRef(null);
-  const detectCanvasRef = useRef(null);
-  const animFrameRef = useRef(null);
-  const anomalyTimerRef = useRef(null);
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
   const femaleUrlRef = useRef({});
   const resumeDelayRef = useRef(null);
-  const anomalyDetectedRef = useRef(false);
   const startDelayRef = useRef(null);
   const pausedRef = useRef(false);
   const sessionActiveRef = useRef(false);
@@ -154,7 +155,6 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const ambienceHeldRef = useRef(false);
 
   useEffect(() => { capturedRef.current = captured; }, [captured]);
-  useEffect(() => { anomalyDetectedRef.current = anomalyDetected; }, [anomalyDetected]);
 
   // Resume the alphabet from A once the creepy voice has actually started AND
   // finished. We must wait for isGenerating/isSpeaking to go true (speech began)
@@ -203,11 +203,9 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     stopSweeperSensors();
+    trigger.stop();
     cleanup();
-    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
-    if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
     if (resumeIntervalRef.current) { clearInterval(resumeIntervalRef.current); resumeIntervalRef.current = null; }
-    if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     // Leaving the tool is an implicit session end: hand the phone's audio session
     // back here too, or leaving mid-session leaves the app's own sound quiet.
     releaseToolSpeech();
@@ -275,57 +273,10 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   }, [resumeFromLock, getActiveSensors]);
   triggerLockRef.current = triggerLock;
 
-  // Camera-based anomaly trigger: runs the same figure detection as the
-  // Anomaly Camera. When a humanoid shape is detected, the current letter is
-  // locked — same effect as a motion/orientation disturbance.
-  const startCameraStream = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 320 }, height: { ideal: 240 } },
-        audio: false,
-      });
-      cameraStreamRef.current = stream;
-      if (camVideoRef.current) {
-        camVideoRef.current.srcObject = stream;
-        await camVideoRef.current.play().catch(() => {});
-      }
-      setCameraActive(true);
-      // Torch mode: turn on the phone's torch so the light is captured in the
-      // recording.
-      if (isTorchActive(sensitivityRef.current)) {
-        const ok = await enableTorch(stream);
-        if (!ok) setSensorError(prev => (prev ? prev + ' ' : '') + 'Torch not supported on this device — anomaly trigger still works without it.');
-      }
-    } catch (e) {
-      setSensorError(prev => (prev ? prev + ' ' : '') + 'Camera access denied — anomaly trigger disabled, but motion/orientation triggers still work.');
-    }
-  };
-
-  const processCameraFrame = () => {
-    const video = camVideoRef.current;
-    const canvas = detectCanvasRef.current;
-    if (!video || !canvas || video.readyState < 2) {
-      animFrameRef.current = requestAnimationFrame(processCameraFrame);
-      return;
-    }
-    const w = video.videoWidth || 320;
-    const h = video.videoHeight || 240;
-    if (canvas.width !== w) canvas.width = w;
-    if (canvas.height !== h) canvas.height = h;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(video, 0, 0, w, h);
-    try {
-      const imageData = ctx.getImageData(0, 0, w, h);
-      const figures = detectFigures(imageData, w, h, sensitivityRef.current);
-      if (figures.length > 0) {
-        setAnomalyDetected(true);
-        if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
-        anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
-        triggerLock('anomaly');
-      }
-    } catch {}
-    animFrameRef.current = requestAnimationFrame(processCameraFrame);
-  };
+  // The anomaly trigger — the depth sensor or the camera-image scan, whichever this
+  // phone is best served by — is the shared useAnomalyTrigger hook. It takes the
+  // camera after the directions, but scanning is held until the settle pause is over
+  // (beginScan).
 
   const draw = () => {
     const canvas = canvasRef.current;
@@ -384,7 +335,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     // Draw sensor alert badges on the canvas so they appear in the recording
     const ss = sensorStatesRef.current;
     drawSweeperBadges(ctx, w, h, {
-      anomaly: anomalyDetectedRef.current,
+      anomaly: trigger.activeRef.current,
       motion: ss.motion || ss.orientation,
       magnetic: ss.magnetic,
       barometric: ss.barometric,
@@ -466,7 +417,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       // Mic prompt AFTER directions.
       await startRecording();
       // Start camera AFTER directions and mic prompt.
-      await startCameraStream();
+      await trigger.start({ scan: false });
       // 3-second pause after the last permission prompt (camera) — tapping the
       // screen to grant permission sets off the motion sensor, so we wait for
       // the device to settle before starting the investigation.
@@ -475,7 +426,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       setPaused(false);
       startStepping();
       armSweeperSensors();
-      processCameraFrame();
+      trigger.beginScan();
       // Start the session timer only after directions are done and recording
       // has begun, so the REC counter doesn't run during the directions.
       // Length from the clock, not from the timer callbacks that happened to fire:
@@ -518,14 +469,10 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
     stopSweeperSensors();
-    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
-    if (anomalyTimerRef.current) { clearTimeout(anomalyTimerRef.current); anomalyTimerRef.current = null; }
+    trigger.stop();
     if (resumeIntervalRef.current) { clearInterval(resumeIntervalRef.current); resumeIntervalRef.current = null; }
-    if (cameraStreamRef.current) { disableTorch(cameraStreamRef.current); cameraStreamRef.current.getTracks().forEach(t => t.stop()); cameraStreamRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     stopRecording();
-    setCameraActive(false);
-    setAnomalyDetected(false);
     lockedRef.current = false;
     stopFemaleAudio();
     // End of session, speech stopped: hand the phone's audio session back so the
@@ -569,7 +516,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         title: `Alphabet Sweeper — ${date}`,
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'alphabet',
-        description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.join('') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (camera).${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
+        description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.join('') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (${trigger.lastMethod === 'depth' ? 'depth sensor' : 'camera'}).${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         file_url,
         date,
         time,
@@ -609,7 +556,12 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
           </ol>
           <p className="text-[10px] text-orange-400 mt-2">Note: Voice availability is dependent upon the user's device/service.</p>
         </div>
-        <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
+        <SweeperTriggerControl
+          trigger={trigger}
+          sensitivity={sensitivity}
+          onSensitivityChange={setSensitivity}
+          depthDetection={depthDetection}
+        />
         <button onClick={startSession} className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary/10 border border-primary/30 text-primary font-heading text-xs uppercase tracking-wider hover:bg-primary/20 transition-colors">
           <Play className="w-4 h-4" /> Start Sweep
         </button>
@@ -633,20 +585,15 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             <span className="text-[9px] text-white font-mono">REC {formatDuration(sessionDuration)}</span>
           </div>
-          {cameraActive && (
-            <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/80">
-              <Camera className="w-2.5 h-2.5 text-white" />
-              <span className="text-[9px] text-white font-mono">CAM</span>
+          {trigger.method && (
+            <div className={`absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded ${trigger.method === 'depth' ? 'bg-teal-500/80' : 'bg-green-500/80'}`}>
+              {trigger.method === 'depth'
+                ? <Layers className="w-2.5 h-2.5 text-white" />
+                : <Camera className="w-2.5 h-2.5 text-white" />}
+              <span className="text-[9px] text-white font-mono">{trigger.method === 'depth' ? 'DEPTH' : 'CAM'}</span>
             </div>
           )}
-          {anomalyDetected && (
-            <div className="absolute top-8 left-1/2 -translate-x-1/2 pointer-events-none">
-              <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                className="px-3 py-1 rounded bg-red-500/90 border border-red-300/50">
-                <p className="text-[10px] font-mono text-white font-bold tracking-wider">⚠ ANOMALY DETECTED</p>
-              </motion.div>
-            </div>
-          )}
+          <AnomalyFigureBadge active={trigger.active} moving={trigger.moving} method={trigger.mode} />
           {(sensorStates.motion || sensorStates.orientation) && (
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none">
               <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -672,9 +619,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
             </div>
           )}
         </div>
-        {/* Hidden camera elements for figure detection */}
-        <video ref={camVideoRef} className="hidden" playsInline muted />
-        <canvas ref={detectCanvasRef} className="hidden" />
+
         <p className="text-[10px] text-muted-foreground/70 text-center flex items-center justify-center gap-1">
           <Zap className="w-3 h-3 text-amber-400" /> Move, tilt, or shake the device — or let the camera, magnetic, or barometric sensors trigger — to lock a letter
         </p>
