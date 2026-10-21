@@ -684,7 +684,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
             <RecordingPreparation {...preparedRecording} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} devicePrefix="alphabet_sweeper" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="alphabet_sweeper" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

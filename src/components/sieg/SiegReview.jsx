@@ -104,7 +104,7 @@ export default function SiegReview({ blob, session, events, counts, correlatedCo
         <>
           <RecordTrimPicker value={trimMode} onChange={onTrimChange} />
           <RecordingPreparation {...preparation} />
-          <EvidenceSaveButtons onSave={onSave} saving={saving} deviceBlob={blob} devicePrefix="sieg_session" preparing={preparation?.preparing} preparationError={preparation?.error} />
+          <EvidenceSaveButtons onSave={onSave} saving={saving} deviceBlob={blob} originalBlob={preparation?.originalBlob} devicePrefix="sieg_session" preparing={preparation?.preparing} preparationError={preparation?.error} />
         </>
       )}
 

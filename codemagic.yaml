@@ -120,19 +120,19 @@ workflows:
         script: |
           # CFBundleVersion comes from CURRENT_PROJECT_VERSION in the checked-out
           # project.pbxproj. The rejected IPA archived a checkout that still had 14;
-          # This source-preparation release requires Build 31.
-          # Hard-stamp 31 deterministically (no App Store Connect lookup) so the
-          # archived IPA always embeds CFBundleVersion 31 regardless of what the
+          # This source-preparation release requires Build 32.
+          # Hard-stamp 32 deterministically (no App Store Connect lookup) so the
+          # archived IPA always embeds CFBundleVersion 32 regardless of what the
           # checked-out project file contains. `agvtool new-version` only writes
           # CURRENT_PROJECT_VERSION, so marketing version 1.0 is untouched.
           # For the next release, bump this value by one.
           set -eu
           cd "$CM_BUILD_DIR/ios/App"
-          agvtool new-version -all 31
-          STAMPED="$(grep -c 'CURRENT_PROJECT_VERSION = 31;' App.xcodeproj/project.pbxproj || true)"
-          echo "CURRENT_PROJECT_VERSION = 31 occurrences in project.pbxproj: $STAMPED"
+          agvtool new-version -all 32
+          STAMPED="$(grep -c 'CURRENT_PROJECT_VERSION = 32;' App.xcodeproj/project.pbxproj || true)"
+          echo "CURRENT_PROJECT_VERSION = 32 occurrences in project.pbxproj: $STAMPED"
           test "$STAMPED" -ge 2 || {
-            echo "CFBundleVersion 31 was not stamped into the Xcode project. Failing instead of uploading a stale build number."
+            echo "CFBundleVersion 32 was not stamped into the Xcode project. Failing instead of uploading a stale build number."
             exit 1
           }
       - name: Build the signed App Store IPA
@@ -142,14 +142,14 @@ workflows:
             --scheme "$XCODE_SCHEME" \
             --config Release \
             --ipa-directory "$CM_BUILD_DIR/build/ios/ipa"
-      - name: Verify the exported IPA embeds Build 31
+      - name: Verify the exported IPA embeds Build 32
         script: |
           # Additive pre-Publishing gate on the artifact itself, not the project
           # file: unzip the IPA xcode-project build-ipa just produced and read
           # the app Info.plist with PlistBuddy (both /usr/bin/unzip and
           # /usr/libexec/PlistBuddy ship with macOS on the build machine). The
           # archived values must be exactly bundle id com.ages.explorer,
-          # marketing version 1.0, build number 31, or App Store Connect would
+          # marketing version 1.0, build number 32, or App Store Connect would
           # reject the upload again — so fail here, before Publishing runs.
           set -eu
           IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
@@ -175,8 +175,8 @@ workflows:
           echo "Embedded CFBundleVersion: $BUNDLE_VERSION"
           [ "$BUNDLE_ID" = "com.ages.explorer" ] || { echo "Expected CFBundleIdentifier com.ages.explorer but the IPA embeds '$BUNDLE_ID'. Failing before Publishing."; exit 1; }
           [ "$SHORT_VERSION" = "1.0" ] || { echo "Expected CFBundleShortVersionString 1.0 but the IPA embeds '$SHORT_VERSION'. Failing before Publishing."; exit 1; }
-          [ "$BUNDLE_VERSION" = "31" ] || { echo "Expected CFBundleVersion 31 but the IPA embeds '$BUNDLE_VERSION'. Failing before Publishing."; exit 1; }
-          echo "IPA metadata verified: com.ages.explorer 1.0 (31)."
+          [ "$BUNDLE_VERSION" = "32" ] || { echo "Expected CFBundleVersion 32 but the IPA embeds '$BUNDLE_VERSION'. Failing before Publishing."; exit 1; }
+          echo "IPA metadata verified: com.ages.explorer 1.0 (32)."
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log

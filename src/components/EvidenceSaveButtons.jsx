@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Lock, Globe, Loader2, Download, Check, AlertCircle } from 'lucide-react';
-import { saveBlobToDevice, buildDeviceFilename } from '@/lib/saveToDevice';
+import { saveBlobToDevice, recoverOriginalToDevice, buildDeviceFilename } from '@/lib/saveToDevice';
 import { Capacitor } from '@capacitor/core';
 
 /**
@@ -13,24 +13,33 @@ import { Capacitor } from '@capacitor/core';
  *                  be kept during field investigations with poor service and
  *                  uploaded to the Journal later.
  */
-export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, devicePrefix, preparing = false, preparationError = '' }) {
+export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, originalBlob = null, devicePrefix, preparing = false, preparationError = '' }) {
   const [deviceSaving, setDeviceSaving] = useState(false);
   const [savedToDevice, setSavedToDevice] = useState('');
   const [deviceError, setDeviceError] = useState('');
   const [deviceNote, setDeviceNote] = useState('');
-  const blocked = saving || deviceSaving || preparing || !!preparationError;
-  useEffect(() => { setSavedToDevice(''); setDeviceNote(''); setDeviceError(''); }, [deviceBlob]);
+  const [savePreparationError, setSavePreparationError] = useState('');
+  const failedPreparation = preparationError || savePreparationError;
+  const blocked = saving || deviceSaving || preparing || !!failedPreparation;
+  const canRecover = Capacitor.getPlatform() === 'ios' && originalBlob?.size > 0 && !!failedPreparation;
+  useEffect(() => { setSavedToDevice(''); setDeviceNote(''); setDeviceError(''); setSavePreparationError(''); }, [deviceBlob, originalBlob]);
 
-  const handleDevice = async () => {
-    if (!deviceBlob || deviceSaving) return;
+  const handleDevice = async (recover = false) => {
+    const input = recover ? originalBlob : deviceBlob;
+    if (!input || deviceSaving || saving || preparing) return;
     setDeviceSaving(true);
     setDeviceError('');
+    setSavedToDevice('');
+    setDeviceNote('');
     try {
-      const result = await saveBlobToDevice(deviceBlob, buildDeviceFilename(devicePrefix || 'evidence', deviceBlob));
+      const filename = buildDeviceFilename(devicePrefix || 'evidence', input);
+      const result = recover ? await recoverOriginalToDevice(originalBlob, filename) : await saveBlobToDevice(deviceBlob, filename);
       const labels = { photos: 'Saved to Photos', gallery: 'Saved to Gallery', files: 'Saved to Files', downloads: 'Download Started' };
       setSavedToDevice(labels[result.destination] || 'Saved to Device');
       setDeviceNote(result.note || labels[result.destination] || 'Saved to Device');
+      if (!recover) setSavePreparationError('');
     } catch (e) {
+      if (e.code === 'recording_preparation_failed') setSavePreparationError(e.message);
       setDeviceError(e.message || 'Save failed. Please try again.');
     } finally {
       setDeviceSaving(false);
@@ -61,23 +70,34 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, device
       {deviceBlob && (
         <>
           <button
-            onClick={handleDevice}
+            onClick={() => handleDevice()}
             disabled={blocked}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 font-heading text-xs uppercase tracking-wider hover:bg-amber-500/20 transition-colors disabled:opacity-50"
           >
             {deviceSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : savedToDevice ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
             {deviceSaving ? 'Saving…' : savedToDevice || 'Save to Device'}
           </button>
-          {deviceError ? (
-            <p className="text-[9px] text-red-400/80 text-center leading-relaxed flex items-center justify-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {deviceError}
-            </p>
-          ) : (
-            <p className="text-[9px] text-muted-foreground/60 text-center leading-relaxed">
-              {deviceNote || `Saves the recording to your device's ${nativeLabel} now — no service needed. Save to your Journal later once you're back in range.`}
-            </p>
-          )}
         </>
+      )}
+      {savePreparationError && (
+        <div role="status" className="text-xs text-destructive text-pretty">
+          <p>{savePreparationError} Your original is kept until you discard it.</p>
+          <button onClick={() => handleDevice()} disabled={saving || deviceSaving || preparing} className="min-h-11 underline focus-visible:outline focus-visible:outline-2 disabled:opacity-50">Retry preparation</button>
+        </div>
+      )}
+      {canRecover && (
+        <div className="space-y-2">
+          <button onClick={() => handleDevice(true)} disabled={saving || deviceSaving || preparing} className="w-full min-h-11 flex items-center justify-center gap-2 rounded-lg border border-border text-sm hover:bg-accent active:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">
+            {deviceSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Recover original
+          </button>
+          <p className="text-xs text-muted-foreground text-pretty">Retries conversion of the full, untrimmed recording for Photos. If conversion fails, keeps the unchanged original in Files instead, not Photos.</p>
+        </div>
+      )}
+      {deviceError ? (
+        <p role="alert" className="text-xs text-destructive text-pretty flex items-center justify-center gap-1"><AlertCircle className="h-3 w-3 shrink-0" /> {deviceError}</p>
+      ) : (deviceBlob || canRecover) && (
+        <p role="status" className="text-xs text-muted-foreground text-center text-pretty">{deviceNote || `Saves the recording to your device's ${nativeLabel} now — no service needed. Save to your Journal later once you're back in range.`}</p>
       )}
     </div>
   );

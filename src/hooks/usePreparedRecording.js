@@ -23,5 +23,5 @@ export default function usePreparedRecording(source, seconds) {
   const current = result.source === source && result.seconds === seconds;
   const blob = needed ? (current ? result.blob : null) : source;
   const error = needed && current ? result.error : '';
-  return { blob, preparing: needed && !blob && !error, error, retry: () => setAttempt((value) => value + 1) };
+  return { blob, originalBlob: source, preparing: needed && !blob && !error, error, retry: () => setAttempt((value) => value + 1) };
 }

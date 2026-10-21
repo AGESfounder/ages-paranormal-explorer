@@ -1,4 +1,4 @@
-import { registerPlugin } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 export const deviceMedia = registerPlugin('AgesSaveToDevice');
@@ -31,6 +31,12 @@ export async function removeMediaTempFile(uri) {
   if (uri) await Filesystem.deleteFile({ path: uri });
 }
 
+export function assertPreparedVideoType(mimeType) {
+  if (Capacitor.getPlatform() === 'ios' && mimeType?.split(';')[0] !== 'video/mp4') {
+    throw Object.assign(new Error('The device did not produce an MP4 video. Retry preparation or recover the original recording below.'), { code: 'recording_format_invalid' });
+  }
+}
+
 // The finished file is read back through the filesystem plugin, which returns its
 // bytes directly. Never with fetch() on a converted file URL: iOS serves a media
 // file to the page with a non-HTTP response (so a <video> can stream it instead of
@@ -49,6 +55,7 @@ export async function exportNativeRecording(blob, trimSeconds) {
   try {
     const result = await deviceMedia.prepareMedia({ filePath: input, mediaType: blob.type.startsWith('audio') ? 'audio' : 'video', trimSeconds });
     output = result.filePath;
+    if (!blob.type.startsWith('audio')) assertPreparedVideoType(result.mimeType);
     const { data } = await Filesystem.readFile({ path: output });
     const bytes = base64ToBytes(data);
     if (!bytes.length) throw new Error('The prepared recording is empty.');

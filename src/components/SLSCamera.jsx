@@ -617,7 +617,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
           <RecordingPreview blob={displayBlob} className="w-full rounded border border-border/30" maxHeight={160} />
           <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
           <RecordingPreparation {...preparedRecording} />
-          <EvidenceSaveButtons onSave={saveRecording} saving={saving} deviceBlob={displayBlob} devicePrefix="anomaly_camera" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
+          <EvidenceSaveButtons onSave={saveRecording} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="anomaly_camera" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
           <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
             <X className="w-3.5 h-3.5" /> Discard
           </button>
