@@ -61,6 +61,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const depthFrameRef = useRef(null);
   const depthAudioRef = useRef(null);
   const depthDiagRef = useRef(null);
+  // Whether the investigator has picked a method themselves, so opening the tool on
+  // the depth scan can never override a choice they just made.
+  const modeChosenRef = useRef(false);
 
   const { sensitivity, setSensitivity, sensitivityRef } = useSensitivity();
   // The depth method's own two gates (stand-out distance, smallest figure), pushed
@@ -111,13 +114,21 @@ export default function SLSCamera({ gateSave, refundSave }) {
     if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
   }, [stopCamera]);
 
-  // Ask the native module once whether this device can do a depth scan at all.
+  // Ask the native module once whether this device can do a depth scan at all, and
+  // open the session on it where the phone carries a depth sensor: the depth method
+  // confirms a person-shaped body standing in front of the surface behind it, rather
+  // than reading the camera image for figure-sized patches, so it is the better
+  // default. The one exception is the torch end of the brightness scale — the depth
+  // module owns the camera and cannot light the room, so a lit session keeps the
+  // contrast method, which is the one that works with the torch.
   useEffect(() => {
     let cancelled = false;
     depthSupport().then((result) => {
-      if (!cancelled) {
-        setDepthAvailable(result.supported);
-        setDepthUnavailable(!result.supported);
+      if (cancelled) return;
+      setDepthAvailable(result.supported);
+      setDepthUnavailable(!result.supported);
+      if (result.supported && !modeChosenRef.current && !isTorchActive(sensitivityRef.current)) {
+        setMode('depth');
       }
     });
     return () => { cancelled = true; };
@@ -554,7 +565,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
       {!active && (
         <div className="space-y-3">
-          <AnomalyModePicker mode={mode} onChange={setMode} depthAvailable={depthAvailable} />
+          <AnomalyModePicker
+            mode={mode}
+            onChange={(next) => { modeChosenRef.current = true; setMode(next); }}
+            depthAvailable={depthAvailable}
+          />
           {mode === 'contrast' && (
             <SensitivityControl sensitivity={sensitivity} onChange={setSensitivity} />
           )}

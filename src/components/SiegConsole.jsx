@@ -165,15 +165,25 @@ export default function SiegConsole({ gateSave, refundSave }) {
   const userStoppedRef = useRef(true);
   const ambienceHeldRef = useRef(false);
   const autoSaveRef = useRef(false);
+  // Whether the investigator has picked a method themselves, so opening the console on
+  // the depth scan can never override a choice they just made.
+  const cameraModeChosenRef = useRef(false);
 
-  // The depth method is only offered on a device that reports a depth sensor, so
-  // the setup screen never presents a camera this phone cannot run.
+  // The depth method is only offered on a device that reports a depth sensor, so the
+  // setup screen never presents a camera this phone cannot run — and where the phone
+  // does carry one, the session opens on it: the depth method confirms a person-shaped
+  // body standing in front of the surface behind it, rather than reading the camera
+  // image for figure-sized patches, so it is the better default. The one exception is
+  // the torch end of the brightness scale — the depth module owns the camera and cannot
+  // light the room, so a lit session keeps the contrast method, the one that works with
+  // the torch.
   useEffect(() => {
     let cancelled = false;
     depthSupport().then((result) => {
       if (cancelled) return;
       setDepthAvailable(result.supported);
       if (!result.supported) setCameraMode('contrast');
+      else if (!cameraModeChosenRef.current && !isTorchActive(sensitivityRef.current)) setCameraMode('depth');
     });
     return () => { cancelled = true; };
   }, []);
@@ -1195,7 +1205,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
           cameraControls={(
             <SiegCameraControls
               mode={cameraMode}
-              onModeChange={setCameraMode}
+              onModeChange={(next) => { cameraModeChosenRef.current = true; setCameraMode(next); }}
               depthAvailable={depthAvailable}
               sensitivity={sensitivity}
               onSensitivityChange={setSensitivity}
