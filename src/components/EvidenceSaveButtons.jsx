@@ -12,28 +12,34 @@ import { Capacitor } from '@capacitor/core';
  *                  or downloads it (web) — no network, no upload — so it can
  *                  be kept during field investigations with poor service and
  *                  uploaded to the Journal later.
+ * iosAudioOriginalToFiles → Audio Recorder only: on iOS copy the original audio
+ *                  directly to Files, without AVFoundation preparation. Local
+ *                  save errors do not block its independent Journal actions.
  */
-export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, originalBlob = null, devicePrefix, preparing = false, preparationError = '' }) {
+export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, originalBlob = null, devicePrefix, preparing = false, preparationError = '', iosAudioOriginalToFiles = false }) {
   const [deviceSaving, setDeviceSaving] = useState(false);
   const [savedToDevice, setSavedToDevice] = useState('');
   const [deviceError, setDeviceError] = useState('');
   const [deviceNote, setDeviceNote] = useState('');
   const [savePreparationError, setSavePreparationError] = useState('');
   const failedPreparation = preparationError || savePreparationError;
-  const blocked = saving || deviceSaving || preparing || !!failedPreparation;
+  const directAudioFiles = iosAudioOriginalToFiles && Capacitor.getPlatform() === 'ios';
+  const blocked = saving || deviceSaving || preparing || !!preparationError || (!directAudioFiles && !!savePreparationError);
   const canRecover = Capacitor.getPlatform() === 'ios' && originalBlob?.size > 0 && !!failedPreparation;
   useEffect(() => { setSavedToDevice(''); setDeviceNote(''); setDeviceError(''); setSavePreparationError(''); }, [deviceBlob, originalBlob]);
 
   const handleDevice = async (recover = false) => {
-    const input = recover ? originalBlob : deviceBlob;
+    const input = recover || directAudioFiles ? originalBlob : deviceBlob;
     if (!input || deviceSaving || saving || preparing) return;
     setDeviceSaving(true);
     setDeviceError('');
     setSavedToDevice('');
     setDeviceNote('');
     try {
-      const filename = buildDeviceFilename(devicePrefix || 'evidence', input);
-      const result = recover ? await recoverOriginalToDevice(originalBlob, filename) : await saveBlobToDevice(deviceBlob, filename);
+      // Never let an unrecognised audio-only recording enter the video/Photos route.
+      if (directAudioFiles && !input.type.startsWith('audio/')) throw new Error('The audio format could not be identified. Your original is kept; you can still save it to your Journal.');
+      const filename = buildDeviceFilename(devicePrefix || 'evidence', input, directAudioFiles ? 'bin' : 'webm');
+      const result = recover || directAudioFiles ? await recoverOriginalToDevice(originalBlob, filename) : await saveBlobToDevice(deviceBlob, filename);
       const labels = { photos: 'Saved to Photos', gallery: 'Saved to Gallery', files: 'Saved to Files', downloads: 'Download Started' };
       setSavedToDevice(labels[result.destination] || 'Saved to Device');
       setDeviceNote(result.note || labels[result.destination] || 'Saved to Device');
@@ -46,7 +52,7 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
     }
   };
 
-  const nativeLabel = Capacitor.isNativePlatform() ? 'Photos / Gallery / Files' : 'Downloads';
+  const nativeLabel = directAudioFiles ? 'Files / On My iPhone' : Capacitor.isNativePlatform() ? 'Photos / Gallery / Files' : 'Downloads';
 
   return (
     <div className="space-y-2">
@@ -75,29 +81,29 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 font-heading text-xs uppercase tracking-wider hover:bg-amber-500/20 transition-colors disabled:opacity-50"
           >
             {deviceSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : savedToDevice ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
-            {deviceSaving ? 'Saving…' : savedToDevice || 'Save to Device'}
+            {deviceSaving ? 'Saving…' : savedToDevice || (directAudioFiles ? 'Save to Files' : 'Save to Device')}
           </button>
         </>
       )}
       {savePreparationError && (
         <div role="status" className="text-xs text-destructive text-pretty">
           <p>{savePreparationError} Your original is kept until you discard it.</p>
-          <button onClick={() => handleDevice()} disabled={saving || deviceSaving || preparing} className="min-h-11 underline focus-visible:outline focus-visible:outline-2 disabled:opacity-50">Retry preparation</button>
+          <button onClick={() => handleDevice()} disabled={saving || deviceSaving || preparing} className="min-h-11 underline focus-visible:outline focus-visible:outline-2 disabled:opacity-50">{directAudioFiles ? 'Retry Files save' : 'Retry preparation'}</button>
         </div>
       )}
       {canRecover && (
         <div className="space-y-2">
           <button onClick={() => handleDevice(true)} disabled={saving || deviceSaving || preparing} className="w-full min-h-11 flex items-center justify-center gap-2 rounded-lg border border-border text-sm hover:bg-accent active:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">
             {deviceSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Recover original
+            {directAudioFiles ? 'Copy original to Files' : 'Recover original'}
           </button>
-          <p className="text-xs text-muted-foreground text-pretty">Retries conversion of the full, untrimmed recording for Photos. If conversion fails, keeps the unchanged original in Files instead, not Photos.</p>
+          <p className="text-xs text-muted-foreground text-pretty">{directAudioFiles ? 'Copies the unchanged original audio to Files, not Photos. No format conversion is performed.' : 'Retries conversion of the full, untrimmed recording for Photos. If conversion fails, keeps the unchanged original in Files instead, not Photos.'}</p>
         </div>
       )}
       {deviceError ? (
         <p role="alert" className="text-xs text-destructive text-pretty flex items-center justify-center gap-1"><AlertCircle className="h-3 w-3 shrink-0" /> {deviceError}</p>
       ) : (deviceBlob || canRecover) && (
-        <p role="status" className="text-xs text-muted-foreground text-center text-pretty">{deviceNote || `Saves the recording to your device's ${nativeLabel} now — no service needed. Save to your Journal later once you're back in range.`}</p>
+        <p role="status" className="text-xs text-muted-foreground text-center text-pretty">{deviceNote || (directAudioFiles ? 'Copies the unchanged original audio to Files / On My iPhone, not Photos — no conversion or service needed. You can save to your Journal separately.' : `Saves the recording to your device's ${nativeLabel} now — no service needed. Save to your Journal later once you're back in range.`)}</p>
       )}
     </div>
   );

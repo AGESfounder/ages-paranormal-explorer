@@ -45,8 +45,9 @@ export async function saveBlobToDevice(blob, filename) {
 }
 
 // Explicit recovery of the untouched, full recording — never mark it prepared.
-// Native retries conversion; only if that fails does it copy the original to
-// Documents. Report its actual destination, not an assumed Photos success.
+// Native audio copies directly to Files/Documents without conversion (also used
+// by Audio Recorder's iOS save). Only video retries conversion, then falls back
+// to Documents. Report the actual destination, not an assumed Photos success.
 export async function recoverOriginalToDevice(originalBlob, filename) {
   if (Capacitor.getPlatform() !== 'ios') throw new Error('Original recovery is available on iOS only.');
   if (!originalBlob?.size) throw new Error('There is no original recording to recover.');
@@ -61,9 +62,9 @@ export async function recoverOriginalToDevice(originalBlob, filename) {
   }
 }
 
-export function buildDeviceFilename(prefix, blob) {
+export function buildDeviceFilename(prefix, blob, fallbackExtension = 'webm') {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
-  return `${prefix}_${stamp}.${mediaExtension(blob)}`;
+  return `${prefix}_${stamp}.${mediaExtension(blob, fallbackExtension)}`;
 }

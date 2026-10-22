@@ -41,6 +41,8 @@ import { getWeatherFlavor } from '@/lib/weatherFlavor';
 import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 import { toast } from '@/components/ui/use-toast';
+import { Capacitor } from '@capacitor/core';
+import { mediaExtension } from '@/lib/deviceMedia';
 
 // Two-column grid order (fills left→right, row by row):
 //   Col 1: Equipment Guide, Audio Recorder, Anomaly Camera, Vibration Communicator, Environmental Anomaly Monitor, Weather Monitor, Paranormal Research: Terms
@@ -265,10 +267,23 @@ export default function Toolkit() {
   };
 
   const startRecording = async () => {
+    let stream;
     try {
       setMediaError('');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const isIos = Capacitor.getPlatform() === 'ios';
+      let mediaRecorder;
+      if (isIos) {
+        // WebKit support varies by OS. Never force a format it has not confirmed.
+        const mimeType = ['audio/mp4', 'audio/webm', 'audio/ogg'].find(type => MediaRecorder.isTypeSupported?.(type));
+        try {
+          mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        } catch {
+          mediaRecorder = new MediaRecorder(stream);
+        }
+      } else {
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      }
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -277,7 +292,8 @@ export default function Toolkit() {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const mimeType = isIos ? (mediaRecorder.mimeType || chunksRef.current.find(chunk => chunk.type)?.type || '') : 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         setRecordedBlob(blob);
         stream.getTracks().forEach(t => t.stop());
       };
@@ -291,6 +307,7 @@ export default function Toolkit() {
         setRecordDuration(prev => prev + 1);
       }, 1000);
     } catch (err) {
+      stream?.getTracks().forEach(t => t.stop());
       console.error('Microphone access denied', err);
       const name = err?.name || '';
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
@@ -320,7 +337,9 @@ export default function Toolkit() {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save. The gate (ad watch +
       // spend-evidence-save) is only called once the evidence is ready to create.
-      const file = new File([recordedBlob], 'evp_session.webm', { type: 'audio/webm' });
+      const file = Capacitor.getPlatform() === 'ios'
+        ? new File([recordedBlob], `evp_session.${mediaExtension(recordedBlob, 'bin')}`, { type: recordedBlob.type })
+        : new File([recordedBlob], 'evp_session.webm', { type: 'audio/webm' });
       const uploadRes = await base44.integrations.Core.UploadFile({ file });
       const now = new Date();
       const date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
@@ -452,7 +471,7 @@ export default function Toolkit() {
                     className="w-full px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 resize-none"
                   />
                 </div>
-                <EvidenceSaveButtons onSave={saveRecording} saving={savingRec} deviceBlob={recordedBlob} devicePrefix="evp_session" />
+                <EvidenceSaveButtons onSave={saveRecording} saving={savingRec} deviceBlob={recordedBlob} originalBlob={recordedBlob} iosAudioOriginalToFiles devicePrefix="evp_session" />
                 <p className="text-[10px] text-muted-foreground/60 text-center">Saves automatically with date & time</p>
                 <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); setRecorderNotes(''); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
                   <X className="w-3.5 h-3.5" /> Discard

@@ -3,9 +3,9 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 
 export const deviceMedia = registerPlugin('AgesSaveToDevice');
 
-export function mediaExtension(blob) {
+export function mediaExtension(blob, fallback = 'webm') {
   const type = (blob?.type || '').split(';')[0];
-  return ({ 'video/mp4': 'mp4', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' })[type] || 'webm';
+  return ({ 'video/mp4': 'mp4', 'audio/mp4': 'm4a', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' })[type] || fallback;
 }
 
 export async function writeMediaTempFile(blob) {
