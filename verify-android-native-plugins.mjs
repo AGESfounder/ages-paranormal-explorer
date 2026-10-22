@@ -20,7 +20,7 @@ const java = (path) => read(path).replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/
 const nativePath = 'android/app/src/main/java/com/ages/explorer/';
 
 const gradle = read('android/app/build.gradle');
-for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '21'], ['versionName', '"1.0"']]) {
+for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '22'], ['versionName', '"1.0"']]) {
   const values = [...gradle.matchAll(new RegExp(`^\\s*${key}\\s+([^\\r\\n]+)`, 'gm'))];
   check(`Android ${key} is exactly ${value}`, values.length === 1 && values[0][1].trim() === value);
 }
