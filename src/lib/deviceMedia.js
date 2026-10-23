@@ -32,8 +32,18 @@ export async function removeMediaTempFile(uri) {
 }
 
 export function assertPreparedVideoType(mimeType) {
-  if (Capacitor.getPlatform() === 'ios' && mimeType?.split(';')[0] !== 'video/mp4') {
-    throw Object.assign(new Error('The device did not produce an MP4 video. Retry preparation or recover the original recording below.'), { code: 'recording_format_invalid' });
+  if ((Capacitor.getPlatform() === 'ios' && mimeType?.split(';')[0] !== 'video/mp4')
+    || (Capacitor.getPlatform() === 'android' && mimeType?.split(';')[0] !== 'video/mp4')) {
+    const guidance = Capacitor.getPlatform() === 'ios'
+      ? 'Retry preparation or recover the original recording below.'
+      : 'Your original recording is still available. Retry preparation.';
+    throw Object.assign(new Error(`The device did not produce an MP4 video. ${guidance}`), { code: 'recording_format_invalid' });
+  }
+}
+
+export function assertPreparedAudioType(mimeType) {
+  if (Capacitor.getPlatform() === 'android' && mimeType?.split(';')[0] !== 'audio/mp4') {
+    throw Object.assign(new Error('The device did not produce AAC/M4A audio. Your original recording is still available. Retry preparation.'), { code: 'recording_format_invalid' });
   }
 }
 
@@ -55,12 +65,16 @@ export async function exportNativeRecording(blob, trimSeconds) {
   try {
     const result = await deviceMedia.prepareMedia({ filePath: input, mediaType: blob.type.startsWith('audio') ? 'audio' : 'video', trimSeconds });
     output = result.filePath;
-    if (!blob.type.startsWith('audio')) assertPreparedVideoType(result.mimeType);
+    if (Capacitor.getPlatform() === 'android' && (typeof output !== 'string' || !output || output === input)) {
+      throw Object.assign(new Error('The device did not return a prepared recording. Your original is still available. Retry preparation.'), { code: 'recording_export_failed' });
+    }
+    if (blob.type.startsWith('audio')) assertPreparedAudioType(result.mimeType);
+    else assertPreparedVideoType(result.mimeType);
     const { data } = await Filesystem.readFile({ path: output });
     const bytes = base64ToBytes(data);
     if (!bytes.length) throw new Error('The prepared recording is empty.');
     return new Blob([bytes], { type: result.mimeType });
   } finally {
-    await Promise.all([input, output].filter(Boolean).map((uri) => removeMediaTempFile(uri).catch(() => {})));
+    await Promise.all([...new Set([input, output].filter(Boolean))].map((uri) => removeMediaTempFile(uri).catch(() => {})));
   }
 }

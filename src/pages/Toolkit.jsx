@@ -184,6 +184,7 @@ export default function Toolkit() {
   const [savingRec, setSavingRec] = useState(false);
   const [recorderNotes, setRecorderNotes] = useState('');
   const [mediaError, setMediaError] = useState('');
+  const [journalSaveError, setJournalSaveError] = useState('');
   const [weatherData, setWeatherData] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState(null);
@@ -270,6 +271,7 @@ export default function Toolkit() {
     let stream;
     try {
       setMediaError('');
+      setJournalSaveError('');
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const isIos = Capacitor.getPlatform() === 'ios';
       let mediaRecorder;
@@ -331,7 +333,8 @@ export default function Toolkit() {
   };
 
   const saveRecording = async (isPrivate = true) => {
-    if (!recordedBlob) return;
+    if (!recordedBlob || savingRec) return;
+    setJournalSaveError('');
     setSavingRec(true);
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
@@ -377,13 +380,20 @@ export default function Toolkit() {
       setRecordedBlob(null);
       setRecordDuration(0);
       setRecorderNotes('');
+      setJournalSaveError('');
     } catch (err) {
-      // Evidence.create failed — refund the daily save charge so the user
-      // is not permanently consume an allowance for a record that was never created.
-      await refundEvidenceSave();
+      // Keep recording and notes intact, and show the failure even if refunding
+      // the save charge is slow or fails. The gate's refund is a no-op if uncharged.
       console.error('Save failed', err);
+      setJournalSaveError('Could not save this recording to your Journal. Your recording and notes are still here. Check your connection, then try the Journal save again.');
+      try {
+        await refundEvidenceSave();
+      } catch (refundError) {
+        console.error('Recording save refund failed', refundError);
+      }
+    } finally {
+      setSavingRec(false);
     }
-    setSavingRec(false);
   };
 
   const fetchWeatherByCoords = async (lat, lon) => {
@@ -471,9 +481,14 @@ export default function Toolkit() {
                     className="w-full px-3 py-2 rounded-lg bg-card/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 resize-none"
                   />
                 </div>
+                {journalSaveError && (
+                  <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+                    <p className="text-pretty text-xs text-destructive">{journalSaveError}</p>
+                  </div>
+                )}
                 <EvidenceSaveButtons onSave={saveRecording} saving={savingRec} deviceBlob={recordedBlob} originalBlob={recordedBlob} iosAudioOriginalToFiles devicePrefix="evp_session" />
                 <p className="text-[10px] text-muted-foreground/60 text-center">Saves automatically with date & time</p>
-                <button onClick={() => { setRecordedBlob(null); setRecordDuration(0); setRecorderNotes(''); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors">
+                <button disabled={savingRec} onClick={() => { setRecordedBlob(null); setRecordDuration(0); setRecorderNotes(''); setJournalSaveError(''); }} className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-border/40 text-muted-foreground font-heading text-xs uppercase tracking-wider hover:border-red-500/30 hover:text-red-400 transition-colors disabled:pointer-events-none disabled:opacity-50">
                   <X className="w-3.5 h-3.5" /> Discard
                 </button>
               </div>
@@ -1489,6 +1504,7 @@ Best Practices
                 if (recording) stopRecording();
                 setRecordedBlob(null);
                 setRecorderNotes('');
+                setJournalSaveError('');
                 setGuideDetail(null);
                 stopNarration();
                 toolAdGate.stopConsumption(activeTool?.name);

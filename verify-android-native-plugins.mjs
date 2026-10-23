@@ -20,7 +20,7 @@ const java = (path) => read(path).replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/
 const nativePath = 'android/app/src/main/java/com/ages/explorer/';
 
 const gradle = read('android/app/build.gradle');
-for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '22'], ['versionName', '"1.0"']]) {
+for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '23'], ['versionName', '"1.0"']]) {
   const values = [...gradle.matchAll(new RegExp(`^\\s*${key}\\s+([^\\r\\n]+)`, 'gm'))];
   check(`Android ${key} is exactly ${value}`, values.length === 1 && values[0][1].trim() === value);
 }
@@ -46,6 +46,31 @@ check('Save retains modern scoped MediaStore insert/copy behavior', /if\s*\(Buil
 const saveJs = read('src/lib/saveToDevice.js');
 const deviceMediaJs = read('src/lib/deviceMedia.js');
 check('Shared JS Save seam registers AgesSaveToDevice and calls saveMedia', deviceMediaJs.includes("registerPlugin('AgesSaveToDevice')") && saveJs.includes("from '@/lib/deviceMedia'") && saveJs.includes('deviceMedia.saveMedia('));
+
+// Recording preparation contracts only. Passing these source checks cannot
+// establish codec support, output duration/seekability, or native compilation.
+check('Android exposes prepareMedia as a Capacitor promise method', /@PluginMethod\s+public void prepareMedia\(PluginCall call\)/.test(save));
+check('Android preparation accepts filePath, mediaType and trimSeconds', ['filePath', 'mediaType'].every((key) => save.includes(`call.getString("${key}")`)) && /call\.getDouble\("trimSeconds"(?:\s*,[^)]*)?\)/.test(save));
+check('Android preparation returns output filePath and truthful MP4 MIME fields', /\.put\("filePath",/.test(save) && /\.put\("mimeType",/.test(save) && save.includes('"video/mp4"') && save.includes('"audio/mp4"'));
+const media3Modules = ['media3-transformer', 'media3-common', 'media3-effect'];
+const media3Versions = media3Modules.map((module) => [...gradle.matchAll(new RegExp(`implementation\\s+["']androidx\\.media3:${module}:([^"']+)["']`, 'g'))]);
+check('Media3 transformer/common/effect each use one identical pinned stable version', media3Versions.every((matches) => matches.length === 1 && /^\d+\.\d+\.\d+$/.test(matches[0][1])) && new Set(media3Versions.map((matches) => matches[0]?.[1])).size === 1);
+check('Android preparation uses Media3 Transformer with H.264/AAC output codecs', save.includes('import androidx.media3.transformer.Transformer;') && save.includes('setVideoMimeType(MimeTypes.VIDEO_H264)') && save.includes('setAudioMimeType(MimeTypes.AUDIO_AAC)'));
+check('Android preparation has async completion/error and duration inspection', /void onCompleted\(/.test(save) && /void onError\(/.test(save) && save.includes('METADATA_KEY_DURATION') && save.includes('recording_export_failed'));
+
+const preparationJs = read('src/lib/prepareRecording.js');
+check('Android and iOS prepare natively while web retains its browser exporter', /const work = \['ios', 'android'\]\.includes\(Capacitor\.getPlatform\(\)\)\s*\? exportNativeRecording\(blob, seconds\)\s*: exportBrowserRecording\(blob, seconds, signal\)/.test(preparationJs));
+check('Trim and full device-bound Android video require preparation', preparationJs.includes("seconds > 0 || Capacitor.getPlatform() === 'ios'") && preparationJs.includes("Capacitor.getPlatform() === 'android' && forDeviceSave && mediaType.startsWith('video')") && preparationJs.includes('needsRecordingExport(seconds, { forDeviceSave, mediaType: blob.type })'));
+check('Full Android video preparation precedes native-save staging and MediaStore', saveJs.includes('await prepareRecording(blob, null, undefined, { forDeviceSave: true })') && saveJs.indexOf('await prepareRecording(') < saveJs.indexOf('await writeMediaTempFile(prepared)') && saveJs.indexOf('await writeMediaTempFile(prepared)') < saveJs.indexOf('await deviceMedia.saveMedia('));
+check('JS uses the prepareMedia bridge fields and reads its output bytes', deviceMediaJs.includes("deviceMedia.prepareMedia({ filePath: input, mediaType: blob.type.startsWith('audio') ? 'audio' : 'video', trimSeconds })") && deviceMediaJs.includes('output = result.filePath') && deviceMediaJs.includes('Filesystem.readFile({ path: output })') && deviceMediaJs.includes('type: result.mimeType'));
+check('Android rejects non-MP4 video and non-AAC/MP4 prepared audio', deviceMediaJs.includes("Capacitor.getPlatform() === 'android' && mimeType?.split(';')[0] !== 'video/mp4'") && deviceMediaJs.includes("Capacitor.getPlatform() === 'android' && mimeType?.split(';')[0] !== 'audio/mp4'") && deviceMediaJs.includes('assertPreparedVideoType(result.mimeType)') && deviceMediaJs.includes('assertPreparedAudioType(result.mimeType)') && deviceMediaJs.includes("'audio/mp4': 'm4a'") && saveJs.includes('mediaExtension(prepared)'));
+check('Failed preparation is retryable and temporary copies are cleaned up', preparationJs.includes('exports.delete(key); throw error;') && deviceMediaJs.includes('finally') && deviceMediaJs.includes('removeMediaTempFile(uri).catch(() => {})'));
+
+const toolkit = read('src/pages/Toolkit.jsx');
+const recorderSave = toolkit.split('const saveRecording = async (isPrivate = true) => {')[1]?.split('const fetchWeatherByCoords')[0] ?? '';
+const saveCatch = recorderSave.split('} catch (err) {')[1] ?? '';
+check('Audio Recorder keeps a separate persistent Journal-save alert by its controls', toolkit.includes("const [journalSaveError, setJournalSaveError] = useState('')") && /journalSaveError && \(\s*<div role="alert"/.test(toolkit) && toolkit.indexOf('{journalSaveError && (') < toolkit.indexOf('<EvidenceSaveButtons onSave={saveRecording}'));
+check('Journal failure preserves recording/notes, shows retry guidance and releases saving state', saveCatch.includes('setJournalSaveError(') && saveCatch.includes('try the Journal save again') && !saveCatch.includes('setRecordedBlob(null)') && !saveCatch.includes("setRecorderNotes('')") && /finally\s*\{\s*setSavingRec\(false\)/.test(saveCatch) && recorderSave.indexOf('await base44.entities.Evidence.create(') < recorderSave.indexOf('setRecordedBlob(null)'));
 
 const manifest = read('android/app/src/main/AndroidManifest.xml').replace(/<!--[\s\S]*?-->/g, '');
 const permissions = manifest.match(/<uses-permission\b[^>]*>/g) ?? [];

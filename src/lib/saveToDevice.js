@@ -22,11 +22,16 @@ export async function saveBlobToDevice(blob, filename) {
   // Only preparation failures expose original recovery. Permission, staging and
   // Photos write failures must remain save errors, not conversion failures.
   try {
-    prepared = blob.type.startsWith('image') ? blob : await prepareRecording(blob);
+    // Full Android video must also be normalized before staging for MediaStore.
+    // Full Journal uploads and untrimmed Android audio retain their existing path.
+    prepared = blob.type.startsWith('image') ? blob : await prepareRecording(blob, null, undefined, { forDeviceSave: true });
     if (!prepared.type.startsWith('audio') && !prepared.type.startsWith('image')) assertPreparedVideoType(prepared.type);
   } catch (cause) {
     if (Capacitor.getPlatform() === 'ios' && !['recording_export_failed', 'recording_format_invalid'].includes(cause.code)) throw cause;
-    throw Object.assign(new Error(cause.message || 'The recording could not be prepared. Retry or recover the original.'), { code: 'recording_preparation_failed' });
+    const guidance = Capacitor.getPlatform() === 'android'
+      ? 'The recording could not be prepared. Your original is still available. Try Save to Device again.'
+      : 'The recording could not be prepared. Retry or recover the original.';
+    throw Object.assign(new Error(cause.message || guidance), { code: 'recording_preparation_failed' });
   }
   const displayName = filename.replace(/\.[^.]+$/, `.${mediaExtension(prepared)}`);
   if (!Capacitor.isNativePlatform()) {

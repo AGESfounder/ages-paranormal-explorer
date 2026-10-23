@@ -229,7 +229,7 @@ for (const plugin of ['AgesSensorsPlugin', 'AgesDepthPlugin', 'AgesSaveToDeviceP
 
 // ── 8. Protected version guards (regression tripwires only — nothing here edits)
 const androidGradle = read('android/app/build.gradle');
-check('Android remains versionCode 22', !!androidGradle && androidGradle.includes('versionCode 22'));
+check('Android remains versionCode 23', !!androidGradle && androidGradle.includes('versionCode 23'));
 const appConfigurationList = objects.find((object) => /isa = XCConfigurationList;/.test(object.body) && appTarget?.body.includes(`buildConfigurationList = ${object.id} `));
 const appConfigurations = objects.filter((object) => /isa = XCBuildConfiguration;/.test(object.body) && appConfigurationList?.body.includes(object.id));
 check('App target has Debug and Release build configurations', appConfigurations.length === 2 && ['Debug', 'Release'].every((name) => appConfigurations.some((object) => object.body.includes(`name = ${name};`))));
