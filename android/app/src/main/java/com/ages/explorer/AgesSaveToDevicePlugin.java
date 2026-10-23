@@ -311,7 +311,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
         } finally {
             try {
                 retriever.release();
-            } catch (RuntimeException ignored) {
+            } catch (java.io.IOException | RuntimeException ignored) {
                 // Keep the original metadata result if release fails.
             }
         }
