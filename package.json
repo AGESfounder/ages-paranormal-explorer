@@ -18,7 +18,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
-    "@base44/sdk": "^0.8.56",
+    "@base44/sdk": "^0.8.57",
     "@base44/vite-plugin": "^1.0.47",
     "@capacitor-community/admob": "7.2.0",
     "@capacitor-community/text-to-speech": "6.1.0",
