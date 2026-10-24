@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { deviceMedia, mediaExtension, writeMediaTempFile, removeMediaTempFile, assertPreparedVideoType } from '@/lib/deviceMedia';
+import { deviceMedia, baseMediaMime, mediaExtension, writeMediaTempFile, removeMediaTempFile, assertPreparedVideoType } from '@/lib/deviceMedia';
 import { prepareRecording } from '@/lib/prepareRecording';
 
 // Device-local only. Native errors are shown to the user, never hidden behind
@@ -22,10 +22,14 @@ export async function saveBlobToDevice(blob, filename) {
   // Only preparation failures expose original recovery. Permission, staging and
   // Photos write failures must remain save errors, not conversion failures.
   try {
-    // Full Android video must also be normalized before staging for MediaStore.
-    // Full Journal uploads and untrimmed Android audio retain their existing path.
-    prepared = blob.type.startsWith('image') ? blob : await prepareRecording(blob, null, undefined, { forDeviceSave: true });
-    if (!prepared.type.startsWith('audio') && !prepared.type.startsWith('image')) assertPreparedVideoType(prepared.type);
+    // Android video and WebM audio require real native conversion before staging.
+    // Journal uploads, browser export and iOS original-to-Files keep their paths.
+    prepared = baseMediaMime(blob.type).startsWith('image/') ? blob : await prepareRecording(blob, null, undefined, { forDeviceSave: true });
+    const preparedMime = baseMediaMime(prepared.type);
+    if (!preparedMime.startsWith('audio/') && !preparedMime.startsWith('image/')) assertPreparedVideoType(prepared.type);
+    if (Capacitor.getPlatform() === 'android' && preparedMime === 'audio/webm') {
+      throw new Error('Android did not convert the WebM audio to AAC/M4A. Your original is still available. Retry preparation.');
+    }
   } catch (cause) {
     if (Capacitor.getPlatform() === 'ios' && !['recording_export_failed', 'recording_format_invalid'].includes(cause.code)) throw cause;
     const guidance = Capacitor.getPlatform() === 'android'
@@ -40,7 +44,8 @@ export async function saveBlobToDevice(blob, filename) {
   }
   const uri = await writeMediaTempFile(prepared);
   try {
-    const mediaType = prepared.type.startsWith('audio') ? 'audio' : prepared.type.startsWith('image') ? 'image' : 'video';
+    const preparedMime = baseMediaMime(prepared.type);
+    const mediaType = preparedMime.startsWith('audio/') ? 'audio' : preparedMime.startsWith('image/') ? 'image' : 'video';
     const result = await deviceMedia.saveMedia({ filePath: uri, mediaType, displayName, prepared: true });
     if (!result?.success) throw new Error('The device did not confirm the save.');
     return { ...result, destination: result.destination || (mediaType === 'audio' ? 'files' : 'gallery') };

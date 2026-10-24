@@ -1,13 +1,15 @@
 import { Capacitor } from '@capacitor/core';
-import { exportNativeRecording } from '@/lib/deviceMedia';
+import { baseMediaMime, exportNativeRecording } from '@/lib/deviceMedia';
 import { exportBrowserRecording } from '@/lib/browserRecordingExport';
 
 const exportsBySource = new WeakMap();
 const preparedBlobs = new WeakSet();
-export const needsRecordingExport = (seconds, { forDeviceSave = false, mediaType = '' } = {}) => (
-  seconds > 0 || Capacitor.getPlatform() === 'ios'
-  || (Capacitor.getPlatform() === 'android' && forDeviceSave && mediaType.startsWith('video'))
-);
+export const needsRecordingExport = (seconds, { forDeviceSave = false, mediaType = '' } = {}) => {
+  const mimeType = baseMediaMime(mediaType);
+  return seconds > 0 || Capacitor.getPlatform() === 'ios'
+    || (Capacitor.getPlatform() === 'android' && forDeviceSave
+      && (mimeType.startsWith('video/') || mimeType === 'audio/webm'));
+};
 
 export function prepareRecording(blob, seconds = null, signal, { forDeviceSave = false } = {}) {
   if (!blob?.size) return Promise.reject(new Error('The recording is empty.'));

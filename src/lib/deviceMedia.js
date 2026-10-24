@@ -3,8 +3,10 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 
 export const deviceMedia = registerPlugin('AgesSaveToDevice');
 
+export const baseMediaMime = (mimeType = '') => mimeType.split(';')[0].trim().toLowerCase();
+
 export function mediaExtension(blob, fallback = 'webm') {
-  const type = (blob?.type || '').split(';')[0];
+  const type = baseMediaMime(blob?.type);
   return ({ 'video/mp4': 'mp4', 'audio/mp4': 'm4a', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' })[type] || fallback;
 }
 
@@ -33,7 +35,7 @@ export async function removeMediaTempFile(uri) {
 
 export function assertPreparedVideoType(mimeType) {
   if ((Capacitor.getPlatform() === 'ios' && mimeType?.split(';')[0] !== 'video/mp4')
-    || (Capacitor.getPlatform() === 'android' && mimeType?.split(';')[0] !== 'video/mp4')) {
+    || (Capacitor.getPlatform() === 'android' && baseMediaMime(mimeType) !== 'video/mp4')) {
     const guidance = Capacitor.getPlatform() === 'ios'
       ? 'Retry preparation or recover the original recording below.'
       : 'Your original recording is still available. Retry preparation.';
@@ -42,7 +44,7 @@ export function assertPreparedVideoType(mimeType) {
 }
 
 export function assertPreparedAudioType(mimeType) {
-  if (Capacitor.getPlatform() === 'android' && mimeType?.split(';')[0] !== 'audio/mp4') {
+  if (Capacitor.getPlatform() === 'android' && baseMediaMime(mimeType) !== 'audio/mp4') {
     throw Object.assign(new Error('The device did not produce AAC/M4A audio. Your original recording is still available. Retry preparation.'), { code: 'recording_format_invalid' });
   }
 }
@@ -60,15 +62,20 @@ function base64ToBytes(data) {
 }
 
 export async function exportNativeRecording(blob, trimSeconds) {
+  const mimeType = baseMediaMime(blob.type);
+  if (!mimeType.startsWith('audio/') && !mimeType.startsWith('video/')) {
+    throw Object.assign(new Error('The recording format could not be identified. Your original is still available.'), { code: 'recording_format_invalid' });
+  }
+  const audioOnly = mimeType.startsWith('audio/');
   const input = await writeMediaTempFile(blob);
   let output;
   try {
-    const result = await deviceMedia.prepareMedia({ filePath: input, mediaType: blob.type.startsWith('audio') ? 'audio' : 'video', trimSeconds });
+    const result = await deviceMedia.prepareMedia({ filePath: input, mediaType: audioOnly ? 'audio' : 'video', trimSeconds });
     output = result.filePath;
     if (Capacitor.getPlatform() === 'android' && (typeof output !== 'string' || !output || output === input)) {
       throw Object.assign(new Error('The device did not return a prepared recording. Your original is still available. Retry preparation.'), { code: 'recording_export_failed' });
     }
-    if (blob.type.startsWith('audio')) assertPreparedAudioType(result.mimeType);
+    if (audioOnly) assertPreparedAudioType(result.mimeType);
     else assertPreparedVideoType(result.mimeType);
     const { data } = await Filesystem.readFile({ path: output });
     const bytes = base64ToBytes(data);

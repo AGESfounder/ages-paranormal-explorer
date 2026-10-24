@@ -36,6 +36,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * AGES save-to-device module (Android).
@@ -111,7 +113,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
         final Handler mainHandler = new Handler(Looper.getMainLooper());
         new Thread(() -> {
             try {
-                MediaInfo sourceInfo = inspectMedia(source);
+                MediaInfo sourceInfo = inspectMedia(source, "source");
                 if (audioOnly && !sourceInfo.hasAudio) {
                     throw new MediaPreparationException("This recording has no readable audio track. The original is unchanged.");
                 }
@@ -123,6 +125,9 @@ public class AgesSaveToDevicePlugin extends Plugin {
                         ? Math.min(requestedTrimMs, sourceInfo.durationMs)
                         : sourceInfo.durationMs;
                 long startMs = Math.max(0L, sourceInfo.durationMs - expectedDurationMs);
+                Log.i(TAG, "Preparation: audioOnly=" + audioOnly + " requestedTrimMs=" + requestedTrimMs
+                        + " clip=" + (requestedTrimMs > 0) + " startMs=" + startMs
+                        + " endMs=" + sourceInfo.durationMs + " expectedDurationMs=" + expectedDurationMs);
                 if (requestedTrimMs > 0 && startMs > 0 && source.getName().endsWith(".webm")) {
                     double estimatedPrefixBytes = source.length() * (startMs / (double) sourceInfo.durationMs);
                     if (estimatedPrefixBytes > MAX_UNSEEKABLE_PREFIX_BYTES) {
@@ -183,6 +188,8 @@ public class AgesSaveToDevicePlugin extends Plugin {
                     .addListener(new Transformer.Listener() {
                         @Override
                         public void onCompleted(Composition composition, ExportResult exportResult) {
+                            Log.i(TAG, "Media3 approximateDurationMs=" + (exportResult.approximateDurationMs >= 0
+                                    ? Long.toString(exportResult.approximateDurationMs) : "unset"));
                             validateAndResolvePreparedMedia(
                                     call, output, audioOnly, sourceInfo.hasAudio,
                                     expectedDurationMs, mainHandler);
@@ -218,7 +225,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
                     throw new MediaPreparationException("Android did not produce a valid MP4 file. The original is unchanged. Try again.");
                 }
 
-                MediaInfo outputInfo = inspectMedia(output);
+                MediaInfo outputInfo = inspectMedia(output, "output");
                 if (audioOnly) {
                     if (!outputInfo.hasAudio || outputInfo.hasVideo || !outputInfo.hasAacAudio) {
                         throw new MediaPreparationException("The audio export did not contain a valid AAC track. The original is unchanged. Try again.");
@@ -228,6 +235,9 @@ public class AgesSaveToDevicePlugin extends Plugin {
                     throw new MediaPreparationException("The video export did not contain the expected MP4 tracks. The original is unchanged. Try again.");
                 }
 
+                Log.i(TAG, "Validation: expectedDurationMs=" + expectedDurationMs
+                        + " outputDurationMs=" + outputInfo.durationMs + " outputBytes=" + output.length()
+                        + " deltaMs=" + (outputInfo.durationMs - expectedDurationMs));
                 if (Math.abs(outputInfo.durationMs - expectedDurationMs) > DURATION_TOLERANCE_MS) {
                     throw new MediaPreparationException("The prepared clip did not match its expected duration. The original is unchanged. Try again with a shorter recording.");
                 }
@@ -248,17 +258,19 @@ public class AgesSaveToDevicePlugin extends Plugin {
         }, "ages-media-validation").start();
     }
 
-    private MediaInfo inspectMedia(File file) throws Exception {
-        long durationMs = readMetadataDurationMs(file);
+    private MediaInfo inspectMedia(File file, String stage) throws Exception {
+        long containerDurationMs = readMetadataDurationMs(file);
         boolean hasAudio = false;
         boolean hasVideo = false;
         boolean hasAacAudio = false;
         boolean hasH264Video = false;
-        long trackDurationUs = 0L;
+        List<TrackTimeline> tracks = new ArrayList<>();
+        long durationMs;
         MediaExtractor extractor = new MediaExtractor();
         try {
             extractor.setDataSource(file.getAbsolutePath());
             int trackCount = extractor.getTrackCount();
+            if (trackCount > 32) throw durationEvidenceError();
             for (int i = 0; i < trackCount; i++) {
                 MediaFormat format = extractor.getTrackFormat(i);
                 String mime = format.getString(MediaFormat.KEY_MIME);
@@ -267,9 +279,9 @@ public class AgesSaveToDevicePlugin extends Plugin {
                 boolean videoTrack = mime.startsWith("video/");
                 if (audioTrack || videoTrack) {
                     extractor.selectTrack(i);
-                    if (format.containsKey(MediaFormat.KEY_DURATION)) {
-                        trackDurationUs = Math.max(trackDurationUs, format.getLong(MediaFormat.KEY_DURATION));
-                    }
+                    long declaredDurationUs = format.containsKey(MediaFormat.KEY_DURATION)
+                            ? format.getLong(MediaFormat.KEY_DURATION) : 0L;
+                    tracks.add(new TrackTimeline(i, mime, declaredDurationUs));
                 }
                 if (audioTrack) {
                     hasAudio = true;
@@ -283,8 +295,15 @@ public class AgesSaveToDevicePlugin extends Plugin {
             if (!hasAudio && !hasVideo) {
                 throw new MediaPreparationException("The recording has no readable audio or video tracks. The original is unchanged.");
             }
-            if (durationMs <= 0 && trackDurationUs > 0) durationMs = trackDurationUs / 1000L;
-            if (durationMs <= 0) durationMs = scanDurationMs(extractor);
+            Log.i(TAG, stage + ": containerDurationMs=" + containerDurationMs + " bytes=" + file.length());
+            scanTimelines(extractor, tracks);
+            for (TrackTimeline track : tracks) {
+                Log.i(TAG, stage + ": track=" + track.index + " mime=" + track.mime
+                        + " declaredDurationUs=" + track.declaredDurationUs + " samples=" + track.sampleCount
+                        + " firstPtsUs=" + track.firstPtsUs + " lastPtsUs=" + track.lastPtsUs
+                        + " maxForwardGapUs=" + track.maxForwardGapUs);
+            }
+            durationMs = resolveDurationMs(containerDurationMs, tracks, stage);
         } catch (MediaPreparationException error) {
             throw error;
         } catch (Exception error) {
@@ -293,9 +312,6 @@ public class AgesSaveToDevicePlugin extends Plugin {
             extractor.release();
         }
 
-        if (durationMs <= 0) {
-            throw new MediaPreparationException("Android could not determine the recording duration. The original is unchanged. Try again with a shorter recording.");
-        }
         return new MediaInfo(durationMs, hasAudio, hasVideo, hasAacAudio, hasH264Video);
     }
 
@@ -318,18 +334,102 @@ public class AgesSaveToDevicePlugin extends Plugin {
         return 0L;
     }
 
-    private long scanDurationMs(MediaExtractor extractor) throws MediaPreparationException {
-        long lastSampleTimeUs = 0L;
+    private void scanTimelines(MediaExtractor extractor, List<TrackTimeline> tracks) throws MediaPreparationException {
         int sampleCount = 0;
         while (extractor.getSampleTime() >= 0) {
-            lastSampleTimeUs = Math.max(lastSampleTimeUs, extractor.getSampleTime());
-            sampleCount++;
-            if (sampleCount > MAX_DURATION_SCAN_SAMPLES) {
+            if (++sampleCount > MAX_DURATION_SCAN_SAMPLES) {
                 throw new MediaPreparationException("This recording is too long to inspect safely on this device. The original is unchanged. Try a shorter recording.");
+            }
+            int trackIndex = extractor.getSampleTrackIndex();
+            for (TrackTimeline track : tracks) {
+                if (track.index == trackIndex) {
+                    track.addSample(extractor.getSampleTime());
+                    break;
+                }
             }
             if (!extractor.advance()) break;
         }
-        return lastSampleTimeUs / 1000L;
+    }
+
+    private long resolveDurationMs(long containerMs, List<TrackTimeline> tracks, String stage)
+            throws MediaPreparationException {
+        long shortestSupportedMs = Long.MAX_VALUE;
+        long longestSupportedMs = 0L;
+        boolean allTracksDeclared = true;
+        for (TrackTimeline track : tracks) {
+            // PTS gives a lower bound, not the final sample's duration. Require a
+            // near-zero start and a continuous, completed scan before comparing it
+            // with a declared duration. Do not infer duration from one stray PTS.
+            if (track.sampleCount < 2 || track.firstPtsUs > DURATION_TOLERANCE_MS * 1000L
+                    || track.lastPtsUs <= track.firstPtsUs
+                    || track.maxForwardGapUs > DURATION_TOLERANCE_MS * 1000L) {
+                throw durationEvidenceError();
+            }
+            long timelineMs = track.lastPtsUs / 1000L;
+            long declaredMs = track.declaredDurationUs / 1000L;
+            long supportedMs;
+            if (declaredMs > 0) {
+                if (Math.abs(declaredMs - timelineMs) > DURATION_TOLERANCE_MS) throw durationEvidenceError();
+                supportedMs = declaredMs;
+            } else {
+                allTracksDeclared = false;
+                // Missing track duration is only recoverable with corroborating
+                // container metadata. Never treat a last sample PTS as exact.
+                if (containerMs <= 0 || Math.abs(containerMs - timelineMs) > DURATION_TOLERANCE_MS) {
+                    throw durationEvidenceError();
+                }
+                supportedMs = containerMs;
+            }
+            shortestSupportedMs = Math.min(shortestSupportedMs, supportedMs);
+            longestSupportedMs = Math.max(longestSupportedMs, supportedMs);
+        }
+        // Only the end of mutually consistent, sample-supported tracks can win;
+        // this is not the maximum of unrelated container/track/sample estimates.
+        if (longestSupportedMs <= 0 || longestSupportedMs - shortestSupportedMs > DURATION_TOLERANCE_MS) {
+            throw durationEvidenceError();
+        }
+        String reason = "consistent container/track/sample evidence";
+        if (containerMs <= 0) {
+            if (!allTracksDeclared) throw durationEvidenceError();
+            reason = "container missing; declared tracks corroborated by samples";
+        } else if (Math.abs(containerMs - longestSupportedMs) > DURATION_TOLERANCE_MS) {
+            if (!allTracksDeclared || containerMs >= shortestSupportedMs - DURATION_TOLERANCE_MS) {
+                throw durationEvidenceError();
+            }
+            reason = "short container outlier; coherent declared tracks and samples support longer timeline";
+        }
+        Log.i(TAG, stage + ": resolvedDurationMs=" + longestSupportedMs + " reason=" + reason);
+        return longestSupportedMs;
+    }
+
+    private MediaPreparationException durationEvidenceError() {
+        return new MediaPreparationException("Android could not reconcile this recording's duration metadata and sample timeline. The original is unchanged. Try again with a shorter recording.");
+    }
+
+    private static final class TrackTimeline {
+        final int index;
+        final String mime;
+        final long declaredDurationUs;
+        long firstPtsUs = Long.MAX_VALUE;
+        long lastPtsUs = -1L;
+        long maxForwardGapUs = 0L;
+        int sampleCount = 0;
+
+        TrackTimeline(int index, String mime, long declaredDurationUs) {
+            this.index = index;
+            this.mime = mime;
+            this.declaredDurationUs = declaredDurationUs;
+        }
+
+        void addSample(long ptsUs) {
+            // Keep presentation bounds despite small decode-order reordering.
+            if (sampleCount > 0 && ptsUs > lastPtsUs) {
+                maxForwardGapUs = Math.max(maxForwardGapUs, ptsUs - lastPtsUs);
+            }
+            firstPtsUs = Math.min(firstPtsUs, ptsUs);
+            lastPtsUs = Math.max(lastPtsUs, ptsUs);
+            sampleCount++;
+        }
     }
 
     private boolean hasMp4FileTypeBox(File file) throws java.io.IOException {
