@@ -235,10 +235,18 @@ public class AgesSaveToDevicePlugin extends Plugin {
                     throw new MediaPreparationException("The video export did not contain the expected MP4 tracks. The original is unchanged. Try again.");
                 }
 
+                // The exported clip's own container duration is its exact length; the
+                // sample timeline is the fallback when the container states none.
+                // Preferring the container keeps a clipped export honest whether the
+                // converter rebases timestamps to zero or keeps the original offset.
+                long measuredDurationMs = outputInfo.declaredDurationMs > 0
+                        ? outputInfo.declaredDurationMs
+                        : outputInfo.durationMs;
                 Log.i(TAG, "Validation: expectedDurationMs=" + expectedDurationMs
+                        + " measuredDurationMs=" + measuredDurationMs
                         + " outputDurationMs=" + outputInfo.durationMs + " outputBytes=" + output.length()
-                        + " deltaMs=" + (outputInfo.durationMs - expectedDurationMs));
-                if (Math.abs(outputInfo.durationMs - expectedDurationMs) > DURATION_TOLERANCE_MS) {
+                        + " deltaMs=" + (measuredDurationMs - expectedDurationMs));
+                if (Math.abs(measuredDurationMs - expectedDurationMs) > DURATION_TOLERANCE_MS) {
                     throw new MediaPreparationException("The prepared clip did not match its expected duration. The original is unchanged. Try again with a shorter recording.");
                 }
 
@@ -312,7 +320,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
             extractor.release();
         }
 
-        return new MediaInfo(durationMs, hasAudio, hasVideo, hasAacAudio, hasH264Video);
+        return new MediaInfo(durationMs, containerDurationMs, hasAudio, hasVideo, hasAacAudio, hasH264Video);
     }
 
     private long readMetadataDurationMs(File file) {
@@ -353,53 +361,55 @@ public class AgesSaveToDevicePlugin extends Plugin {
 
     private long resolveDurationMs(long containerMs, List<TrackTimeline> tracks, String stage)
             throws MediaPreparationException {
-        long shortestSupportedMs = Long.MAX_VALUE;
-        long longestSupportedMs = 0L;
-        boolean allTracksDeclared = true;
+        long resolvedMs = 0L;
         for (TrackTimeline track : tracks) {
-            // PTS gives a lower bound, not the final sample's duration. Require a
-            // near-zero start and a continuous, completed scan before comparing it
-            // with a declared duration. Do not infer duration from one stray PTS.
-            if (track.sampleCount < 2 || track.firstPtsUs > DURATION_TOLERANCE_MS * 1000L
-                    || track.lastPtsUs <= track.firstPtsUs
-                    || track.maxForwardGapUs > DURATION_TOLERANCE_MS * 1000L) {
-                throw durationEvidenceError();
+            // A track can only be measured if its scan produced a real span: at least
+            // two samples, ending after it starts. Anything less is not evidence, and
+            // one unmeasurable track does not invalidate the others.
+            if (track.sampleCount < 2 || track.lastPtsUs <= track.firstPtsUs) {
+                Log.w(TAG, stage + ": track=" + track.index + " skipped, no usable sample span (samples="
+                        + track.sampleCount + " firstPtsUs=" + track.firstPtsUs + " lastPtsUs=" + track.lastPtsUs + ")");
+                continue;
+            }
+            if (track.maxForwardGapUs > DURATION_TOLERANCE_MS * 1000L) {
+                // A phone recorder that stalls, or a low-rate stream, leaves gaps. The
+                // last sample still marks the end of the track, and the converted clip
+                // is measured against the duration resolved here afterwards, so a gap
+                // is recorded rather than treated as a corrupt file.
+                Log.w(TAG, stage + ": track=" + track.index + " is sparse (maxForwardGapUs="
+                        + track.maxForwardGapUs + "); using its sample timeline");
             }
             long timelineMs = track.lastPtsUs / 1000L;
             long declaredMs = track.declaredDurationUs / 1000L;
             long supportedMs;
-            if (declaredMs > 0) {
-                if (Math.abs(declaredMs - timelineMs) > DURATION_TOLERANCE_MS) throw durationEvidenceError();
+            if (declaredMs > 0 && Math.abs(declaredMs - timelineMs) <= DURATION_TOLERANCE_MS) {
                 supportedMs = declaredMs;
             } else {
-                allTracksDeclared = false;
-                // Missing track duration is only recoverable with corroborating
-                // container metadata. Never treat a last sample PTS as exact.
-                if (containerMs <= 0 || Math.abs(containerMs - timelineMs) > DURATION_TOLERANCE_MS) {
-                    throw durationEvidenceError();
+                // No usable declared duration, or one that contradicts the samples. A
+                // phone recording is written live, so the file often states no duration
+                // at all; the last sample's position is then the only duration evidence
+                // that exists. It can understate the track by a single frame, which the
+                // post-conversion check absorbs.
+                if (declaredMs > 0) {
+                    Log.w(TAG, stage + ": track=" + track.index + " declaredDurationMs=" + declaredMs
+                            + " contradicts its sample timeline " + timelineMs + "ms; using the timeline");
                 }
-                supportedMs = containerMs;
+                supportedMs = timelineMs;
             }
-            shortestSupportedMs = Math.min(shortestSupportedMs, supportedMs);
-            longestSupportedMs = Math.max(longestSupportedMs, supportedMs);
+            resolvedMs = Math.max(resolvedMs, supportedMs);
         }
-        // Only the end of mutually consistent, sample-supported tracks can win;
-        // this is not the maximum of unrelated container/track/sample estimates.
-        if (longestSupportedMs <= 0 || longestSupportedMs - shortestSupportedMs > DURATION_TOLERANCE_MS) {
-            throw durationEvidenceError();
+        // Nothing in the file could be measured, so its length cannot be trusted and
+        // the original is kept untouched for a retry.
+        if (resolvedMs <= 0) throw durationEvidenceError();
+        if (containerMs > 0 && Math.abs(containerMs - resolvedMs) > DURATION_TOLERANCE_MS) {
+            // The container header is advisory: on live recordings it is often absent,
+            // stale, or clipped. The sample-backed length above wins, and the converted
+            // clip is measured against it afterwards.
+            Log.w(TAG, stage + ": containerDurationMs=" + containerMs + " disagrees with the sample-backed "
+                    + resolvedMs + "ms; using the sample-backed duration");
         }
-        String reason = "consistent container/track/sample evidence";
-        if (containerMs <= 0) {
-            if (!allTracksDeclared) throw durationEvidenceError();
-            reason = "container missing; declared tracks corroborated by samples";
-        } else if (Math.abs(containerMs - longestSupportedMs) > DURATION_TOLERANCE_MS) {
-            if (!allTracksDeclared || containerMs >= shortestSupportedMs - DURATION_TOLERANCE_MS) {
-                throw durationEvidenceError();
-            }
-            reason = "short container outlier; coherent declared tracks and samples support longer timeline";
-        }
-        Log.i(TAG, stage + ": resolvedDurationMs=" + longestSupportedMs + " reason=" + reason);
-        return longestSupportedMs;
+        Log.i(TAG, stage + ": resolvedDurationMs=" + resolvedMs + " containerDurationMs=" + containerMs);
+        return resolvedMs;
     }
 
     private MediaPreparationException durationEvidenceError() {
@@ -448,13 +458,15 @@ public class AgesSaveToDevicePlugin extends Plugin {
 
     private static final class MediaInfo {
         final long durationMs;
+        final long declaredDurationMs;
         final boolean hasAudio;
         final boolean hasVideo;
         final boolean hasAacAudio;
         final boolean hasH264Video;
 
-        MediaInfo(long durationMs, boolean hasAudio, boolean hasVideo, boolean hasAacAudio, boolean hasH264Video) {
+        MediaInfo(long durationMs, long declaredDurationMs, boolean hasAudio, boolean hasVideo, boolean hasAacAudio, boolean hasH264Video) {
             this.durationMs = durationMs;
+            this.declaredDurationMs = declaredDurationMs;
             this.hasAudio = hasAudio;
             this.hasVideo = hasVideo;
             this.hasAacAudio = hasAacAudio;
