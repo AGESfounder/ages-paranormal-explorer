@@ -4,13 +4,16 @@ import { App } from '@capacitor/app';
 // Session-only, keyed by recording identity. Never persist or upload reports.
 const reports = new WeakMap();
 const savePlugin = registerPlugin('AgesSaveToDevice');
-const stages = ['preparation', 'inspection', 'transformation', 'validation', 'staging', 'mediaStore', 'outputRead'];
-const numericKeys = ['androidApi', 'requestedTrimMs', 'expectedDurationMs', 'sourceDurationMs', 'outputDurationMs', 'sourceBytes', 'outputBytes', 'exportErrorCode'];
+const stages = ['preparation', 'trimIntent', 'inputStaging', 'inspection', 'transformation', 'validation', 'staging', 'mediaStore', 'outputRead'];
+const numericKeys = ['androidApi', 'requestedTrimMs', 'requestedStartMs', 'requestedEndMs', 'expectedDurationMs', 'sourceDurationMs', 'outputDurationMs', 'comparisonDurationMs', 'durationToleranceMs', 'sourceBytes', 'outputBytes', 'stagedBytes', 'exportErrorCode'];
 const booleanKeys = ['sourceHasAudio', 'sourceHasVideo', 'sourceHasAacAudio', 'sourceHasH264Video', 'outputHasAudio', 'outputHasVideo', 'outputHasAacAudio', 'outputHasH264Video', 'partialRowDeleted'];
 
 export function safeNativeSaveData(data) {
   const safe = {};
   if (stages.includes(data?.stage)) safe.stage = data.stage;
+  if (['brief', 'standard', 'full', 'unknown'].includes(data?.trimMode)) safe.trimMode = data.trimMode;
+  if (typeof data?.durationDifferenceMs === 'number' && Number.isFinite(data.durationDifferenceMs)) safe.durationDifferenceMs = data.durationDifferenceMs;
+  if (typeof data?.stagedByteDelta === 'number' && Number.isFinite(data.stagedByteDelta)) safe.stagedByteDelta = data.stagedByteDelta;
   for (const key of numericKeys) {
     if (typeof data?.[key] === 'number' && Number.isFinite(data[key]) && data[key] >= 0) safe[key] = data[key];
   }

@@ -24,8 +24,12 @@ export async function writeMediaTempFile(blob) {
   const { uri } = await Filesystem.writeFile({ data, path, directory: Directory.Cache });
   const stat = await Filesystem.stat({ path: uri });
   if (stat.size !== blob.size) {
-    await removeMediaTempFile(uri);
-    throw new Error('The device copy did not match the recording. Nothing was saved.');
+    const error = new Error('The device copy did not match the recording. Nothing was saved.');
+    if (Capacitor.getPlatform() === 'android' && Number.isSafeInteger(stat.size) && stat.size >= 0) {
+      Object.assign(error, { data: { stagedBytes: stat.size, stagedByteDelta: stat.size - blob.size } });
+    }
+    await removeMediaTempFile(uri).catch(() => {});
+    throw error;
   }
   return uri;
 }
@@ -62,19 +66,23 @@ function base64ToBytes(data) {
   return bytes;
 }
 
-export async function exportNativeRecording(blob, trimSeconds) {
+export async function exportNativeRecording(blob, trimSeconds, intent) {
   const mimeType = baseMediaMime(blob.type);
   if (!mimeType.startsWith('audio/') && !mimeType.startsWith('video/')) {
     throw Object.assign(new Error('The recording format could not be identified. Your original is still available.'), { code: 'recording_format_invalid' });
   }
   const audioOnly = mimeType.startsWith('audio/');
-  const input = await writeMediaTempFile(blob);
+  let input;
   let output;
-  let diagnostics;
-  let stage = 'preparation';
+  let diagnostics = safeNativeSaveData(intent);
+  let stage = 'inputStaging';
   try {
-    const result = await deviceMedia.prepareMedia({ filePath: input, mediaType: audioOnly ? 'audio' : 'video', trimSeconds });
-    diagnostics = safeNativeSaveData(result.diagnostics);
+    input = await writeMediaTempFile(blob);
+    stage = 'inspection';
+    const result = Capacitor.getPlatform() === 'android'
+      ? await deviceMedia.prepareMedia({ filePath: input, mediaType: audioOnly ? 'audio' : 'video', trimSeconds, trimMode: diagnostics.trimMode })
+      : await deviceMedia.prepareMedia({ filePath: input, mediaType: audioOnly ? 'audio' : 'video', trimSeconds });
+    diagnostics = { ...diagnostics, ...safeNativeSaveData(result.diagnostics) };
     rememberAndroidSaveMetrics(blob, diagnostics);
     output = result.filePath;
     if (Capacitor.getPlatform() === 'android' && (typeof output !== 'string' || !output || output === input)) {

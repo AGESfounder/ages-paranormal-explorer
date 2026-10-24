@@ -61,9 +61,9 @@ check('Android preparation uses Media3 Transformer with H.264/AAC output codecs'
 check('Android preparation has async completion/error and duration inspection', /void onCompleted\(/.test(save) && /void onError\(/.test(save) && save.includes('METADATA_KEY_DURATION') && save.includes('recording_export_failed'));
 
 const preparationJs = read('src/lib/prepareRecording.js');
-check('Android and iOS prepare natively while web retains its browser exporter', /const work = \['ios', 'android'\]\.includes\(Capacitor\.getPlatform\(\)\)\s*\? exportNativeRecording\(blob, seconds\)\s*: exportBrowserRecording\(blob, seconds, signal\)/.test(preparationJs));
+check('Android and iOS prepare natively while web retains its browser exporter', /const work = \['ios', 'android'\]\.includes\(Capacitor\.getPlatform\(\)\)\s*\? exportNativeRecording\(blob, seconds, intent\)\s*: exportBrowserRecording\(blob, seconds, signal\)/.test(preparationJs));
 check('Trim, full Android video and WebM audio device saves require preparation by normalized MIME', preparationJs.includes("seconds > 0 || Capacitor.getPlatform() === 'ios'") && preparationJs.includes("Capacitor.getPlatform() === 'android' && forDeviceSave") && preparationJs.includes('const mimeType = baseMediaMime(mediaType)') && preparationJs.includes("mimeType.startsWith('video/') || mimeType === 'audio/webm'") && preparationJs.includes('needsRecordingExport(seconds, { forDeviceSave, mediaType: blob.type })'));
-check('Full Android video preparation precedes native-save staging and MediaStore', saveJs.includes('await prepareRecording(blob, null, undefined, { forDeviceSave: true })') && saveJs.indexOf('await prepareRecording(') < saveJs.indexOf('await writeMediaTempFile(prepared)') && saveJs.indexOf('await writeMediaTempFile(prepared)') < saveJs.indexOf('await deviceMedia.saveMedia('));
+check('Full Android video preparation precedes native-save staging and MediaStore', saveJs.includes("Capacitor.getPlatform() === 'android' ? trimSeconds : null, undefined, { forDeviceSave: true, trimMode }") && saveJs.includes("trimSeconds = null") && saveJs.indexOf('await prepareRecording(') < saveJs.indexOf('await writeMediaTempFile(prepared)') && saveJs.indexOf('await writeMediaTempFile(prepared)') < saveJs.indexOf('await deviceMedia.saveMedia('));
 check('JS uses normalized audio/video prepareMedia routing and reads output bytes', deviceMediaJs.includes("deviceMedia.prepareMedia({ filePath: input, mediaType: audioOnly ? 'audio' : 'video', trimSeconds })") && deviceMediaJs.includes('const mimeType = baseMediaMime(blob.type)') && deviceMediaJs.includes("const audioOnly = mimeType.startsWith('audio/')") && deviceMediaJs.includes('output = result.filePath') && deviceMediaJs.includes('Filesystem.readFile({ path: output })') && deviceMediaJs.includes('type: result.mimeType'));
 check('Android rejects non-MP4 video and non-AAC/MP4 prepared audio', deviceMediaJs.includes("Capacitor.getPlatform() === 'android' && baseMediaMime(mimeType) !== 'video/mp4'") && deviceMediaJs.includes("Capacitor.getPlatform() === 'android' && baseMediaMime(mimeType) !== 'audio/mp4'") && deviceMediaJs.includes('assertPreparedVideoType(result.mimeType)') && deviceMediaJs.includes('assertPreparedAudioType(result.mimeType)') && deviceMediaJs.includes("'audio/mp4': 'm4a'") && saveJs.includes('mediaExtension(prepared)'));
 check('Failed preparation is retryable and temporary copies are cleaned up', preparationJs.includes('exports.delete(key); throw error;') && deviceMediaJs.includes('finally') && deviceMediaJs.includes('removeMediaTempFile(uri).catch(() => {})'));
@@ -98,6 +98,72 @@ for (const path of ['src/components/PhoneREMDevice.jsx', 'src/components/Acousti
 }
 const diagnostics = read('src/lib/androidSaveDiagnostics.js');
 const saveButtons = read('src/components/EvidenceSaveButtons.jsx');
+const yesNo = read('src/components/YesNoSweeper.jsx');
+const trimOptions = read('src/lib/recordTrim.js');
+const trimPicker = read('src/components/RecordTrimPicker.jsx');
+const preparedHook = read('src/hooks/usePreparedRecording.js');
+check('Y/K/IDK picker carries explicit Brief mode and 30 seconds through preparation and saving',
+  /id: 'brief', label: 'Brief', seconds: 30\b/.test(trimOptions)
+  && trimPicker.includes('onClick={() => onChange(opt.id)}')
+  && yesNo.includes('TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds')
+  && yesNo.includes('usePreparedRecording(videoBlob, trimSeconds, trimMode)')
+  && yesNo.includes('trimMode={trimMode} trimSeconds={trimSeconds}')
+  && preparedHook.includes('{ trimMode: androidTrimMode }')
+  && saveButtons.includes('saveBlobToDevice(deviceBlob, filename, { trimMode, trimSeconds })')
+  && deviceMediaJs.includes('trimSeconds, trimMode: diagnostics.trimMode')
+  && save.includes('call.getString("trimMode")'));
+check('Explicit Brief must equal 30000ms; invalid/missing intent fails without full fallback',
+  preparationJs.includes("intent.trimMode === 'brief' && seconds !== 30")
+  && preparationJs.includes("intent.trimMode === 'standard' && seconds !== 90")
+  && preparationJs.includes('seconds * 1000')
+  && preparationJs.includes("stage: 'trimIntent'")
+  && save.includes('"brief".equals(trimMode) && (trimSeconds == null || trimSeconds != 30.0)')
+  && save.includes('Math.round(trimSeconds * 1000.0)')
+  && save.includes('diagnostics.put("stage", "trimIntent")'));
+check('Prepared Brief is reused only for matching intent and never trimmed twice',
+  preparationJs.includes('android && preparedBlobs.has(blob) && trimMode !== \'unknown\'')
+  && preparationJs.includes('previous?.trimMode !== intent.trimMode || previous?.requestedTrimMs !== intent.requestedTrimMs')
+  && preparationJs.includes('preparedTrimIntents.set(result, intent)')
+  && preparationJs.indexOf('return Promise.resolve(blob); // Already trimmed') < preparationJs.indexOf('exportNativeRecording(blob, seconds, intent)')
+  && preparationJs.includes('(!seconds && preparedBlobs.has(blob))'));
+const nativeExport = deviceMediaJs.split('export async function exportNativeRecording(')[1] || '';
+check('Input copy integrity failure is inputStaging before native inspection, with UI intent but no invented durations',
+  nativeExport.includes('let diagnostics = safeNativeSaveData(intent)')
+  && nativeExport.includes("let stage = 'inputStaging'")
+  && /try \{\s*input = await writeMediaTempFile\(blob\);\s*stage = 'inspection';/.test(nativeExport)
+  && nativeExport.includes('error.data = { ...diagnostics, stage, ...safeNativeSaveData(error.data) }')
+  && deviceMediaJs.includes('Filesystem.writeFile({ data, path, directory: Directory.Cache })')
+  && /if \(stat.size !== blob.size\) \{\s*const error = new Error\('The device copy did not match the recording. Nothing was saved.'\)/.test(deviceMediaJs)
+  && /await removeMediaTempFile\(uri\)\.catch\(\(\) => \{\}\);\s*throw error;/.test(deviceMediaJs)
+  && !/sourceDurationMs|outputDurationMs|comparisonDurationMs/.test(nativeExport));
+check('Android copy mismatches report only safe staged byte counts and signed staged-minus-source delta',
+  /if \(Capacitor.getPlatform\(\) === 'android' && Number.isSafeInteger\(stat.size\) && stat.size >= 0\) \{\s*Object.assign\(error, \{ data: \{ stagedBytes: stat.size, stagedByteDelta: stat.size - blob.size \} \}\);\s*\}/.test(deviceMediaJs)
+  && diagnostics.includes("typeof data?.stagedByteDelta === 'number' && Number.isFinite(data.stagedByteDelta)")
+  && diagnostics.includes('safe.stagedByteDelta = data.stagedByteDelta')
+  && nativeExport.includes('...safeNativeSaveData(error.data)')
+  && preparationJs.includes("rememberAndroidSaveFailure(blob, error, 'preparation', seconds)")
+  && saveJs.includes('data: safeNativeSaveData(cause.data)'));
+const allowedNumbers = ['androidApi', 'requestedTrimMs', 'requestedStartMs', 'requestedEndMs', 'expectedDurationMs', 'sourceDurationMs', 'outputDurationMs', 'comparisonDurationMs', 'durationToleranceMs', 'sourceBytes', 'outputBytes', 'stagedBytes', 'exportErrorCode'];
+const actualNumbers = [...(diagnostics.match(/const numericKeys = \[([^\]]+)\]/)?.[1] || '').matchAll(/'([^']+)'/g)].map((match) => match[1]);
+check('Diagnostics add only allowlisted trim enums, nonnegative metrics and finite signed delta',
+  actualNumbers.length === allowedNumbers.length && actualNumbers.every((key) => allowedNumbers.includes(key))
+  && diagnostics.includes("['brief', 'standard', 'full', 'unknown'].includes(data?.trimMode)")
+  && diagnostics.includes("typeof data?.durationDifferenceMs === 'number' && Number.isFinite(data.durationDifferenceMs)")
+  && diagnostics.includes('data[key] >= 0')
+  && diagnostics.includes("'trimIntent', 'inputStaging', 'inspection'")
+  && diagnostics.includes('publicMessages.has(message)'));
+check('Native trim window and compared duration diagnostics retain the strict 750ms guard',
+  save.includes('Math.min(requestedTrimMs, sourceInfo.durationMs)')
+  && save.includes('long startMs = Math.max(0L, sourceInfo.durationMs - expectedDurationMs)')
+  && save.includes('diagnostics.put("requestedStartMs", startMs)')
+  && save.includes('diagnostics.put("requestedEndMs", sourceInfo.durationMs)')
+  && save.includes('if (info.durationMs > 0) data.put(prefix + "DurationMs", info.durationMs)')
+  && save.includes('if (expectedDurationMs > 0) diagnostics.put("expectedDurationMs", expectedDurationMs)')
+  && save.includes('diagnostics.put("comparisonDurationMs", measuredDurationMs)')
+  && save.includes('diagnostics.put("durationDifferenceMs", measuredDurationMs - expectedDurationMs)')
+  && save.includes('diagnostics.put("durationToleranceMs", DURATION_TOLERANCE_MS)')
+  && save.includes('DURATION_TOLERANCE_MS = 750L')
+  && save.includes('if (trimRequested && Math.abs(measuredDurationMs - expectedDurationMs) > DURATION_TOLERANCE_MS)'));
 check('Native failures return sanitized metrics and Media3 error code without raw exception messages', save.includes('call.reject(message, "recording_export_failed", diagnostics)') && save.includes('diagnostics.put("exportErrorCode", exception.errorCode)') && save.includes('result.put("androidApi", Build.VERSION.SDK_INT)') && !save.includes('call.reject("Failed to save to MediaStore: " + e.getMessage())'));
 check('Preparation wrapper retains native code and allowlisted data', saveJs.includes('nativeCode: safeNativeSaveCode(cause.code), data: safeNativeSaveData(cause.data)') && saveJs.includes("code: 'recording_preparation_failed'") && deviceMediaJs.includes('...safeNativeSaveData(error.data)'));
 check('Diagnostics are session-local and allowlist only safe primitive metrics/messages', diagnostics.includes('const reports = new WeakMap()') && diagnostics.includes('const numericKeys = [') && diagnostics.includes('const booleanKeys = [') && diagnostics.includes('Number.isFinite(data[key])') && diagnostics.includes('publicMessages.has(message)') && !/localStorage|sessionStorage|base44|fetch\(/.test(diagnostics));

@@ -84,7 +84,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
     }
 
     private void addMediaMetrics(JSObject data, String prefix, MediaInfo info, File file) {
-        data.put(prefix + "DurationMs", info.durationMs);
+        if (info.durationMs > 0) data.put(prefix + "DurationMs", info.durationMs);
         data.put(prefix + "Bytes", file.length());
         data.put(prefix + "HasAudio", info.hasAudio);
         data.put(prefix + "HasVideo", info.hasVideo);
@@ -133,7 +133,18 @@ public class AgesSaveToDevicePlugin extends Plugin {
 
         final long requestedTrimMs = trimMs;
         final JSObject diagnostics = saveDiagnostics("inspection");
+        String suppliedTrimMode = call.getString("trimMode");
+        String trimMode = "brief".equals(suppliedTrimMode) || "standard".equals(suppliedTrimMode)
+                || "full".equals(suppliedTrimMode) ? suppliedTrimMode : "unknown";
+        diagnostics.put("trimMode", trimMode);
         diagnostics.put("requestedTrimMs", requestedTrimMs);
+        if (("brief".equals(trimMode) && (trimSeconds == null || trimSeconds != 30.0))
+                || ("standard".equals(trimMode) && (trimSeconds == null || trimSeconds != 90.0))
+                || ("full".equals(trimMode) && requestedTrimMs != 0)) {
+            diagnostics.put("stage", "trimIntent");
+            call.reject("The selected trim duration is invalid. The original recording is unchanged.", "recording_export_failed", diagnostics);
+            return;
+        }
         final File cacheDirectory = getContext().getCacheDir();
         final Handler mainHandler = new Handler(Looper.getMainLooper());
         new Thread(() -> {
@@ -153,7 +164,11 @@ public class AgesSaveToDevicePlugin extends Plugin {
                         ? Math.min(requestedTrimMs, sourceInfo.durationMs)
                         : sourceInfo.durationMs;
                 long startMs = Math.max(0L, sourceInfo.durationMs - expectedDurationMs);
-                diagnostics.put("expectedDurationMs", expectedDurationMs);
+                if (expectedDurationMs > 0) diagnostics.put("expectedDurationMs", expectedDurationMs);
+                if (requestedTrimMs > 0) {
+                    diagnostics.put("requestedStartMs", startMs);
+                    diagnostics.put("requestedEndMs", sourceInfo.durationMs);
+                }
                 Log.i(TAG, "Preparation: audioOnly=" + audioOnly + " requestedTrimMs=" + requestedTrimMs
                         + " clip=" + (requestedTrimMs > 0) + " startMs=" + startMs
                         + " endMs=" + sourceInfo.durationMs + " expectedDurationMs=" + expectedDurationMs);
@@ -169,7 +184,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
                         call, source, output, sourceInfo, audioOnly, requestedTrimMs > 0,
                         startMs, sourceInfo.durationMs, expectedDurationMs, mainHandler, diagnostics));
             } catch (Exception error) {
-                Log.e(TAG, "Could not inspect the Android recording before export.", error);
+                Log.e(TAG, "Could not inspect the Android recording before export.");
                 String message = error instanceof MediaPreparationException
                         ? error.getMessage()
                         : "Android could not read this recording's duration or media tracks. The original is unchanged. Try again with a shorter recording.";
@@ -228,7 +243,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
 
                         @Override
                         public void onError(Composition composition, ExportResult exportResult, ExportException exception) {
-                            Log.e(TAG, "Media3 could not convert the Android recording.", exception);
+                            Log.e(TAG, "Media3 could not convert the Android recording.");
                             output.delete();
                             diagnostics.put("exportErrorCode", exception.errorCode);
                             call.reject("Android could not convert this recording. Your original is unchanged. Try again with a shorter recording.", "recording_export_failed", diagnostics);
@@ -237,7 +252,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
                     .build();
             transformer.start(editedMediaItem, output.getAbsolutePath());
         } catch (Exception error) {
-            Log.e(TAG, "Could not start the Android media export.", error);
+            Log.e(TAG, "Could not start the Android media export.");
             output.delete();
             call.reject("Android could not start the recording export. Your original is unchanged. Try again.", "recording_export_failed", diagnostics);
         }
@@ -282,6 +297,11 @@ public class AgesSaveToDevicePlugin extends Plugin {
                 long measuredDurationMs = outputInfo.declaredDurationMs > 0
                         ? outputInfo.declaredDurationMs
                         : outputInfo.durationMs;
+                diagnostics.put("comparisonDurationMs", measuredDurationMs);
+                if (expectedDurationMs > 0) {
+                    diagnostics.put("durationDifferenceMs", measuredDurationMs - expectedDurationMs);
+                }
+                if (trimRequested) diagnostics.put("durationToleranceMs", DURATION_TOLERANCE_MS);
                 Log.i(TAG, "Validation: expectedDurationMs=" + expectedDurationMs
                         + " measuredDurationMs=" + measuredDurationMs
                         + " outputDurationMs=" + outputInfo.durationMs + " outputBytes=" + output.length()
@@ -297,7 +317,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
                 result.put("diagnostics", diagnostics);
                 mainHandler.post(() -> call.resolve(result));
             } catch (Exception error) {
-                Log.e(TAG, "The Android media export failed validation.", error);
+                Log.e(TAG, "The Android media export failed validation.");
                 output.delete();
                 String message = error instanceof MediaPreparationException
                         ? error.getMessage()

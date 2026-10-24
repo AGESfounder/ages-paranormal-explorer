@@ -17,7 +17,7 @@ import { buildAndroidSaveReport, copySaveReport } from '@/lib/androidSaveDiagnos
  *                  directly to Files, without AVFoundation preparation. Local
  *                  save errors do not block its independent Journal actions.
  */
-export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, originalBlob = null, devicePrefix, preparing = false, preparationError = '', iosAudioOriginalToFiles = false }) {
+export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, originalBlob = null, devicePrefix, preparing = false, preparationError = '', iosAudioOriginalToFiles = false, trimMode = 'unknown', trimSeconds = null }) {
   const [deviceSaving, setDeviceSaving] = useState(false);
   const [savedToDevice, setSavedToDevice] = useState('');
   const [deviceError, setDeviceError] = useState('');
@@ -59,7 +59,11 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
       // Never let an unrecognised audio-only recording enter the video/Photos route.
       if (directAudioFiles && !input.type.startsWith('audio/')) throw new Error('The audio format could not be identified. Your original is kept; you can still save it to your Journal.');
       const filename = buildDeviceFilename(devicePrefix || 'evidence', input, directAudioFiles ? 'bin' : 'webm');
-      const result = recover || directAudioFiles ? await recoverOriginalToDevice(originalBlob, filename) : await saveBlobToDevice(deviceBlob, filename);
+      const result = recover || directAudioFiles
+        ? await recoverOriginalToDevice(originalBlob, filename)
+        : isAndroid
+          ? await saveBlobToDevice(deviceBlob, filename, { trimMode, trimSeconds })
+          : await saveBlobToDevice(deviceBlob, filename);
       const labels = { photos: 'Saved to Photos', gallery: 'Saved to Gallery', files: 'Saved to Files', music: 'Saved to Music', downloads: 'Download Started' };
       setSavedToDevice(labels[result.destination] || 'Saved to Device');
       setDeviceNote(result.note || labels[result.destination] || 'Saved to Device');

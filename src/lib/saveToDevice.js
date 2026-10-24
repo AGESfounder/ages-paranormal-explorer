@@ -17,7 +17,7 @@ function webDownload(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export async function saveBlobToDevice(blob, filename) {
+export async function saveBlobToDevice(blob, filename, { trimMode = 'unknown', trimSeconds = null } = {}) {
   if (!blob?.size) throw new Error('There is no recording to save.');
   let prepared;
   // Only preparation failures expose original recovery. Permission, staging and
@@ -25,7 +25,7 @@ export async function saveBlobToDevice(blob, filename) {
   try {
     // Android video and WebM audio require real native conversion before staging.
     // Journal uploads, browser export and iOS original-to-Files keep their paths.
-    prepared = baseMediaMime(blob.type).startsWith('image/') ? blob : await prepareRecording(blob, null, undefined, { forDeviceSave: true });
+    prepared = baseMediaMime(blob.type).startsWith('image/') ? blob : await prepareRecording(blob, Capacitor.getPlatform() === 'android' ? trimSeconds : null, undefined, { forDeviceSave: true, trimMode });
     const preparedMime = baseMediaMime(prepared.type);
     if (!preparedMime.startsWith('audio/') && !preparedMime.startsWith('image/')) assertPreparedVideoType(prepared.type);
     if (Capacitor.getPlatform() === 'android' && preparedMime === 'audio/webm') {
