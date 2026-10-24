@@ -1222,7 +1222,9 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       setParkingMove(null);
       toast({
         title: 'Parking Updated',
-        description: 'The stops have been re-ordered from your new parking spot.',
+        description: result.orderIsFinal
+          ? 'The lot now matches this spot, with the validated tour order unchanged.'
+          : 'The stops have been re-ordered from your new parking spot.',
       });
     } catch (e) {
       toast({ title: 'Parking Update Failed', description: e?.message || 'Please try again.', variant: 'destructive' });

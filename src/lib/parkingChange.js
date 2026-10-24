@@ -1,5 +1,6 @@
 import { base44 } from '@/api/base44Client';
 import { enforceWalkingDistance } from '@/lib/routeOptimizer';
+import { reverseGeocodeStreetAddress } from '@/lib/reverseGeocode';
 import { verifyStopLocation } from '@/lib/verifyStop';
 
 // Changing WHERE a tour starts changes how it should be walked, so a parking
@@ -10,7 +11,10 @@ import { verifyStopLocation } from '@/lib/verifyStop';
 //
 // The lot's own details are what the tour displays (name, type, cost), so they
 // are confirmed with the new location and written here as one change, together
-// with the tour's copy of the parking fields.
+// with the tour's copy of the parking fields and the spot's street address.
+//
+// A fully validated tour is the exception: its parking spot is fixed, so the
+// order the tour already has is kept exactly as it is.
 
 export const PARKING_TYPES = [
   { value: 'street', label: 'Street Parking' },
@@ -52,41 +56,52 @@ export function parseParkingCost(cost) {
 }
 
 // Apply a parking location change: the new coordinates, the lot's confirmed
-// details, and the stops re-ordered from the new lot. `details` is
+// details, the refreshed street address, and — for a tour that is not yet fully
+// validated — the stops re-laid from the new lot. `details` is
 // { name, parking_type, costKind, costDetails }.
 export async function changeParkingLocation({ tour, stops, parkingStopId, latitude, longitude, details, userId, walkingLimit }) {
   const name = String(details.name || '').trim();
   const parkingCost = composeParkingCost(details.costKind, details.costDetails);
+  // A fully validated tour keeps the order it has — its parking spot is locked
+  // to the spot the tour was validated around.
+  const orderIsFinal = tour.verified === true;
 
   // Coordinates and verification first — this also re-checks whether the whole
-  // tour is now validated — then the lot's own details.
-  await verifyStopLocation(parkingStopId, tour.id, latitude, longitude, userId);
+  // tour is now validated — then the lot's own details. The street address is
+  // looked up alongside, so the stored address matches the new coordinates.
+  const [, streetAddress] = await Promise.all([
+    verifyStopLocation(parkingStopId, tour.id, latitude, longitude, userId),
+    reverseGeocodeStreetAddress(latitude, longitude),
+  ]);
   await base44.entities.TourStop.update(parkingStopId, {
     name,
     parking_type: details.parking_type,
     parking_cost: parkingCost,
+    ...(streetAddress ? { address: streetAddress } : {}),
   });
 
-  // Re-lay the stops from the new lot. Parking and the shuttle drop-off are
-  // never part of the order itself.
+  // Parking and the shuttle drop-off are never part of the order itself.
   const tourStopsOnly = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-  const reordered = await enforceWalkingDistance(
-    tourStopsOnly,
-    tour.tour_type,
-    { lat: tour.start_latitude, lon: tour.start_longitude },
-    { walkingLimit, parkingCoords: { lat: latitude, lon: longitude } },
-  );
-  for (const s of reordered) {
-    const existing = tourStopsOnly.find(ts => ts.id === s.id);
-    if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
-      await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
+  let ordered = tourStopsOnly;
+  let orderedType = null;
+  if (!orderIsFinal) {
+    ordered = await enforceWalkingDistance(
+      tourStopsOnly,
+      tour.tour_type,
+      { lat: tour.start_latitude, lon: tour.start_longitude },
+      { walkingLimit, parkingCoords: { lat: latitude, lon: longitude } },
+    );
+    for (const s of ordered) {
+      const existing = tourStopsOnly.find(ts => ts.id === s.id);
+      if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
+        await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
+      }
     }
+    const methods = new Set(ordered.map(s => s.travel_method));
+    orderedType = methods.has('driving') && methods.has('walking') ? 'mixed'
+      : methods.has('driving') ? 'driving' : 'walking';
   }
 
-  const methods = new Set(reordered.map(s => s.travel_method));
-  const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed'
-    : methods.has('driving') ? 'driving' : 'walking';
-  const newFirstName = reordered[0]?.name;
   const tourUpdates = {
     parking_name: name,
     parking_type: details.parking_type,
@@ -94,13 +109,17 @@ export async function changeParkingLocation({ tour, stops, parkingStopId, latitu
     parking_latitude: latitude,
     parking_longitude: longitude,
     parking_verified: true,
+  };
+  if (streetAddress) tourUpdates.parking_address = streetAddress;
+  if (!orderIsFinal) {
     // A new lot re-anchors the route: neither the order freeze held during
     // validation nor a hand-made order can survive it.
-    user_reordered: false,
-    manual_reorder: false,
-  };
-  if (correctedType !== tour.tour_type) tourUpdates.tour_type = correctedType;
-  if (newFirstName && newFirstName !== tour.start_location_name) tourUpdates.start_location_name = newFirstName;
+    tourUpdates.user_reordered = false;
+    tourUpdates.manual_reorder = false;
+    if (orderedType && orderedType !== tour.tour_type) tourUpdates.tour_type = orderedType;
+    const newFirstName = ordered[0]?.name;
+    if (newFirstName && newFirstName !== tour.start_location_name) tourUpdates.start_location_name = newFirstName;
+  }
   await base44.entities.Tour.update(tour.id, tourUpdates);
 
   return {
@@ -113,8 +132,10 @@ export async function changeParkingLocation({ tour, stops, parkingStopId, latitu
       user_verified: true,
       geocoded: true,
       needs_placement: false,
+      ...(streetAddress ? { address: streetAddress } : {}),
     },
-    reordered,
+    reordered: ordered,
+    orderIsFinal,
     tourUpdates,
   };
 }
