@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Lock, Globe, Loader2, Download, Check, AlertCircle } from 'lucide-react';
+import { Lock, Globe, Loader2, Download, Check, AlertCircle, Copy } from 'lucide-react';
 import { saveBlobToDevice, recoverOriginalToDevice, buildDeviceFilename } from '@/lib/saveToDevice';
 import { Capacitor } from '@capacitor/core';
+import { buildAndroidSaveReport, copySaveReport } from '@/lib/androidSaveDiagnostics';
 
 /**
  * Save destination picker for evidence.
@@ -22,11 +23,29 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
   const [deviceError, setDeviceError] = useState('');
   const [deviceNote, setDeviceNote] = useState('');
   const [savePreparationError, setSavePreparationError] = useState('');
+  const [copyingDiagnostics, setCopyingDiagnostics] = useState(false);
+  const [diagnosticsNote, setDiagnosticsNote] = useState('');
+  const isAndroid = Capacitor.getPlatform() === 'android';
   const failedPreparation = preparationError || savePreparationError;
   const directAudioFiles = iosAudioOriginalToFiles && Capacitor.getPlatform() === 'ios';
   const blocked = saving || deviceSaving || preparing || !!preparationError || (!directAudioFiles && !!savePreparationError);
   const canRecover = Capacitor.getPlatform() === 'ios' && originalBlob?.size > 0 && !!failedPreparation;
-  useEffect(() => { setSavedToDevice(''); setDeviceNote(''); setDeviceError(''); setSavePreparationError(''); }, [deviceBlob, originalBlob]);
+  useEffect(() => { setSavedToDevice(''); setDeviceNote(''); setDeviceError(''); setSavePreparationError(''); setDiagnosticsNote(''); }, [deviceBlob, originalBlob]);
+
+  const handleCopyDiagnostics = async () => {
+    if (copyingDiagnostics) return;
+    setCopyingDiagnostics(true);
+    setDiagnosticsNote('');
+    try {
+      const report = await buildAndroidSaveReport(deviceError ? deviceBlob : originalBlob, deviceError || preparationError);
+      const copied = await copySaveReport(report);
+      setDiagnosticsNote(copied ? 'Diagnostics copied. Share them with the Build 25 tester report.' : 'Could not copy diagnostics. Try Copy save diagnostics again.');
+    } catch {
+      setDiagnosticsNote('Could not copy diagnostics. Try Copy save diagnostics again.');
+    } finally {
+      setCopyingDiagnostics(false);
+    }
+  };
 
   const handleDevice = async (recover = false) => {
     const input = recover || directAudioFiles ? originalBlob : deviceBlob;
@@ -35,12 +54,13 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
     setDeviceError('');
     setSavedToDevice('');
     setDeviceNote('');
+    setDiagnosticsNote('');
     try {
       // Never let an unrecognised audio-only recording enter the video/Photos route.
       if (directAudioFiles && !input.type.startsWith('audio/')) throw new Error('The audio format could not be identified. Your original is kept; you can still save it to your Journal.');
       const filename = buildDeviceFilename(devicePrefix || 'evidence', input, directAudioFiles ? 'bin' : 'webm');
       const result = recover || directAudioFiles ? await recoverOriginalToDevice(originalBlob, filename) : await saveBlobToDevice(deviceBlob, filename);
-      const labels = { photos: 'Saved to Photos', gallery: 'Saved to Gallery', files: 'Saved to Files', downloads: 'Download Started' };
+      const labels = { photos: 'Saved to Photos', gallery: 'Saved to Gallery', files: 'Saved to Files', music: 'Saved to Music', downloads: 'Download Started' };
       setSavedToDevice(labels[result.destination] || 'Saved to Device');
       setDeviceNote(result.note || labels[result.destination] || 'Saved to Device');
       if (!recover) setSavePreparationError('');
@@ -52,7 +72,7 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
     }
   };
 
-  const nativeLabel = directAudioFiles ? 'Files / On My iPhone' : Capacitor.isNativePlatform() ? 'Photos / Gallery / Files' : 'Downloads';
+  const nativeLabel = directAudioFiles ? 'Files / On My iPhone' : isAndroid ? 'Gallery / Music' : Capacitor.isNativePlatform() ? 'Photos / Gallery / Files' : 'Downloads';
 
   return (
     <div className="space-y-2">
@@ -104,6 +124,16 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
         <p role="alert" className="text-xs text-destructive text-pretty flex items-center justify-center gap-1"><AlertCircle className="h-3 w-3 shrink-0" /> {deviceError}</p>
       ) : (deviceBlob || canRecover) && (
         <p role="status" className="text-xs text-muted-foreground text-center text-pretty">{deviceNote || (directAudioFiles ? 'Copies the unchanged original audio to Files / On My iPhone, not Photos — no conversion or service needed. You can save to your Journal separately.' : `Saves the recording to your device's ${nativeLabel} now — no service needed. Save to your Journal later once you're back in range.`)}</p>
+      )}
+      {isAndroid && (deviceError || preparationError) && (
+        <div className="space-y-1 text-xs">
+          <button type="button" onClick={handleCopyDiagnostics} disabled={copyingDiagnostics || deviceSaving || preparing} className="min-h-11 w-full flex items-center justify-center gap-2 rounded-lg border border-border px-3 text-foreground hover:bg-accent active:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">
+            {copyingDiagnostics ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : <Copy className="h-4 w-4" />}
+            Copy save diagnostics
+          </button>
+          <p className="text-muted-foreground text-center text-pretty">Copies technical save details only, not your recording or account details.</p>
+          {diagnosticsNote && <p role="status" className="text-muted-foreground text-center text-pretty">{diagnosticsNote}</p>}
+        </div>
       )}
     </div>
   );

@@ -51,6 +51,9 @@
 
 ## Android recording/export route
 - The user selected the full Android-native recording reliability fix. Keep the existing Vite + Capacitor app; do not convert screens to Expo/React Native.
-- Android video/audio preparation may use AndroidX Media3 through the existing Capacitor save plugin. Keep the work Android-only; leave the iOS Swift plugin, iOS build settings, and web browser recording exporter unchanged.
-- CatDoes cannot compile or test the Android Java/Gradle path for this target. Do not run native builds, Codemagic, or Play Store uploads. Report native code as written but unverified until the user builds it in Android Studio and tests a physical Android phone and tablet.
+- Android video/audio preparation uses AndroidX Media3 through the existing Capacitor save plugin. Audio-only recorder paths must use the recorder or emitted chunk's actual MIME type, not synthetic MP4/video fallbacks.
+- Full untrimmed Android exports may proceed when source duration metadata is unavailable if source tracks are readable; validate the transformed output's expected tracks and positive duration. Keep strict duration/sample-timeline checks for trimmed exports.
+- Prepared Android audio is M4A in `Music/AGES`; the save result and UI should report that destination. MediaStore writes use pending rows where supported and remove an inserted row after a failed write.
+- An Android-only `Copy save diagnostics` action is available beside save errors. Reports are session-local and include build/platform, stage, MIME/size, trim request, and safe native diagnostics; never include recording bytes, paths, or account data.
+- Android `versionCode` 25 is prepared for the next physical-device test build. CatDoes cannot compile or test the Android Java/Gradle path for this target. Do not run native builds, Codemagic, or Play Store uploads. Report native code as written but unverified until the user builds it in Android Studio and tests a physical Android phone and tablet.
 - Preserve visible save errors and the original recording for retry when preparation or Journal save fails. Avoid claiming Media3 can process every device codec or long/unseekable source until physical-device testing confirms it.

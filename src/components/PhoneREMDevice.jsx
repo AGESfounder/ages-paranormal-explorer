@@ -415,7 +415,8 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push({ blob: e.data, t: Date.now() }); };
       mr.onstop = () => {
         stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
-        const blob = new Blob(videoChunksRef.current.map((c) => c.blob), { type: mimeType || (canvasCapture ? 'video/webm' : 'audio/mp4') });
+        const actualMime = mr.mimeType || videoChunksRef.current.find((c) => c.blob.type)?.blob.type || mimeType || (canvasCapture ? 'video/webm' : 'audio/webm');
+        const blob = new Blob(videoChunksRef.current.map((c) => c.blob), { type: actualMime });
         videoBlobRef.current = blob;
         setVideoBlob(blob);
         canvasStream.getTracks().forEach(t => t.stop());

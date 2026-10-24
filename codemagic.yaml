@@ -19,7 +19,7 @@ workflows:
         script: npm run build
       - name: Sync the existing web app into Capacitor Android
         script: npx cap sync android
-      - name: Verify Android Version 23 and native plugin wiring before Gradle
+      - name: Verify Android Version 25 and native plugin wiring before Gradle
         script: |
           set -eu
           cd "$CM_BUILD_DIR"

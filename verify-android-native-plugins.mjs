@@ -20,7 +20,7 @@ const java = (path) => read(path).replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/
 const nativePath = 'android/app/src/main/java/com/ages/explorer/';
 
 const gradle = read('android/app/build.gradle');
-for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '24'], ['versionName', '"1.0"']]) {
+for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '25'], ['versionName', '"1.0"']]) {
   const values = [...gradle.matchAll(new RegExp(`^\\s*${key}\\s+([^\\r\\n]+)`, 'gm'))];
   check(`Android ${key} is exactly ${value}`, values.length === 1 && values[0][1].trim() === value);
 }
@@ -42,7 +42,9 @@ check('Save requests permission only on API <= 28 and returns before writing', g
 check('Save has only one runtime permission request site', (save.match(/requestPermission\w*\(/g) ?? []).length === 1);
 check('Permission callback rejects denial and resumes save only after grant', /@PermissionCallback\s+private void legacyStoragePermissionCallback\(PluginCall call\)\s*\{\s*if\s*\(getPermissionState\("legacyStorage"\)\s*!=\s*PermissionState\.GRANTED\)\s*\{\s*call\.reject\("[^"\n]+"\);\s*return;\s*\}\s*saveMedia\(call\);\s*\}/.test(save));
 check('Save preserves filePath/mediaType/displayName inputs and result', ['filePath', 'mediaType', 'displayName'].every((key) => save.includes(`call.getString("${key}")`)) && save.includes('result.put("success", true)') && save.includes('result.put("uri", uri.toString())') && save.includes('call.resolve(result)'));
-check('Save retains modern scoped MediaStore insert/copy behavior', /if\s*\(Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.Q\)\s*\{\s*values\.put\(MediaStore\.MediaColumns\.RELATIVE_PATH, subDir\);\s*\}/.test(save) && ['MediaStore.Images.Media.EXTERNAL_CONTENT_URI', 'MediaStore.Video.Media.EXTERNAL_CONTENT_URI', 'MediaStore.Audio.Media.EXTERNAL_CONTENT_URI', 'resolver.insert(collection, values)', 'resolver.openOutputStream(uri)', 'out.write(buf, 0, len)'].every((value) => save.includes(value)));
+check('Save retains modern scoped MediaStore insert/copy behavior', /if\s*\(Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.Q\)\s*\{\s*values\.put\(MediaStore\.MediaColumns\.RELATIVE_PATH, subDir\);\s*values\.put\(MediaStore\.MediaColumns\.IS_PENDING, 1\);\s*\}/.test(save) && ['MediaStore.Images.Media.EXTERNAL_CONTENT_URI', 'MediaStore.Video.Media.EXTERNAL_CONTENT_URI', 'MediaStore.Audio.Media.EXTERNAL_CONTENT_URI', 'resolver.insert(collection, values)', 'resolver.openOutputStream(uri)', 'out.write(buf, 0, len)'].every((value) => save.includes(value)));
+check('MediaStore publishes only after the copy closes, and deletes inserted rows on failure', save.includes('published.put(MediaStore.MediaColumns.IS_PENDING, 0)') && save.indexOf('resolver.update(uri, published, null, null)') > save.indexOf('out.write(buf, 0, len)') && save.includes('resolver.delete(uri, null, null)') && /if \(out == null\)\s*\{\s*throw new java\.io\.IOException/.test(save) && /if \(uri == null\)\s*\{\s*throw new java\.io\.IOException/.test(save));
+check('Android audio returns its Music destination and API-aware location note', save.includes('result.put("destination", isAudio ? "music" : "gallery")') && save.includes('Saved to Music/AGES.') && save.includes("Saved to your device's Music collection."));
 const saveJs = read('src/lib/saveToDevice.js');
 const deviceMediaJs = read('src/lib/deviceMedia.js');
 check('Shared JS Save seam registers AgesSaveToDevice and calls saveMedia', deviceMediaJs.includes("registerPlugin('AgesSaveToDevice')") && saveJs.includes("from '@/lib/deviceMedia'") && saveJs.includes('deviceMedia.saveMedia('));
@@ -65,6 +67,42 @@ check('Full Android video preparation precedes native-save staging and MediaStor
 check('JS uses normalized audio/video prepareMedia routing and reads output bytes', deviceMediaJs.includes("deviceMedia.prepareMedia({ filePath: input, mediaType: audioOnly ? 'audio' : 'video', trimSeconds })") && deviceMediaJs.includes('const mimeType = baseMediaMime(blob.type)') && deviceMediaJs.includes("const audioOnly = mimeType.startsWith('audio/')") && deviceMediaJs.includes('output = result.filePath') && deviceMediaJs.includes('Filesystem.readFile({ path: output })') && deviceMediaJs.includes('type: result.mimeType'));
 check('Android rejects non-MP4 video and non-AAC/MP4 prepared audio', deviceMediaJs.includes("Capacitor.getPlatform() === 'android' && baseMediaMime(mimeType) !== 'video/mp4'") && deviceMediaJs.includes("Capacitor.getPlatform() === 'android' && baseMediaMime(mimeType) !== 'audio/mp4'") && deviceMediaJs.includes('assertPreparedVideoType(result.mimeType)') && deviceMediaJs.includes('assertPreparedAudioType(result.mimeType)') && deviceMediaJs.includes("'audio/mp4': 'm4a'") && saveJs.includes('mediaExtension(prepared)'));
 check('Failed preparation is retryable and temporary copies are cleaned up', preparationJs.includes('exports.delete(key); throw error;') && deviceMediaJs.includes('finally') && deviceMediaJs.includes('removeMediaTempFile(uri).catch(() => {})'));
+
+check('Full sources can reach transformation without strict duration evidence; trims retain it', save.includes('inspectMedia(source, "source", requestedTrimMs > 0)') && /if \(requireExactDuration\)\s*\{\s*scanTimelines\(extractor, tracks\)/.test(save) && save.includes('durationMs = resolveDurationMs(containerDurationMs, tracks, stage)') && save.includes('durationMs = Math.max(0L, containerDurationMs)'));
+check('All outputs require positive duration and expected tracks, with exact measured-duration checks only for trims', save.includes('inspectMedia(output, "output", trimRequested)') && save.includes('if (outputInfo.durationMs <= 0)') && /long measuredDurationMs = outputInfo\.declaredDurationMs > 0\s*\? outputInfo\.declaredDurationMs\s*: outputInfo\.durationMs;/.test(save) && save.includes('if (trimRequested && Math.abs(measuredDurationMs - expectedDurationMs) > DURATION_TOLERANCE_MS)') && save.includes('DURATION_TOLERANCE_MS = 750L') && save.includes('!outputInfo.hasAudio || outputInfo.hasVideo || !outputInfo.hasAacAudio') && save.includes('!outputInfo.hasVideo || !outputInfo.hasH264Video') && save.includes('sourceHadAudio && (!outputInfo.hasAudio || !outputInfo.hasAacAudio)'));
+// Scope this contract to the real inspection/resolver methods. Container metadata
+// is advisory; trims require a measurable sample span, not matching headers.
+const inspection = save.split('private MediaInfo inspectMedia(')[1]?.split('private long readMetadataDurationMs(')[0] ?? '';
+const durationResolver = save.split('private long resolveDurationMs(')[1]?.split('private MediaPreparationException durationEvidenceError(')[0] ?? '';
+const sampleScan = save.split('private void scanTimelines(')[1]?.split('private long resolveDurationMs(')[0] ?? '';
+check('Full exports require readable tracks; trims require bounded sample-backed duration with advisory metadata',
+  save.includes('inspectMedia(source, "source", requestedTrimMs > 0)')
+  && /if \(!hasAudio && !hasVideo\)\s*\{\s*throw new MediaPreparationException\(/.test(inspection)
+  && /durationMs = Math\.max\(0L, containerDurationMs\);\s*if \(requireExactDuration\)\s*\{\s*scanTimelines\(extractor, tracks\);/.test(inspection)
+  && (inspection.match(/scanTimelines\(/g) ?? []).length === 1
+  && inspection.includes('durationMs = resolveDurationMs(containerDurationMs, tracks, stage)')
+  && /if \(\+\+sampleCount > MAX_DURATION_SCAN_SAMPLES\)\s*\{\s*throw new MediaPreparationException\(/.test(sampleScan)
+  && sampleScan.includes('track.addSample(extractor.getSampleTime())')
+  && /if \(track.sampleCount < 2 \|\| track.lastPtsUs <= track.firstPtsUs\)\s*\{[^}]*continue;\s*\}/.test(durationResolver)
+  && durationResolver.includes('long timelineMs = track.lastPtsUs / 1000L;')
+  && /if \(declaredMs > 0 && Math.abs\(declaredMs - timelineMs\) <= DURATION_TOLERANCE_MS\)\s*\{\s*supportedMs = declaredMs;\s*\} else \{[\s\S]*?supportedMs = timelineMs;\s*\}/.test(durationResolver)
+  && durationResolver.includes('resolvedMs = Math.max(resolvedMs, supportedMs)')
+  && durationResolver.includes('if (resolvedMs <= 0) throw durationEvidenceError();')
+  && !/supportedMs = containerMs|resolvedMs = containerMs/.test(durationResolver)
+  && save.includes('inspectMedia(output, "output", trimRequested)')
+  && /if \(outputInfo.durationMs <= 0\)\s*\{\s*throw new MediaPreparationException\(/.test(save)
+  && save.includes('if (trimRequested && Math.abs(measuredDurationMs - expectedDurationMs) > DURATION_TOLERANCE_MS)'));
+for (const path of ['src/components/PhoneREMDevice.jsx', 'src/components/AcousticAnomalySweeper.jsx', 'src/hooks/useSweeperRecorder.js', 'src/components/SiegConsole.jsx']) {
+  const recorder = read(path);
+  check(`${path} prefers actual recorder/chunk MIME without guessing MP4 audio`, /mr\.mimeType \|\| [^\n]+find\(\(c\) => c\.blob\.type\)\?\.blob\.type/.test(recorder) && recorder.includes("'audio/webm' : 'video/webm'") || (recorder.includes("mr.mimeType || ") && recorder.includes('find((c) => c.blob.type)?.blob.type') && /(?:canvasCapture|picture) \? 'video\/webm' : 'audio\/webm'/.test(recorder)));
+}
+const diagnostics = read('src/lib/androidSaveDiagnostics.js');
+const saveButtons = read('src/components/EvidenceSaveButtons.jsx');
+check('Native failures return sanitized metrics and Media3 error code without raw exception messages', save.includes('call.reject(message, "recording_export_failed", diagnostics)') && save.includes('diagnostics.put("exportErrorCode", exception.errorCode)') && save.includes('result.put("androidApi", Build.VERSION.SDK_INT)') && !save.includes('call.reject("Failed to save to MediaStore: " + e.getMessage())'));
+check('Preparation wrapper retains native code and allowlisted data', saveJs.includes('nativeCode: safeNativeSaveCode(cause.code), data: safeNativeSaveData(cause.data)') && saveJs.includes("code: 'recording_preparation_failed'") && deviceMediaJs.includes('...safeNativeSaveData(error.data)'));
+check('Diagnostics are session-local and allowlist only safe primitive metrics/messages', diagnostics.includes('const reports = new WeakMap()') && diagnostics.includes('const numericKeys = [') && diagnostics.includes('const booleanKeys = [') && diagnostics.includes('Number.isFinite(data[key])') && diagnostics.includes('publicMessages.has(message)') && !/localStorage|sessionStorage|base44|fetch\(/.test(diagnostics));
+check('Copy report includes real app/build, Android API, source MIME/size and trim evidence', diagnostics.includes('App.getInfo()') && diagnostics.includes('savePlugin.getSaveInfo()') && ['appVersion:', 'build:', 'androidApi:', 'sourceMime:', 'sourceBytes:', 'nativeErrorCode:', 'nativeErrorMessage:', 'stage:', 'requestedTrimMs'].every((field) => diagnostics.includes(field)) && preparationJs.includes("rememberAndroidSaveFailure(blob, error, 'preparation', seconds)"));
+check('Copy diagnostics is Android-only beside save/preparation errors and preserves visible errors/retry', saveButtons.includes("const isAndroid = Capacitor.getPlatform() === 'android'") && saveButtons.includes('isAndroid && (deviceError || preparationError)') && saveButtons.includes('Copy save diagnostics') && saveButtons.includes('role="alert"') && saveButtons.includes("'Retry preparation'") && saveButtons.includes("music: 'Saved to Music'"));
 
 const toolkit = read('src/pages/Toolkit.jsx');
 const recorderSave = toolkit.split('const saveRecording = async (isPrivate = true) => {')[1]?.split('const fetchWeatherByCoords')[0] ?? '';

@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { deviceMedia, baseMediaMime, mediaExtension, writeMediaTempFile, removeMediaTempFile, assertPreparedVideoType } from '@/lib/deviceMedia';
 import { prepareRecording } from '@/lib/prepareRecording';
+import { rememberAndroidSaveFailure, safeNativeSaveCode, safeNativeSaveData } from '@/lib/androidSaveDiagnostics';
 
 // Device-local only. Native errors are shown to the user, never hidden behind
 // a browser download that iOS may not actually save.
@@ -35,20 +36,31 @@ export async function saveBlobToDevice(blob, filename) {
     const guidance = Capacitor.getPlatform() === 'android'
       ? 'The recording could not be prepared. Your original is still available. Try Save to Device again.'
       : 'The recording could not be prepared. Retry or recover the original.';
-    throw Object.assign(new Error(cause.message || guidance), { code: 'recording_preparation_failed' });
+    const error = Object.assign(new Error(cause.message || guidance), {
+      code: 'recording_preparation_failed',
+      ...(Capacitor.getPlatform() === 'android' ? { nativeCode: safeNativeSaveCode(cause.code), data: safeNativeSaveData(cause.data) } : {}),
+    });
+    rememberAndroidSaveFailure(blob, error);
+    throw error;
   }
   const displayName = filename.replace(/\.[^.]+$/, `.${mediaExtension(prepared)}`);
   if (!Capacitor.isNativePlatform()) {
     webDownload(prepared, displayName);
     return { destination: 'downloads', note: 'Download started. Check your browser downloads.' };
   }
-  const uri = await writeMediaTempFile(prepared);
+  let uri;
+  let stage = 'staging';
   try {
+    uri = await writeMediaTempFile(prepared);
     const preparedMime = baseMediaMime(prepared.type);
     const mediaType = preparedMime.startsWith('audio/') ? 'audio' : preparedMime.startsWith('image/') ? 'image' : 'video';
+    stage = 'mediaStore';
     const result = await deviceMedia.saveMedia({ filePath: uri, mediaType, displayName, prepared: true });
     if (!result?.success) throw new Error('The device did not confirm the save.');
-    return { ...result, destination: result.destination || (mediaType === 'audio' ? 'files' : 'gallery') };
+    return { ...result, destination: result.destination || (mediaType === 'audio' ? (Capacitor.getPlatform() === 'android' ? 'music' : 'files') : 'gallery') };
+  } catch (error) {
+    rememberAndroidSaveFailure(blob, error, stage);
+    throw error;
   } finally {
     await removeMediaTempFile(uri).catch(() => {});
   }

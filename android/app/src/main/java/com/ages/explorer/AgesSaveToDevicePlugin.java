@@ -69,6 +69,29 @@ public class AgesSaveToDevicePlugin extends Plugin {
     private static final int MAX_DURATION_SCAN_SAMPLES = 100000;
     private static final long MAX_UNSEEKABLE_PREFIX_BYTES = 64L * 1024L * 1024L;
 
+    @PluginMethod
+    public void getSaveInfo(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("androidApi", Build.VERSION.SDK_INT);
+        call.resolve(result);
+    }
+
+    private JSObject saveDiagnostics(String stage) {
+        JSObject data = new JSObject();
+        data.put("androidApi", Build.VERSION.SDK_INT);
+        data.put("stage", stage);
+        return data;
+    }
+
+    private void addMediaMetrics(JSObject data, String prefix, MediaInfo info, File file) {
+        data.put(prefix + "DurationMs", info.durationMs);
+        data.put(prefix + "Bytes", file.length());
+        data.put(prefix + "HasAudio", info.hasAudio);
+        data.put(prefix + "HasVideo", info.hasVideo);
+        data.put(prefix + "HasAacAudio", info.hasAacAudio);
+        data.put(prefix + "HasH264Video", info.hasH264Video);
+    }
+
     @PermissionCallback
     private void legacyStoragePermissionCallback(PluginCall call) {
         if (getPermissionState("legacyStorage") != PermissionState.GRANTED) {
@@ -109,11 +132,16 @@ public class AgesSaveToDevicePlugin extends Plugin {
                         : Math.max(1L, Math.round(trimSeconds * 1000.0));
 
         final long requestedTrimMs = trimMs;
+        final JSObject diagnostics = saveDiagnostics("inspection");
+        diagnostics.put("requestedTrimMs", requestedTrimMs);
         final File cacheDirectory = getContext().getCacheDir();
         final Handler mainHandler = new Handler(Looper.getMainLooper());
         new Thread(() -> {
             try {
-                MediaInfo sourceInfo = inspectMedia(source, "source");
+                // Full exports need readable tracks, not exact source duration.
+                // Trims still require the existing corroborated timeline evidence.
+                MediaInfo sourceInfo = inspectMedia(source, "source", requestedTrimMs > 0);
+                addMediaMetrics(diagnostics, "source", sourceInfo, source);
                 if (audioOnly && !sourceInfo.hasAudio) {
                     throw new MediaPreparationException("This recording has no readable audio track. The original is unchanged.");
                 }
@@ -125,6 +153,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
                         ? Math.min(requestedTrimMs, sourceInfo.durationMs)
                         : sourceInfo.durationMs;
                 long startMs = Math.max(0L, sourceInfo.durationMs - expectedDurationMs);
+                diagnostics.put("expectedDurationMs", expectedDurationMs);
                 Log.i(TAG, "Preparation: audioOnly=" + audioOnly + " requestedTrimMs=" + requestedTrimMs
                         + " clip=" + (requestedTrimMs > 0) + " startMs=" + startMs
                         + " endMs=" + sourceInfo.durationMs + " expectedDurationMs=" + expectedDurationMs);
@@ -138,13 +167,13 @@ public class AgesSaveToDevicePlugin extends Plugin {
                 File output = new File(cacheDirectory, "ages_export_" + java.util.UUID.randomUUID() + "." + extension);
                 mainHandler.post(() -> startMediaTransformation(
                         call, source, output, sourceInfo, audioOnly, requestedTrimMs > 0,
-                        startMs, sourceInfo.durationMs, expectedDurationMs, mainHandler));
+                        startMs, sourceInfo.durationMs, expectedDurationMs, mainHandler, diagnostics));
             } catch (Exception error) {
                 Log.e(TAG, "Could not inspect the Android recording before export.", error);
                 String message = error instanceof MediaPreparationException
                         ? error.getMessage()
                         : "Android could not read this recording's duration or media tracks. The original is unchanged. Try again with a shorter recording.";
-                mainHandler.post(() -> call.reject(message, "recording_export_failed"));
+                mainHandler.post(() -> call.reject(message, "recording_export_failed", diagnostics));
             }
         }, "ages-media-inspection").start();
     }
@@ -167,9 +196,11 @@ public class AgesSaveToDevicePlugin extends Plugin {
             long startMs,
             long endMs,
             long expectedDurationMs,
-            Handler mainHandler
+            Handler mainHandler,
+            JSObject diagnostics
     ) {
         try {
+            diagnostics.put("stage", "transformation");
             MediaItem.Builder mediaItemBuilder = new MediaItem.Builder().setUri(Uri.fromFile(source));
             if (trimRequested) {
                 MediaItem.ClippingConfiguration.Builder clippingBuilder = new MediaItem.ClippingConfiguration.Builder()
@@ -192,14 +223,15 @@ public class AgesSaveToDevicePlugin extends Plugin {
                                     ? Long.toString(exportResult.approximateDurationMs) : "unset"));
                             validateAndResolvePreparedMedia(
                                     call, output, audioOnly, sourceInfo.hasAudio,
-                                    expectedDurationMs, mainHandler);
+                                    expectedDurationMs, trimRequested, mainHandler, diagnostics);
                         }
 
                         @Override
                         public void onError(Composition composition, ExportResult exportResult, ExportException exception) {
                             Log.e(TAG, "Media3 could not convert the Android recording.", exception);
                             output.delete();
-                            call.reject("Android could not convert this recording. Your original is unchanged. Try again with a shorter recording.", "recording_export_failed");
+                            diagnostics.put("exportErrorCode", exception.errorCode);
+                            call.reject("Android could not convert this recording. Your original is unchanged. Try again with a shorter recording.", "recording_export_failed", diagnostics);
                         }
                     })
                     .build();
@@ -207,7 +239,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
         } catch (Exception error) {
             Log.e(TAG, "Could not start the Android media export.", error);
             output.delete();
-            call.reject("Android could not start the recording export. Your original is unchanged. Try again.", "recording_export_failed");
+            call.reject("Android could not start the recording export. Your original is unchanged. Try again.", "recording_export_failed", diagnostics);
         }
     }
 
@@ -217,15 +249,23 @@ public class AgesSaveToDevicePlugin extends Plugin {
             boolean audioOnly,
             boolean sourceHadAudio,
             long expectedDurationMs,
-            Handler mainHandler
+            boolean trimRequested,
+            Handler mainHandler,
+            JSObject diagnostics
     ) {
         new Thread(() -> {
             try {
+                diagnostics.put("stage", "validation");
+                diagnostics.put("outputBytes", output.length());
                 if (!output.isFile() || output.length() <= 0 || !hasMp4FileTypeBox(output)) {
                     throw new MediaPreparationException("Android did not produce a valid MP4 file. The original is unchanged. Try again.");
                 }
 
-                MediaInfo outputInfo = inspectMedia(output, "output");
+                MediaInfo outputInfo = inspectMedia(output, "output", trimRequested);
+                addMediaMetrics(diagnostics, "output", outputInfo, output);
+                if (outputInfo.durationMs <= 0) {
+                    throw new MediaPreparationException("Android could not verify a positive export duration. The original is unchanged. Try again.");
+                }
                 if (audioOnly) {
                     if (!outputInfo.hasAudio || outputInfo.hasVideo || !outputInfo.hasAacAudio) {
                         throw new MediaPreparationException("The audio export did not contain a valid AAC track. The original is unchanged. Try again.");
@@ -246,7 +286,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
                         + " measuredDurationMs=" + measuredDurationMs
                         + " outputDurationMs=" + outputInfo.durationMs + " outputBytes=" + output.length()
                         + " deltaMs=" + (measuredDurationMs - expectedDurationMs));
-                if (Math.abs(measuredDurationMs - expectedDurationMs) > DURATION_TOLERANCE_MS) {
+                if (trimRequested && Math.abs(measuredDurationMs - expectedDurationMs) > DURATION_TOLERANCE_MS) {
                     throw new MediaPreparationException("The prepared clip did not match its expected duration. The original is unchanged. Try again with a shorter recording.");
                 }
 
@@ -254,6 +294,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
                 result.put("filePath", Uri.fromFile(output).toString());
                 result.put("mimeType", audioOnly ? "audio/mp4" : "video/mp4");
                 result.put("durationMs", outputInfo.durationMs);
+                result.put("diagnostics", diagnostics);
                 mainHandler.post(() -> call.resolve(result));
             } catch (Exception error) {
                 Log.e(TAG, "The Android media export failed validation.", error);
@@ -261,12 +302,12 @@ public class AgesSaveToDevicePlugin extends Plugin {
                 String message = error instanceof MediaPreparationException
                         ? error.getMessage()
                         : "Android could not verify the exported recording. The original is unchanged. Try again with a shorter recording.";
-                mainHandler.post(() -> call.reject(message, "recording_export_failed"));
+                mainHandler.post(() -> call.reject(message, "recording_export_failed", diagnostics));
             }
         }, "ages-media-validation").start();
     }
 
-    private MediaInfo inspectMedia(File file, String stage) throws Exception {
+    private MediaInfo inspectMedia(File file, String stage, boolean requireExactDuration) throws Exception {
         long containerDurationMs = readMetadataDurationMs(file);
         boolean hasAudio = false;
         boolean hasVideo = false;
@@ -304,14 +345,17 @@ public class AgesSaveToDevicePlugin extends Plugin {
                 throw new MediaPreparationException("The recording has no readable audio or video tracks. The original is unchanged.");
             }
             Log.i(TAG, stage + ": containerDurationMs=" + containerDurationMs + " bytes=" + file.length());
-            scanTimelines(extractor, tracks);
-            for (TrackTimeline track : tracks) {
-                Log.i(TAG, stage + ": track=" + track.index + " mime=" + track.mime
-                        + " declaredDurationUs=" + track.declaredDurationUs + " samples=" + track.sampleCount
-                        + " firstPtsUs=" + track.firstPtsUs + " lastPtsUs=" + track.lastPtsUs
-                        + " maxForwardGapUs=" + track.maxForwardGapUs);
+            durationMs = Math.max(0L, containerDurationMs);
+            if (requireExactDuration) {
+                scanTimelines(extractor, tracks);
+                for (TrackTimeline track : tracks) {
+                    Log.i(TAG, stage + ": track=" + track.index + " mime=" + track.mime
+                            + " declaredDurationUs=" + track.declaredDurationUs + " samples=" + track.sampleCount
+                            + " firstPtsUs=" + track.firstPtsUs + " lastPtsUs=" + track.lastPtsUs
+                            + " maxForwardGapUs=" + track.maxForwardGapUs);
+                }
+                durationMs = resolveDurationMs(containerDurationMs, tracks, stage);
             }
-            durationMs = resolveDurationMs(containerDurationMs, tracks, stage);
         } catch (MediaPreparationException error) {
             throw error;
         } catch (Exception error) {
@@ -513,7 +557,7 @@ public class AgesSaveToDevicePlugin extends Plugin {
         }
 
         if (!file.exists()) {
-            call.reject("File not found: " + file.getAbsolutePath());
+            call.reject("The staged recording could not be found. Your original is unchanged. Try again.", "media_store_failed", saveDiagnostics("mediaStore"));
             return;
         }
 
@@ -542,26 +586,26 @@ public class AgesSaveToDevicePlugin extends Plugin {
             mimeType = isAudio ? "audio/mp4" : (isImage ? "image/jpeg" : "video/mp4");
         }
 
+        ContentResolver resolver = getContext().getContentResolver();
+        Uri uri = null;
         try {
-            ContentResolver resolver = getContext().getContentResolver();
             ContentValues values = new ContentValues();
             values.put(MediaStore.MediaColumns.DISPLAY_NAME, displayName);
             values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 values.put(MediaStore.MediaColumns.RELATIVE_PATH, subDir);
+                values.put(MediaStore.MediaColumns.IS_PENDING, 1);
             }
 
-            Uri uri = resolver.insert(collection, values);
+            uri = resolver.insert(collection, values);
             if (uri == null) {
-                call.reject("MediaStore insert returned null");
-                return;
+                throw new java.io.IOException("MediaStore insert returned null");
             }
 
             try (InputStream in = new FileInputStream(file);
                  OutputStream out = resolver.openOutputStream(uri)) {
                 if (out == null) {
-                    call.reject("Could not open output stream for MediaStore URI");
-                    return;
+                    throw new java.io.IOException("Could not open MediaStore output stream");
                 }
                 byte[] buf = new byte[8192];
                 int len;
@@ -570,12 +614,34 @@ public class AgesSaveToDevicePlugin extends Plugin {
                 }
             }
 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues published = new ContentValues();
+                published.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                if (resolver.update(uri, published, null, null) != 1) {
+                    throw new java.io.IOException("MediaStore did not publish the recording");
+                }
+            }
+
             JSObject result = new JSObject();
             result.put("success", true);
             result.put("uri", uri.toString());
+            result.put("destination", isAudio ? "music" : "gallery");
+            result.put("note", isAudio
+                    ? (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? "Saved to Music/AGES." : "Saved to your device's Music collection.")
+                    : "Saved to your device's Gallery.");
             call.resolve(result);
         } catch (Exception e) {
-            call.reject("Failed to save to MediaStore: " + e.getMessage());
+            JSObject diagnostics = saveDiagnostics("mediaStore");
+            if (uri != null) {
+                try {
+                    diagnostics.put("partialRowDeleted", resolver.delete(uri, null, null) > 0);
+                } catch (Exception cleanupError) {
+                    diagnostics.put("partialRowDeleted", false);
+                    Log.e(TAG, "Could not remove an incomplete MediaStore row.", cleanupError);
+                }
+            }
+            Log.e(TAG, "Failed to save to MediaStore.", e);
+            call.reject("Android could not save the recording to its media collection. Your original is unchanged. Check storage space and try again.", "media_store_failed", diagnostics);
         }
     }
 }

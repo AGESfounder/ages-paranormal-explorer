@@ -217,7 +217,7 @@ export default function useSweeperRecorder({
           // User-initiated stop — assemble the final blob from every chunk
           // collected across the whole session (including restarts).
           const blob = new Blob(videoChunksRef.current.map((c) => c.blob), {
-            type: mimeTypeRef.current || (audioOnlyRef.current ? 'audio/mp4' : 'video/webm'),
+            type: mr.mimeType || videoChunksRef.current.find((c) => c.blob.type)?.blob.type || mimeTypeRef.current || (audioOnlyRef.current ? 'audio/webm' : 'video/webm'),
           });
           diag('info', `${componentName} recorder stopped (user)`, {
             elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),

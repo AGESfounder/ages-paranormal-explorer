@@ -626,7 +626,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     mr.onstop = () => {
       stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
       if (userStoppedRef.current) {
-        const actual = (mr.mimeType || mime || 'video/webm').split(';')[0];
+        const actual = (mr.mimeType || chunksRef.current.find((c) => c.blob.type)?.blob.type || mime || (picture ? 'video/webm' : 'audio/webm')).split(';')[0];
         releaseOwnTrack();
         const finished = new Blob(chunksRef.current.map((c) => c.blob), { type: actual });
         console.log(`[SIEG] recording stopped after ${Math.round((Date.now() - startedAtRef.current) / 1000)}s · ${chunksRef.current.length} chunks · ${Math.round(finished.size / 1024)} kB`);

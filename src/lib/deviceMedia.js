@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
+import { rememberAndroidSaveMetrics, safeNativeSaveData } from '@/lib/androidSaveDiagnostics';
 
 export const deviceMedia = registerPlugin('AgesSaveToDevice');
 
@@ -69,18 +70,28 @@ export async function exportNativeRecording(blob, trimSeconds) {
   const audioOnly = mimeType.startsWith('audio/');
   const input = await writeMediaTempFile(blob);
   let output;
+  let diagnostics;
+  let stage = 'preparation';
   try {
     const result = await deviceMedia.prepareMedia({ filePath: input, mediaType: audioOnly ? 'audio' : 'video', trimSeconds });
+    diagnostics = safeNativeSaveData(result.diagnostics);
+    rememberAndroidSaveMetrics(blob, diagnostics);
     output = result.filePath;
     if (Capacitor.getPlatform() === 'android' && (typeof output !== 'string' || !output || output === input)) {
       throw Object.assign(new Error('The device did not return a prepared recording. Your original is still available. Retry preparation.'), { code: 'recording_export_failed' });
     }
     if (audioOnly) assertPreparedAudioType(result.mimeType);
     else assertPreparedVideoType(result.mimeType);
+    stage = 'outputRead';
     const { data } = await Filesystem.readFile({ path: output });
     const bytes = base64ToBytes(data);
     if (!bytes.length) throw new Error('The prepared recording is empty.');
-    return new Blob([bytes], { type: result.mimeType });
+    const prepared = new Blob([bytes], { type: result.mimeType });
+    rememberAndroidSaveMetrics(prepared, diagnostics);
+    return prepared;
+  } catch (error) {
+    if (Capacitor.getPlatform() === 'android') error.data = { ...diagnostics, stage, ...safeNativeSaveData(error.data) };
+    throw error;
   } finally {
     await Promise.all([...new Set([input, output].filter(Boolean))].map((uri) => removeMediaTempFile(uri).catch(() => {})));
   }

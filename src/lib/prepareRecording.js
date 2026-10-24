@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { baseMediaMime, exportNativeRecording } from '@/lib/deviceMedia';
 import { exportBrowserRecording } from '@/lib/browserRecordingExport';
+import { rememberAndroidSaveFailure, rememberAndroidSaveMetrics } from '@/lib/androidSaveDiagnostics';
 
 const exportsBySource = new WeakMap();
 const preparedBlobs = new WeakSet();
@@ -18,12 +19,16 @@ export function prepareRecording(blob, seconds = null, signal, { forDeviceSave =
   if (!exports) { exports = new Map(); exportsBySource.set(blob, exports); }
   const key = seconds > 0 ? seconds : 'full';
   if (!exports.has(key)) {
+    rememberAndroidSaveMetrics(blob, { requestedTrimMs: seconds > 0 ? seconds * 1000 : 0 });
     // Android must never fall back to WebView decode/re-record after a native
     // failure. Keep the source blob and evict failures so retry uses it again.
     const work = ['ios', 'android'].includes(Capacitor.getPlatform())
       ? exportNativeRecording(blob, seconds)
       : exportBrowserRecording(blob, seconds, signal);
-    const pending = work.then((result) => { preparedBlobs.add(result); return result; }).catch((error) => { exports.delete(key); throw error; });
+    const pending = work.then((result) => { preparedBlobs.add(result); return result; }).catch((error) => {
+      rememberAndroidSaveFailure(blob, error, 'preparation', seconds);
+      exports.delete(key); throw error;
+    });
     exports.set(key, pending);
   }
   return exports.get(key);
