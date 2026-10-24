@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { isLargeProperty } from '@/lib/largeProperty';
 
 // Shared route optimization logic — used by both tour creation (generateTour.js)
 // and tour viewing (TourDetail.jsx). Extracted here so creation can enforce
@@ -130,6 +131,18 @@ export function orderStopsByProximity(stops, includeReturn = false, distFn) {
 }
 
 const WALKING_LIMIT = 0.33;
+
+// Walking threshold for stop clustering. Single-site tours (landmark/ship/
+// cold_spot) are large properties where you walk between structures that can
+// be 0.5+ miles apart — use 1.0-mile threshold so they form a walking cluster
+// ordered as a loop. Area tours use 0.33 miles (downtown walking tours).
+export const getWalkingLimit = (tour) => {
+  const cat = tour?.tour_category;
+  if (cat === 'landmark' || cat === 'ship' || cat === 'cold_spot') {
+    return isLargeProperty(tour) ? 1.0 : 0.33;
+  }
+  return 0.33;
+};
 
 // Enforce proper stop ordering for a tour's stops.
 // - DRIVING tours: linear nearest-neighbor order, all stops driving.

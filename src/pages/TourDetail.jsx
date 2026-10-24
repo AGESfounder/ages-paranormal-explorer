@@ -33,7 +33,7 @@ import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
 import { stripConclusionOpeners, stripStopConclusion, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
 import { regenerateTourContent } from '@/lib/enrichStops';
 import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
-import { haversineDistance, enforceWalkingDistance, orderStopsByProximity } from '@/lib/routeOptimizer';
+import { haversineDistance, enforceWalkingDistance, orderStopsByProximity, getWalkingLimit } from '@/lib/routeOptimizer';
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
@@ -42,6 +42,8 @@ import { useNarrationMode } from '@/hooks/useNarrationMode';
 import { useObserverNarrationGate } from '@/hooks/useObserverNarrationGate';
 import { canUseEnhanced } from '@/lib/narrationMode';
 import { verifyStopLocation } from '@/lib/verifyStop';
+import { changeParkingLocation } from '@/lib/parkingChange';
+import ParkingChangeDialog from '@/components/ParkingChangeDialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
 import { addStopByName } from '@/lib/addTourStops';
@@ -56,18 +58,6 @@ const STOPS_VALIDATION_VERSION = 20;
 // The stamp is written at the START of each job, but the write is async — this
 // closes the small race window where a second mount reads the old DB value.
 const activeCoordJobs = new Set();
-
-// Walking threshold for stop clustering. Single-site tours (landmark/ship/
-// cold_spot) are large properties where you walk between structures that can
-// be 0.5+ miles apart — use 1.0-mile threshold so they form a walking cluster
-// ordered as a loop. Area tours use 0.33 miles (downtown walking tours).
-const getWalkingLimit = (tour) => {
-  const cat = tour?.tour_category;
-  if (cat === 'landmark' || cat === 'ship' || cat === 'cold_spot') {
-    return isLargeProperty(tour) ? 1.0 : 0.33;
-  }
-  return 0.33;
-};
 
 // Validate that a tour's stops comply with current guidelines:
 // - No stop should be unreasonably far from the tour's start coordinates
@@ -200,6 +190,10 @@ export default function TourDetail() {
   const userDraggedRef = useRef(false);
   const [addingStop, setAddingStop] = useState(false);
   const [stopSearchName, setStopSearchName] = useState('');
+  // A parking spot just moved but not yet confirmed: the pin follows the drag
+  // and the lot's details are collected before anything is written.
+  const [parkingMove, setParkingMove] = useState(null);
+  const [parkingSaving, setParkingSaving] = useState(false);
   const [travelMode, setTravelMode] = useState('mixed');
   const [isOfflineCached, setIsOfflineCached] = useState(false);
   const [regeneratingContent, setRegeneratingContent] = useState(false);
@@ -1114,6 +1108,23 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   // needs_placement, and mark as user-verified so the marker turns blue.
   const handleMarkerDragEnd = async (stopId, latLng) => {
     userDraggedRef.current = true;
+    // A parking move is a tour-level change, not a stop edit: the lot is where
+    // the route starts, so its details are confirmed with it and the stops are
+    // re-ordered from the new spot. Every other pin keeps its stop in place and
+    // leaves the order alone. Nothing is written until the details are
+    // confirmed — the pin follows the finger meanwhile, and Cancel puts it back.
+    const draggedStop = stops.find(s => s.id === stopId);
+    if (draggedStop?.stop_type === 'parking') {
+      setStops(prev => prev.map(s => (s.id === stopId ? { ...s, latitude: latLng.lat, longitude: latLng.lng } : s)));
+      setParkingMove({
+        stopId,
+        lat: latLng.lat,
+        lng: latLng.lng,
+        previousLat: draggedStop.latitude,
+        previousLng: draggedStop.longitude,
+      });
+      return;
+    }
     // Compute updated stops with the new coordinates
     const updatedStops = stops.map(s =>
       s.id === stopId
@@ -1182,6 +1193,52 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       await base44.entities.Tour.update(tourId, updateData);
       setTour(prev => prev ? { ...prev, user_reordered: updateData.user_reordered } : prev);
     } catch (e) {}
+  };
+
+  // Confirm a parking move: the new location, the lot's confirmed details and
+  // the re-ordered route are written together (see lib/parkingChange).
+  const confirmParkingMove = async (details) => {
+    if (!parkingMove || !tour) return;
+    setParkingSaving(true);
+    try {
+      const result = await changeParkingLocation({
+        tour,
+        stops,
+        parkingStopId: parkingMove.stopId,
+        latitude: parkingMove.lat,
+        longitude: parkingMove.lng,
+        details,
+        userId: user?.id,
+        walkingLimit: getWalkingLimit(tour),
+      });
+      const movedParking = stops.find(s => s.id === parkingMove.stopId);
+      const shuttleData = stops.find(s => s.stop_type === 'shuttle');
+      setStops([
+        ...(movedParking ? [{ ...movedParking, ...result.parking }] : []),
+        ...(shuttleData ? [shuttleData] : []),
+        ...result.reordered,
+      ]);
+      setTour(prev => (prev ? { ...prev, ...result.tourUpdates } : prev));
+      setParkingMove(null);
+      toast({
+        title: 'Parking Updated',
+        description: 'The stops have been re-ordered from your new parking spot.',
+      });
+    } catch (e) {
+      toast({ title: 'Parking Update Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
+    }
+    setParkingSaving(false);
+  };
+
+  // Cancel puts the pin back where it was — nothing has been written yet.
+  const cancelParkingMove = () => {
+    if (!parkingMove) return;
+    setStops(prev => prev.map(s => (
+      s.id === parkingMove.stopId
+        ? { ...s, latitude: parkingMove.previousLat, longitude: parkingMove.previousLng }
+        : s
+    )));
+    setParkingMove(null);
   };
 
   const handleAddStopByName = async () => {
@@ -1602,6 +1659,13 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       />
       <UpgradePrompt show={showUpgrade} onClose={() => setShowUpgrade(false)} reason={gateReason} />
       {narrationAdGateEl}
+      <ParkingChangeDialog
+        open={!!parkingMove}
+        parking={stops.find(s => s.id === parkingMove?.stopId)}
+        onConfirm={confirmParkingMove}
+        onCancel={cancelParkingMove}
+        saving={parkingSaving}
+      />
       <NavBar />
     </PageContainer>
   );

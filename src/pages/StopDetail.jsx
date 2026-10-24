@@ -38,7 +38,9 @@ import DeleteStopDialog from '@/components/DeleteStopDialog';
 import { Trash2 } from 'lucide-react';
 import { reverseGeocodeParking } from '@/lib/reverseGeocode';
 import { addShuttleStop } from '@/lib/addShuttleStop';
-import { haversineDistance } from '@/lib/routeOptimizer';
+import { haversineDistance, getWalkingLimit } from '@/lib/routeOptimizer';
+import { changeParkingLocation } from '@/lib/parkingChange';
+import ParkingChangeDialog from '@/components/ParkingChangeDialog';
 
 const isThinContent = (s) => !s || s.trim().length < 600;
 
@@ -74,6 +76,10 @@ export default function StopDetail() {
   const [addingShuttle, setAddingShuttle] = useState(false);
   const [showPhotoViewer, setShowPhotoViewer] = useState(false);
   const [tour, setTour] = useState(null);
+  // A parking spot just marked or dragged, waiting on the lot's details: the
+  // move and the re-ordered route land together when they're confirmed.
+  const [parkingMove, setParkingMove] = useState(null);
+  const [parkingSaving, setParkingSaving] = useState(false);
 
   // Gated narration wrapper — checks for pre-generated offline audio first,
   // then falls back to live TTS generation (which costs narration credits).
@@ -457,6 +463,14 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       // don't fire multiple toasts from repeated GPS updates.
       saved = true;
       navigator.geolocation.clearWatch(watchId);
+      // A new parking location is a tour-level change: the lot's details are
+      // confirmed with it and the tour re-orders from the new spot, so the
+      // spot is collected here instead of writing the coordinates on their own.
+      if (stop.stop_type === 'parking') {
+        setParkingMove({ lat: latitude, lng: longitude });
+        setVerifying(false);
+        return;
+      }
       verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id, photoUrl)
         .then((result) => {
           setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false, ...(photoUrl ? { verification_photo_url: photoUrl } : {}) }));
@@ -488,7 +502,46 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
     setTimeout(() => navigator.geolocation.clearWatch(watchId), 20000);
   };
 
+  // Confirm a parking move: the new coordinates, the lot's confirmed details
+  // and the re-ordered route are written together (see lib/parkingChange).
+  const confirmParkingMove = async (details) => {
+    if (!parkingMove || !stop) return;
+    if (!tour) {
+      toast({ title: 'Parking Update Failed', description: 'This tour could not be loaded. Check your connection and try again.', variant: 'destructive' });
+      return;
+    }
+    setParkingSaving(true);
+    try {
+      const result = await changeParkingLocation({
+        tour,
+        stops: allStops,
+        parkingStopId: stop.id,
+        latitude: parkingMove.lat,
+        longitude: parkingMove.lng,
+        details,
+        userId: user?.id,
+        walkingLimit: getWalkingLimit(tour),
+      });
+      setStop(prev => ({ ...prev, ...result.parking }));
+      setTour(prev => (prev ? { ...prev, ...result.tourUpdates } : prev));
+      const siblings = await base44.entities.TourStop.filter({ tour_id: stop.tour_id });
+      setAllStops(siblings.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0)));
+      setParkingMove(null);
+      toast({
+        title: 'Parking Updated',
+        description: 'The stops have been re-ordered from your new parking spot.',
+      });
+    } catch (e) {
+      toast({ title: 'Parking Update Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
+    }
+    setParkingSaving(false);
+  };
+
   const handleMarkerDragEnd = async (stopId, latlng) => {
+    if (stop?.stop_type === 'parking') {
+      setParkingMove({ lat: latlng.lat, lng: latlng.lng });
+      return;
+    }
     try {
       const result = await verifyStopLocation(stopId, stop.tour_id, latlng.lat, latlng.lng, user?.id);
       setStop(prev => ({ ...prev, latitude: latlng.lat, longitude: latlng.lng, user_verified: true, needs_placement: false }));
@@ -693,6 +746,13 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             </button>
           </div>
         </div>
+        <ParkingChangeDialog
+          open={!!parkingMove}
+          parking={stop}
+          onConfirm={confirmParkingMove}
+          onCancel={() => setParkingMove(null)}
+          saving={parkingSaving}
+        />
       </PageContainer>
     );
   }
