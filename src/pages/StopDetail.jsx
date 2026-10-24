@@ -541,6 +541,13 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
 
   const handleMarkerDragEnd = async (stopId, latlng) => {
     if (stop?.stop_type === 'parking') {
+      if (tour?.verified === true) {
+        toast({
+          title: 'Parking Spot Locked',
+          description: 'This tour is fully validated, so its parking spot can no longer be moved.',
+        });
+        return;
+      }
       setParkingMove({ lat: latlng.lat, lng: latlng.lng });
       return;
     }
@@ -608,6 +615,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
 
   if (stop.stop_type === 'parking' || stop.stop_type === 'shuttle') {
     const isShuttle = stop.stop_type === 'shuttle';
+    // A fully validated tour's lot is fixed — its route was validated around
+    // that spot — so the pin, and the button that would re-place it, are locked.
+    const parkingPinLocked = !isShuttle && tour?.verified === true;
     const handleParkingDetailChange = async (field, value) => {
       try {
         await base44.entities.TourStop.update(stop.id, { [field]: value });
@@ -690,7 +700,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
             </div>
           </div>
 
-          {isPaid && !stop.user_verified && (
+          {isPaid && !stop.user_verified && !parkingPinLocked && (
             <div className="p-3 rounded-xl border border-primary/30 bg-primary/5">
               <button
                 onClick={() => handleMarkVantagePoint()}
@@ -719,10 +729,12 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
           )}
 
           {stop.latitude && stop.longitude && (
-            <TourMap stops={[stop]} height="h-52" draggable={isAdmin} onMarkerDragEnd={handleMarkerDragEnd} />
+            <TourMap stops={[stop]} height="h-52" draggable={isAdmin && !parkingPinLocked} onMarkerDragEnd={handleMarkerDragEnd} />
           )}
           {isAdmin && (
-            <p className="text-[10px] text-amber-400/70 text-center">Admin: drag the map marker to adjust the exact location</p>
+            <p className="text-[10px] text-amber-400/70 text-center">
+              {parkingPinLocked ? 'This tour is fully validated — its parking spot is locked' : 'Admin: drag the map marker to adjust the exact location'}
+            </p>
           )}
 
           <button onClick={openInMaps} className={`flex items-center justify-center gap-2 w-full py-3 rounded-lg border text-sm font-heading uppercase tracking-wider transition-colors ${isShuttle ? 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20' : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'}`}>

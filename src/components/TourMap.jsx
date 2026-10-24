@@ -112,7 +112,7 @@ function makeNeedsPlacementIcon(stopNumber) {
   });
 }
 
-export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, onMarkerDragEnd, amenities = [] }) {
+export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64', draggable = false, parkingLocked = false, onMarkerDragEnd, amenities = [] }) {
   const [showAmenities, setShowAmenities] = useState(false);
   if (!stops || stops.length === 0) return null;
 
@@ -245,7 +245,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
           <LongPressMarker
             position={[parkingLat, parkingLon]}
             icon={makeParkingIcon()}
-            draggable={draggable}
+            draggable={draggable && !parkingLocked}
             stopId={parkingStop?.id}
             onMarkerDragEnd={onMarkerDragEnd}
           >

@@ -1107,13 +1107,22 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   // Handle pink "Needs Placement" marker drag — update coordinates, clear
   // needs_placement, and mark as user-verified so the marker turns blue.
   const handleMarkerDragEnd = async (stopId, latLng) => {
+    const draggedStop = stops.find(s => s.id === stopId);
+    // A validated tour's lot is locked: its route was validated around that
+    // spot, so the parking pin cannot be moved at all.
+    if (draggedStop?.stop_type === 'parking' && tour.verified === true) {
+      toast({
+        title: 'Parking Spot Locked',
+        description: 'This tour is fully validated, so its parking spot can no longer be moved.',
+      });
+      return;
+    }
     userDraggedRef.current = true;
     // A parking move is a tour-level change, not a stop edit: the lot is where
     // the route starts, so its details are confirmed with it and the stops are
     // re-ordered from the new spot. Every other pin keeps its stop in place and
     // leaves the order alone. Nothing is written until the details are
     // confirmed — the pin follows the finger meanwhile, and Cancel puts it back.
-    const draggedStop = stops.find(s => s.id === stopId);
     if (draggedStop?.stop_type === 'parking') {
       setStops(prev => prev.map(s => (s.id === stopId ? { ...s, latitude: latLng.lat, longitude: latLng.lng } : s)));
       setParkingMove({
@@ -1460,7 +1469,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           </div>
         </div>
 
-        {stops.length > 0 && <TourMap stops={mapStops} tour={tour} amenities={amenities} height="h-72" draggable={user?.role === 'admin' || isPaid} onMarkerDragEnd={handleMarkerDragEnd} />}
+        {stops.length > 0 && <TourMap stops={mapStops} tour={tour} amenities={amenities} height="h-72" draggable={user?.role === 'admin' || isPaid} parkingLocked={tour.verified === true} onMarkerDragEnd={handleMarkerDragEnd} />}
 
         <div>
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
