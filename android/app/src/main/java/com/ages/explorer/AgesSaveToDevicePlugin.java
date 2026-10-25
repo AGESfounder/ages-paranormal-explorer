@@ -12,6 +12,8 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.util.Base64;
+import android.util.Base64InputStream;
 import android.util.Log;
 
 import androidx.media3.common.MediaItem;
@@ -32,10 +34,13 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -99,6 +104,57 @@ public class AgesSaveToDevicePlugin extends Plugin {
             return;
         }
         saveMedia(call);
+    }
+
+    @PluginMethod
+    public void stageRecordingInput(PluginCall call) {
+        final JSObject diagnostics = saveDiagnostics("inputStaging");
+        final String data = call.getString("data");
+        final Double expectedBytes = call.getDouble("expectedBytes");
+        if (data == null || data.isEmpty() || expectedBytes == null
+                || !Double.isFinite(expectedBytes) || expectedBytes <= 0
+                || expectedBytes > 9007199254740991D || expectedBytes != Math.floor(expectedBytes)) {
+            call.reject("The recording could not be read.", "recording_export_failed", diagnostics);
+            return;
+        }
+        final long sourceBytes = expectedBytes.longValue();
+        diagnostics.put("sourceBytes", sourceBytes);
+        String suppliedExtension = call.getString("extension");
+        final String extension = suppliedExtension != null && suppliedExtension.matches("webm|mp4|m4a|ogg|mp3|wav")
+                ? suppliedExtension : "bin";
+        final File cacheDirectory = getContext().getCacheDir();
+        new Thread(() -> {
+            File staged = null;
+            try {
+                staged = File.createTempFile("ages_input_", "." + extension, cacheDirectory);
+                try (InputStream input = new Base64InputStream(
+                            new ByteArrayInputStream(data.getBytes(StandardCharsets.US_ASCII)), Base64.DEFAULT);
+                     OutputStream output = new FileOutputStream(staged)) {
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        output.write(buffer, 0, count);
+                    }
+                    output.flush();
+                }
+                // Both streams have closed successfully before the final measurement.
+                long stagedBytes = staged.length();
+                diagnostics.put("stagedBytes", stagedBytes);
+                diagnostics.put("stagedByteDelta", stagedBytes - sourceBytes);
+                if (!staged.isFile() || stagedBytes != sourceBytes) {
+                    throw new MediaPreparationException("The device copy did not match the recording. Nothing was saved.");
+                }
+                JSObject result = new JSObject();
+                result.put("filePath", Uri.fromFile(staged).toString());
+                result.put("stagedBytes", stagedBytes);
+                call.resolve(result);
+            } catch (Exception error) {
+                if (staged != null) staged.delete();
+                String message = error instanceof MediaPreparationException ? error.getMessage()
+                        : "Android could not copy the recording. Your original is unchanged. Check storage space and retry preparation.";
+                call.reject(message, "recording_export_failed", diagnostics);
+            }
+        }, "ages-input-staging").start();
     }
 
     @PluginMethod

@@ -55,6 +55,7 @@ const publicMessages = new Set([
   'The prepared recording is empty.',
   'The device copy did not match the recording. Nothing was saved.',
   'The recording could not be read.',
+  'Android could not copy the recording. Your original is unchanged. Check storage space and retry preparation.',
   'The device did not confirm the save.',
 ]);
 const safeMessage = (message) => publicMessages.has(message) ? message : 'Unrecognized platform error message withheld for privacy. Retry the save.';

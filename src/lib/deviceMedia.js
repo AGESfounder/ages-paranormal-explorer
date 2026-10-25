@@ -11,14 +11,18 @@ export function mediaExtension(blob, fallback = 'webm') {
   return ({ 'video/mp4': 'mp4', 'audio/mp4': 'm4a', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' })[type] || fallback;
 }
 
-export async function writeMediaTempFile(blob) {
+async function readMediaBase64(blob) {
   if (!blob?.size) throw new Error('The recording is empty.');
-  const data = await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(',')[1]);
     reader.onerror = () => reject(new Error('The recording could not be read.'));
     reader.readAsDataURL(blob);
   });
+}
+
+export async function writeMediaTempFile(blob) {
+  const data = await readMediaBase64(blob);
   const path = `ages_media_${crypto.randomUUID()}.${mediaExtension(blob)}`;
   // Omit encoding: Capacitor decodes base64 to bytes only on its binary path.
   const { uri } = await Filesystem.writeFile({ data, path, directory: Directory.Cache });
@@ -32,6 +36,29 @@ export async function writeMediaTempFile(blob) {
     throw error;
   }
   return uri;
+}
+
+async function stageAndroidRecordingInput(blob) {
+  const data = await readMediaBase64(blob);
+  const result = await deviceMedia.stageRecordingInput({ data, expectedBytes: blob.size, extension: mediaExtension(blob) });
+  const uri = result?.filePath;
+  try {
+    if (typeof uri !== 'string' || !uri.startsWith('file://')) throw new Error('The recording could not be read.');
+    // Independently verify the closed native file as well as the native byte count.
+    const stat = await Filesystem.stat({ path: uri });
+    if (result.stagedBytes !== blob.size || stat.size !== blob.size) {
+      const error = new Error('The device copy did not match the recording. Nothing was saved.');
+      const stagedBytes = stat.size !== blob.size ? stat.size : result.stagedBytes;
+      if (Number.isSafeInteger(stagedBytes) && stagedBytes >= 0) {
+        Object.assign(error, { data: { stagedBytes, stagedByteDelta: stagedBytes - blob.size } });
+      }
+      throw error;
+    }
+    return uri;
+  } catch (error) {
+    await removeMediaTempFile(uri).catch(() => {});
+    throw error;
+  }
 }
 
 export async function removeMediaTempFile(uri) {
@@ -77,7 +104,9 @@ export async function exportNativeRecording(blob, trimSeconds, intent) {
   let diagnostics = safeNativeSaveData(intent);
   let stage = 'inputStaging';
   try {
-    input = await writeMediaTempFile(blob);
+    input = Capacitor.getPlatform() === 'android'
+      ? await stageAndroidRecordingInput(blob)
+      : await writeMediaTempFile(blob);
     stage = 'inspection';
     const result = Capacitor.getPlatform() === 'android'
       ? await deviceMedia.prepareMedia({ filePath: input, mediaType: audioOnly ? 'audio' : 'video', trimSeconds, trimMode: diagnostics.trimMode })

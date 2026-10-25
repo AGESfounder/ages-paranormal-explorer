@@ -25,21 +25,22 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
   const [savePreparationError, setSavePreparationError] = useState('');
   const [copyingDiagnostics, setCopyingDiagnostics] = useState(false);
   const [diagnosticsNote, setDiagnosticsNote] = useState('');
+  const [deviceAttemptBlob, setDeviceAttemptBlob] = useState(null);
   const isAndroid = Capacitor.getPlatform() === 'android';
   const failedPreparation = preparationError || savePreparationError;
   const directAudioFiles = iosAudioOriginalToFiles && Capacitor.getPlatform() === 'ios';
   const blocked = saving || deviceSaving || preparing || !!preparationError || (!directAudioFiles && !!savePreparationError);
   const canRecover = Capacitor.getPlatform() === 'ios' && originalBlob?.size > 0 && !!failedPreparation;
-  useEffect(() => { setSavedToDevice(''); setDeviceNote(''); setDeviceError(''); setSavePreparationError(''); setDiagnosticsNote(''); }, [deviceBlob, originalBlob]);
+  useEffect(() => { setSavedToDevice(''); setDeviceNote(''); setDeviceError(''); setSavePreparationError(''); setDiagnosticsNote(''); setDeviceAttemptBlob(null); }, [deviceBlob, originalBlob, trimMode, trimSeconds]);
 
   const handleCopyDiagnostics = async () => {
     if (copyingDiagnostics) return;
     setCopyingDiagnostics(true);
     setDiagnosticsNote('');
     try {
-      const report = await buildAndroidSaveReport(deviceError ? deviceBlob : originalBlob, deviceError || preparationError);
+      const report = await buildAndroidSaveReport(deviceError ? deviceAttemptBlob || deviceBlob : originalBlob, deviceError || preparationError);
       const copied = await copySaveReport(report);
-      setDiagnosticsNote(copied ? 'Diagnostics copied. Share them with the Build 26 tester report.' : 'Could not copy diagnostics. Try Copy save diagnostics again.');
+      setDiagnosticsNote(copied ? 'Diagnostics copied. Share them with the Build 27 tester report.' : 'Could not copy diagnostics. Try Copy save diagnostics again.');
     } catch {
       setDiagnosticsNote('Could not copy diagnostics. Try Copy save diagnostics again.');
     } finally {
@@ -47,10 +48,21 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
     }
   };
 
-  const handleDevice = async (recover = false) => {
+  // A retry explicitly selects the retained original. Normal saves still use the
+  // finished clip; prepareRecording reuses matching prepared intent, never re-trims it.
+  const deviceInput = deviceBlob;
+  const handleDevice = async (recover = false, deviceBlob = deviceInput) => {
     const input = recover || directAudioFiles ? originalBlob : deviceBlob;
+    if (!input && !deviceSaving && !saving && !preparing) {
+      const message = 'There is no recording available to prepare. Keep the original recording open and try again.';
+      setSavePreparationError(message);
+      setDeviceError(message);
+      return;
+    }
     if (!input || deviceSaving || saving || preparing) return;
     setDeviceSaving(true);
+    setDeviceAttemptBlob(input);
+    setSavePreparationError('');
     setDeviceError('');
     setSavedToDevice('');
     setDeviceNote('');
@@ -112,9 +124,10 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
       {savePreparationError && (
         <div role="status" className="text-xs text-destructive text-pretty">
           <p>{savePreparationError} Your original is kept until you discard it.</p>
-          <button onClick={() => handleDevice()} disabled={saving || deviceSaving || preparing} className="min-h-11 underline focus-visible:outline focus-visible:outline-2 disabled:opacity-50">{directAudioFiles ? 'Retry Files save' : 'Retry preparation'}</button>
+          <button type="button" onClick={() => handleDevice(false, (isAndroid ? originalBlob : null) || deviceBlob)} disabled={saving || deviceSaving || preparing} className="min-h-11 underline hover:no-underline active:opacity-80 focus-visible:outline focus-visible:outline-2 disabled:opacity-50">{directAudioFiles ? 'Retry Files save' : 'Retry preparation'}</button>
         </div>
       )}
+      {deviceSaving && <p role="status" className="text-xs text-muted-foreground text-center">Preparing and saving this recording on your device…</p>}
       {canRecover && (
         <div className="space-y-2">
           <button onClick={() => handleDevice(true)} disabled={saving || deviceSaving || preparing} className="w-full min-h-11 flex items-center justify-center gap-2 rounded-lg border border-border text-sm hover:bg-accent active:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">

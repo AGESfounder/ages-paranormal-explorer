@@ -20,7 +20,7 @@ const java = (path) => read(path).replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/
 const nativePath = 'android/app/src/main/java/com/ages/explorer/';
 
 const gradle = read('android/app/build.gradle');
-for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '26'], ['versionName', '"1.0"']]) {
+for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '27'], ['versionName', '"1.0"']]) {
   const values = [...gradle.matchAll(new RegExp(`^\\s*${key}\\s+([^\\r\\n]+)`, 'gm'))];
   check(`Android ${key} is exactly ${value}`, values.length === 1 && values[0][1].trim() === value);
 }
@@ -130,12 +130,98 @@ const nativeExport = deviceMediaJs.split('export async function exportNativeReco
 check('Input copy integrity failure is inputStaging before native inspection, with UI intent but no invented durations',
   nativeExport.includes('let diagnostics = safeNativeSaveData(intent)')
   && nativeExport.includes("let stage = 'inputStaging'")
-  && /try \{\s*input = await writeMediaTempFile\(blob\);\s*stage = 'inspection';/.test(nativeExport)
+  && /try \{\s*input = Capacitor.getPlatform\(\) === 'android'\s*\? await stageAndroidRecordingInput\(blob\)\s*: await writeMediaTempFile\(blob\);\s*stage = 'inspection';/.test(nativeExport)
+  && nativeExport.indexOf('await stageAndroidRecordingInput(blob)') < nativeExport.indexOf('await deviceMedia.prepareMedia(')
   && nativeExport.includes('error.data = { ...diagnostics, stage, ...safeNativeSaveData(error.data) }')
   && deviceMediaJs.includes('Filesystem.writeFile({ data, path, directory: Directory.Cache })')
   && /if \(stat.size !== blob.size\) \{\s*const error = new Error\('The device copy did not match the recording. Nothing was saved.'\)/.test(deviceMediaJs)
   && /await removeMediaTempFile\(uri\)\.catch\(\(\) => \{\}\);\s*throw error;/.test(deviceMediaJs)
   && !/sourceDurationMs|outputDurationMs|comparisonDurationMs/.test(nativeExport));
+const nativeInputStage = save.split('public void stageRecordingInput(PluginCall call) {')[1]?.split('@PluginMethod')[0] ?? '';
+const jsInputStage = deviceMediaJs.split('async function stageAndroidRecordingInput(blob) {')[1]?.split('export async function removeMediaTempFile')[0] ?? '';
+check('Android exposes dedicated input staging on a worker with a unique cache file and bounded base64 stream',
+  /@PluginMethod\s+public void stageRecordingInput\(PluginCall call\)/.test(save)
+  && nativeInputStage.includes('File.createTempFile("ages_input_", "." + extension, cacheDirectory)')
+  && nativeInputStage.includes('new Base64InputStream(')
+  && nativeInputStage.includes('new ByteArrayInputStream(data.getBytes(StandardCharsets.US_ASCII)), Base64.DEFAULT)')
+  && nativeInputStage.includes('byte[] buffer = new byte[8192]')
+  && /while \(\(count = input.read\(buffer\)\) != -1\)\s*\{\s*output.write\(buffer, 0, count\);\s*\}/.test(nativeInputStage)
+  && nativeInputStage.includes('"ages-input-staging").start()'));
+check('Native input streams flush and close before final length, equality gate, then resolve',
+  /try \(InputStream input = new Base64InputStream\([\s\S]*?OutputStream output = new FileOutputStream\(staged\)\)\s*\{[\s\S]*?output.flush\(\);\s*\}\s*long stagedBytes = staged.length\(\);/.test(nativeInputStage)
+  && nativeInputStage.indexOf('stagedBytes != sourceBytes') > nativeInputStage.indexOf('long stagedBytes = staged.length()')
+  && nativeInputStage.indexOf('call.resolve(result)') > nativeInputStage.indexOf('stagedBytes != sourceBytes')
+  && nativeInputStage.includes('result.put("filePath", Uri.fromFile(staged).toString())')
+  && nativeInputStage.includes('result.put("stagedBytes", stagedBytes)'));
+check('Native stage rejects invalid expected sizes and deletes failed/mismatched copies with safe diagnostics',
+  nativeInputStage.includes('!Double.isFinite(expectedBytes) || expectedBytes <= 0')
+  && nativeInputStage.includes('expectedBytes != Math.floor(expectedBytes)')
+  && nativeInputStage.includes('saveDiagnostics("inputStaging")')
+  && nativeInputStage.includes('diagnostics.put("stagedByteDelta", stagedBytes - sourceBytes)')
+  && /if \(!staged.isFile\(\) \|\| stagedBytes != sourceBytes\)\s*\{\s*throw new MediaPreparationException\("The device copy did not match the recording. Nothing was saved."\);\s*\}/.test(nativeInputStage)
+  && /catch \(Exception error\)\s*\{\s*if \(staged != null\) staged.delete\(\);/.test(nativeInputStage)
+  && nativeInputStage.includes('call.reject(message, "recording_export_failed", diagnostics)')
+  && !nativeInputStage.includes('prepareMedia('));
+check('JS awaits native staging with original Blob size and independently stats the closed file',
+  jsInputStage.includes('await deviceMedia.stageRecordingInput({ data, expectedBytes: blob.size, extension: mediaExtension(blob) })')
+  && jsInputStage.indexOf('await Filesystem.stat({ path: uri })') > jsInputStage.indexOf('await deviceMedia.stageRecordingInput(')
+  && jsInputStage.includes('result.stagedBytes !== blob.size || stat.size !== blob.size')
+  && jsInputStage.indexOf('return uri;') > jsInputStage.indexOf('result.stagedBytes !== blob.size || stat.size !== blob.size')
+  && /catch \(error\)\s*\{\s*await removeMediaTempFile\(uri\).catch\(\(\) => \{\}\);\s*throw error;/.test(jsInputStage)
+  && !jsInputStage.includes('prepareMedia('));
+check('Both native and JS byte mismatches reject partial files including seven bytes without a delay or fallback',
+  nativeInputStage.includes('stagedBytes != sourceBytes')
+  && jsInputStage.includes('result.stagedBytes !== blob.size || stat.size !== blob.size')
+  && jsInputStage.includes('stagedByteDelta: stagedBytes - blob.size')
+  && jsInputStage.includes("throw error;")
+  && !/setTimeout|writeMediaTempFile|prepareMedia/.test(jsInputStage));
+check('Generic iOS and prepared-output staging keep the existing Filesystem binary-write equality gate',
+  deviceMediaJs.includes('const data = await readMediaBase64(blob)')
+  && deviceMediaJs.includes('Filesystem.writeFile({ data, path, directory: Directory.Cache })')
+  && deviceMediaJs.includes('stat.size !== blob.size')
+  && nativeExport.includes(': await writeMediaTempFile(blob)')
+  && saveJs.includes('uri = await writeMediaTempFile(prepared)'));
+check('Hook retry changes attempt identity immediately, then prepares the retained source with unchanged trim intent',
+  preparedHook.includes('retry: () => setAttempt((value) => value + 1)')
+  && preparedHook.includes('result.attempt === attempt')
+  && preparedHook.includes('setResult({ source, seconds, trimMode: androidTrimMode, attempt, blob: null, error: \'\' })')
+  && preparedHook.includes('prepareRecording(source, seconds, controller.signal, { trimMode: androidTrimMode })')
+  && preparedHook.includes('[source, seconds, androidTrimMode, needed, attempt]')
+  && preparedHook.includes('originalBlob: source')
+  && preparedHook.includes('if (!active) return')
+  && preparedHook.includes("blob: null, error: error.message || 'The recording could not be prepared.'"));
+const preparationUi = read('src/components/RecordingPreparation.jsx');
+check('Visible hook Retry is an explicit non-submit button invoking the hook callback',
+  preparationUi.includes('type="button" onClick={retry} disabled={!retry}')
+  && preparationUi.includes('preparing ? <span')
+  && preparationUi.includes('Preparing recording on this device'));
+const deviceAttempt = saveButtons.split('const handleDevice = async')[1]?.split('const nativeLabel')[0] ?? '';
+check('Save-time Android Retry explicitly uses the retained original and the current unchanged trim intent',
+  saveButtons.includes('onClick={() => handleDevice(false, (isAndroid ? originalBlob : null) || deviceBlob)}')
+  && deviceAttempt.includes('(recover = false, deviceBlob = deviceInput)')
+  && deviceAttempt.includes('saveBlobToDevice(deviceBlob, filename, { trimMode, trimSeconds })')
+  && saveButtons.includes('[deviceBlob, originalBlob, trimMode, trimSeconds]')
+  && saveButtons.includes('originalBlob = null'));
+check('Save-time Retry clears prior errors, shows progress, rejects a missing source and replaces the latest failure',
+  deviceAttempt.indexOf("setSavePreparationError('')") < deviceAttempt.indexOf('await saveBlobToDevice(')
+  && deviceAttempt.indexOf("setDeviceError('')") < deviceAttempt.indexOf('await saveBlobToDevice(')
+  && deviceAttempt.includes('setDeviceSaving(true)')
+  && deviceAttempt.includes('There is no recording available to prepare.')
+  && deviceAttempt.includes("if (e.code === 'recording_preparation_failed') setSavePreparationError(e.message)")
+  && deviceAttempt.includes("setDeviceError(e.message || 'Save failed. Please try again.')")
+  && deviceAttempt.includes('setDeviceSaving(false)')
+  && saveButtons.includes('deviceSaving && <p role="status"')
+  && !/setOriginalBlob|setDeviceBlob|onSave\(/.test(deviceAttempt));
+check('Retry diagnostics use the actual attempted source and Build 27 copy',
+  deviceAttempt.includes('setDeviceAttemptBlob(input)')
+  && saveButtons.includes('deviceError ? deviceAttemptBlob || deviceBlob : originalBlob')
+  && saveButtons.includes('Build 27 tester report.'));
+check('Brief, Standard and Full retain last-30s, last-90s and whole-source intent',
+  /id: 'brief', label: 'Brief', seconds: 30, desc: 'last 30 seconds'/.test(trimOptions)
+  && /id: 'standard', label: 'Standard', seconds: 90, desc: 'last 90 seconds'/.test(trimOptions)
+  && /id: 'full', label: 'Full', seconds: null, desc: 'entire session'/.test(trimOptions)
+  && preparationJs.includes('if (seconds == null) intent.requestedTrimMs = 0')
+  && save.includes('"full".equals(trimMode) && requestedTrimMs != 0'));
 check('Android copy mismatches report only safe staged byte counts and signed staged-minus-source delta',
   /if \(Capacitor.getPlatform\(\) === 'android' && Number.isSafeInteger\(stat.size\) && stat.size >= 0\) \{\s*Object.assign\(error, \{ data: \{ stagedBytes: stat.size, stagedByteDelta: stat.size - blob.size \} \}\);\s*\}/.test(deviceMediaJs)
   && diagnostics.includes("typeof data?.stagedByteDelta === 'number' && Number.isFinite(data.stagedByteDelta)")
@@ -208,6 +294,17 @@ check('Unsupported depth closes the session and rejects depth_unsupported before
 check('ARCore and camera remain optional install features', /<meta-data\s+android:name="com.google.ar.core"\s+android:value="optional"/.test(manifest) && /<uses-feature\s+android:name="android.hardware.camera.ar"\s+android:required="false"/.test(manifest) && /<uses-feature\s+android:name="android.hardware.camera"\s+android:required="false"/.test(manifest));
 const sls = read('src/components/SLSCamera.jsx');
 check('Anomaly Camera keeps a persistent unsupported fallback and explicit depth routing', sls.includes('Choose Contrast Scan or Device Camera.') && sls.includes('{depthUnavailable && (') && sls.includes('setDepthAvailable(false)') && /if \(mode === 'depth'\)\s*\{[^}]+return;/s.test(sls));
+check('Build 25 Anomaly Full video and Audio Recorder keep native MP4/M4A saves to Gallery/Music',
+  sls.includes('usePreparedRecording(recordedBlob, trimSeconds)')
+  && sls.includes('deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob}')
+  && toolkit.includes('deviceBlob={recordedBlob} originalBlob={recordedBlob} iosAudioOriginalToFiles')
+  && toolkit.includes("mimeType: 'audio/webm'")
+  && preparationJs.includes("mimeType.startsWith('video/') || mimeType === 'audio/webm'")
+  && save.includes('String extension = audioOnly ? "m4a" : "mp4"')
+  && deviceMediaJs.includes("'audio/mp4': 'm4a'")
+  && save.includes('Environment.DIRECTORY_MUSIC + "/AGES"')
+  && save.includes('Environment.DIRECTORY_MOVIES + "/AGES"')
+  && save.includes('result.put("destination", isAudio ? "music" : "gallery")'));
 
 const pkg = JSON.parse(read('package.json') || '{}');
 check('Both verifier scripts map to local read-only Node files', pkg.scripts?.['verify:android-native-plugins'] === 'node verify-android-native-plugins.mjs' && pkg.scripts?.['verify:native-plugins'] === 'node verify-ios-native-plugins.mjs');
@@ -230,6 +327,10 @@ const sync = workflow.indexOf('script: npx cap sync android');
 const verify = workflow.indexOf('npm run verify:android-native-plugins');
 const compile = workflow.indexOf('./gradlew assembleRelease bundleRelease');
 check('Android workflow orders web build, Android sync, static gate, then Gradle', build >= 0 && sync > build && verify > sync && compile > verify);
+check('Current CI and native notes identify Android Build 27 without changing iOS Build 33',
+  workflow.includes('Verify Android Version 27 and native plugin wiring before Gradle')
+  && read('AGENTS.md').includes('Android `versionCode` 27 is prepared')
+  && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 33;'));
 check('Android workflow keeps signing and signature verification', workflow.includes('- ages-explorer-upload') && workflow.includes('jarsigner -verify -verbose -certs'));
 
 for (const { label, ok } of results) console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
