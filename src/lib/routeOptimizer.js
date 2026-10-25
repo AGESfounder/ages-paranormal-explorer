@@ -144,6 +144,18 @@ export const getWalkingLimit = (tour) => {
   return 0.33;
 };
 
+// An AREA tour is walkable by definition — its generation prompt requires a
+// tight walkable cluster (total route ≤2.5 miles), so a city/town tour is never
+// a pure driving tour. When the model labels one "driving" anyway, every stop
+// gets stamped driving, cluster detection never runs and no parking is ever
+// created: a downtown tour whose stops are 300 ft apart shows as all-driving
+// with no lot (the Richmond bug). Seed area tours as "mixed" instead — the
+// enforcement below then finds the real cluster and re-derives the final type
+// from the stops (walking + driving = mixed), while a genuinely spread-out area
+// tour still comes back out as "driving".
+export const normalizeAreaTourType = (tourCategory, tourType) =>
+  tourCategory === 'area' && tourType === 'driving' ? 'mixed' : tourType;
+
 // Enforce proper stop ordering for a tour's stops.
 // - DRIVING tours: linear nearest-neighbor order, all stops driving.
 // - WALKING & MIXED tours: build connected components (stops within

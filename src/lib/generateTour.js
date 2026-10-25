@@ -2,7 +2,7 @@ import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { US_STATES } from '@/lib/statesData';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_TOUR, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
-import { enforceWalkingDistance } from '@/lib/routeOptimizer';
+import { enforceWalkingDistance, normalizeAreaTourType } from '@/lib/routeOptimizer';
 import { getVerifiedCoordsForStops, applyVerifiedCoords } from '@/lib/reuseVerifiedCoords';
 
 function normalizeStateName(state) {
@@ -366,7 +366,10 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
       access_type: (correctedCategory === 'cold_spot' || correctedCategory === 'landmark') ? (accessType || 'exterior_interior') : '',
       state: normalizeStateName(state),
       city: raw.city || '',
-      tour_type: normEnum(raw.tour_type, ['walking', 'driving', 'mixed'], 'walking'),
+      tour_type: normalizeAreaTourType(
+        correctedCategory,
+        normEnum(raw.tour_type, ['walking', 'driving', 'mixed'], 'walking')
+      ),
       location_type: isAbroad ? (locationType || '') : '',
       description: toStr(raw.description),
       introduction: toStr(raw.introduction),

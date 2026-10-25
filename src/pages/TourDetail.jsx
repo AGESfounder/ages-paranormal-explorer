@@ -33,7 +33,7 @@ import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
 import { stripConclusionOpeners, stripStopConclusion, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
 import { regenerateTourContent } from '@/lib/enrichStops';
 import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
-import { haversineDistance, enforceWalkingDistance, orderStopsByProximity, getWalkingLimit } from '@/lib/routeOptimizer';
+import { haversineDistance, enforceWalkingDistance, orderStopsByProximity, getWalkingLimit, normalizeAreaTourType } from '@/lib/routeOptimizer';
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
 import { isLargeProperty } from '@/lib/largeProperty';
 import { stripUrlsForNarration } from '@/lib/urlText';
@@ -527,13 +527,17 @@ export default function TourDetail() {
         // background validation or coordinate correction. User-verified pins
         // are ground truth — no automated process should ever touch them.
         const hasVerifiedStops = tourStopsOnly.some(s => s.user_verified);
+        // An area tour is walkable by definition — never enforce one as a pure
+        // driving tour (see normalizeAreaTourType). The auto-correct below
+        // stores whatever the stops actually turn out to be.
+        const enforcedType = normalizeAreaTourType(tourData[0].tour_category, tourData[0].tour_type);
         if (!regenerated) {
           if (tourData[0].user_reordered || tourData[0].manual_reorder) {
             // Respect the user's manual stop order — do not re-sort by proximity.
             // But still update travel_method based on current (possibly validated)
             // coordinates so stops show as walking/driving correctly.
             const parkingCoords = parkingStop?.latitude != null ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
-            const updatedMethods = await enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords, preserveOrder: true });
+            const updatedMethods = await enforceWalkingDistance(tourStopsOnly, enforcedType, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords, preserveOrder: true });
             for (const s of updatedMethods) {
               const existing = tourStopsOnly.find(ts => ts.id === s.id);
               if (existing && existing.travel_method !== s.travel_method) {
@@ -558,7 +562,7 @@ export default function TourDetail() {
             // Reorder stops for the best walking loop. Verified pins are sacred —
             // their coordinates never change — but the ORDER can be optimized
             // unless the user manually reordered (user_reordered handled above).
-            const reordered = await enforceWalkingDistance(tourStopsOnly, tourData[0].tour_type, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords });
+            const reordered = await enforceWalkingDistance(tourStopsOnly, enforcedType, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), parkingCoords });
             // Update stop_numbers in the database if they changed
             for (const s of reordered) {
               const existing = tourStopsOnly.find(ts => ts.id === s.id);
@@ -597,7 +601,7 @@ export default function TourDetail() {
           }
         }
         // Lazily generate parking for tours that don't have it yet
-        if (!parkingStop && tourData[0].tour_type !== 'driving') {
+        if (!parkingStop && enforcedType !== 'driving') {
           generateParking(tourData[0], tourStopsOnly).catch(console.error);
         }
 
@@ -749,6 +753,10 @@ Output ONLY valid JSON. No markdown fences.`;
     setGeneratingStops(true);
     setStopsError('');
     try {
+      // Area tours are walkable by definition (see normalizeAreaTourType) — a
+      // stored "driving" label must never strip a downtown cluster of its
+      // walking stops and parking. The auto-correct below stores the result.
+      const enforcedType = normalizeAreaTourType(tourData.tour_category, tourData.tour_type);
       const needsCoordVerification = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
       const coordInstruction = needsCoordVerification
         ? '\nCOORDINATES — CRITICAL: Look up the REAL GPS coordinates of each stop using web search. There are two cases:\n- DIFFERENT BUILDINGS/STRUCTURES on the property (e.g., separate buildings at Pennhurst Asylum, separate batteries at a fort): each MUST have its OWN distinct, real GPS coordinates. Search for each one individually (e.g., "Battery 519 Fort Miles Lewes DE").\n- ROOMS/AREAS WITHIN A SINGLE BUILDING (e.g., rooms in the Farnsworth House, floors of the Anthracite Hotel, Andy Gavin\'s mansion rooms): these stops SHOULD share the SAME coordinates — the building\'s real GPS coordinates. Set same_structure: true for these stops. It is CORRECT for them to stack at the same point on the map — they are all inside one structure.\nDo NOT invent fake distinct coordinates for rooms within one building. If all stops are inside the same building, they all get that building\'s real coordinates with same_structure: true.'
@@ -851,7 +859,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         }
       }
 
-      const processed = await enforceWalkingDistance(result.stops || [], tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
+      const processed = await enforceWalkingDistance(result.stops || [], enforcedType, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData) });
       // Auto-correct tour type if stops are a mix of walking + driving
       const methods = new Set(processed.map(s => s.travel_method));
       const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
@@ -931,7 +939,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       // geocoding fails (water/failed), fall back to the tour's start coords
       // (verified on land by fix-collapsed-coords). If the LLM didn't provide
       // parking at all, create one at the tour's start location.
-      if (tourData.tour_type !== 'driving') {
+      if (enforcedType !== 'driving') {
         const p = result.parking || {};
         let pLat = tourData.start_latitude;
         let pLon = tourData.start_longitude;
@@ -975,7 +983,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         const vShuttle = verifiedStops.find(s => s.stop_type === 'shuttle');
         const vTourStops = verifiedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
         const parkingCoords = vParking?.latitude != null ? { lat: vParking.latitude, lon: vParking.longitude } : null;
-        const reordered = await enforceWalkingDistance(vTourStops, tourData.tour_type, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
+        const reordered = await enforceWalkingDistance(vTourStops, enforcedType, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { walkingLimit: getWalkingLimit(tourData), parkingCoords });
         for (const s of reordered) {
           const existing = vTourStops.find(ts => ts.id === s.id);
           if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {

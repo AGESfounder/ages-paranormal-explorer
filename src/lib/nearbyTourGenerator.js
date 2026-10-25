@@ -2,6 +2,7 @@ import { base44 } from '@/api/base44Client';
 import { paidGenerate } from '@/lib/paidAi';
 import { findExistingTour } from '@/lib/generateTour';
 import { haversineMiles } from '@/lib/deviceCapabilities';
+import { normalizeAreaTourType } from '@/lib/routeOptimizer';
 
 // Phase 1: Try up to AREA_MAX_ATTEMPTS times to create a new Area tour in a
 // location that doesn't already have one. Each redundant result adds its city
@@ -231,7 +232,11 @@ export async function generateNewNearbyTour(locationContext, originOpts = null) 
     }
     const existing = await findExistingTour(tourData.title, tourData.state, 'area', undefined, tourData.city);
     if (!existing) {
-      const saved = await base44.entities.Tour.create({ ...tourData, tour_category: 'area' });
+      const saved = await base44.entities.Tour.create({
+        ...tourData,
+        tour_category: 'area',
+        tour_type: normalizeAreaTourType('area', tourData.tour_type),
+      });
       return {
         status: 'created',
         tour: saved,

@@ -11,6 +11,7 @@ import { US_STATES } from '../lib/statesData';
 import { base44 } from '@/api/base44Client';
 import { paidGenerate } from '@/lib/paidAi';
 import { generateLocationTour, findExistingTour } from '@/lib/generateTour';
+import { normalizeAreaTourType } from '@/lib/routeOptimizer';
 import ExistingTourDialog from '@/components/ExistingTourDialog';
 import TourCategoryDialog from '@/components/TourCategoryDialog';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
@@ -141,6 +142,15 @@ Use real locations with documented paranormal history only.`,
         const title = tour.title || '';
         if (strongAreaRe.test(title) || (cityTownRe.test(title) && !propertyRe.test(title))) {
           tour.tour_category = 'area';
+        }
+      }
+
+      // AREA tours are walkable by definition — see normalizeAreaTourType. This
+      // flow stores the model's tour_type as-is, so a "driving" label here would
+      // again leave a downtown cluster with no walking stops and no parking.
+      for (const tour of result.tours || []) {
+        if (tour.tour_category === 'area') {
+          tour.tour_type = normalizeAreaTourType('area', tour.tour_type || 'mixed');
         }
       }
 
