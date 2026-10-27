@@ -235,10 +235,10 @@ const appConfigurations = objects.filter((object) => /isa = XCBuildConfiguration
 check('App target has Debug and Release build configurations', appConfigurations.length === 2 && ['Debug', 'Release'].every((name) => appConfigurations.some((object) => object.body.includes(`name = ${name};`))));
 for (const name of ['Debug', 'Release']) {
   const settings = appConfigurations.find((object) => object.body.includes(`name = ${name};`))?.body ?? '';
-  check(`iOS ${name} is com.ages.explorer 1.0 (33)`, /CURRENT_PROJECT_VERSION = 33;/.test(settings) && /MARKETING_VERSION = 1\.0;/.test(settings) && /PRODUCT_BUNDLE_IDENTIFIER = com\.ages\.explorer;/.test(settings));
+  check(`iOS ${name} is com.ages.explorer 1.0 (34)`, /CURRENT_PROJECT_VERSION = 34;/.test(settings) && /MARKETING_VERSION = 1\.0;/.test(settings) && /PRODUCT_BUNDLE_IDENTIFIER = com\.ages\.explorer;/.test(settings));
 }
 const codemagic = read('codemagic.yaml') ?? '';
-check('iOS has exactly two Build 33 stamps and Codemagic stamps/guards the same build', (pbxproj?.match(/CURRENT_PROJECT_VERSION = 33;/g) ?? []).length === 2 && (pbxproj?.match(/CURRENT_PROJECT_VERSION = [^;]+;/g) ?? []).length === 2 && codemagic.includes('agvtool new-version -all 33') && codemagic.includes('CURRENT_PROJECT_VERSION = 33;') && codemagic.includes('[ "$BUNDLE_VERSION" = "33" ]') && !/Build 32|CFBundleVersion 32|build number 32/.test(codemagic));
+check('iOS has exactly two Build 34 stamps and Codemagic stamps/guards the same build', (pbxproj?.match(/CURRENT_PROJECT_VERSION = 34;/g) ?? []).length === 2 && (pbxproj?.match(/CURRENT_PROJECT_VERSION = [^;]+;/g) ?? []).length === 2 && codemagic.includes('agvtool new-version -all 34') && codemagic.includes('CURRENT_PROJECT_VERSION = 34;') && codemagic.includes('[ "$BUNDLE_VERSION" = "34" ]') && !/Build 33|CFBundleVersion 33|build number 33/.test(codemagic));
 
 // ── Report
 const width = Math.max(...results.map((r) => r.label.length));
