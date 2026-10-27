@@ -47,7 +47,7 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
     try {
       const report = await buildAndroidSaveReport(deviceError ? deviceAttemptBlob || deviceBlob : originalBlob, deviceError || preparationError);
       const copied = await copySaveReport(report);
-      setDiagnosticsNote(copied ? 'Diagnostics copied. Share them with the Build 28 tester report.' : 'Could not copy diagnostics. Try Copy save diagnostics again.');
+      setDiagnosticsNote(copied ? 'Diagnostics copied. Share them with the Build 29 tester report.' : 'Could not copy diagnostics. Try Copy save diagnostics again.');
     } catch {
       setDiagnosticsNote('Could not copy diagnostics. Try Copy save diagnostics again.');
     } finally {
