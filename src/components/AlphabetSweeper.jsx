@@ -74,7 +74,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     setSensorError,
   });
 
-  const { stop: stopVoice, unlock, attachMicToRecording, boostMicStream, resumeContext, playCue } = useGhostVoice();
+  const { stop: stopVoice, unlock, attachMicToRecording, boostMicStream, resumeContext, refreshRecordingDestination, playCue } = useGhostVoice();
 
   // Speak a letter aloud via the shared Tool speech adapter (native TTS on
   // iOS/Android, browser speechSynthesis on web), in the user's own device
@@ -134,6 +134,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     attachMicToRecording,
     boostMicStream,
     resumeAudioContext: resumeContext,
+    refreshRecordingDestination,
     setSensorError,
     componentName: 'AlphabetSweeper',
   });

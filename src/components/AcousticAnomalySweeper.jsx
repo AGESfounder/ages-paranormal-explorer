@@ -15,6 +15,7 @@ import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
+import { recordingBlobType } from '@/lib/recordingLabel';
 
 // Listen-only acoustic monitor. It never emits sound: it listens through the
 // device microphone, measures the room's own baseline first, then watches for
@@ -211,7 +212,12 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
       stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
-      const actualMime = mr.mimeType || chunksRef.current.find((c) => c.blob.type)?.blob.type || mimeRef.current || (audioOnlyRef.current ? 'audio/webm' : 'video/webm');
+      const actualMime = recordingBlobType({
+        recorderMime: mr.mimeType,
+        chunkMime: chunksRef.current.find((c) => c.blob.type)?.blob.type,
+        requestedMime: mimeRef.current,
+        fallback: audioOnlyRef.current ? 'audio/webm' : 'video/webm',
+      });
       const blob = new Blob(chunksRef.current.map((c) => c.blob), { type: actualMime });
       setVideoBlob(blob);
       // Release the microphone and the audio context only once the recorder has

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
+import { isAndroidRecording, recordingBlobType } from '@/lib/recordingLabel';
 
 // Shared MediaRecorder lifecycle for the canvas-based sweeper tools (Terms,
 // Alphabet, Yes/No/IDK). All three recorded a <canvas> + mic into a
@@ -54,6 +55,7 @@ export default function useSweeperRecorder({
   attachMicToRecording,
   boostMicStream,
   resumeAudioContext,
+  refreshRecordingDestination,
   setSensorError,
   componentName = 'Sweeper',
 }) {
@@ -110,6 +112,33 @@ export default function useSweeperRecorder({
       canvasStreamRef.current = null;
     }
   }, []);
+
+  // Assemble the session into the one file it is. The declared type is the
+  // container the recorder actually produced, and on Android it carries the
+  // container name alone — the same declaration the camera tools make, because
+  // the device save reads that string to decide how to hand the file on. A blob
+  // that declares its codecs is refused there.
+  const finalizeTake = useCallback((reason) => {
+    stopHeartbeat();
+    stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
+    const mr = mediaRecorderRef.current;
+    const blobType = recordingBlobType({
+      recorderMime: mr?.mimeType,
+      chunkMime: videoChunksRef.current.find((c) => c.blob.type)?.blob.type,
+      requestedMime: mimeTypeRef.current,
+      fallback: audioOnlyRef.current ? 'audio/webm' : 'video/webm',
+    });
+    const blob = new Blob(videoChunksRef.current.map((c) => c.blob), { type: blobType });
+    diag('info', `${componentName} recorder stopped (${reason})`, {
+      elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
+      chunks: videoChunksRef.current.length,
+      blobSize: blob.size,
+      declaredType: blob.type,
+      recorderReported: mr?.mimeType || '',
+    });
+    setVideoBlob(blob);
+    stopTracks();
+  }, [componentName, stopHeartbeat, stopTracks]);
 
   // Spin up a fresh MediaRecorder on a new canvas stream + mic. Used for both
   // the initial recording and auto-restarts. Chunks always accumulate into
@@ -212,22 +241,28 @@ export default function useSweeperRecorder({
       if (audioTrack) audioTrack.addEventListener('ended', onTrackEnded('audio'));
 
       mr.onstop = () => {
-        stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
         if (userStoppedRef.current) {
           // User-initiated stop — assemble the final blob from every chunk
-          // collected across the whole session (including restarts).
-          const blob = new Blob(videoChunksRef.current.map((c) => c.blob), {
-            type: mr.mimeType || videoChunksRef.current.find((c) => c.blob.type)?.blob.type || mimeTypeRef.current || (audioOnlyRef.current ? 'audio/webm' : 'video/webm'),
-          });
-          diag('info', `${componentName} recorder stopped (user)`, {
-            elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
-            chunks: videoChunksRef.current.length,
-            blobSize: blob.size,
-          });
-          setVideoBlob(blob);
-          stopTracks();
+          // collected across the whole session.
+          finalizeTake('user');
           return;
         }
+        // Android: a stopped recorder cannot be resumed into the same file. A
+        // second recorder's chunks glued onto the first make a file with two
+        // container headers and timestamps that restart mid-way, which the
+        // device save refuses. Finalize the one take instead of gluing another
+        // onto it, and say so rather than passing off a short file as the whole
+        // session.
+        if (isAndroidRecording()) {
+          diag('warn', `${componentName} recorder stopped before the session ended`, {
+            elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
+            chunks: videoChunksRef.current.length,
+          });
+          setSensorError?.('The session recording ended early on this device. Save what was captured, then start a new session.');
+          finalizeTake('ended early');
+          return;
+        }
+        stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
         // Auto-stop (track ended / WebKit fragility) while the session is
         // still running — restart a fresh recorder so the rest of the
         // session is captured. Chunks already collected are preserved.
@@ -252,7 +287,7 @@ export default function useSweeperRecorder({
       diag('error', `${componentName} spinup failed`, { msg: e?.message });
       return false;
     }
-  }, [canvasRef, attachMicToRecording, boostMicStream, setSensorError, componentName, stopTracks, stopCanvasTracks]);
+  }, [canvasRef, attachMicToRecording, boostMicStream, setSensorError, componentName, stopTracks, stopCanvasTracks, finalizeTake]);
 
   const startRecording = useCallback(async () => {
     userStoppedRef.current = false;
@@ -261,10 +296,16 @@ export default function useSweeperRecorder({
     setVideoBlob(null);
     startedAtRef.current = Date.now();
     diag('info', `${componentName} recording started`);
+    // Android: begin the session on a live mixed audio track, so the whole take
+    // records on one audio path — a dead destination left over from an earlier
+    // session would send this one to the plain microphone instead.
+    if (isAndroidRecording() && refreshRecordingDestination) {
+      try { refreshRecordingDestination(); } catch {}
+    }
     const ok = await spinup();
     if (ok) startHeartbeat();
     return ok;
-  }, [spinup, startHeartbeat, componentName]);
+  }, [spinup, startHeartbeat, componentName, refreshRecordingDestination]);
 
   // User-initiated stop (Stop Session button). Flags the stop so the onstop
   // handler builds the blob instead of restarting.

@@ -596,6 +596,26 @@ export default function useGhostVoice() {
     } catch { return null; }
   }, []);
 
+  // Replace a dead recording destination before a session starts.
+  //
+  // The mixed destination is created once and reused, and its track can end
+  // while the app keeps running. A recorder that attaches to that dead track
+  // falls back to the plain microphone for the whole session, so the tools' own
+  // words and cues reach the file only acoustically. Starting each session on a
+  // live destination keeps a whole take on one audio path. The microphone chain,
+  // its lift and its limiter are untouched — only a dead destination is
+  // replaced.
+  const refreshRecordingDestination = useCallback(() => {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || ctx.state === 'closed') return false;
+      const track = recordDestRef.current?.stream.getAudioTracks()[0];
+      if (recordDestRef.current && track && track.readyState === 'live') return true;
+      recordDestRef.current = ctx.createMediaStreamDestination();
+      return !!recordDestRef.current.stream.getAudioTracks()[0];
+    } catch { return false; }
+  }, []);
+
   // Fetch + decode an audio URL into an AudioBuffer for instant playback later.
   const fetchAudioBuffer = useCallback(async (url) => {
     try {
@@ -705,5 +725,5 @@ export default function useGhostVoice() {
     } catch {}
   }, []);
 
-  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop, unlock, attachMicToRecording, boostMicStream, playCue };
+  return { isSpeaking, isGenerating, narrate, speak, playPreGenerated, playAudioBuffer, fetchAudioBuffer, resumeContext, stop, unlock, attachMicToRecording, boostMicStream, refreshRecordingDestination, playCue };
 }

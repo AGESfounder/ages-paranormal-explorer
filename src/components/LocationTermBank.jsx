@@ -163,7 +163,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
     setSensorError,
   });
 
-  const { unlock, attachMicToRecording, boostMicStream, resumeContext, playCue } = useGhostVoice();
+  const { unlock, attachMicToRecording, boostMicStream, resumeContext, refreshRecordingDestination, playCue } = useGhostVoice();
   const { gateManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const speakNormal = (word) => {
@@ -226,6 +226,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
     attachMicToRecording,
     boostMicStream,
     resumeAudioContext: resumeContext,
+    refreshRecordingDestination,
     setSensorError,
     componentName: 'TermsSweeper',
   });

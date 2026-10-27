@@ -48,7 +48,7 @@ function formatDuration(sec) {
 
 export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
-  const { unlock, attachMicToRecording, boostMicStream, resumeContext, playCue } = useGhostVoice();
+  const { unlock, attachMicToRecording, boostMicStream, resumeContext, refreshRecordingDestination, playCue } = useGhostVoice();
 
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
   const [available, setAvailable] = useState(null);
@@ -105,6 +105,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     attachMicToRecording,
     boostMicStream,
     resumeAudioContext: resumeContext,
+    refreshRecordingDestination,
     setSensorError,
     componentName: 'EnvironmentMonitor',
   });

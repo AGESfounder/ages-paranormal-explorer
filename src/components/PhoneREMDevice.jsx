@@ -13,6 +13,7 @@ import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
+import { recordingBlobType } from '@/lib/recordingLabel';
 
 // Quiet window the sensor baseline is measured over, before the session — and
 // its recording — begin.
@@ -415,7 +416,12 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push({ blob: e.data, t: Date.now() }); };
       mr.onstop = () => {
         stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
-        const actualMime = mr.mimeType || videoChunksRef.current.find((c) => c.blob.type)?.blob.type || mimeType || (canvasCapture ? 'video/webm' : 'audio/webm');
+        const actualMime = recordingBlobType({
+          recorderMime: mr.mimeType,
+          chunkMime: videoChunksRef.current.find((c) => c.blob.type)?.blob.type,
+          requestedMime: mimeType,
+          fallback: canvasCapture ? 'video/webm' : 'audio/webm',
+        });
         const blob = new Blob(videoChunksRef.current.map((c) => c.blob), { type: actualMime });
         videoBlobRef.current = blob;
         setVideoBlob(blob);
