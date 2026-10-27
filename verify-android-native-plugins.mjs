@@ -20,7 +20,7 @@ const java = (path) => read(path).replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/
 const nativePath = 'android/app/src/main/java/com/ages/explorer/';
 
 const gradle = read('android/app/build.gradle');
-for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '27'], ['versionName', '"1.0"']]) {
+for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '28'], ['versionName', '"1.0"']]) {
   const values = [...gradle.matchAll(new RegExp(`^\\s*${key}\\s+([^\\r\\n]+)`, 'gm'))];
   check(`Android ${key} is exactly ${value}`, values.length === 1 && values[0][1].trim() === value);
 }
@@ -92,9 +92,22 @@ check('Full exports require readable tracks; trims require bounded sample-backed
   && save.includes('inspectMedia(output, "output", trimRequested)')
   && /if \(outputInfo.durationMs <= 0\)\s*\{\s*throw new MediaPreparationException\(/.test(save)
   && save.includes('if (trimRequested && Math.abs(measuredDurationMs - expectedDurationMs) > DURATION_TOLERANCE_MS)'));
+const recordingLabel = read('src/lib/recordingLabel.js');
+const structuredMimeResolution = recordingLabel.includes("import { Capacitor } from '@capacitor/core';")
+  && /export function isAndroidRecording\(\) \{\s*try \{\s*return Capacitor\.getPlatform\(\) === 'android';\s*\} catch \{\s*return false;\s*\}\s*\}/.test(recordingLabel)
+  && /export function recordingBlobType\(\{ recorderMime, chunkMime, requestedMime, fallback \}\) \{\s*const reported = recorderMime \|\| chunkMime \|\| requestedMime \|\| fallback \|\| '';\s*if \(!isAndroidRecording\(\)\) return reported;\s*return String\(reported\)\.split\(';'\)\[0\]\.trim\(\) \|\| fallback;\s*\}/.test(recordingLabel);
+const structuredMimeAssemblies = {
+  'src/components/PhoneREMDevice.jsx': /const actualMime = recordingBlobType\(\{\s*recorderMime: mr\.mimeType,\s*chunkMime: videoChunksRef\.current\.find\(\(c\) => c\.blob\.type\)\?\.blob\.type,\s*requestedMime: mimeType,\s*fallback: canvasCapture \? 'video\/webm' : 'audio\/webm',\s*\}\);\s*const blob = new Blob\(videoChunksRef\.current\.map\(\(c\) => c\.blob\), \{ type: actualMime \}\);/,
+  'src/components/AcousticAnomalySweeper.jsx': /const actualMime = recordingBlobType\(\{\s*recorderMime: mr\.mimeType,\s*chunkMime: chunksRef\.current\.find\(\(c\) => c\.blob\.type\)\?\.blob\.type,\s*requestedMime: mimeRef\.current,\s*fallback: audioOnlyRef\.current \? 'audio\/webm' : 'video\/webm',\s*\}\);\s*const blob = new Blob\(chunksRef\.current\.map\(\(c\) => c\.blob\), \{ type: actualMime \}\);/,
+  'src/hooks/useSweeperRecorder.js': /const blobType = recordingBlobType\(\{\s*recorderMime: mr\?\.mimeType,\s*chunkMime: videoChunksRef\.current\.find\(\(c\) => c\.blob\.type\)\?\.blob\.type,\s*requestedMime: mimeTypeRef\.current,\s*fallback: audioOnlyRef\.current \? 'audio\/webm' : 'video\/webm',\s*\}\);\s*const blob = new Blob\(videoChunksRef\.current\.map\(\(c\) => c\.blob\), \{ type: blobType \}\);/,
+};
 for (const path of ['src/components/PhoneREMDevice.jsx', 'src/components/AcousticAnomalySweeper.jsx', 'src/hooks/useSweeperRecorder.js', 'src/components/SiegConsole.jsx']) {
   const recorder = read(path);
-  check(`${path} prefers actual recorder/chunk MIME without guessing MP4 audio`, /mr\.mimeType \|\| [^\n]+find\(\(c\) => c\.blob\.type\)\?\.blob\.type/.test(recorder) && recorder.includes("'audio/webm' : 'video/webm'") || (recorder.includes("mr.mimeType || ") && recorder.includes('find((c) => c.blob.type)?.blob.type') && /(?:canvasCapture|picture) \? 'video\/webm' : 'audio\/webm'/.test(recorder)));
+  check(`${path} prefers actual recorder/chunk MIME without guessing MP4 audio`, path === 'src/components/SiegConsole.jsx'
+    ? /mr\.mimeType \|\| [^\n]+find\(\(c\) => c\.blob\.type\)\?\.blob\.type/.test(recorder) && recorder.includes("'audio/webm' : 'video/webm'") || (recorder.includes("mr.mimeType || ") && recorder.includes('find((c) => c.blob.type)?.blob.type') && /(?:canvasCapture|picture) \? 'video\/webm' : 'audio\/webm'/.test(recorder))
+    : structuredMimeResolution
+      && /import \{ (?:isAndroidRecording, )?recordingBlobType \} from '@\/lib\/recordingLabel';/.test(recorder)
+      && structuredMimeAssemblies[path].test(recorder));
 }
 const diagnostics = read('src/lib/androidSaveDiagnostics.js');
 const saveButtons = read('src/components/EvidenceSaveButtons.jsx');
@@ -212,10 +225,10 @@ check('Save-time Retry clears prior errors, shows progress, rejects a missing so
   && deviceAttempt.includes('setDeviceSaving(false)')
   && saveButtons.includes('deviceSaving && <p role="status"')
   && !/setOriginalBlob|setDeviceBlob|onSave\(/.test(deviceAttempt));
-check('Retry diagnostics use the actual attempted source and Build 27 copy',
+check('Retry diagnostics use the actual attempted source and Build 28 copy',
   deviceAttempt.includes('setDeviceAttemptBlob(input)')
   && saveButtons.includes('deviceError ? deviceAttemptBlob || deviceBlob : originalBlob')
-  && saveButtons.includes('Build 27 tester report.'));
+  && saveButtons.includes('Build 28 tester report.'));
 check('Brief, Standard and Full retain last-30s, last-90s and whole-source intent',
   /id: 'brief', label: 'Brief', seconds: 30, desc: 'last 30 seconds'/.test(trimOptions)
   && /id: 'standard', label: 'Standard', seconds: 90, desc: 'last 90 seconds'/.test(trimOptions)
@@ -327,9 +340,9 @@ const sync = workflow.indexOf('script: npx cap sync android');
 const verify = workflow.indexOf('npm run verify:android-native-plugins');
 const compile = workflow.indexOf('./gradlew assembleRelease bundleRelease');
 check('Android workflow orders web build, Android sync, static gate, then Gradle', build >= 0 && sync > build && verify > sync && compile > verify);
-check('Current CI and native notes identify Android Build 27 without changing iOS Build 33',
-  workflow.includes('Verify Android Version 27 and native plugin wiring before Gradle')
-  && read('AGENTS.md').includes('Android `versionCode` 27 is prepared')
+check('Current CI and native notes identify Android Build 28 without changing iOS Build 33',
+  workflow.includes('Verify Android Version 28 and native plugin wiring before Gradle')
+  && read('AGENTS.md').includes('Android `versionCode` 28 is prepared')
   && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 33;'));
 check('Android workflow keeps signing and signature verification', workflow.includes('- ages-explorer-upload') && workflow.includes('jarsigner -verify -verbose -certs'));
 
