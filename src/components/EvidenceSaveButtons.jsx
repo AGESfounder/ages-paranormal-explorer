@@ -3,6 +3,7 @@ import { Lock, Globe, Loader2, Download, Check, AlertCircle, Copy } from 'lucide
 import { saveBlobToDevice, recoverOriginalToDevice, buildDeviceFilename } from '@/lib/saveToDevice';
 import { Capacitor } from '@capacitor/core';
 import { buildAndroidSaveReport, copySaveReport } from '@/lib/androidSaveDiagnostics';
+import { useAuth } from '@/lib/AuthContext';
 
 /**
  * Save destination picker for evidence.
@@ -27,6 +28,12 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
   const [diagnosticsNote, setDiagnosticsNote] = useState('');
   const [deviceAttemptBlob, setDeviceAttemptBlob] = useState(null);
   const isAndroid = Capacitor.getPlatform() === 'android';
+  // Diagnostic output is an admin troubleshooting aid. Standard users get a
+  // plain failure message instead — except permission failures, where granting
+  // access is the user's own fix and the reason must stay readable.
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const visibleDeviceError = isAdmin || /permission|storage access/i.test(deviceError) ? deviceError : 'Save failed. Try again.';
   const failedPreparation = preparationError || savePreparationError;
   const directAudioFiles = iosAudioOriginalToFiles && Capacitor.getPlatform() === 'ios';
   const blocked = saving || deviceSaving || preparing || !!preparationError || (!directAudioFiles && !!savePreparationError);
@@ -138,11 +145,11 @@ export default function EvidenceSaveButtons({ onSave, saving, deviceBlob, origin
         </div>
       )}
       {deviceError ? (
-        <p role="alert" className="text-xs text-destructive text-pretty flex items-center justify-center gap-1"><AlertCircle className="h-3 w-3 shrink-0" /> {deviceError}</p>
+        <p role="alert" className="text-xs text-destructive text-pretty flex items-center justify-center gap-1"><AlertCircle className="h-3 w-3 shrink-0" /> {visibleDeviceError}</p>
       ) : (deviceBlob || canRecover) && (
         <p role="status" className="text-xs text-muted-foreground text-center text-pretty">{deviceNote || (directAudioFiles ? 'Copies the unchanged original audio to Files / On My iPhone, not Photos — no conversion or service needed. You can save to your Journal separately.' : `Saves the recording to your device's ${nativeLabel} now — no service needed. Save to your Journal later once you're back in range.`)}</p>
       )}
-      {isAndroid && (deviceError || preparationError) && (
+      {isAdmin && isAndroid && (deviceError || preparationError) && (
         <div className="space-y-1 text-xs">
           <button type="button" onClick={handleCopyDiagnostics} disabled={copyingDiagnostics || deviceSaving || preparing} className="min-h-11 w-full flex items-center justify-center gap-2 rounded-lg border border-border px-3 text-foreground hover:bg-accent active:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">
             {copyingDiagnostics ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : <Copy className="h-4 w-4" />}
