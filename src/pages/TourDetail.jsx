@@ -47,6 +47,7 @@ import ParkingChangeDialog from '@/components/ParkingChangeDialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
 import { addStopByName } from '@/lib/addTourStops';
+import { sanitizeStopRecord } from '@/lib/stopRecordSanitize';
 
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
@@ -929,7 +930,13 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
       for (const stop of deduped) {
         if (!stop.access_area) stop.access_area = classifyStopAccess(stop.name);
         const { _geocoded, ...rest } = stop;
-        const saved = await base44.entities.TourStop.create({ ...rest, tour_id: tourId, geocoded: !!_geocoded });
+        // Coerce the model's types before saving: one field of the wrong shape
+        // used to reject the record and leave the tour with no stops at all.
+        const saved = await base44.entities.TourStop.create({
+          ...sanitizeStopRecord(rest),
+          tour_id: tourId,
+          geocoded: !!_geocoded,
+        });
         created.push(saved);
       }
       // Generation was already authorized and charged by the server.
