@@ -5,6 +5,9 @@
 // doesn't have. TourStop.create rejects the whole record on either, and in the
 // tour view that rejection happens before any stop is saved — which is how
 // tours ended up stored with zero stops. Coerce here, never trust the model.
+//
+// Only the fields listed below are written through, so when TourStop gains a
+// new field, add it here too — otherwise AI-generated stops won't fill it.
 
 const TEXT_FIELDS = [
   'name',
