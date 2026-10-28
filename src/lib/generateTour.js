@@ -483,23 +483,49 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
 
   const newTour = await base44.entities.Tour.create(processed.tourData);
 
-  try {
-    const stopRecords = orderedStops.map((r) => ({ ...r, tour_id: newTour.id }));
-    await base44.entities.TourStop.bulkCreate(stopRecords);
+  const stopRecords = orderedStops.map((r) => ({ ...r, tour_id: newTour.id }));
 
-    // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
-    // API — LLM-generated coordinates are unreliable (often in water or at
-    // wrong locations). Uses real mapped features for accuracy.
-    if (processed.correctedCategory === 'landmark' || processed.correctedCategory === 'ship' || processed.correctedCategory === 'cold_spot') {
+  // A single invalid stop record used to kill the whole batch write, and that
+  // failure was swallowed — leaving a tour saved with no stops that the
+  // duplicate check then refused to regenerate (this is what produced the empty
+  // tours from the July batch). Write the batch, then fall back to one-by-one so
+  // one bad record can only lose itself.
+  let savedStops = 0;
+  try {
+    const created = await base44.entities.TourStop.bulkCreate(stopRecords);
+    savedStops = Array.isArray(created) ? created.length : stopRecords.length;
+  } catch (e) {
+    console.error('Stop batch write failed, retrying per stop:', e);
+    for (const record of stopRecords) {
       try {
-        await base44.functions.invoke('fix-collapsed-coords', { tourId: newTour.id });
-      } catch (e) {
-        console.error('Coordinate verification failed (tour still created):', e);
+        await base44.entities.TourStop.create(record);
+        savedStops += 1;
+      } catch (err) {
+        console.error(`Stop write failed for "${record.name}":`, err);
       }
     }
-  } catch (e) {
-    // Stop creation failure must not block the tour; TourDetail backfills stops.
-    console.error('Stop creation failed (tour still created):', e);
+  }
+
+  // With no stops the tour is unusable. Remove it rather than leave an empty
+  // tour behind that blocks ever generating it again.
+  if (savedStops === 0) {
+    try {
+      await base44.entities.Tour.delete(newTour.id);
+    } catch (e) {
+      console.error('Could not remove the empty tour:', e);
+    }
+    throw new Error('The stops could not be saved, so nothing was kept. Please try again.');
+  }
+
+  // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
+  // API — LLM-generated coordinates are unreliable (often in water or at
+  // wrong locations). Uses real mapped features for accuracy.
+  if (processed.correctedCategory === 'landmark' || processed.correctedCategory === 'ship' || processed.correctedCategory === 'cold_spot') {
+    try {
+      await base44.functions.invoke('fix-collapsed-coords', { tourId: newTour.id });
+    } catch (e) {
+      console.error('Coordinate verification failed (tour still created):', e);
+    }
   }
 
   return newTour;
