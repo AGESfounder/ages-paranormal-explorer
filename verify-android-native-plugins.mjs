@@ -20,7 +20,7 @@ const java = (path) => read(path).replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/
 const nativePath = 'android/app/src/main/java/com/ages/explorer/';
 
 const gradle = read('android/app/build.gradle');
-for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '29'], ['versionName', '"1.0"']]) {
+for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '30'], ['versionName', '"1.0"']]) {
   const values = [...gradle.matchAll(new RegExp(`^\\s*${key}\\s+([^\\r\\n]+)`, 'gm'))];
   check(`Android ${key} is exactly ${value}`, values.length === 1 && values[0][1].trim() === value);
 }
@@ -225,10 +225,10 @@ check('Save-time Retry clears prior errors, shows progress, rejects a missing so
   && deviceAttempt.includes('setDeviceSaving(false)')
   && saveButtons.includes('deviceSaving && <p role="status"')
   && !/setOriginalBlob|setDeviceBlob|onSave\(/.test(deviceAttempt));
-check('Retry diagnostics use the actual attempted source and Build 29 copy',
+check('Retry diagnostics use the actual attempted source and Build 30 copy',
   deviceAttempt.includes('setDeviceAttemptBlob(input)')
   && saveButtons.includes('deviceError ? deviceAttemptBlob || deviceBlob : originalBlob')
-  && saveButtons.includes('Build 29 tester report.'));
+  && saveButtons.includes('Build 30 tester report.'));
 check('Brief, Standard and Full retain last-30s, last-90s and whole-source intent',
   /id: 'brief', label: 'Brief', seconds: 30, desc: 'last 30 seconds'/.test(trimOptions)
   && /id: 'standard', label: 'Standard', seconds: 90, desc: 'last 90 seconds'/.test(trimOptions)
@@ -340,10 +340,10 @@ const sync = workflow.indexOf('script: npx cap sync android');
 const verify = workflow.indexOf('npm run verify:android-native-plugins');
 const compile = workflow.indexOf('./gradlew assembleRelease bundleRelease');
 check('Android workflow orders web build, Android sync, static gate, then Gradle', build >= 0 && sync > build && verify > sync && compile > verify);
-check('Current CI and native notes identify Android Build 29 alongside iOS Build 34',
-  workflow.includes('Verify Android Version 29 and native plugin wiring before Gradle')
-  && read('AGENTS.md').includes('Android `versionCode` 29 is prepared')
-  && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 34;'));
+check('Current CI and native notes identify Android Build 30 alongside iOS Build 35',
+  workflow.includes('Verify Android Version 30 and native plugin wiring before Gradle')
+  && read('AGENTS.md').includes('Android `versionCode` 30 is prepared')
+  && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 35;'));
 check('Android workflow keeps signing and signature verification', workflow.includes('- ages-explorer-upload') && workflow.includes('jarsigner -verify -verbose -certs'));
 
 for (const { label, ok } of results) console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
