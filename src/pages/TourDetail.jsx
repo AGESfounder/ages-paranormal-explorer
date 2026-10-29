@@ -52,10 +52,10 @@ import { sanitizeStopRecord } from '@/lib/stopRecordSanitize';
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
 // energy cost to the user (system maintenance bypasses energy gating).
-// 21 — walking links allow a hairline grace and equal-size pockets are judged
-// by distance to the lot (routeOptimizer), so every tour re-derives its
-// walking/driving split and its lot once on next open.
-const STOPS_VALIDATION_VERSION = 21;
+// 22 — a lot sitting inside its own loop is confirmed from its coordinates when
+// the address lookup fails (a failed geocode used to relocate a good lot to the
+// loop centre), so every tour re-derives its split and its lot once on next open.
+const STOPS_VALIDATION_VERSION = 22;
 
 // Module-level guard: prevents duplicate background coordinate jobs when the
 // user navigates away and back before the DB stamp (stops_regenerated) lands.

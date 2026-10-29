@@ -129,6 +129,19 @@ export async function planParking({ tour, walkingLimit, parkingStop, locatedStop
     }
   }
 
+  // 3b. Address geocoding is unreliable — Nominatim rate-limits and returns
+  //     nothing — and a lot that already sits inside the loop is not wrong just
+  //     because a lookup failed. The loop is the evidence. Accept its own
+  //     coordinates unless the pin is parked at the loop CENTRE, which is where
+  //     unresolved pins are put and therefore proves nothing about a real lot.
+  if (!usable) {
+    const centre = centroidOf(loop);
+    const parkedAtCentre = haversine(parkingStop.latitude, parkingStop.longitude, centre.lat, centre.lon) <= 0.02;
+    if (!parkedAtCentre && nearestToLoop(parkingStop.latitude, parkingStop.longitude) <= walkingLimit) {
+      usable = true;
+    }
+  }
+
   if (usable) {
     const changed = lat !== parkingStop.latitude
       || lon !== parkingStop.longitude
