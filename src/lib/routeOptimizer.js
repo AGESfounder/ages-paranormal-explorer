@@ -153,6 +153,74 @@ export const getWalkingLimit = (tour) => {
   return 0.33;
 };
 
+// A cluster is only a walk if it can actually be walked. Membership in the
+// cluster only proves each stop is within the limit of SOME other stop, so a
+// chain of legal hops can still put a long leg on the drawn route (Carbondale:
+// 3→5 is 0.33, 5→4 is 0.33, but 3→4 is 0.65 and lands in the walking loop).
+// So order the cluster as a loop first, then keep only what forms a legal walk:
+// the prefix whose consecutive legs are all inside the limit, trimmed from the
+// end until the loop closes near the lot. Demoted stops are driven to instead.
+// A loop is walkable when every leg between consecutive stops — and the leg back
+// to the lot — is inside the limit. That is the rule the map draws, so it is the
+// rule the stops have to satisfy.
+function isWalkableLoop(loop, limit, closingCoords, dist) {
+  for (let i = 1; i < loop.length; i++) {
+    if (dist(loop[i - 1], loop[i]) > limit) return false;
+  }
+  if (closingCoords && closingCoords.lat != null && closingCoords.lon != null) {
+    const last = loop[loop.length - 1];
+    return haversineDistance(closingCoords.lat, closingCoords.lon, last.latitude, last.longitude) <= limit;
+  }
+  return true;
+}
+
+// Build a walk that is legal by construction: step out from the lot, and from
+// each stop take the nearest stop still within the limit, until nothing is left
+// to reach. Then drop any tail the loop can't close to the lot from. Those
+// dropped stops are driven to instead of walked — never the other way round.
+export function buildWalkableLoop(stops, limit, closingCoords, dist) {
+  if (stops.length < 2) return { walk: [], demoted: [...stops] };
+  const nearestToLot = closingCoords && closingCoords.lat != null && closingCoords.lon != null
+    ? stops.reduce((best, s) => (
+      haversineDistance(closingCoords.lat, closingCoords.lon, s.latitude, s.longitude)
+        < haversineDistance(closingCoords.lat, closingCoords.lon, best.latitude, best.longitude) ? s : best
+    ), stops[0])
+    : stops[0];
+  const walk = [nearestToLot];
+  const remaining = stops.filter(s => s !== nearestToLot);
+  while (remaining.length > 0) {
+    const last = walk[walk.length - 1];
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const d = dist(last, remaining[i]);
+      if (d <= limit && d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    if (bestIdx < 0) break;
+    walk.push(remaining.splice(bestIdx, 1)[0]);
+  }
+  if (closingCoords && closingCoords.lat != null && closingCoords.lon != null) {
+    while (walk.length > 1) {
+      const last = walk[walk.length - 1];
+      if (haversineDistance(closingCoords.lat, closingCoords.lon, last.latitude, last.longitude) <= limit) break;
+      remaining.push(walk.pop());
+    }
+  }
+  if (walk.length < 2) return { walk: [], demoted: [...walk, ...remaining] };
+  return { walk, demoted: remaining };
+}
+
+// Keep the existing loop when it is already legal (no behaviour change for tours
+// that work), otherwise rebuild it so no walking leg can exceed the limit.
+export function ensureWalkableLoop(orderedLoop, clusterStops, limit, closingCoords, dist) {
+  if (orderedLoop.length < 2) return { walk: orderedLoop, demoted: [] };
+  const measure = dist || ((a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude));
+  if (isWalkableLoop(orderedLoop, limit, closingCoords, measure)) {
+    return { walk: orderedLoop, demoted: [] };
+  }
+  return buildWalkableLoop(clusterStops, limit, closingCoords, measure);
+}
+
 // An AREA tour is walkable by definition — its generation prompt requires a
 // tight walkable cluster (total route ≤2.5 miles), so a city/town tour is never
 // a pure driving tour. When the model labels one "driving" anyway, every stop
@@ -218,9 +286,22 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
     components.sort((a, b) => b.length - a.length);
     const walkingCluster = components[0] && components[0].length > 1 ? components[0] : [];
     const walkingSet = new Set(walkingCluster);
+    // Same rule as the auto order: a walking leg may never exceed the limit. In
+    // a manual order two cluster stops can sit far apart in the sequence, so the
+    // first stop that cannot be walked to from the last confirmed walking stop
+    // is driven to instead.
+    const keepWalking = new Set();
+    let lastWalk = null;
+    for (const s of stops.filter(st => walkingSet.has(st))) {
+      if (!lastWalk) { keepWalking.add(s); lastWalk = s; continue; }
+      if (haversineDistance(lastWalk.latitude, lastWalk.longitude, s.latitude, s.longitude) <= walkingLimit * WALK_LINK_GRACE) {
+        keepWalking.add(s);
+        lastWalk = s;
+      }
+    }
     return stops.map(s => ({
       ...s,
-      travel_method: walkingSet.has(s) ? 'walking' : 'driving',
+      travel_method: keepWalking.has(s) ? 'walking' : 'driving',
     }));
   }
 
@@ -377,6 +458,14 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
       orderedCluster.push(...rotated);
     }
   }
+
+  // Ordering the cluster as a loop can still leave a leg longer than the limit
+  // (a chain of legal hops). Keep only the part that forms a legal walk and
+  // hand the rest to the drive.
+  const walkPlan = ensureWalkableLoop(orderedCluster, walkingCluster, walkingLimit * WALK_LINK_GRACE, parkingCoords, dist);
+  orderedCluster.length = 0;
+  orderedCluster.push(...walkPlan.walk);
+  drivingStops.push(...walkPlan.demoted);
 
   // Order driving stops linearly, starting from the one closest to the
   // end of the walking cluster so the drive-out is as short as possible.
