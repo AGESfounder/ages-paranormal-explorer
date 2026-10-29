@@ -136,7 +136,11 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   const parkingStop = stops.find(s => s.stop_type === 'parking' && s.latitude && s.longitude);
   const parkingLat = parkingStop?.latitude || tour?.parking_latitude;
   const parkingLon = parkingStop?.longitude || tour?.parking_longitude;
-  const parkingName = parkingStop?.name || tour?.parking_name;
+  // An unplaced lot has no confirmed spot, so its recorded name is only a guess
+  // and must not be shown as the lot's name.
+  const parkingName = parkingStop?.needs_placement === true
+    ? 'Parking Area'
+    : (parkingStop?.name || tour?.parking_name);
   const parkingCost = parkingStop?.parking_cost || tour?.parking_cost;
   const parkingUnconfirmed = parkingStop?.needs_placement === true;
   const hasParking = parkingLat != null && parkingLon != null;

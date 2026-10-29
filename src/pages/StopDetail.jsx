@@ -23,6 +23,7 @@ import { getNarrationLength, truncateText } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { toast } from '@/components/ui/use-toast';
 import { verifyStopLocation } from '@/lib/verifyStop';
+import { parkingDisplay } from '@/lib/parkingLabel';
 import StopVerificationPhoto from '@/components/StopVerificationPhoto';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -615,6 +616,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
 
   if (stop.stop_type === 'parking' || stop.stop_type === 'shuttle') {
     const isShuttle = stop.stop_type === 'shuttle';
+    const lot = parkingDisplay(stop);
     // A fully validated tour's lot is fixed — its route was validated around
     // that spot — so the pin, and the button that would re-place it, are locked.
     const parkingPinLocked = !isShuttle && tour?.verified === true;
@@ -631,7 +633,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       <PageContainer>
         <SectionHeader
           title="Parking"
-          subtitle={stop.name}
+          subtitle={lot.name}
           showBack
           onBack={() => navigate(`/tour/${stop.tour_id}`)}
         />
@@ -643,13 +645,18 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
               </div>
               <div className="flex-1 min-w-0">
                 <p className={`text-[10px] font-heading uppercase tracking-wider ${isShuttle ? 'text-green-400' : 'text-amber-400'}`}>{isShuttle ? 'Shuttle Drop-Off' : 'Parking Area'}</p>
-                <p className="text-sm text-foreground truncate">{stop.name}</p>
+                <p className="text-sm text-foreground truncate">{lot.name}</p>
               </div>
               {stop.user_verified && <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />}
             </div>
-            {stop.address && (
+            {lot.address && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <MapPin className="w-3 h-3 shrink-0" /> {stop.address}
+                <MapPin className="w-3 h-3 shrink-0" /> {lot.address}
+              </p>
+            )}
+            {!isShuttle && lot.unplaced && (
+              <p className="text-xs text-amber-300 flex items-center gap-1">
+                <MapPin className="w-3 h-3 shrink-0" /> No confirmed lot yet — long press the pin on the tour map to place it.
               </p>
             )}
           </div>

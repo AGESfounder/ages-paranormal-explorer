@@ -48,6 +48,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
 import { addStopByName } from '@/lib/addTourStops';
 import { sanitizeStopRecord } from '@/lib/stopRecordSanitize';
+import { parkingDisplay } from '@/lib/parkingLabel';
 
 // Bump this when validation rules change — all tours with an older version
 // get re-validated (and regenerated if non-compliant) on next view, at no
@@ -1333,6 +1334,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
   };
 
   const parkingStop = stops.find(s => s.stop_type === 'parking');
+  const parkingLot = parkingDisplay(parkingStop);
   const shuttleStop = stops.find(s => s.stop_type === 'shuttle');
   const tourStops = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
   const accessFilteredStops = tour?.access_type === 'interior_only'
@@ -1532,9 +1534,9 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
               >
                 <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 font-heading text-sm font-bold shrink-0 text-amber-400">P</div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate group-hover:text-amber-400 transition-colors">{parkingStop.name || 'Parking Area'}</p>
+                  <p className="text-sm font-medium text-foreground truncate group-hover:text-amber-400 transition-colors">{parkingLot.name}</p>
                   <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
-                    <MapPin className="w-2.5 h-2.5" /> <span className="truncate">{parkingStop.address || 'Parking'}</span>
+                    <MapPin className="w-2.5 h-2.5" /> <span className="truncate">{parkingLot.unplaced ? 'Location not confirmed yet' : (parkingLot.address || 'Parking')}</span>
                   </p>
                 </div>
                 {parkingStop.user_verified && <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />}
