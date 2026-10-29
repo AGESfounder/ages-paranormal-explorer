@@ -6,13 +6,8 @@ import { isLargeProperty } from '@/lib/largeProperty';
 // correct stop ordering (driving stops at the end, walking stops as a loop)
 // BEFORE stops are stored, not just on view.
 
-export function haversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 3958.8;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+import { haversineDistance, WALK_LINK_GRACE, isLocatedStop, walkingComponents, planWalkingRoute } from '@/lib/walkingRoute';
+export { haversineDistance, WALK_LINK_GRACE } from '@/lib/walkingRoute';
 
 // Rounding helper for coordinate-based map keys (5 decimals ≈ 1 meter).
 const coordKey = (s) => `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
@@ -132,14 +127,8 @@ export function orderStopsByProximity(stops, includeReturn = false, distFn) {
 
 const WALKING_LIMIT = 0.33;
 
-// A hairline grace on the walking link. Stops are grouped when the walk between
-// them is within this limit, and a pair that measures a couple of thousandths
-// OVER the line is still a walk — 0.332 mi against 0.33 tore the Journal Square
-// pocket in Jersey City into fragments, so the walk went to a different pair
-// entirely and every stop around the lot was stamped driving. 5% is well under
-// the next real gap (0.366 mi) and only affects near-exact boundary cases.
-// Mirrored in base44/shared/tourParking.ts — keep the two in step.
-export const WALK_LINK_GRACE = 1.05;
+// The same walking-link tolerance is used for membership, route expansion and
+// map geometry. Parking affects where the walk starts, not which stops survive.
 
 // Walking threshold for stop clustering. Single-site tours (landmark/ship/
 // cold_spot) are large properties where you walk between structures that can
@@ -153,73 +142,7 @@ export const getWalkingLimit = (tour) => {
   return 0.33;
 };
 
-// A cluster is only a walk if it can actually be walked. Membership in the
-// cluster only proves each stop is within the limit of SOME other stop, so a
-// chain of legal hops can still put a long leg on the drawn route (Carbondale:
-// 3→5 is 0.33, 5→4 is 0.33, but 3→4 is 0.65 and lands in the walking loop).
-// So order the cluster as a loop first, then keep only what forms a legal walk:
-// the prefix whose consecutive legs are all inside the limit, trimmed from the
-// end until the loop closes near the lot. Demoted stops are driven to instead.
-// A loop is walkable when every leg between consecutive stops — and the leg back
-// to the lot — is inside the limit. That is the rule the map draws, so it is the
-// rule the stops have to satisfy.
-function isWalkableLoop(loop, limit, closingCoords, dist) {
-  for (let i = 1; i < loop.length; i++) {
-    if (dist(loop[i - 1], loop[i]) > limit) return false;
-  }
-  if (closingCoords && closingCoords.lat != null && closingCoords.lon != null) {
-    const last = loop[loop.length - 1];
-    return haversineDistance(closingCoords.lat, closingCoords.lon, last.latitude, last.longitude) <= limit;
-  }
-  return true;
-}
 
-// Build a walk that is legal by construction: step out from the lot, and from
-// each stop take the nearest stop still within the limit, until nothing is left
-// to reach. Then drop any tail the loop can't close to the lot from. Those
-// dropped stops are driven to instead of walked — never the other way round.
-export function buildWalkableLoop(stops, limit, closingCoords, dist) {
-  if (stops.length < 2) return { walk: [], demoted: [...stops] };
-  const nearestToLot = closingCoords && closingCoords.lat != null && closingCoords.lon != null
-    ? stops.reduce((best, s) => (
-      haversineDistance(closingCoords.lat, closingCoords.lon, s.latitude, s.longitude)
-        < haversineDistance(closingCoords.lat, closingCoords.lon, best.latitude, best.longitude) ? s : best
-    ), stops[0])
-    : stops[0];
-  const walk = [nearestToLot];
-  const remaining = stops.filter(s => s !== nearestToLot);
-  while (remaining.length > 0) {
-    const last = walk[walk.length - 1];
-    let bestIdx = -1;
-    let bestDist = Infinity;
-    for (let i = 0; i < remaining.length; i++) {
-      const d = dist(last, remaining[i]);
-      if (d <= limit && d < bestDist) { bestDist = d; bestIdx = i; }
-    }
-    if (bestIdx < 0) break;
-    walk.push(remaining.splice(bestIdx, 1)[0]);
-  }
-  if (closingCoords && closingCoords.lat != null && closingCoords.lon != null) {
-    while (walk.length > 1) {
-      const last = walk[walk.length - 1];
-      if (haversineDistance(closingCoords.lat, closingCoords.lon, last.latitude, last.longitude) <= limit) break;
-      remaining.push(walk.pop());
-    }
-  }
-  if (walk.length < 2) return { walk: [], demoted: [...walk, ...remaining] };
-  return { walk, demoted: remaining };
-}
-
-// Keep the existing loop when it is already legal (no behaviour change for tours
-// that work), otherwise rebuild it so no walking leg can exceed the limit.
-export function ensureWalkableLoop(orderedLoop, clusterStops, limit, closingCoords, dist) {
-  if (orderedLoop.length < 2) return { walk: orderedLoop, demoted: [] };
-  const measure = dist || ((a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude));
-  if (isWalkableLoop(orderedLoop, limit, closingCoords, measure)) {
-    return { walk: orderedLoop, demoted: [] };
-  }
-  return buildWalkableLoop(clusterStops, limit, closingCoords, measure);
-}
 
 // An AREA tour is walkable by definition — its generation prompt requires a
 // tight walkable cluster (total route ≤2.5 miles), so a city/town tour is never
@@ -233,75 +156,35 @@ export function ensureWalkableLoop(orderedLoop, clusterStops, limit, closingCoor
 export const normalizeAreaTourType = (tourCategory, tourType) =>
   tourCategory === 'area' && tourType === 'driving' ? 'mixed' : tourType;
 
-// Enforce proper stop ordering for a tour's stops.
-// - DRIVING tours: linear nearest-neighbor order, all stops driving.
-// - WALKING & MIXED tours: build connected components (stops within
-//   WALKING_LIMIT of each other). The largest component (2+ stops) is the
-//   walking cluster, ordered as a loop. All other stops are DRIVING stops,
-//   appended AFTER the walking cluster — never in the middle.
-//
-// Distances use OSRM routed distances (over bridges, around water) when
-// available, falling back to haversine (straight-line) if OSRM is down.
-// This prevents two stops separated by a creek from being ordered adjacent
-// when the actual walking distance via the nearest bridge is much longer.
-//
-// `startCoords` ({ lat, lon }) optionally moves the stop closest to the
-// tour's designated start to the front before ordering begins.
+// Classify walking eligibility before ordering. All located stops in the main
+// connected group stay walkable, independently of parking and visit order.
+// Walking routes may retrace legal links; driving routes use road distances.
+// `startCoords` is only an ordering reference, never a walking cut-off.
 export async function enforceWalkingDistance(stops, tourType, startCoords, options = {}) {
   const walkingLimit = options.walkingLimit || WALKING_LIMIT;
+  tourType = normalizeAreaTourType(options.tourCategory, tourType);
   const parkingCoords = options.parkingCoords;
   const preserveOrder = options.preserveOrder || false;
   if (!stops.length) return stops;
 
-  // preserveOrder: update travel_method based on current coordinates
-  // without reordering stops or changing stop_numbers. Uses haversine
-  // only (no OSRM/water barrier fetch) for speed. Used when the user
-  // has manually reordered stops — we respect their order but still
-  // mark stops as walking/driving based on actual distances.
+  // Manual and automatic order use identical walking membership. The order
+  // cannot remove a nearby stop from its connected walking group.
+  const withCoords = stops.filter(isLocatedStop);
+  const unlocated = stops.filter(s => !isLocatedStop(s));
+  const refCoords = parkingCoords?.lat != null && parkingCoords?.lon != null ? parkingCoords : startCoords;
+  const pocketDistance = (group) => refCoords?.lat != null && refCoords?.lon != null
+    ? Math.min(...group.map(s => haversineDistance(refCoords.lat, refCoords.lon, s.latitude, s.longitude)))
+    : Infinity;
+  const components = walkingComponents(withCoords, walkingLimit * WALK_LINK_GRACE);
+  components.sort((a, b) => b.length - a.length || pocketDistance(a) - pocketDistance(b));
+  const walkingCluster = components[0]?.length > 1 || withCoords.length === 1 ? components[0] : [];
+  const walkingSet = new Set(walkingCluster);
+  const pendingMethod = s => s.travel_method || (tourType === 'driving' ? 'driving' : 'walking');
   if (preserveOrder) {
-    if (tourType === 'driving') {
-      return stops.map(s => ({ ...s, travel_method: 'driving' }));
-    }
-    const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
-    const visited = new Array(withCoords.length).fill(false);
-    const components = [];
-    for (let i = 0; i < withCoords.length; i++) {
-      if (visited[i]) continue;
-      const comp = [];
-      const queue = [i];
-      let head = 0;
-      visited[i] = true;
-      while (head < queue.length) {
-        const idx = queue[head++];
-        comp.push(withCoords[idx]);
-        for (let j = 0; j < withCoords.length; j++) {
-          if (!visited[j]) {
-            const d = haversineDistance(withCoords[idx].latitude, withCoords[idx].longitude, withCoords[j].latitude, withCoords[j].longitude);
-            if (d <= walkingLimit * WALK_LINK_GRACE) { visited[j] = true; queue.push(j); }
-          }
-        }
-      }
-      components.push(comp);
-    }
-    components.sort((a, b) => b.length - a.length);
-    const walkingCluster = components[0] && components[0].length > 1 ? components[0] : [];
-    const walkingSet = new Set(walkingCluster);
-    // Same rule as the auto order: a walking leg may never exceed the limit. In
-    // a manual order two cluster stops can sit far apart in the sequence, so the
-    // first stop that cannot be walked to from the last confirmed walking stop
-    // is driven to instead.
-    const keepWalking = new Set();
-    let lastWalk = null;
-    for (const s of stops.filter(st => walkingSet.has(st))) {
-      if (!lastWalk) { keepWalking.add(s); lastWalk = s; continue; }
-      if (haversineDistance(lastWalk.latitude, lastWalk.longitude, s.latitude, s.longitude) <= walkingLimit * WALK_LINK_GRACE) {
-        keepWalking.add(s);
-        lastWalk = s;
-      }
-    }
     return stops.map(s => ({
       ...s,
-      travel_method: keepWalking.has(s) ? 'walking' : 'driving',
+      travel_method: !isLocatedStop(s) ? pendingMethod(s)
+        : tourType !== 'driving' && walkingSet.has(s) ? 'walking' : 'driving',
     }));
   }
 
@@ -341,7 +224,6 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   // closest to parking (or the tour's start coordinates if no parking) to
   // the front — the user starts investigating from where they park.
   stops = [...stops].sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-  const refCoords = (parkingCoords && parkingCoords.lat != null && parkingCoords.lon != null) ? parkingCoords : startCoords;
   if (refCoords && refCoords.lat != null && refCoords.lon != null) {
     let bestIdx = 0;
     let bestDist = Infinity;
@@ -368,129 +250,19 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
     ].map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
   }
 
-  // WALKING & MIXED tours: separate into a walking cluster (the largest group
-  // of stops within WALKING_LIMIT of each other) and driving stops. Order the
-  // walking cluster as a loop (2-opt with return-to-start) so the first and
-  // last stops are near each other — the user walks a circle and returns to
-  // their car. The loop's start/end point is chosen as the stop closest to the
-  // nearest driving stop. Driving stops are appended in linear order AFTER the
-  // walking cluster — never in the middle.
-  // Stops awaiting placement carry temporary coordinates parked around the
-  // lot (or at the loop centre) — they are NOT located. Letting them into the
-  // cluster detection skews the loop and, through the rotation below, silently
-  // re-points which stop starts the tour. They are appended after the route.
-  const awaitingPlacement = stops.filter(s => s.needs_placement);
-  const locatedStops = stops.filter(s => !s.needs_placement);
-  const withCoords = locatedStops.filter(s => s.latitude != null && s.longitude != null);
-  const noCoords = locatedStops.filter(s => s.latitude == null || s.longitude == null);
-
-  // Build connected components: stops linked when within WALKING_LIMIT.
-  // Uses routed distances (over bridges, around water) so stops on opposite
-  // sides of a creek are NOT grouped as walking even if straight-line distance
-  // is short — the actual walk to the bridge makes them too far apart.
-  // Uses a head-index queue (not shift) to avoid O(n²) on larger stop sets.
-  const visited = new Array(withCoords.length).fill(false);
-  const components = [];
-  for (let i = 0; i < withCoords.length; i++) {
-    if (visited[i]) continue;
-    const comp = [];
-    const queue = [i];
-    let head = 0;
-    visited[i] = true;
-    while (head < queue.length) {
-      const idx = queue[head++];
-      comp.push(withCoords[idx]);
-      for (let j = 0; j < withCoords.length; j++) {
-        if (!visited[j]) {
-          const d = dist(withCoords[idx], withCoords[j]);
-          if (d <= walkingLimit * WALK_LINK_GRACE) { visited[j] = true; queue.push(j); }
-        }
-      }
-    }
-    components.push(comp);
-  }
-  // Largest component wins. When two pockets are the same size, the one nearest
-  // where the user actually starts (their lot, else the tour start) takes the
-  // walk — list order used to decide, which could hand the walking loop to a
-  // pocket on the far side of town and stamp the stops around the car driving.
-  const pocketDistance = (comp) => {
-    if (!refCoords || refCoords.lat == null || refCoords.lon == null) return Infinity;
-    let nearest = Infinity;
-    for (const s of comp) {
-      const d = haversineDistance(refCoords.lat, refCoords.lon, s.latitude, s.longitude);
-      if (d < nearest) nearest = d;
-    }
-    return nearest;
-  };
-  components.sort((a, b) => b.length - a.length || pocketDistance(a) - pocketDistance(b));
-
-  // Largest component (2+ stops) = walking cluster; everything else = driving
-  const walkingCluster = components[0] && components[0].length > 1 ? components[0] : [];
-  const drivingStops = (walkingCluster.length > 0 ? components.slice(1) : components).flat();
-
-  // Order the walking cluster as a loop (2-opt with return-to-start)
-  const orderedCluster = walkingCluster.length > 1
-    ? orderStopsByProximity(walkingCluster, true, dist)
-    : walkingCluster.slice();
-
-  // Rotate the loop so the stop closest to parking (or the nearest driving
-  // stop if no parking) is first/last — the user starts at their car, walks
-  // to the nearest stop, does the loop, and returns near where they parked.
-  if (orderedCluster.length > 1) {
-    let bestIdx = 0;
-    let bestDist = Infinity;
-    if (parkingCoords && parkingCoords.lat != null && parkingCoords.lon != null) {
-      for (let i = 0; i < orderedCluster.length; i++) {
-        const d = haversineDistance(parkingCoords.lat, parkingCoords.lon, orderedCluster[i].latitude, orderedCluster[i].longitude);
-        if (d < bestDist) { bestDist = d; bestIdx = i; }
-      }
-    } else if (drivingStops.length > 0) {
-      for (let i = 0; i < orderedCluster.length; i++) {
-        for (const ds of drivingStops) {
-          const d = dist(orderedCluster[i], ds);
-          if (d < bestDist) { bestDist = d; bestIdx = i; }
-        }
-      }
-    }
-    if (bestIdx > 0) {
-      const rotated = [...orderedCluster.slice(bestIdx), ...orderedCluster.slice(0, bestIdx)];
-      orderedCluster.length = 0;
-      orderedCluster.push(...rotated);
-    }
-  }
-
-  // Ordering the cluster as a loop can still leave a leg longer than the limit
-  // (a chain of legal hops). Keep only the part that forms a legal walk and
-  // hand the rest to the drive.
-  const walkPlan = ensureWalkableLoop(orderedCluster, walkingCluster, walkingLimit * WALK_LINK_GRACE, parkingCoords, dist);
-  orderedCluster.length = 0;
-  orderedCluster.push(...walkPlan.walk);
-  drivingStops.push(...walkPlan.demoted);
-
-  // Order driving stops linearly, starting from the one closest to the
-  // end of the walking cluster so the drive-out is as short as possible.
+  // Preserve the whole connected walk. Shortest-path expansion permits a
+  // return along the same street instead of demoting the tail to driving.
+  const plan = planWalkingRoute(walkingCluster, walkingLimit * WALK_LINK_GRACE, parkingCoords, false, dist);
+  const orderedCluster = plan.ordered;
+  const drivingStops = withCoords.filter(s => !walkingSet.has(s));
   const clusterEnd = orderedCluster[orderedCluster.length - 1];
-  const orderedDriving = [];
-  if (drivingStops.length > 0) {
-    const ref = clusterEnd || withCoords[0];
-    let startIdx = 0;
-    let startDist = Infinity;
-    for (let i = 0; i < drivingStops.length; i++) {
-      if (ref) {
-        const d = dist(ref, drivingStops[i]);
-        if (d < startDist) { startDist = d; startIdx = i; }
-      }
-    }
-    const sorted = [drivingStops[startIdx], ...drivingStops.filter((_, i) => i !== startIdx)];
-    orderedDriving.push(...orderStopsByProximity(sorted, false, dist));
+  if (drivingStops.length && clusterEnd) {
+    drivingStops.sort((a, b) => dist(clusterEnd, a) - dist(clusterEnd, b));
   }
-
-  // Final order: walking cluster loop + driving stops + no-coords stops
-  const clusterSet = new Set(orderedCluster);
-  const final = [...orderedCluster, ...orderedDriving, ...noCoords, ...awaitingPlacement];
+  const final = [...orderedCluster, ...orderStopsByProximity(drivingStops, false, dist), ...unlocated];
   return final.map((s, i) => ({
     ...s,
-    travel_method: clusterSet.has(s) ? 'walking' : 'driving',
+    travel_method: !isLocatedStop(s) ? pendingMethod(s) : walkingSet.has(s) ? 'walking' : 'driving',
     stop_number: i + 1,
   }));
 }

@@ -89,7 +89,7 @@ export async function changeParkingLocation({ tour, stops, parkingStopId, latitu
       tourStopsOnly,
       tour.tour_type,
       { lat: tour.start_latitude, lon: tour.start_longitude },
-      { walkingLimit, parkingCoords: { lat: latitude, lon: longitude } },
+      { walkingLimit, tourCategory: tour.tour_category, parkingCoords: { lat: latitude, lon: longitude } },
     );
     for (const s of ordered) {
       const existing = tourStopsOnly.find(ts => ts.id === s.id);

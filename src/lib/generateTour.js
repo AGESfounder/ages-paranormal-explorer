@@ -2,7 +2,7 @@ import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { US_STATES } from '@/lib/statesData';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_TOUR, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
-import { enforceWalkingDistance, normalizeAreaTourType } from '@/lib/routeOptimizer';
+import { enforceWalkingDistance, normalizeAreaTourType, getWalkingLimit } from '@/lib/routeOptimizer';
 import { getVerifiedCoordsForStops, applyVerifiedCoords } from '@/lib/reuseVerifiedCoords';
 
 function normalizeStateName(state) {
@@ -471,7 +471,8 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
   const orderedStops = await enforceWalkingDistance(
     processed.stopRecords,
     processed.tourData.tour_type,
-    { lat: processed.tourData.start_latitude, lon: processed.tourData.start_longitude }
+    { lat: processed.tourData.start_latitude, lon: processed.tourData.start_longitude },
+    { walkingLimit: getWalkingLimit(processed.tourData), tourCategory: processed.tourData.tour_category }
   );
   // Auto-correct tour type if stops are a mix of walking + driving
   const methods = new Set(orderedStops.map((s) => s.travel_method));
