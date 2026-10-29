@@ -18,6 +18,12 @@ export function getWalkingLimit(tour, isLarge) {
   return 0.33;
 }
 
+// Hairline grace on the walking link, mirrored from WALK_LINK_GRACE in
+// src/lib/routeOptimizer.js. A pair measuring a couple of thousandths over the
+// limit is still a walk; without this the loop the parking plan judges a lot
+// against is a different (smaller) pocket than the one the map draws.
+const WALK_LINK_GRACE = 1.05;
+
 // The walking loop: the largest group of stops within `limit` of each other.
 // Returns [] when no cluster of 2+ exists — a driving-only route has no loop to
 // centre anything on, and no lot is invented for it.
@@ -31,7 +37,7 @@ export function largestWalkingCluster(stops, limit) {
     for (let head = 0; head < comp.length; head++) {
       const i = comp[head];
       for (const j of [...unvisited]) {
-        if (haversine(stops[i].latitude, stops[i].longitude, stops[j].latitude, stops[j].longitude) <= limit) {
+        if (haversine(stops[i].latitude, stops[i].longitude, stops[j].latitude, stops[j].longitude) <= limit * WALK_LINK_GRACE) {
           unvisited.delete(j);
           comp.push(j);
         }

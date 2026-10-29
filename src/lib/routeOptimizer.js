@@ -132,6 +132,15 @@ export function orderStopsByProximity(stops, includeReturn = false, distFn) {
 
 const WALKING_LIMIT = 0.33;
 
+// A hairline grace on the walking link. Stops are grouped when the walk between
+// them is within this limit, and a pair that measures a couple of thousandths
+// OVER the line is still a walk — 0.332 mi against 0.33 tore the Journal Square
+// pocket in Jersey City into fragments, so the walk went to a different pair
+// entirely and every stop around the lot was stamped driving. 5% is well under
+// the next real gap (0.366 mi) and only affects near-exact boundary cases.
+// Mirrored in base44/shared/tourParking.ts — keep the two in step.
+export const WALK_LINK_GRACE = 1.05;
+
 // Walking threshold for stop clustering. Single-site tours (landmark/ship/
 // cold_spot) are large properties where you walk between structures that can
 // be 0.5+ miles apart — use 1.0-mile threshold so they form a walking cluster
@@ -200,7 +209,7 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
         for (let j = 0; j < withCoords.length; j++) {
           if (!visited[j]) {
             const d = haversineDistance(withCoords[idx].latitude, withCoords[idx].longitude, withCoords[j].latitude, withCoords[j].longitude);
-            if (d <= walkingLimit) { visited[j] = true; queue.push(j); }
+            if (d <= walkingLimit * WALK_LINK_GRACE) { visited[j] = true; queue.push(j); }
           }
         }
       }
@@ -313,13 +322,26 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
       for (let j = 0; j < withCoords.length; j++) {
         if (!visited[j]) {
           const d = dist(withCoords[idx], withCoords[j]);
-          if (d <= walkingLimit) { visited[j] = true; queue.push(j); }
+          if (d <= walkingLimit * WALK_LINK_GRACE) { visited[j] = true; queue.push(j); }
         }
       }
     }
     components.push(comp);
   }
-  components.sort((a, b) => b.length - a.length);
+  // Largest component wins. When two pockets are the same size, the one nearest
+  // where the user actually starts (their lot, else the tour start) takes the
+  // walk — list order used to decide, which could hand the walking loop to a
+  // pocket on the far side of town and stamp the stops around the car driving.
+  const pocketDistance = (comp) => {
+    if (!refCoords || refCoords.lat == null || refCoords.lon == null) return Infinity;
+    let nearest = Infinity;
+    for (const s of comp) {
+      const d = haversineDistance(refCoords.lat, refCoords.lon, s.latitude, s.longitude);
+      if (d < nearest) nearest = d;
+    }
+    return nearest;
+  };
+  components.sort((a, b) => b.length - a.length || pocketDistance(a) - pocketDistance(b));
 
   // Largest component (2+ stops) = walking cluster; everything else = driving
   const walkingCluster = components[0] && components[0].length > 1 ? components[0] : [];
