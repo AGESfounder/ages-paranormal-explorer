@@ -773,6 +773,11 @@ Return a JSON object with:
       // not be overridden by name-matching to potentially wrong OSM features.
       // "Stops with physical addresses should be marked at those addresses."
 
+      // Stops no method could place are collected here and laid out LAST,
+      // after the loop is marked and parking is settled. Their temporary
+      // coordinates are markers, not locations — nothing reads them back, and
+      // they never influence the loop or the lot.
+      const unresolvedStops: any[] = [];
       // Identify collapsed stops (sharing identical coordinates)
       const coordMap = {};
       for (const s of stops) {
@@ -837,11 +842,6 @@ Return a JSON object with:
           // streets no longer exist in any map database), place the stop near
           // the parking area with a pink "Needs Placement" marker so a visitor
           // can drag it to the correct spot.
-          // Stops no method could place are collected here and laid out LAST,
-          // after parking is settled. Their temporary coordinates are markers,
-          // not locations — nothing below reads them back, and they never
-          // influence the loop or the lot.
-          const unresolvedStops = [];
           // Detect stops that share the same address — address geocoding would
           // collapse them all to the same point (coordinate collision). For
           // these stops, skip address geocoding (Steps 1 & 1b) and go directly

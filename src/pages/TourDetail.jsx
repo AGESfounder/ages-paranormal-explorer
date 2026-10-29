@@ -960,12 +960,17 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
         let pAddr = p.parking_address || tourData.start_location_name || '';
         let pType = p.parking_type || 'street';
         let pCost = p.parking_cost || 'Free';
+        // Only a lot its address actually resolved to counts as found. Without
+        // that proof the marker must not claim to be a confirmed lot — parking
+        // is settled after the loop exists, and fix-collapsed-coords (which runs
+        // right below) flags it at the loop centre for a human to place.
+        let pConfirmed = false;
         if (p.parking_address) {
           const geoMap = await geocodeStopsWithNames([{
             id: 'parking', name: p.parking_name, address: p.parking_address,
             city: tourData.city, state: tourData.state
           }], { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: 0.5, clusterRadius: 0.3 });
-          if (geoMap.parking) { pLat = geoMap.parking.lat; pLon = geoMap.parking.lon; }
+          if (geoMap.parking) { pLat = geoMap.parking.lat; pLon = geoMap.parking.lon; pConfirmed = true; }
         }
         try {
           const parkingStopRecord = await base44.entities.TourStop.create({
@@ -973,7 +978,9 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
             name: pName, address: pAddr,
             latitude: pLat, longitude: pLon,
             parking_type: pType, parking_cost: pCost,
-            travel_method: 'walking', geocoded: true,
+            travel_method: 'walking',
+            geocoded: pConfirmed,
+            needs_placement: !pConfirmed,
           });
           created.push(parkingStopRecord);
         } catch (e) { console.error('Parking stop creation failed:', e); }
