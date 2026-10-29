@@ -35,6 +35,22 @@ function makeParkingIcon() {
   });
 }
 
+// A lot nobody has confirmed: the marker must not read as a verified lot. It
+// sits at the centre of the walking loop until a person places it (dragging it
+// opens the parking dialog, which collects the details and clears the flag).
+function makeUnconfirmedParkingIcon() {
+  return new L.DivIcon({
+    className: 'parking-marker unconfirmed',
+    html: `<div style="position:relative;width:28px;height:28px;">
+      <div style="width:28px;height:28px;background:hsl(45,90%,50%);border-radius:6px;box-shadow:0 0 12px hsl(45,90%,50%,0.5);border:2px dashed hsl(45,90%,50%);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:bold;font-family:'Cinzel',serif;">P</div>
+      <div style="position:absolute;top:-6px;right:-8px;min-width:22px;height:14px;padding:0 3px;background:hsl(330,80%,55%);border-radius:7px;border:1.5px solid hsl(222,47%,8%);display:flex;align-items:center;justify-content:center;color:white;font-size:7px;font-weight:bold;font-family:'Inter',sans-serif;line-height:1;letter-spacing:0.3px;">PLACE</div>
+    </div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  });
+}
+
 function makeShuttleIcon() {
   return new L.DivIcon({
     className: 'shuttle-marker',
@@ -122,6 +138,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   const parkingLon = parkingStop?.longitude || tour?.parking_longitude;
   const parkingName = parkingStop?.name || tour?.parking_name;
   const parkingCost = parkingStop?.parking_cost || tour?.parking_cost;
+  const parkingUnconfirmed = parkingStop?.needs_placement === true;
   const hasParking = parkingLat != null && parkingLon != null;
 
   const shuttleStop = stops.find(s => s.stop_type === 'shuttle' && s.latitude && s.longitude);
@@ -174,9 +191,11 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
   const walkingStops = boundsStops.filter(s => s.travel_method !== 'driving');
   const drivingStops = boundsStops.filter(s => s.travel_method === 'driving');
   // Walking loop start/end — shuttle if present, else parking
+  // An unconfirmed lot sits at the loop centre, not at a real edge of the walk —
+  // closing the loop on it would draw a spur to a point nobody chose.
   const loopEndpoint = hasShuttle
     ? [shuttleStop.latitude, shuttleStop.longitude]
-    : hasParking
+    : hasParking && !parkingUnconfirmed
     ? [parkingLat, parkingLon]
     : null;
   const walkingLine = walkingStops.length > 0
@@ -244,7 +263,7 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
         {hasParking && (
           <LongPressMarker
             position={[parkingLat, parkingLon]}
-            icon={makeParkingIcon()}
+            icon={parkingUnconfirmed ? makeUnconfirmedParkingIcon() : makeParkingIcon()}
             draggable={draggable && !parkingLocked}
             stopId={parkingStop?.id}
             onMarkerDragEnd={onMarkerDragEnd}
@@ -253,6 +272,11 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
               <div className="text-xs font-heading">
                 <strong>Parking: {parkingName || 'Parking Area'}</strong>
                 {parkingCost && <><br /><span className="text-muted-foreground">{parkingCost}</span></>}
+                {parkingUnconfirmed && (
+                  <div className="text-pink-400 text-[10px] mt-1">
+                    Parking not confirmed — centered on the tour loop. Long press to drag it to the real lot.
+                  </div>
+                )}
               </div>
             </Popup>
           </LongPressMarker>

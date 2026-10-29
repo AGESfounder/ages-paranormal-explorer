@@ -268,7 +268,14 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   }
 
   if (tourType === 'driving') {
-    return orderStopsByProximity(stops, false, dist).map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
+    // Stops awaiting placement are not located — they never take part in the
+    // driving order either. Append them after the real route.
+    const awaiting = stops.filter(s => s.needs_placement);
+    const routed = stops.filter(s => !s.needs_placement);
+    return [
+      ...orderStopsByProximity(routed, false, dist),
+      ...awaiting,
+    ].map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
   }
 
   // WALKING & MIXED tours: separate into a walking cluster (the largest group
@@ -278,8 +285,14 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   // their car. The loop's start/end point is chosen as the stop closest to the
   // nearest driving stop. Driving stops are appended in linear order AFTER the
   // walking cluster — never in the middle.
-  const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
-  const noCoords = stops.filter(s => s.latitude == null || s.longitude == null);
+  // Stops awaiting placement carry temporary coordinates parked around the
+  // lot (or at the loop centre) — they are NOT located. Letting them into the
+  // cluster detection skews the loop and, through the rotation below, silently
+  // re-points which stop starts the tour. They are appended after the route.
+  const awaitingPlacement = stops.filter(s => s.needs_placement);
+  const locatedStops = stops.filter(s => !s.needs_placement);
+  const withCoords = locatedStops.filter(s => s.latitude != null && s.longitude != null);
+  const noCoords = locatedStops.filter(s => s.latitude == null || s.longitude == null);
 
   // Build connected components: stops linked when within WALKING_LIMIT.
   // Uses routed distances (over bridges, around water) so stops on opposite
@@ -363,7 +376,7 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
 
   // Final order: walking cluster loop + driving stops + no-coords stops
   const clusterSet = new Set(orderedCluster);
-  const final = [...orderedCluster, ...orderedDriving, ...noCoords];
+  const final = [...orderedCluster, ...orderedDriving, ...noCoords, ...awaitingPlacement];
   return final.map((s, i) => ({
     ...s,
     travel_method: clusterSet.has(s) ? 'walking' : 'driving',

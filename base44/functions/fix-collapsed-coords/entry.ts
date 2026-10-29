@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { paidCoordinateSearch } from '../../shared/paidAiRequest.js';
 import { haversine } from '../../shared/geo.ts';
+import { getWalkingLimit, planParking, applyParkingPlan } from '../../shared/tourParking.ts';
 
 // Inline large-property detection — inlined (not imported from shared module)
 // to ensure the deployed function always uses the latest keyword list.
@@ -742,9 +743,12 @@ Return a JSON object with:
         }
       }
 
-      // Verify parking stop — move to center if too far or in water
+      // Verify parking stop — move to center if too far or in water.
+      // A lot a person placed (or one already validated with the tour) is ground
+      // truth: these corrections never move it.
       const parkingStop = allStops.find(s => s.stop_type === 'parking');
-      if (parkingStop && parkingStop.latitude && parkingStop.longitude) {
+      const parkingLocked = !!parkingStop && (parkingStop.user_verified === true || tour.parking_verified === true);
+      if (parkingStop && parkingStop.latitude && parkingStop.longitude && !parkingLocked) {
         const pDist = haversine(centerLat, centerLon, parkingStop.latitude, parkingStop.longitude);
         let needsMove = pDist > 0.3;
         if (!needsMove) {
@@ -833,10 +837,11 @@ Return a JSON object with:
           // streets no longer exist in any map database), place the stop near
           // the parking area with a pink "Needs Placement" marker so a visitor
           // can drag it to the correct spot.
-          const parkingStopData = allStops.find(s => s.stop_type === 'parking');
-          const areaPlacementLat = parkingStopData?.latitude || tour.start_latitude;
-          const areaPlacementLon = parkingStopData?.longitude || tour.start_longitude;
-          let areaNeedsPlacementIdx = 0;
+          // Stops no method could place are collected here and laid out LAST,
+          // after parking is settled. Their temporary coordinates are markers,
+          // not locations — nothing below reads them back, and they never
+          // influence the loop or the lot.
+          const unresolvedStops = [];
           // Detect stops that share the same address — address geocoding would
           // collapse them all to the same point (coordinate collision). For
           // these stops, skip address geocoding (Steps 1 & 1b) and go directly
@@ -1045,9 +1050,23 @@ Return a JSON object with:
               // rarely includes building names — only road and house_number.
               // The 0.4-mile radius is tight enough that rural wrong-point
               // geocodes (typically 0.8+ miles off) still get the name check.
+              // PROVEN ADDRESS — a house number and street the geocoder resolved
+              // IS the location. No distance gate: how far a stop sits from the
+              // tour start (or from the lot) says nothing about whether its
+              // address is real, and a stop two miles out on a city tour is an
+              // ordinary stop, not a bad address. The old 0.4-mile trust radius
+              // discarded valid addresses and pushed those stops into the
+              // needs_placement ring around the parking lot instead.
               const hasHouseNumber = /^\d+\s+\w/.test(stop.address || '');
-              const addrDist = haversine(tour.start_latitude, tour.start_longitude, addrGeocodeCandidate.lat, addrGeocodeCandidate.lon);
-              if (addrGeocodeCandidate.fromFullAddress && hasHouseNumber && addrDist <= 0.4) {
+              if (addrGeocodeCandidate.fromFullAddress && hasHouseNumber) {
+                if (stop.latitude != null && stop.longitude != null) {
+                  const drift = haversine(stop.latitude, stop.longitude, addrGeocodeCandidate.lat, addrGeocodeCandidate.lon);
+                  if (drift > 0.1) {
+                    // Log only — the address wins, but a large disagreement is
+                    // worth seeing in the logs.
+                    console.log(`Address/stored-coord disagreement on "${stop.name}": ${drift.toFixed(2)} mi (using the address)`);
+                  }
+                }
                 updates.push({ id: stop.id, latitude: addrGeocodeCandidate.lat, longitude: addrGeocodeCandidate.lon, geocoded: true, needs_placement: false });
                 matched.add(stop.id);
                 fixed = true;
@@ -1178,20 +1197,7 @@ Return a JSON object with:
             // area with a pink "Needs Placement" marker so a visitor can drag
             // it to the correct spot. This is NOT guessing — the marker is
             // explicitly flagged as unplaced and requires manual verification.
-            if (!fixed) {
-              const radius = 0.0002; // ~20 meters — surrounding parking, individually visible
-              const angle = areaNeedsPlacementIdx * 2.39996; // golden angle
-              const offsetLat = radius * Math.cos(angle);
-              const offsetLon = radius * Math.sin(angle);
-              updates.push({
-                id: stop.id,
-                latitude: areaPlacementLat + offsetLat,
-                longitude: areaPlacementLon + offsetLon,
-                geocoded: false,
-                needs_placement: true,
-              });
-              areaNeedsPlacementIdx++;
-            }
+            if (!fixed) unresolvedStops.push(stop);
           }
         }
 
@@ -1226,43 +1232,40 @@ Return a JSON object with:
         }
       }
 
-      // Offset parking from any tour stop it overlaps. For area tours, the
-      // parking address often geocodes to the same point as a landmark stop
-      // (e.g. "Waterworks Road" is both the parking address and the Sachs
-      // Covered Bridge address), placing the parking marker ON the bridge
-      // instead of at the parking area. Offset it ~40m from the nearest stop.
+      // ── PARKING, AFTER THE LOOP ─────────────────────────────────────────
+      // The loop is already marked from located stops alone. Only now is the
+      // lot judged against it (shared/tourParking): usable when it sits within
+      // the loop's walking limit of the nearest loop stop, otherwise flagged at
+      // the loop centre for a human to place. Unresolved markers are ringed
+      // last — they are markers, not locations, and nothing reads them back.
+      const located = (await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId }))
+        .filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' &&
+          s.latitude != null && s.longitude != null && !s.needs_placement);
       const parkingStop = allStops.find(s => s.stop_type === 'parking');
-      if (parkingStop && parkingStop.latitude && parkingStop.longitude) {
-        const refreshedStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
-        // Only offset from real verified stops — NOT needs_placement markers,
-        // which are intentionally placed near parking and should stay there.
-        const tourStops = refreshedStops.filter(s => s.stop_type !== 'parking' && s.latitude && s.longitude && !s.needs_placement);
-        let overlap = false;
-        for (const s of tourStops) {
-          const d = haversine(parkingStop.latitude, parkingStop.longitude, s.latitude, s.longitude);
-          if (d < 0.03) { overlap = true; break; }
-        }
-        if (overlap) {
-          // Find the centroid of the walking cluster (stops within 0.2 mi of
-          // parking) and offset parking away from it, toward open space.
-          const nearby = tourStops.filter(s => haversine(parkingStop.latitude, parkingStop.longitude, s.latitude, s.longitude) < 0.2);
-          if (nearby.length > 0) {
-            const avgLat = nearby.reduce((sum, s) => sum + s.latitude, 0) / nearby.length;
-            const avgLon = nearby.reduce((sum, s) => sum + s.longitude, 0) / nearby.length;
-            // Offset away from the cluster centroid
-            const dLat = parkingStop.latitude - avgLat;
-            const dLon = parkingStop.longitude - avgLon;
-            const mag = Math.sqrt(dLat * dLat + dLon * dLon) || 1;
-            const offsetMag = 0.0006; // ~60m offset
-            const newLat = parkingStop.latitude + (dLat / mag) * offsetMag;
-            const newLon = parkingStop.longitude + (dLon / mag) * offsetMag;
-            await base44.asServiceRole.entities.TourStop.update(parkingStop.id, {
-              latitude: newLat,
-              longitude: newLon,
-              geocoded: true,
-            });
-          }
-        }
+      const plan = await planParking({
+        tour,
+        walkingLimit: getWalkingLimit(tour, largeProp),
+        parkingStop,
+        locatedStops: located,
+        geocodeParkingAddress: async (address) => {
+          const geo = await geocode(addressQuery(address, tour));
+          await sleep(1100);
+          return geo;
+        },
+      });
+      await applyParkingPlan({
+        entities: base44.asServiceRole.entities,
+        tourId,
+        parkingStop,
+        parking: plan.parking,
+        update: plan.update,
+        located,
+        unresolvedStops,
+        startCoords: tour.start_latitude != null ? { lat: tour.start_latitude, lon: tour.start_longitude } : null,
+        parkingLocked: !!parkingStop && (parkingStop.user_verified === true || tour.parking_verified === true),
+      });
+      if (plan.update?.needs_placement) {
+        console.log(`fix-collapsed-coords: no lot within the walking limit of the loop on "${tour.title}" — flagged at the loop centre`);
       }
     }
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ShieldCheck, CheckCircle2, Loader2, Lock, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, Loader2, Lock, AlertTriangle, MapPinOff } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 const VALIDATION_CHECKS = [
@@ -19,6 +19,9 @@ export default function ValidateTourCard({ tour, stops, userId, onValidated }) {
   const alreadyValidated = tour?.verified || locallyValidated;
   const allChecked = VALIDATION_CHECKS.every(c => checks[c.id]);
   const hasNeedsPlacement = stops.some(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' && s.needs_placement);
+  // Parking is deliberately NOT part of validation: a fully validated route can
+  // still have a lot nobody has confirmed. Flag it, never block on it.
+  const hasUnconfirmedParking = stops.some(s => s.stop_type === 'parking' && s.needs_placement);
 
   const handleValidate = async () => {
     if (!allChecked || validating) return;
@@ -59,6 +62,11 @@ export default function ValidateTourCard({ tour, stops, userId, onValidated }) {
             <p className="font-heading text-sm font-bold text-green-400 uppercase tracking-wider">Tour Validated</p>
           </div>
           <p className="text-xs text-muted-foreground text-center">All stops have been verified by a paid investigator or admin.</p>
+          {hasUnconfirmedParking && (
+            <p className="text-[10px] text-amber-300/90 text-center flex items-center justify-center gap-1">
+              <MapPinOff className="w-3 h-3" /> Parking not confirmed — drag the lot onto the real parking area.
+            </p>
+          )}
         </>
       ) : (
         <>
@@ -71,6 +79,12 @@ export default function ValidateTourCard({ tour, stops, userId, onValidated }) {
             <div className="flex items-center gap-2 p-2 rounded-lg bg-pink-500/10 border border-pink-500/30">
               <AlertTriangle className="w-3.5 h-3.5 text-pink-400 shrink-0" />
               <p className="text-[10px] text-pink-300">Some stops need placement on the map. Drag them to the correct location before validating.</p>
+            </div>
+          )}
+          {hasUnconfirmedParking && (
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <MapPinOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <p className="text-[10px] text-amber-300">Parking not confirmed — the lot is sitting at the centre of the loop. Drag it to the real lot to confirm it. This does not block validation.</p>
             </div>
           )}
           {!expanded ? (
