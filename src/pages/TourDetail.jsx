@@ -505,9 +505,15 @@ export default function TourDetail() {
       if (tourStops.length === 0) {
         await generateStops(tourData[0]);
       } else {
+        // FULLY VALIDATED = FROZEN. A tour a person has validated is final:
+        // no automated process may reorder it, relabel a stop, regenerate its
+        // content, add a lot or migrate its records. It displays exactly as it
+        // was validated. Only a person can change it afterwards (dragging a
+        // pin, reordering, adding/removing a stop).
+        const isFrozen = tourData[0].verified === true;
         // Lazy migration: if tour has parking on Tour entity but no parking TourStop, create one
         let parkingStop = tourStops.find(s => s.stop_type === 'parking');
-        if (!parkingStop && tourData[0].parking_latitude) {
+        if (!parkingStop && tourData[0].parking_latitude && !isFrozen) {
           try {
             parkingStop = await base44.entities.TourStop.create({
               tour_id: tourId, stop_type: 'parking', stop_number: 0,
@@ -536,7 +542,14 @@ export default function TourDetail() {
         // driving tour (see normalizeAreaTourType). The auto-correct below
         // stores whatever the stops actually turn out to be.
         const enforcedType = normalizeAreaTourType(tourData[0].tour_category, tourData[0].tour_type);
-        if (!regenerated) {
+        if (isFrozen) {
+          // Frozen: show the stops in their validated order, untouched. No
+          // proximity reorder, no walking/driving relabel, no background
+          // validation or geocoding.
+          const sortedTourStops = [...tourStopsOnly].sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
+          const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
+          setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sortedTourStops]);
+        } else if (!regenerated) {
           if (tourData[0].user_reordered || tourData[0].manual_reorder) {
             // Respect the user's manual stop order — do not re-sort by proximity.
             // But still update travel_method based on current (possibly validated)
@@ -606,7 +619,7 @@ export default function TourDetail() {
           }
         }
         // Lazily generate parking for tours that don't have it yet
-        if (!parkingStop && enforcedType !== 'driving') {
+        if (!parkingStop && enforcedType !== 'driving' && !isFrozen) {
           generateParking(tourData[0], tourStopsOnly).catch(console.error);
         }
 
@@ -616,7 +629,7 @@ export default function TourDetail() {
         // then stops refresh when regeneration completes. One-time: once
         // stamped, the tour never regenerates again. Free users see the
         // original content until a paid user/admin triggers the upgrade.
-        if ((tourData[0].content_version || 0) < STOP_CONTENT_VERSION && tourStopsOnly.length > 0) {
+        if (!isFrozen && (tourData[0].content_version || 0) < STOP_CONTENT_VERSION && tourStopsOnly.length > 0) {
           checkManifestationGate().then(gate => {
             if (!gate.allowed) return;
             setRegeneratingContent(true);
