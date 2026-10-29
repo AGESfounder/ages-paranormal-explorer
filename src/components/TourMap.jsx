@@ -185,18 +185,20 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
     ? [[Math.min(...allLats), Math.min(...allLngs)], [Math.max(...allLats), Math.max(...allLngs)]]
     : undefined;
 
-  // Split stops into walking and driving segments for separate route lines.
-  // Walking stops form a loop (back to parking/shuttle); driving stops are a
-  // linear segment starting from parking.
+  // Split stops into walking and driving segments for separate route lines:
+  // the walk is a closed loop, the drive is a line that picks up where it ends.
   const walkingStops = boundsStops.filter(s => s.travel_method !== 'driving');
   const drivingStops = boundsStops.filter(s => s.travel_method === 'driving');
-  // Walking loop start/end — shuttle if present, else parking
-  // An unconfirmed lot sits at the loop centre, not at a real edge of the walk —
-  // closing the loop on it would draw a spur to a point nobody chose.
+  // Walking loop start/end — the shuttle if present, else the confirmed lot.
+  // An unplaced lot sits at the loop centre, not at a real edge of the walk, so
+  // closing the loop on it would draw a spur to a point nobody chose; with no
+  // confirmed lot the walk closes on its own first stop.
   const loopEndpoint = hasShuttle
     ? [shuttleStop.latitude, shuttleStop.longitude]
     : hasParking && !parkingUnconfirmed
     ? [parkingLat, parkingLon]
+    : walkingStops.length > 0
+    ? [walkingStops[0].latitude, walkingStops[0].longitude]
     : null;
   const walkingLine = walkingStops.length > 0
     ? [
@@ -205,12 +207,16 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
         ...(loopEndpoint ? [loopEndpoint] : []),
       ]
     : undefined;
-  // Driving line — starts from parking (user returns to car, then drives)
+  // Driving line — begins where the walk ends: the confirmed lot, or the last
+  // walking stop while the lot is still unplaced (an unplaced pin sits at the
+  // loop centre, so driving from it draws a spike out of the middle of the walk).
+  const driveOrigin = hasParking && !parkingUnconfirmed
+    ? [[parkingLat, parkingLon]]
+    : walkingStops.length > 0
+    ? [[walkingStops[walkingStops.length - 1].latitude, walkingStops[walkingStops.length - 1].longitude]]
+    : hasParking ? [[parkingLat, parkingLon]] : [];
   const drivingLine = drivingStops.length > 0
-    ? [
-        ...(hasParking ? [[parkingLat, parkingLon]] : []),
-        ...drivingStops.map(s => [s.latitude, s.longitude]),
-      ]
+    ? [...driveOrigin, ...drivingStops.map(s => [s.latitude, s.longitude])]
     : undefined;
 
   // Group stops by coordinates for stacked marker display. When multiple
