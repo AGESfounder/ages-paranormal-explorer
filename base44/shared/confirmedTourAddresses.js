@@ -25,10 +25,13 @@ export function matchesConfirmedAddress(result, query) {
 function canCorrect(stop, counts) {
   return !['parking', 'shuttle'].includes(stop.stop_type) && !stop.same_structure
     && !stop.user_verified && !stop.verified_by_id && !stop.verified_date
-    && (stop.needs_placement === true || stop.geocoded !== true || stop.latitude == null || stop.longitude == null)
     && typeof stop.address === 'string' && stop.address.length <= 300 && !!houseAddress(stop.address)
     && !/\b(near|vicinity|intersection|approximate|opposite)\b/i.test(stop.address)
     && counts.get(addressKey(stop.address)) === 1;
+}
+
+function isUnresolved(stop) {
+  return stop.needs_placement === true || stop.geocoded !== true || stop.latitude == null || stop.longitude == null;
 }
 
 // Address-only opening pass. No AI, content generation, pin scattering, parking
@@ -36,14 +39,24 @@ function canCorrect(stop, counts) {
 // protected by the same lease as builds/repairs, but failed lookups are NOT cached.
 export async function correctConfirmedTourAddresses(base44, tour, userId, nonce, offset, lookup) {
   const entities = base44.asServiceRole.entities;
-  const page = await entities.TourStop.filter({ tour_id: tour.id }, { sort: 'id', limit: 100 });
-  if (page.has_more) return { tourId: tour.id, updates: [], nextOffset: null, error: 'This tour needs an administrator review before its addresses can be checked.' };
+  const page = await entities.TourStop.filter({ tour_id: tour.id });
+  const allStops = (Array.isArray(page) ? page : (page?.items || []))
+    .slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
   const counts = new Map();
-  for (const stop of page.items.filter(s => !['parking', 'shuttle'].includes(s.stop_type))) {
+  for (const stop of allStops.filter(s => !['parking', 'shuttle'].includes(s.stop_type))) {
     const key = addressKey(stop.address);
     counts.set(key, (counts.get(key) || 0) + 1);
   }
-  const candidates = page.items.slice(offset, offset + 10).filter(stop => canCorrect(stop, counts));
+  const parking = allStops.find(stop => stop.stop_type === 'parking' && stop.latitude != null);
+  const anchor = parking ? { lat: parking.latitude, lon: parking.longitude } : { lat: tour.start_latitude, lon: tour.start_longitude };
+  const hasAnchor = Number.isFinite(anchor.lat) && Number.isFinite(anchor.lon);
+  const candidates = allStops.slice(offset, offset + 10).filter(stop => {
+    if (!canCorrect(stop, counts)) return false;
+    // Unresolved, or a walking leg stranded miles from the loop by an earlier
+    // bad coordinate.
+    return isUnresolved(stop) || (stop.travel_method === 'walking' && hasAnchor
+      && haversine(anchor.lat, anchor.lon, stop.latitude, stop.longitude) > 2);
+  });
   const updates = [];
   for (const stop of candidates) {
     const coords = await lookup(stop);
@@ -54,6 +67,9 @@ export async function correctConfirmedTourAddresses(base44, tour, userId, nonce,
       && haversine(tour.start_latitude, tour.start_longitude, coords.lat, coords.lon) > 50) continue;
     if (!(await ownsTourLease(base44, tour.id, userId, nonce))) break;
     const fields = { latitude: coords.lat, longitude: coords.lon, geocoded: true, needs_placement: false };
+    // A stop placed miles from the loop cannot still be a walking leg.
+    if (stop.travel_method === 'walking' && hasAnchor
+      && haversine(anchor.lat, anchor.lon, coords.lat, coords.lon) > 1) fields.travel_method = 'driving';
     // Conditional writes protect a pin moved/verified while geocoding was in
     // flight, without reading and then overwriting a newer user's placement.
     const result = await entities.TourStop.updateMany({
@@ -67,5 +83,5 @@ export async function correctConfirmedTourAddresses(base44, tour, userId, nonce,
       previous: { address: stop.address, latitude: stop.latitude, longitude: stop.longitude } });
   }
   console.log('Confirmed tour addresses checked:', { tourId: tour.id, checked: candidates.length, updated: updates.length });
-  return { tourId: tour.id, updates, nextOffset: offset + 10 < page.items.length ? offset + 10 : null };
+  return { tourId: tour.id, updates, nextOffset: offset + 10 < allStops.length ? offset + 10 : null };
 }

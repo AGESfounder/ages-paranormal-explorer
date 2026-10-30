@@ -17,7 +17,8 @@ export function applyAddressCorrections(stops, updates) {
     if (!update || stop.user_verified || stop.verified_by_id || stop.verified_date || stop.same_structure
       || stop.address !== update.previous.address || stop.latitude !== update.previous.latitude
       || stop.longitude !== update.previous.longitude) return stop;
-    return { ...stop, latitude: update.latitude, longitude: update.longitude, geocoded: true, needs_placement: false };
+    return { ...stop, latitude: update.latitude, longitude: update.longitude, geocoded: true, needs_placement: false,
+      ...(update.travel_method ? { travel_method: update.travel_method } : {}) };
   });
 }
 
