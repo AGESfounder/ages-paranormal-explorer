@@ -3,6 +3,7 @@ import { paidCoordinateSearch } from '../../shared/paidAiRequest.js';
 import { haversine } from '../../shared/geo.ts';
 import { getWalkingLimit, planParking, applyParkingPlan } from '../../shared/tourParking.ts';
 import { acquireTourLease, ownsTourLease, releaseTourLease } from '../../shared/tourLease.js';
+import { matchesConfirmedAddress, correctConfirmedTourAddresses } from '../../shared/confirmedTourAddresses.js';
 
 // Inline large-property detection — inlined (not imported from shared module)
 // to ensure the deployed function always uses the latest keyword list.
@@ -54,13 +55,16 @@ function addressQuery(address, tour) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Query Nominatim once and return the first result (or null).
-async function geocodeOnce(query) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=${encodeURIComponent(query)}`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'AGES-Paranormal-Explorer/1.0' } });
-  if (!res.ok) return null;
+async function geocodeOnce(query, confirmedOnly = false) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=${confirmedOnly ? 5 : 1}&addressdetails=1&countrycodes=us&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'AGES-Paranormal-Explorer/1.0' }, signal: AbortSignal.timeout(10000) });
+  if (!res.ok) {
+    if (confirmedOnly) throw new Error(`Address lookup unavailable (${res.status}).`);
+    return null;
+  }
   const data = await res.json();
-  if (!data || data.length === 0) return null;
-  return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+  const match = confirmedOnly ? data?.find(result => matchesConfirmedAddress(result, query)) : data?.[0];
+  return match ? { lat: parseFloat(match.lat), lon: parseFloat(match.lon) } : null;
 }
 
 // Geocode a query via Nominatim, with fallback variants for the common
@@ -70,9 +74,9 @@ async function geocodeOnce(query) {
 // address is real — Sanders Road is in Straban Township but uses the
 // Gettysburg post office. The ZIP code boundary correctly includes the
 // township, so retrying without the city name (keeping the ZIP) finds it.
-async function geocode(query) {
+async function geocode(query, confirmedOnly = false) {
   // 1. Try the full query as-is.
-  let result = await geocodeOnce(query);
+  let result = await geocodeOnce(query, confirmedOnly);
   if (result) return result;
   await sleep(1100);
 
@@ -90,7 +94,7 @@ async function geocode(query) {
     const statePart = stateMatch ? stateMatch[1] : '';
     const variant = [beforeFirstComma, statePart, zip].filter(Boolean).join(', ');
     if (variant && variant !== query) {
-      result = await geocodeOnce(variant);
+      result = await geocodeOnce(variant, confirmedOnly);
       if (result) return result;
       await sleep(1100);
     }
@@ -98,7 +102,7 @@ async function geocode(query) {
     const streetOnly = beforeFirstComma;
     const variant2 = `${streetOnly} ${zip}`.trim();
     if (variant2 && variant2 !== query && variant2 !== variant) {
-      result = await geocodeOnce(variant2);
+      result = await geocodeOnce(variant2, confirmedOnly);
       if (result) return result;
     }
   }
@@ -443,14 +447,19 @@ export default async function (req) {
   let leaseUserId = null;
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    const user = await base44.auth.me().catch(e => e.status === 401 ? null : Promise.reject(e));
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
     const tourId = body.tourId;
     const skipReorder = body.skipReorder || false;
     const verifyAll = body.verifyAll || false;
+    const addressOnly = body.mode === 'confirmed_addresses';
+    const offset = body.offset ?? 0;
     if (typeof tourId !== 'string' || !/^[a-zA-Z0-9_-]{8,80}$/.test(tourId)) return Response.json({ error: 'tourId required' }, { status: 400 });
+    if (addressOnly && (!Number.isInteger(offset) || offset < 0 || offset > 90 || offset % 10 !== 0)) {
+      return Response.json({ error: 'Invalid address-check page.' }, { status: 400 });
+    }
 
     const tour = await base44.asServiceRole.entities.Tour.get(tourId).catch(e => e.status === 404 ? null : Promise.reject(e));
     if (!tour) return Response.json({ error: 'Tour not found' }, { status: 404 });
@@ -465,6 +474,15 @@ export default async function (req) {
       leaseClient = base44;
       leasedTourId = tourId;
       leaseUserId = user.id;
+    }
+
+    if (addressOnly) {
+      const result = await correctConfirmedTourAddresses(base44, tour, user.id, ownedLease || body.buildNonce, offset, async stop => {
+        const coords = await geocode(addressQuery(stop.address, tour), true);
+        await sleep(1100);
+        return coords;
+      });
+      return Response.json(result);
     }
 
     const allStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });

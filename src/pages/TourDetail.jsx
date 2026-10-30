@@ -52,8 +52,10 @@ import tourRouteGeometry from '@/lib/tourRouteGeometry';
 import readTourSnapshot from '@/lib/readTourSnapshot';
 import TourBuildPrompt from '@/components/TourBuildPrompt';
 import RepairTourAction from '@/components/RepairTourAction';
+import TourAddressCorrection from '@/components/TourAddressCorrection';
+import { applyAddressCorrections } from '@/lib/correctTourAddresses';
 
-// Build preparation is explicit. Viewing never starts a maintenance job.
+// Builds stay explicit. Opening only corrects unresolved, confirmed addresses.
 const activeBuilds = new Set();
 
 export default function TourDetail() {
@@ -730,6 +732,11 @@ export default function TourDetail() {
         </div>
 
         <TourBuildStatus status={tour.build_status} />
+        <TourAddressCorrection
+          tour={tour}
+          stops={stops}
+          onCorrected={updates => setStops(current => applyAddressCorrections(current, updates))}
+        />
 
         <TourAccessInfo tour={tour} stops={stops} />
 
