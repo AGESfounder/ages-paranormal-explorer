@@ -87,6 +87,9 @@ function StopPopup({ stop }) {
     <Popup>
       <div className="text-xs font-heading">
         <strong>Stop {stop.stop_number}:</strong> {stop.name}
+        {stop.boat_access === true && (
+          <div className="text-cyan-300 text-[10px] mt-1">Boat access — open water separates this stop from the rest of the tour</div>
+        )}
         {stop.needs_placement
           ? <div className="text-pink-400 text-[10px] mt-1">Needs Placement — long press to drag</div>
           : stop.geocoded === false && <div className="text-amber-400 text-[10px] mt-1">Estimated — needs verification</div>}
@@ -103,7 +106,7 @@ export default function StopMarkers({ stops, draggable = false, onMarkerDragEnd 
   // overlap layout as every other stop so the pins never hide each other.
   const iconFor = (stop) => (stop.needs_placement
     ? makeNeedsPlacementIcon(stop.stop_number)
-    : makeStopIcon(stop.stop_number, stop.geocoded === false));
+    : makeStopIcon(stop.stop_number, stop.geocoded === false, stop.boat_access === true));
   const canDrag = (stop) => draggable || stop.needs_placement === true;
 
   useEffect(() => {

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { motion } from 'framer-motion';
-import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, Info, DollarSign, CheckCircle2, PartyPopper, Route, Plus, Trash2 } from 'lucide-react';
+import { MapPin, Clock, Footprints, Car, Heart, Ghost, Loader2, ChevronRight, Volume2, VolumeX, Navigation, Zap, AlertTriangle, RefreshCw, Map, CheckCircle2, PartyPopper, Route, Plus, Trash2 } from 'lucide-react';
 import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
@@ -22,19 +22,17 @@ import EnergyCostBadge from '@/components/EnergyCostBadge';
 import NarrationLengthSelector from '@/components/NarrationLengthSelector';
 import TravelModeSelector from '@/components/TravelModeSelector';
 import TourTypeSelector from '@/components/TourTypeSelector';
-import { classifyStopAccess } from '@/lib/stopAccess';
 import TourStopRow from '@/components/TourStopRow';
 import ValidateTourCard from '@/components/ValidateTourCard';
 import AmenitySheet from '@/components/amenities/AmenitySheet';
 
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
+import useBoatAccessFlags from '@/hooks/useBoatAccessFlags';
 
 import TourBuildStatus from '@/components/TourBuildStatus';
 import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
-import { haversineDistance, enforceWalkingDistance, orderStopsByProximity, getWalkingLimit, normalizeAreaTourType } from '@/lib/routeOptimizer';
-import { looksLikeRoomOrArea } from '@/lib/roomDetection';
-import { isLargeProperty } from '@/lib/largeProperty';
+import { enforceWalkingDistance, getWalkingLimit } from '@/lib/routeOptimizer';
 import { stripUrlsForNarration } from '@/lib/urlText';
 import NarrationToggle from '@/components/NarrationToggle';
 import { useNarrationMode } from '@/hooks/useNarrationMode';
@@ -46,7 +44,6 @@ import ParkingChangeDialog from '@/components/ParkingChangeDialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
 import { addStopByName } from '@/lib/addTourStops';
-import { sanitizeStopRecord } from '@/lib/stopRecordSanitize';
 import { parkingDisplay } from '@/lib/parkingLabel';
 import tourRouteGeometry from '@/lib/tourRouteGeometry';
 import readTourSnapshot from '@/lib/readTourSnapshot';
@@ -159,6 +156,7 @@ export default function TourDetail() {
       console.error('Failed to update tour access type:', e);
     }
   };
+  useBoatAccessFlags(tour, stops, setStops);
   const condensed = useCondensedTexts({
     description: tour?.description,
     introduction: tour?.introduction,

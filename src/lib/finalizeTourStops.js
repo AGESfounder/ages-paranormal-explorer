@@ -1,6 +1,7 @@
 import { base44 } from '@/api/base44Client';
 import { enforceWalkingDistance, normalizeAreaTourType } from '@/lib/routeOptimizer';
 import ensureTourParking from '@/lib/ensureTourParking';
+import { syncBoatAccessFlags } from '@/lib/boatAccess';
 import { walkRuleOptions, walkLegProblems } from '@/lib/walkRules';
 
 // Initial builds share this order: resolve locations, classify the real stops,
@@ -49,5 +50,8 @@ export default async function finalizeTourStops(tour) {
   const fields = { tour_type: tourType, build_status: buildStatus, stops_regenerated: STOPS_PREP_VERSION };
   await base44.entities.Tour.update(tour.id, fields);
   const shuttle = page.items.find(s => s.stop_type === 'shuttle');
-  return { tour: { ...current, ...fields }, stops: [...(parking ? [parking] : []), ...(shuttle ? [shuttle] : []), ...ordered] };
+  // Which stops the water cuts off is settled with the coordinates, so the map
+  // can mark them from the first time the tour is opened.
+  const flagged = await syncBoatAccessFlags(ordered, { force: true });
+  return { tour: { ...current, ...fields }, stops: [...(parking ? [parking] : []), ...(shuttle ? [shuttle] : []), ...(flagged || ordered)] };
 }

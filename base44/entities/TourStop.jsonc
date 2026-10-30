@@ -122,6 +122,10 @@
       "default": false,
       "description": "For large property tours (parks, forts, farms, battlefields): true when no definitive GPS coordinates could be found via Overpass or LLM web search. The stop is placed near the parking area with a pink 'Needs Placement' marker. A visitor drags it to the correct location to clear this flag and turn it blue."
     },
+    "boat_access": {
+      "type": "boolean",
+      "description": "true = this stop cannot be reached on foot from the rest of the tour: open water with no walkable bridge separates it from every other stop (a light station on its own island, a wreck offshore). Shown as a boat badge on the map marker and in the stop list. Unset = not tested yet; the water test runs during a build and once on opening an older tour, and its answer (true or false) is stored so it is never re-asked."
+    },
     "user_verified": {
       "type": "boolean",
       "default": false,

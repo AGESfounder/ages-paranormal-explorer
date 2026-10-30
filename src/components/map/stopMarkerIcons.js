@@ -52,13 +52,21 @@ export function makeShuttleIcon() {
   });
 }
 
-export function makeStopIcon(stopNumber, estimated = false) {
+// A stop no road reaches wears a small boat clipped to its marker, so a water
+// crossing is visible on the map instead of reading as a drive. It sits at the
+// bottom-left, opposite the EST / PLACE badges.
+const BOAT_GLYPH = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h18l-2.5 4h-13z"/><path d="M12 3v14"/><path d="M12 4l6 9h-6z"/></svg>`;
+const boatBadge = () => `<div style="position:absolute;bottom:-7px;left:-9px;width:19px;height:19px;border-radius:50%;background:hsl(190,85%,42%);border:1.5px solid hsl(222,47%,8%);box-shadow:0 0 10px hsl(190,85%,42%,0.9);display:flex;align-items:center;justify-content:center;">${BOAT_GLYPH}</div>`;
+
+export function makeStopIcon(stopNumber, estimated = false, boatAccess = false) {
+  const boat = boatAccess ? boatBadge() : '';
   if (estimated) {
     return new L.DivIcon({
       className: 'stop-marker estimated',
       html: `<div style="position:relative;width:28px;height:28px;">
         <div style="width:28px;height:28px;background:hsl(35,90%,50%);border-radius:50%;box-shadow:0 0 12px hsl(35,90%,50%,0.6),0 0 24px hsl(35,90%,50%,0.3);border:2px dashed hsl(35,90%,50%);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:bold;font-family:'Cinzel',serif;">${stopNumber}</div>
         <div style="position:absolute;top:-6px;right:-6px;min-width:18px;height:14px;padding:0 3px;background:hsl(35,90%,50%);border-radius:7px;border:1.5px solid hsl(222,47%,8%);display:flex;align-items:center;justify-content:center;color:white;font-size:8px;font-weight:bold;font-family:'Inter',sans-serif;line-height:1;letter-spacing:0.5px;">EST</div>
+        ${boat}
       </div>`,
       iconSize: [28, 28],
       iconAnchor: [14, 14],
@@ -67,15 +75,18 @@ export function makeStopIcon(stopNumber, estimated = false) {
   }
   return new L.DivIcon({
     className: 'stop-marker',
-    html: `<div style="
-      width: 28px; height: 28px;
-      background: hsl(199,89%,48%);
-      border-radius: 50%;
-      box-shadow: 0 0 12px hsl(199,89%,48%,0.6), 0 0 24px hsl(199,89%,48%,0.3);
-      border: 2px solid hsl(199,89%,48%);
-      display: flex; align-items: center; justify-content: center;
-      color: white; font-size: 12px; font-weight: bold; font-family: 'Cinzel', serif;
-    ">${stopNumber}</div>`,
+    html: `<div style="position:relative;width:28px;height:28px;">
+      <div style="
+        width: 28px; height: 28px;
+        background: hsl(199,89%,48%);
+        border-radius: 50%;
+        box-shadow: 0 0 12px hsl(199,89%,48%,0.6), 0 0 24px hsl(199,89%,48%,0.3);
+        border: 2px solid hsl(199,89%,48%);
+        display: flex; align-items: center; justify-content: center;
+        color: white; font-size: 12px; font-weight: bold; font-family: 'Cinzel', serif;
+      ">${stopNumber}</div>
+      ${boat}
+    </div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14],
     popupAnchor: [0, -16],

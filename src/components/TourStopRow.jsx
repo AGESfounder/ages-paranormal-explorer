@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, Car, MapPin, DollarSign, Info, ChevronRight, Volume2, VolumeX } from 'lucide-react';
+import { Clock, Car, Ship, MapPin, DollarSign, Info, ChevronRight, Volume2, VolumeX } from 'lucide-react';
 import { truncateText } from '@/lib/narrationLength';
 
 // Renders a single tour stop row. When `provided` is passed (from
@@ -32,6 +32,11 @@ export default function TourStopRow({ stop, onNavigate, onNarrate, isSpeaking, i
             )}
             {!stop.needs_placement && stop.geocoded === false && (
               <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 text-[9px] font-heading uppercase tracking-wider">Est.</span>
+            )}
+            {stop.boat_access === true && (
+              <span className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[9px] font-heading uppercase tracking-wider">
+                <Ship className="w-2.5 h-2.5" /> Boat
+              </span>
             )}
           </div>
           <p className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
