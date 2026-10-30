@@ -827,7 +827,7 @@ export default function TourDetail() {
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
             <Map className="w-4 h-4 text-primary" /> {visibleTourStops.length} Investigation Stops
           </h3>
-          {tourStops.length > 0 && !tour.verified && !generatingStops && (user?.role === 'admin' || isPaid) && (
+          {tourStops.length > 0 && !tour.verified && !generatingStops && user?.role === 'admin' && (
             <RepairTourAction
               tour={tour}
               onRepaired={(result) => {
