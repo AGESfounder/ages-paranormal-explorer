@@ -1,5 +1,6 @@
 import { base44 } from '@/api/base44Client';
-import { enforceWalkingDistance, getWalkingLimit } from '@/lib/routeOptimizer';
+import { enforceWalkingDistance } from '@/lib/routeOptimizer';
+import { walkRuleOptions } from '@/lib/walkRules';
 
 // Cheap local sanity check — does the stored order break the route rules?
 // Walking stops must come first as one loop, driving stops last, and no leg
@@ -43,7 +44,7 @@ export default async function reorderCorrectedStops(tour, stops) {
     investigation,
     tour.tour_type,
     { lat: tour.start_latitude, lon: tour.start_longitude },
-    { walkingLimit: getWalkingLimit(tour), tourCategory: tour.tour_category, parkingCoords },
+    { ...walkRuleOptions(tour), tourCategory: tour.tour_category, parkingCoords },
   );
 
   const before = new Map(investigation.map(s => [s.id, s]));

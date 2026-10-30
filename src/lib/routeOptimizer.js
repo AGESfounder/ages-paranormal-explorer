@@ -1,13 +1,13 @@
 import { base44 } from '@/api/base44Client';
-import { isLargeProperty } from '@/lib/largeProperty';
-
 // Shared route optimization logic — used by both tour creation (generateTour.js)
 // and tour viewing (TourDetail.jsx). Extracted here so creation can enforce
 // correct stop ordering (driving stops at the end, walking stops as a loop)
 // BEFORE stops are stored, not just on view.
 
 import { haversineDistance, WALK_LINK_GRACE, isLocatedStop, walkingComponents, planWalkingRoute } from '@/lib/walkingRoute';
+import { getWalkingLimit, WALK_LINK_MILES } from '@/lib/walkRules';
 export { haversineDistance, WALK_LINK_GRACE } from '@/lib/walkingRoute';
+export { getWalkingLimit } from '@/lib/walkRules';
 
 // Rounding helper for coordinate-based map keys (5 decimals ≈ 1 meter).
 const coordKey = (s) => `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
@@ -125,25 +125,8 @@ export function orderStopsByProximity(stops, includeReturn = false, distFn) {
   return optimizeRoute2Opt(ordered, includeReturn, dist);
 }
 
-// An area tour's stops can sit up to ~0.9 miles apart and still be one walking
-// chain along the same street (a 15-20 minute leg). Splitting such a chain
-// produced a tour whose walking pockets were separated by driving legs.
-const WALKING_LIMIT = 0.9;
-
-// The same walking-link tolerance is used for membership, route expansion and
-// map geometry. Parking affects where the walk starts, not which stops survive.
-
-// Walking threshold for stop clustering. Single-site tours (landmark/ship/
-// cold_spot) are large properties where you walk between structures that can
-// be 0.5+ miles apart — use 1.0-mile threshold so they form a walking cluster
-// ordered as a loop. Area tours use 0.33 miles (downtown walking tours).
-export const getWalkingLimit = (tour) => {
-  const cat = tour?.tour_category;
-  if (cat === 'landmark' || cat === 'ship' || cat === 'cold_spot') {
-    return isLargeProperty(tour) ? 1.0 : 0.33;
-  }
-  return WALKING_LIMIT;
-};
+// Walking limits, grace and totals live in lib/walkRules — one place, shared by
+// the build, every edit path and the readiness check.
 
 
 
@@ -164,7 +147,12 @@ export const normalizeAreaTourType = (tourCategory, tourType) =>
 // Walking routes may retrace legal links; driving routes use road distances.
 // `startCoords` is only an ordering reference, never a walking cut-off.
 export async function enforceWalkingDistance(stops, tourType, startCoords, options = {}) {
-  const walkingLimit = options.walkingLimit || WALKING_LIMIT;
+  const walkingLimit = options.walkingLimit || WALK_LINK_MILES;
+  // The ceiling is the longest leg that still counts as a walk (the limit plus
+  // its grace). Anything longer is a drive, so a 1.4-mile gap can never be
+  // bridged through other stops and then labelled walking.
+  const ceiling = options.walkingCeiling || walkingLimit * WALK_LINK_GRACE;
+  const walkTotal = options.walkingTotal;
   tourType = normalizeAreaTourType(options.tourCategory, tourType);
   const parkingCoords = options.parkingCoords;
   const preserveOrder = options.preserveOrder || false;
@@ -178,7 +166,7 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   const pocketDistance = (group) => refCoords?.lat != null && refCoords?.lon != null
     ? Math.min(...group.map(s => haversineDistance(refCoords.lat, refCoords.lon, s.latitude, s.longitude)))
     : Infinity;
-  const components = walkingComponents(withCoords, walkingLimit * WALK_LINK_GRACE);
+  const components = walkingComponents(withCoords, ceiling);
   components.sort((a, b) => b.length - a.length || pocketDistance(a) - pocketDistance(b));
   const walkingCluster = components[0]?.length > 1 || withCoords.length === 1 ? components[0] : [];
   const walkingSet = new Set(walkingCluster);
@@ -255,17 +243,30 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
 
   // Preserve the whole connected walk. Shortest-path expansion permits a
   // return along the same street instead of demoting the tail to driving.
-  const plan = planWalkingRoute(walkingCluster, walkingLimit * WALK_LINK_GRACE, parkingCoords, false, dist);
-  const orderedCluster = plan.ordered;
-  const drivingStops = withCoords.filter(s => !walkingSet.has(s));
+  const plan = planWalkingRoute(walkingCluster, ceiling, parkingCoords, false, dist);
+  let orderedCluster = plan.ordered;
+  let clusterMiles = plan.miles;
+  // The walk must also fit the tour's total walking mileage. When it does not,
+  // the furthest stops from the start of the walk become drives — the tight
+  // cluster around the lot is always the part that stays walkable.
+  while (Number.isFinite(walkTotal) && orderedCluster.length > 1 && clusterMiles > walkTotal) {
+    const shorter = planWalkingRoute(orderedCluster.slice(0, -1), ceiling, parkingCoords, false, dist);
+    if (!shorter.path.length || shorter.miles >= clusterMiles) break;
+    orderedCluster = shorter.ordered;
+    clusterMiles = shorter.miles;
+  }
+  const walked = new Set(orderedCluster);
+  const drivingStops = withCoords.filter(s => !walked.has(s));
   const clusterEnd = orderedCluster[orderedCluster.length - 1];
   if (drivingStops.length && clusterEnd) {
     drivingStops.sort((a, b) => dist(clusterEnd, a) - dist(clusterEnd, b));
   }
+  // The drive belongs at the END: the walk runs from the lot as one loop, then
+  // the driving stops follow. No drive is ever left mid-route.
   const final = [...orderedCluster, ...orderStopsByProximity(drivingStops, false, dist), ...unlocated];
   return final.map((s, i) => ({
     ...s,
-    travel_method: !isLocatedStop(s) ? pendingMethod(s) : walkingSet.has(s) ? 'walking' : 'driving',
+    travel_method: !isLocatedStop(s) ? pendingMethod(s) : walked.has(s) ? 'walking' : 'driving',
     stop_number: i + 1,
   }));
 }

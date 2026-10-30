@@ -2,6 +2,7 @@ import { base44 } from '@/api/base44Client';
 import { enforceWalkingDistance } from '@/lib/routeOptimizer';
 import { reverseGeocodeStreetAddress } from '@/lib/reverseGeocode';
 import { verifyStopLocation } from '@/lib/verifyStop';
+import { walkRuleOptions } from '@/lib/walkRules';
 
 // Changing WHERE a tour starts changes how it should be walked, so a parking
 // move is the one pin move that re-orders a tour: the stops are re-laid from the
@@ -89,7 +90,7 @@ export async function changeParkingLocation({ tour, stops, parkingStopId, latitu
       tourStopsOnly,
       tour.tour_type,
       { lat: tour.start_latitude, lon: tour.start_longitude },
-      { walkingLimit, tourCategory: tour.tour_category, parkingCoords: { lat: latitude, lon: longitude } },
+      { ...walkRuleOptions(tour), walkingLimit, tourCategory: tour.tour_category, parkingCoords: { lat: latitude, lon: longitude } },
     );
     for (const s of ordered) {
       const existing = tourStopsOnly.find(ts => ts.id === s.id);

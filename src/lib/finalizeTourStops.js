@@ -1,6 +1,7 @@
 import { base44 } from '@/api/base44Client';
-import { enforceWalkingDistance, getWalkingLimit, normalizeAreaTourType } from '@/lib/routeOptimizer';
+import { enforceWalkingDistance, normalizeAreaTourType } from '@/lib/routeOptimizer';
 import ensureTourParking from '@/lib/ensureTourParking';
+import { walkRuleOptions, walkLegProblems } from '@/lib/walkRules';
 
 // Initial builds share this order: resolve locations, classify the real stops,
 // find parking for that walk, then store the final order and completion state.
@@ -19,7 +20,7 @@ export default async function finalizeTourStops(tour) {
   if (current.verified) return { tour: current, stops: page.items };
   const regular = page.items.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
   if (!regular.length) throw new Error('This tour has no saved investigation stops.');
-  const options = { walkingLimit: getWalkingLimit(current), tourCategory: current.tour_category,
+  const options = { ...walkRuleOptions(current), tourCategory: current.tour_category,
     preserveOrder: !!(current.manual_reorder || current.user_reordered) };
   const type = normalizeAreaTourType(current.tour_category, current.tour_type);
   const start = { lat: current.start_latitude, lon: current.start_longitude };
@@ -39,7 +40,11 @@ export default async function finalizeTourStops(tour) {
   const tourType = methods.size === 2 ? 'mixed' : methods.has('driving') ? 'driving' : methods.has('walking') ? 'walking' : current.tour_type;
   // A tour with stops and no lot is never 'ready' — a missing parking record is
   // a failed step, not a finished build.
-  const buildStatus = !parking || parking.needs_placement || ordered.some(s => s.needs_placement || s.geocoded !== true)
+  // A tour is only ready when its walk obeys the walk rules as well: no leg
+  // over the ceiling and no over-length walk for an area tour.
+  const walkProblems = walkLegProblems(current, ordered);
+  const buildStatus = !parking || parking.needs_placement || walkProblems.length > 0
+    || ordered.some(s => s.needs_placement || s.geocoded !== true)
     ? 'needs_review' : 'ready';
   const fields = { tour_type: tourType, build_status: buildStatus, stops_regenerated: STOPS_PREP_VERSION };
   await base44.entities.Tour.update(tour.id, fields);

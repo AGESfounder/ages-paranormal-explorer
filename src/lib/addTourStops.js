@@ -240,8 +240,13 @@ Output ONLY a valid JSON object with a "new_stops" array.${CONCLUSION_PHRASE_RUL
     await base44.entities.TourStop.delete(id);
   }
 
+  // Driving stops always come last — the walk happens from the lot, then the
+  // drive. A model-chosen insert position can never leave a drive mid-tour.
+  const driven = dedupedOrdered.filter((s) => s.travel_method === 'driving');
+  const reordered = [...dedupedOrdered.filter((s) => s.travel_method !== 'driving'), ...driven];
+
   // Cap at MAX_STOPS and renumber.
-  const finalOrdered = dedupedOrdered.slice(0, maxStops);
+  const finalOrdered = reordered.slice(0, maxStops);
   const actualAdded = newStops.length - orphanedNewIds.length;
   const updates = finalOrdered.map((s, i) => ({ id: s.id, stop_number: i + 1 }));
   if (updates.length > 0) {
