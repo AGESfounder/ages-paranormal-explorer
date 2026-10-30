@@ -14,7 +14,7 @@
         "ship",
         "cold_spot"
       ],
-      "description": "Tour category: property (enum value 'landmark') = single property with all stops on the same site, area = various properties in a local area with no repeat stops, road_trip = 8-10 stops with 5+ miles between most stops, ship = haunted ship or vessel with all stops on the same vessel, cold_spot = a very short tour with 1-4 stops at a single haunted location or tiny cluster"
+      "description": "Tour category: property (landmark) = one property; area = distinct properties in a local area; road_trip = spread-out locations; ship = one vessel; cold_spot = 1-4 stops at one location or tiny cluster."
     },
     "access_type": {
       "type": "string",
@@ -23,7 +23,7 @@
         "exterior_interior",
         "interior_only"
       ],
-      "description": "Access classification for cold_spot and landmark (property) tours: exterior_only = tour covers only exterior/grounds/perimeter (free 24/7 access), exterior_interior = tour covers both interior and exterior areas (may require paid admission), interior_only = tour covers only the interior of the building. Null/undefined for area/road_trip/ship tours. An exterior-only tour and an exterior/interior tour of the same location are different tours (not duplicates)."
+      "description": "Access classification for cold_spot and landmark tours. Different access types at the same location are different tours."
     },
     "state": {
       "type": "string"
@@ -100,42 +100,47 @@
     "manual_reorder": {
       "type": "boolean",
       "default": false,
-      "description": "True when a user or admin has manually reordered stops via the drag-and-drop list (not via pin validation). This is permanent \u2014 it takes precedence over proximity-based auto-reordering so the custom order is always respected, even after all stops are validated."
+      "description": "Permanent user-selected stop order. Takes precedence over automatic ordering."
     },
     "rank": {
       "type": "number",
-      "description": "State ranking: 1 = #1 Most Active, 2 = #2, 3 = #3. Null/undefined for unranked tours."
+      "description": "State ranking, 1-3. Unset for unranked tours."
     },
     "stops_regenerated": {
       "type": "number",
       "default": 0,
-      "description": "Validation version of the stops. 0 = unvalidated. When validation rules change, STOPS_VALIDATION_VERSION is bumped in TourDetail.jsx, and all tours with an older version are re-validated (and regenerated if non-compliant) on next view at no energy cost. Boolean true (legacy) is treated as version 1."
+      "description": "Last completed coordinate/route preparation version. Viewing never triggers maintenance."
     },
     "content_version": {
       "type": "number",
       "default": 0,
-      "description": "Version of the stop-content enrichment prompt used to generate this tour's stop narratives. 0 = original prompt (pre-stop-focus rules, stops repeated general property history). When STOP_CONTENT_VERSION is bumped in stopContent.js, tours with an older content_version are auto-regenerated with the improved prompt when a paid user or admin opens them (one-time, at their energy expense). Once stamped, the tour's stops are permanently upgraded for all users and never regenerate again."
+      "description": "Last completed stop-content prompt version. Viewing a tour does not regenerate its content."
+    },
+    "build_status": {
+      "type": "string",
+      "enum": [
+        "building",
+        "ready",
+        "needs_review"
+      ],
+      "description": "Initial build completion state. Estimated or unresolved locations and interrupted builds require review; ready is not human verification."
     },
     "verified": {
       "type": "boolean",
       "default": false,
-      "description": "Whether all stops on this tour have been user-verified (coordinates confirmed by a paid user or admin at the actual location). When new stops are added or regenerated, this drops back to false until the new stops are verified."
+      "description": "Human-validated tour. Automated coordinate and content maintenance must not change it."
     },
     "parking_name": {
-      "type": "string",
-      "description": "Name of the parking area for the walking cluster (e.g., 'Main Street Metered Parking', 'City Lot #3'). Null for driving-only tours."
+      "type": "string"
     },
     "parking_address": {
-      "type": "string",
-      "description": "Complete street address of the parking area."
+      "type": "string"
     },
     "parking_latitude": {
-      "type": "number",
-      "description": "GPS latitude of the parking spot. Located between the first and last stop of the walking cluster."
+      "type": "number"
     },
     "parking_longitude": {
-      "type": "number",
-      "description": "GPS longitude of the parking spot."
+      "type": "number"
     },
     "parking_type": {
       "type": "string",
@@ -143,17 +148,59 @@
         "street",
         "parking_lot",
         "parking_garage"
-      ],
-      "description": "Type of parking: street = on-street parking, parking_lot = surface parking lot, parking_garage = multi-level parking structure."
+      ]
     },
     "parking_cost": {
-      "type": "string",
-      "description": "Parking cost description (e.g., 'Free', 'Metered ($1.50/hr, free after 6pm)', 'Paid lot ($5 flat rate)')."
+      "type": "string"
     },
     "parking_verified": {
       "type": "boolean",
-      "default": false,
-      "description": "Whether a paid user or admin has confirmed the parking spot's coordinates at the actual location."
+      "default": false
+    },
+    "maintenance_token": {
+      "type": "string",
+      "rls": {
+        "read": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "collaborator_role": "editor"
+          }
+        }
+      }
+    },
+    "maintenance_user_id": {
+      "type": "string",
+      "rls": {
+        "read": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "collaborator_role": "editor"
+          }
+        }
+      }
+    },
+    "maintenance_expires_at": {
+      "type": "number",
+      "rls": {
+        "read": {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        "update": {
+          "user_condition": {
+            "collaborator_role": "editor"
+          }
+        }
+      }
     }
   },
   "required": [

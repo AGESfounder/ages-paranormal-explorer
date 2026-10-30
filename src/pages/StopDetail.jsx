@@ -304,7 +304,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         // Determine if this is the first tour stop (for enrichment context)
         const minStopNum = tourSiblings.length > 0 ? Math.min(...tourSiblings.map(s => s.stop_number || 0)) : 0;
         const stopIsFirst = currentStop.stop_type !== 'parking' && currentStop.stop_type !== 'shuttle' && (currentStop.stop_number || 0) === minStopNum;
-        if (currentStop.stop_type !== 'parking' && (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0)) {
+        if (tourData?.verified !== true && currentStop.stop_type !== 'parking' && currentStop.stop_type !== 'shuttle' && (isThinContent(currentStop.historical_info) || isThinContent(currentStop.paranormal_info) || !currentStop.people || currentStop.people.length === 0)) {
           const siblingNames = tourSiblings.filter(s => s.id !== currentStop.id).map(s => s.name).filter(Boolean);
           ensureRichContent(currentStop, {
             title: tourData?.title,

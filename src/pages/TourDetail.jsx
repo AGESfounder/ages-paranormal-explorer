@@ -11,7 +11,7 @@ import useGhostVoice from '../hooks/useGhostVoice';
 import { base44 } from '@/api/base44Client';
 import { getOfflineTour, removeTourOffline, isTourOffline } from '@/lib/offlineTours';
 import { getOfflineAudio, clearTourAudio } from '@/lib/offlineAudio';
-import { callJson } from '@/lib/llmJson';
+import buildTourStops from '@/lib/buildTourStops';
 import BePatient from '@/components/BePatient';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
 import TourAccessInfo from '@/components/TourAccessInfo';
@@ -29,9 +29,8 @@ import AmenitySheet from '@/components/amenities/AmenitySheet';
 
 import { getNarrationLength, saveNarrationLength, truncateText, computeAdjustedDuration } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
-import { geocodeAddresses, geocodeStopsWithNames } from '@/lib/geocodeStops';
-import { stripConclusionOpeners, stripStopConclusion, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
-import { regenerateTourContent } from '@/lib/enrichStops';
+
+import TourBuildStatus from '@/components/TourBuildStatus';
 import { rebalanceConclusionPhrases } from '@/lib/reorderConclusion';
 import { haversineDistance, enforceWalkingDistance, orderStopsByProximity, getWalkingLimit, normalizeAreaTourType } from '@/lib/routeOptimizer';
 import { looksLikeRoomOrArea } from '@/lib/roomDetection';
@@ -50,134 +49,11 @@ import { addStopByName } from '@/lib/addTourStops';
 import { sanitizeStopRecord } from '@/lib/stopRecordSanitize';
 import { parkingDisplay } from '@/lib/parkingLabel';
 import tourRouteGeometry from '@/lib/tourRouteGeometry';
+import readTourSnapshot from '@/lib/readTourSnapshot';
+import TourBuildPrompt from '@/components/TourBuildPrompt';
 
-// Bump this when validation rules change — all tours with an older version
-// get re-validated (and regenerated if non-compliant) on next view, at no
-// energy cost to the user (system maintenance bypasses energy gating).
-// 22 — a lot sitting inside its own loop is confirmed from its coordinates when
-// the address lookup fails (a failed geocode used to relocate a good lot to the
-// loop centre), so every tour re-derives its split and its lot once on next open.
-const STOPS_VALIDATION_VERSION = 22;
-
-// Module-level guard: prevents duplicate background coordinate jobs when the
-// user navigates away and back before the DB stamp (stops_regenerated) lands.
-// The stamp is written at the START of each job, but the write is async — this
-// closes the small race window where a second mount reads the old DB value.
-const activeCoordJobs = new Set();
-
-// Validate that a tour's stops comply with current guidelines:
-// - No stop should be unreasonably far from the tour's start coordinates
-//   (area/cold_spot/landmark/ship: 50 miles, road_trip: 200 miles)
-// - No two stops should share identical coordinates (collapsed markers)
-function validateStops(stops, tour) {
-  if (!stops || stops.length === 0) return { compliant: false, reason: 'no stops' };
-  // Stop count check — max 10 stops (cold_spot allows 1-4)
-  const maxStops = tour.tour_category === 'cold_spot' ? 4 : 10;
-  if (stops.length > maxStops) {
-    return { compliant: false, reason: `${stops.length} stops (max ${maxStops} for ${tour.tour_category})` };
-  }
-  // Duplicate name detection — fuzzy match (one normalized name contains
-  // another). Catches near-duplicates like "Frederick City Hall" vs
-  // "Frederick City Hall Main Floor" that slip through exact-match dedup.
-  const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-  const stopNames = stops.map(s => normName(s.name)).filter(n => n.length > 0);
-  for (let i = 0; i < stopNames.length; i++) {
-    for (let j = i + 1; j < stopNames.length; j++) {
-      if (stopNames[i] === stopNames[j]) {
-        return { compliant: false, reason: `duplicate stop: "${stops[i].name}"` };
-      }
-      if (stopNames[i].length >= 8 && stopNames[j].length >= 8 &&
-          (stopNames[i].includes(stopNames[j]) || stopNames[j].includes(stopNames[i]))) {
-        return { compliant: false, reason: `near-duplicate stops: "${stops[i].name}" / "${stops[j].name}"` };
-      }
-    }
-  }
-  const maxDistMiles = tour.tour_category === 'road_trip' ? 200
-    : (tour.tour_category === 'cold_spot' || tour.tour_category === 'ship') ? 0.5
-    : tour.tour_category === 'area' ? 2.5
-    : isLargeProperty(tour) ? 5 : 1;
-  const startLat = tour.start_latitude;
-  const startLon = tour.start_longitude;
-  if (startLat != null && startLon != null) {
-    for (const s of stops) {
-      if (s.latitude != null && s.longitude != null) {
-        const dist = haversineDistance(startLat, startLon, s.latitude, s.longitude);
-        if (dist > maxDistMiles) {
-          return { compliant: false, reason: `stop "${s.name}" is ${Math.round(dist)} miles from start` };
-        }
-      }
-    }
-  }
-  // Collapse detection — same_structure aware. Multiple stops at the same
-  // coordinates are only an error if NOT all of them are same_structure: true
-  // (rooms/areas within one building legitimately share coordinates).
-  const coordMap = {};
-  for (const s of stops) {
-    if (s.latitude != null && s.longitude != null) {
-      const key = `${s.latitude.toFixed(5)},${s.longitude.toFixed(5)}`;
-      if (!coordMap[key]) coordMap[key] = [];
-      coordMap[key].push(s);
-    }
-  }
-  for (const [key, group] of Object.entries(coordMap)) {
-    if (group.length > 1) {
-      const allSameStructure = group.every(s => s.same_structure === true);
-      if (!allSameStructure) {
-        return { compliant: false, reason: `${group.length} stops collapsed at same coordinates` };
-      }
-    }
-  }
-  // For area tours, only validate the WALKING CLUSTER — the stops that form
-  // a connected component within 0.33 miles of each other. Driving stops in
-  // a mixed tour can be miles away and should NOT cause the tour to fail
-  // validation. This allows mixed area tours (walk a downtown cluster, then
-  // drive to spread-out locations). If there's no walking cluster at all,
-  // the tour doesn't work as an area tour and should be regenerated.
-  if (tour.tour_category === 'area') {
-    const withCoords = stops.filter(s => s.latitude != null && s.longitude != null);
-    if (withCoords.length >= 2) {
-      const WALKING_LIMIT = 0.33;
-      const visited = new Array(withCoords.length).fill(false);
-      const components = [];
-      for (let i = 0; i < withCoords.length; i++) {
-        if (visited[i]) continue;
-        const comp = [];
-        const queue = [i];
-        let head = 0;
-        visited[i] = true;
-        while (head < queue.length) {
-          const idx = queue[head++];
-          comp.push(withCoords[idx]);
-          for (let j = 0; j < withCoords.length; j++) {
-            if (!visited[j]) {
-              const d = haversineDistance(withCoords[idx].latitude, withCoords[idx].longitude, withCoords[j].latitude, withCoords[j].longitude);
-              if (d <= WALKING_LIMIT) { visited[j] = true; queue.push(j); }
-            }
-          }
-        }
-        components.push(comp);
-      }
-      components.sort((a, b) => b.length - a.length);
-      const walkingCluster = components[0] && components[0].length > 1 ? components[0] : [];
-      if (walkingCluster.length < 2) {
-        return { compliant: false, reason: 'no walkable cluster found (all stops are too far apart for an area tour)' };
-      }
-      const ordered = orderStopsByProximity(walkingCluster);
-      let totalDist = 0;
-      for (let i = 1; i < ordered.length; i++) {
-        const dist = haversineDistance(ordered[i - 1].latitude, ordered[i - 1].longitude, ordered[i].latitude, ordered[i].longitude);
-        totalDist += dist;
-        if (dist > 1) {
-          return { compliant: false, reason: `walking stops are ${dist.toFixed(1)} miles apart` };
-        }
-      }
-      if (totalDist > 2.5) {
-        return { compliant: false, reason: `walking route is ${totalDist.toFixed(1)} miles` };
-      }
-    }
-  }
-  return { compliant: true };
-}
+// Build preparation is explicit. Viewing never starts a maintenance job.
+const activeBuilds = new Set();
 
 export default function TourDetail() {
   const { tourId } = useParams();
@@ -185,6 +61,8 @@ export default function TourDetail() {
   const [tour, setTour] = useState(null);
   const [stops, setStops] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const loadVersionRef = useRef(0);
   const [generatingStops, setGeneratingStops] = useState(false);
   const [stopsError, setStopsError] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
@@ -202,8 +80,7 @@ export default function TourDetail() {
   const [parkingSaving, setParkingSaving] = useState(false);
   const [travelMode, setTravelMode] = useState('mixed');
   const [isOfflineCached, setIsOfflineCached] = useState(false);
-  const [regeneratingContent, setRegeneratingContent] = useState(false);
-  const [regenerationProgress, setRegenerationProgress] = useState(null);
+
   const [amenities, setAmenities] = useState([]);
   const [amenitySheetOpen, setAmenitySheetOpen] = useState(false);
 
@@ -264,96 +141,6 @@ export default function TourDetail() {
     rawNarrate(cleanText, opts);
   };
 
-  // Lazily verify existing stops whose GPS coordinates haven't been verified.
-  // Runs in the background — user sees the tour immediately. Uses per-stop LLM
-  // web search (fix-collapsed-coords) to confirm/correct coordinates, NOT
-  // Nominatim address geocoding, which collapses stops in tiny towns and
-  // overrides accurate LLM coordinates with generic address points.
-  const geocodeExistingStops = async (stopsList, tourData) => {
-    // SAFETY: Do NOT re-verify stops that already have coordinates. The
-    // background OSM/LLM search can return WRONG coordinates (e.g. Morgan's
-    // Grove Park was moved 0.5 miles off), sending users to the wrong
-    // location at night. Only fix collapsed/missing stops — never overwrite
-    // existing coordinates with a new guess.
-    const needsVerification = stopsList.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' && s.geocoded === false);
-    if (needsVerification.length === 0) return;
-    if (activeCoordJobs.has(tourData.id)) return; // already running from a prior mount
-    activeCoordJobs.add(tourData.id);
-    try {
-      await base44.functions.invoke('fix-collapsed-coords', { tourId: tourData.id, skipReorder: tourData.user_reordered || tourData.manual_reorder, verifyAll: false });
-      // Reload stops with corrected coordinates
-      const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourData.id });
-      // Don't overwrite stops the user has manually placed via marker drag
-      if (userDraggedRef.current) return;
-      // fix-collapsed-coords only updates coordinates (and geocoded status) —
-      // it does NOT reclassify travel_method. The self-heal that just ran set
-      // the correct walking/driving classification, and the reloaded stops
-      // retain it. Re-running enforceWalkingDistance here would reclassify ALL
-      // stops from whatever Overpass/LLM handed back, letting one bad unverified
-      // coordinate revert the self-heal's work (the Savannah bug: self-heal
-      // fixes all-walking, then this step reverts 4 stops to driving). Instead,
-      // just display the coordinate-corrected stops in their existing order;
-      // the NEXT load's self-heal reclassifies if the new coords warrant it.
-      const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
-      const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
-      const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-      const sorted = tourStopsOnly.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
-    } catch (e) {
-      console.error('Coordinate verification failed:', e);
-    } finally {
-      activeCoordJobs.delete(tourData.id);
-    }
-  };
-
-  // Background validation — runs fix-collapsed-coords (verifyAll) WITHOUT
-  // blocking the page load. The tour displays immediately with existing
-  // coordinates; when verification completes, stops are reloaded and
-  // re-ordered with corrected coordinates. This prevents the page from
-  // appearing stuck when opening a tour whose validation version is
-  // outdated (fix-collapsed-coords can take 30-60+ seconds for 10 stops).
-  const runBackgroundValidation = async (tourId, tourData) => {
-    if (activeCoordJobs.has(tourId)) return; // already running from a prior mount
-    activeCoordJobs.add(tourId);
-    try {
-      // Stamp FIRST so a re-mount sees the current version and skips. The
-      // coordinate work runs to completion in the background; if it fails
-      // partway, geocodeExistingStops picks up any remaining unverified stops
-      // on the next visit.
-      try {
-        await base44.entities.Tour.update(tourId, { stops_regenerated: STOPS_VALIDATION_VERSION });
-      } catch (e) { console.error('Failed to pre-stamp stops_regenerated:', e); }
-      // SAFETY: Do NOT re-verify all stops. Background OSM/LLM search can return
-      // WRONG coordinates, overwriting correct ones and sending users to the
-      // wrong location at night. Only fix collapsed/missing/water stops.
-      await base44.functions.invoke('fix-collapsed-coords', { tourId, skipReorder: tourData.user_reordered || tourData.manual_reorder, verifyAll: false });
-      // Reload stops with corrected coordinates
-      const updatedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
-      const parkingStop = updatedStops.find(s => s.stop_type === 'parking');
-      const shuttleStopData = updatedStops.find(s => s.stop_type === 'shuttle');
-      let tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-      // Validate — log issues but never delete stops (needs_placement handles
-      // unverified stops instead of destructive regeneration)
-      const validation = validateStops(tourStopsOnly, tourData);
-      if (!validation.compliant) {
-        console.warn(`Tour ${tourId} validation: ${validation.reason}. Stops preserved.`);
-      }
-      // Don't overwrite stops the user has manually placed via marker drag
-      if (userDraggedRef.current) return;
-      // fix-collapsed-coords only updates coordinates — it does NOT reclassify
-      // travel_method (same rationale as geocodeExistingStops: re-running
-      // enforceWalkingDistance here would let one bad Overpass result revert
-      // the self-heal's classification). Just display the coordinate-corrected
-      // stops in their existing order; the NEXT load's self-heal reclassifies.
-      const sorted = tourStopsOnly.sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-      setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sorted]);
-    } catch (e) {
-      console.error('Coordinate verification failed:', e);
-    } finally {
-      activeCoordJobs.delete(tourId);
-    }
-  };
-
   const [narrationLength, setNarrationLengthState] = useState(getNarrationLength());
   const handleNarrationLengthChange = (value) => {
     setNarrationLengthState(value);
@@ -411,9 +198,20 @@ export default function TourDetail() {
   const formatDistance = (mi) => mi < 1 ? `${Math.round(mi * 5280)} ft` : `${mi.toFixed(1)} mi`;
 
   useEffect(() => {
+    userDraggedRef.current = false;
+    setStopsError('');
     loadTour();
-    return () => { /* hook handles its own cleanup */ };
+    return () => { loadVersionRef.current += 1; };
   }, [tourId]);
+
+  useEffect(() => {
+    if (loading || loadError || tour) return;
+    const meta = document.createElement('meta');
+    meta.name = 'prerender-status-code';
+    meta.content = '404';
+    document.head.appendChild(meta);
+    return () => meta.remove();
+  }, [loading, loadError, tour]);
 
   // When a user navigates from the last stop via the "Conclusion" button,
   // the URL carries #conclusion — auto-reveal the "Mark Tour Complete"
@@ -439,603 +237,57 @@ export default function TourDetail() {
   useEffect(() => { loadAmenities(); }, [tourId]);
 
   const loadTour = async () => {
+    const version = ++loadVersionRef.current;
     setLoading(true);
+    setLoadError('');
     try {
-    const tourData = await base44.entities.Tour.filter({ id: tourId });
-    if (tourData.length > 0) {
-      setTour(tourData[0]);
-      const [favs, completions] = await Promise.all([
-        base44.entities.Favorite.filter({ tour_id: tourId }),
-        base44.entities.Investigation.filter({ tour_id: tourId, is_completed: true }),
-      ]);
-      setIsFavorite(favs.length > 0);
-      if (completions.length > 0) { setIsCompleted(true); setConclusionRead(true); }
-      let tourStops = await base44.entities.TourStop.filter({ tour_id: tourId });
-      // Classify stops that don't have access_area — instant heuristic,
-      // persisted to DB in the background (non-blocking).
-      const toClassify = tourStops.filter(s => s.stop_type === 'tour' && !s.access_area);
-      if (toClassify.length > 0) {
-        for (const s of toClassify) {
-          s.access_area = classifyStopAccess(s.name);
-        }
-        base44.entities.TourStop.bulkUpdate(
-          toClassify.map(s => ({ id: s.id, access_area: s.access_area }))
-        ).catch(e => console.error('Failed to persist access classification:', e));
-      }
-      // SCRUB CONCLUSION PHRASES from all stops on load — no stop (not even
-      // the final one) may contain conclusion language. The tour's Conclusion
-      // field is the only place for closing statements. This fixes
-      // already-generated tours (e.g. Gettysburg) that have conclusion phrases
-      // scattered across non-final stops from before this rule existed.
-      // Runs at no energy cost — pure text processing, no LLM call.
-      const scrubUpdates = [];
-      for (const s of tourStops) {
-        if (s.stop_type === 'parking' || s.stop_type === 'shuttle') continue;
-        const clean = stripStopConclusion(s, false);
-        if (Object.keys(clean).length > 0) {
-          scrubUpdates.push({ id: s.id, ...clean });
-          Object.assign(s, clean);
-        }
-      }
-      if (scrubUpdates.length > 0) {
-        base44.entities.TourStop.bulkUpdate(scrubUpdates)
-          .catch(e => console.error('Failed to persist conclusion scrub:', e));
-      }
-
-      // Clean up duplicate parking stops (keep the first, delete the rest)
-      const allParking = tourStops.filter(s => s.stop_type === 'parking');
-      if (allParking.length > 1) {
-        for (let i = 1; i < allParking.length; i++) {
-          await base44.entities.TourStop.delete(allParking[i].id);
-        }
-        tourStops = tourStops.filter(s => !allParking.slice(1).some(p => p.id === s.id));
-      }
-      if (tourStops.length === 0) {
-        await generateStops(tourData[0]);
-      } else {
-        // FULLY VALIDATED = FROZEN. A tour a person has validated is final:
-        // no automated process may reorder it, relabel a stop, regenerate its
-        // content, add a lot or migrate its records. It displays exactly as it
-        // was validated. Only a person can change it afterwards (dragging a
-        // pin, reordering, adding/removing a stop).
-        const isFrozen = tourData[0].verified === true;
-        // Lazy migration: if tour has parking on Tour entity but no parking TourStop, create one
-        let parkingStop = tourStops.find(s => s.stop_type === 'parking');
-        if (!parkingStop && tourData[0].parking_latitude && !isFrozen) {
-          try {
-            parkingStop = await base44.entities.TourStop.create({
-              tour_id: tourId, stop_type: 'parking', stop_number: 0,
-              name: tourData[0].parking_name || 'Parking Area',
-              address: tourData[0].parking_address,
-              latitude: tourData[0].parking_latitude, longitude: tourData[0].parking_longitude,
-              parking_type: tourData[0].parking_type, parking_cost: tourData[0].parking_cost,
-              travel_method: 'walking', geocoded: true,
-              user_verified: tourData[0].parking_verified || false,
-            });
-          } catch (e) { console.error('Parking migration failed:', e); }
-        }
-        let tourStopsOnly = tourStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-        // Re-validate stops when validation rules change. fix-collapsed-coords
-        // runs first to verify/correct coordinates, then validateStops checks
-        // compliance. Stops are NEVER deleted — needs_placement handles
-        // unverified stops instead of destructive regeneration.
-        let regenerated = false;
-        const needsValidation = (tourData[0].stops_regenerated || 0) < STOPS_VALIDATION_VERSION;
-        // SACRED PINS: If any stop on this tour has been user-verified (manually
-        // placed by a real person at the actual location), do NOT run any
-        // background validation or coordinate correction. User-verified pins
-        // are ground truth — no automated process should ever touch them.
-        const hasVerifiedStops = tourStopsOnly.some(s => s.user_verified);
-        // An area tour is walkable by definition — never enforce one as a pure
-        // driving tour (see normalizeAreaTourType). The auto-correct below
-        // stores whatever the stops actually turn out to be.
-        const enforcedType = normalizeAreaTourType(tourData[0].tour_category, tourData[0].tour_type);
-        if (isFrozen) {
-          // Frozen: show the stops in their validated order, untouched. No
-          // proximity reorder, no walking/driving relabel, no background
-          // validation or geocoding.
-          const sortedTourStops = [...tourStopsOnly].sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
-          const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
-          setStops([...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sortedTourStops]);
-        } else if (!regenerated) {
-          if (tourData[0].user_reordered || tourData[0].manual_reorder) {
-            // Respect the user's manual stop order — do not re-sort by proximity.
-            // But still update travel_method based on current (possibly validated)
-            // coordinates so stops show as walking/driving correctly.
-            const parkingCoords = parkingStop?.latitude != null && !parkingStop.needs_placement ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
-            const updatedMethods = await enforceWalkingDistance(tourStopsOnly, enforcedType, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), tourCategory: tourData[0].tour_category, parkingCoords, preserveOrder: true });
-            for (const s of updatedMethods) {
-              const existing = tourStopsOnly.find(ts => ts.id === s.id);
-              if (existing && existing.travel_method !== s.travel_method) {
-                try { await base44.entities.TourStop.update(s.id, { travel_method: s.travel_method }); } catch (e) {}
-              }
-            }
-            const methods = new Set(updatedMethods.map(s => s.travel_method));
-            const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed'
-              : methods.has('driving') ? 'driving' : 'walking';
-            if (correctedType !== tourData[0].tour_type) {
-              await base44.entities.Tour.update(tourId, { tour_type: correctedType });
-              tourData[0].tour_type = correctedType;
-              setTour({ ...tourData[0] });
-            }
-            const sortedTourStops = updatedMethods.sort((a, b) => a.stop_number - b.stop_number);
-            const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
-            const allStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...sortedTourStops];
-            setStops(allStops);
-            // SACRED PINS: Skip all background validation on tours with
-            // user-verified stops — no automated process touches them.
-            if (!hasVerifiedStops) {
-              if (needsValidation) {
-                runBackgroundValidation(tourId, tourData[0]).catch(console.error);
-              } else {
-                geocodeExistingStops(allStops, tourData[0]).catch(console.error);
-              }
-            }
-          } else {
-            const parkingCoords = parkingStop?.latitude != null && !parkingStop.needs_placement ? { lat: parkingStop.latitude, lon: parkingStop.longitude } : null;
-            // Reorder stops for the best walking loop. Verified pins are sacred —
-            // their coordinates never change — but the ORDER can be optimized
-            // unless the user manually reordered (user_reordered handled above).
-            const reordered = await enforceWalkingDistance(tourStopsOnly, enforcedType, { lat: tourData[0].start_latitude, lon: tourData[0].start_longitude }, { walkingLimit: getWalkingLimit(tourData[0]), tourCategory: tourData[0].tour_category, parkingCoords });
-            // Update stop_numbers in the database if they changed
-            for (const s of reordered) {
-              const existing = tourStopsOnly.find(ts => ts.id === s.id);
-              if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
-                try { await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method }); } catch (e) {}
-              }
-            }
-            // Auto-correct tour type if stops are now a mix of walking + driving
-            const methods = new Set(reordered.map(s => s.travel_method));
-            const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
-              : methods.has('driving') ? 'driving' : 'walking';
-            // Sync start_location_name to the new first stop so the Start
-            // Location note and future stop-generation prompts stay accurate
-            // after proximity auto-reordering.
-            const newFirstName = reordered[0]?.name;
-            const tourUpdates = {};
-            if (correctedType !== tourData[0].tour_type) tourUpdates.tour_type = correctedType;
-            if (newFirstName && newFirstName !== tourData[0].start_location_name) tourUpdates.start_location_name = newFirstName;
-            if (Object.keys(tourUpdates).length > 0) {
-              await base44.entities.Tour.update(tourData[0].id, tourUpdates);
-              if (tourUpdates.tour_type) tourData[0].tour_type = tourUpdates.tour_type;
-              if (tourUpdates.start_location_name) tourData[0].start_location_name = tourUpdates.start_location_name;
-              setTour({ ...tourData[0] });
-            }
-            const shuttleStopData = tourStops.find(s => s.stop_type === 'shuttle');
-            const allStops = [...(parkingStop ? [parkingStop] : []), ...(shuttleStopData ? [shuttleStopData] : []), ...reordered];
-            setStops(allStops);
-            // SACRED PINS: Skip all background validation on tours with
-            // user-verified stops — no automated process touches them.
-            if (!hasVerifiedStops) {
-              if (needsValidation) {
-                runBackgroundValidation(tourId, tourData[0]).catch(console.error);
-              } else {
-                geocodeExistingStops(allStops, tourData[0]).catch(console.error);
-              }
-            }
-          }
-        }
-        // Lazily generate parking for tours that don't have it yet
-        if (!parkingStop && enforcedType !== 'driving' && !isFrozen) {
-          generateParking(tourData[0], tourStopsOnly).catch(console.error);
-        }
-
-        // Auto-regenerate stop content for old tours (content_version <
-        // STOP_CONTENT_VERSION) when a paid user or admin opens them. Runs
-        // in the background — the tour displays immediately with old content,
-        // then stops refresh when regeneration completes. One-time: once
-        // stamped, the tour never regenerates again. Free users see the
-        // original content until a paid user/admin triggers the upgrade.
-        if (!isFrozen && (tourData[0].content_version || 0) < STOP_CONTENT_VERSION && tourStopsOnly.length > 0) {
-          checkManifestationGate().then(gate => {
-            if (!gate.allowed) return;
-            setRegeneratingContent(true);
-            setRegenerationProgress({ completed: 0, total: tourStopsOnly.length });
-            regenerateTourContent(tourData[0], tourStops, (completed, total, stopName) => {
-              setRegenerationProgress({ completed, total, stopName });
-            })
-              .then(({ enrichedStops }) => {
-                setStops(prev => prev.map(s => {
-                  const enriched = enrichedStops.find(e => e.id === s.id);
-                  return enriched ? { ...s, ...enriched } : s;
-                }));
-                setTour(prev => prev ? { ...prev, content_version: STOP_CONTENT_VERSION } : prev);
-              })
-              .catch(e => console.error('Content regeneration failed:', e))
-              .finally(() => {
-                setRegeneratingContent(false);
-                setRegenerationProgress(null);
-              });
-          }).catch(e => console.error('Content regeneration gate check failed:', e));
-        }
-      }
-    }
-    } catch (err) {
-      // Network failure (airplane mode / offline) — load from the offline
-      // cache. Stops were already ordered correctly when saved, so we set
-      // them directly WITHOUT calling enforceWalkingDistance (which would
-      // try to reach OSRM and the detect-water-barriers backend, hanging
-      // for 30+ seconds without a network and trapping the page on the
-      // loading spinner).
+      const snapshot = await readTourSnapshot(tourId);
+      if (version !== loadVersionRef.current) return;
+      setTour(snapshot.tour);
+      setStops(snapshot.stops);
+      setIsFavorite(snapshot.favorite);
+      setIsCompleted(snapshot.completed);
+      setConclusionRead(snapshot.completed || window.location.hash === '#conclusion');
+    } catch (error) {
+      if (version !== loadVersionRef.current) return;
       const cached = getOfflineTour(tourId);
       if (cached) {
         setTour(cached.tour);
-        // Sort cached stops: parking first, then shuttle, then by stop_number.
-        // The saved array order may not match stop_number order — sorting
-        // ensures correct display order when loaded offline.
-        const sortedStops = (cached.stops || []).slice().sort((a, b) => {
-          const aOrder = a.stop_type === 'parking' ? -2 : a.stop_type === 'shuttle' ? -1 : (a.stop_number || 0);
-          const bOrder = b.stop_type === 'parking' ? -2 : b.stop_type === 'shuttle' ? -1 : (b.stop_number || 0);
-          return aOrder - bOrder;
-        });
-        setStops(sortedStops);
+        const order = s => s.stop_type === 'parking' ? -2 : s.stop_type === 'shuttle' ? -1 : (s.stop_number || 0);
+        setStops((cached.stops || []).slice().sort((a, b) => order(a) - order(b)));
+      } else {
+        setTour(null);
+        setStops([]);
+        setLoadError(error?.message || 'This tour could not be loaded. Please try again.');
       }
     }
+    if (version !== loadVersionRef.current) return;
     setIsOfflineCached(isTourOffline(tourId));
-    // Lock narration length to the download level for saved tours so the
-    // display text matches the condensed text that was cached during
-    // download. Without this, the display uses the user's current setting
-    // (which may differ from the download level), making the text appear
-    // at the wrong size — e.g., a "Glimpse" (1/3) download shows "Uncover"
-    // (2/3) text if the current setting is "Uncover".
-    const offlineTourData = getOfflineTour(tourId);
-    if (offlineTourData?.tour?._offline_level && offlineTourData.tour._offline_level !== 'free') {
-      setNarrationLengthState(offlineTourData.tour._offline_level);
+    const offline = getOfflineTour(tourId);
+    if (offline?.tour?._offline_level && offline.tour._offline_level !== 'free') {
+      setNarrationLengthState(offline.tour._offline_level);
     }
     setLoading(false);
   };
 
-  // Generate a parking spot for the walking cluster. Called lazily for existing
-  // tours that have stops but no parking yet, and as a fallback if stop generation
-  // didn't include parking. Only generates for tours with walking stops.
-  const generateParking = async (tourData, stopsList) => {
-    // The loop is already marked by the time we look for a lot — measure
-    // against it. Stops awaiting placement are not located, so they are not
-    // part of the loop and never decide where the lot goes.
-    const walkingStops = (stopsList || stops).filter(s => s.travel_method === 'walking' && s.latitude != null && s.longitude != null && !s.needs_placement);
-    if (walkingStops.length < 1) return;
-    try {
-      const stopNames = walkingStops.map(s => `${s.name} (${s.address || 'no address'})`).join(', ');
-      const cLat = walkingStops.reduce((sum, s) => sum + s.latitude, 0) / walkingStops.length;
-      const cLon = walkingStops.reduce((sum, s) => sum + s.longitude, 0) / walkingStops.length;
-      const loopLimit = getWalkingLimit(tourData);
-      const prompt = `Generate a parking spot for a paranormal walking tour in ${tourData.city}, ${tourData.state}.
-The walking loop covers these stops: ${stopNames}
-The loop center is approximately at ${cLat.toFixed(5)}, ${cLon.toFixed(5)}.
-
-Suggest a real, logical parking location where investigators can park their car before walking the tour. Requirements:
-- Must be a real parking lot, parking garage, or street parking area near the loop
-- Must be located between the first and last stop of the loop
-- Must be publicly accessible at night (after 7 PM)
-- Must be within ${loopLimit} miles of at least one stop on the loop — the lot serves the walk, so distance to the nearest stop is what matters
-- Must NOT be in water — parking must be on land
-
-Return JSON with:
-- parking_name: Name of the parking area (e.g., "Main Street Metered Parking", "City Lot #3")
-- parking_address: Complete street address of the parking area
-- parking_type: "street", "parking_lot", or "parking_garage"
-- parking_cost: e.g., "Free", "Metered ($1.50/hr, free after 6pm)", "Paid lot ($5 flat rate)"
-- parking_latitude: GPS latitude
-- parking_longitude: GPS longitude
-
-Output ONLY valid JSON. No markdown fences.`;
-      const result = await callJson(prompt, { useWeb: true });
-      // If no lot can be confirmed, the marker goes to the CENTRE OF THE LOOP
-      // flagged for a human to place — never a guess presented as a confirmed
-      // lot, and never a distant point pulled from the tour start.
-      let lat = cLat;
-      let lon = cLon;
-      let confirmed = false;
-      let parkingName = 'Parking Area';
-      let parkingAddress = tourData.start_location_name || '';
-      let parkingType = 'street';
-      let parkingCost = 'Free';
-      if (result) {
-        parkingName = result.parking_name || 'Parking Area';
-        parkingAddress = result.parking_address || parkingAddress;
-        parkingType = result.parking_type || parkingType;
-        parkingCost = result.parking_cost || parkingCost;
-        // Geocode the parking address — if it returns valid on-land coords,
-        // use them. If it fails (water/failed/null), keep the tour start coords.
-        if (result.parking_address) {
-          const geoMap = await geocodeStopsWithNames([{
-            id: 'parking', name: result.parking_name, address: result.parking_address,
-            city: tourData.city, state: tourData.state
-          }], { lat: cLat, lon: cLon, maxDistMiles: 0.5, clusterRadius: 0.3 });
-          if (geoMap.parking) { lat = geoMap.parking.lat; lon = geoMap.parking.lon; confirmed = true; }
-        }
-      }
-      const parkingStopRecord = await base44.entities.TourStop.create({
-        tour_id: tourData.id, stop_type: 'parking', stop_number: 0,
-        name: parkingName, address: parkingAddress,
-        latitude: lat, longitude: lon,
-        parking_type: parkingType, parking_cost: parkingCost,
-        travel_method: 'walking',
-        geocoded: confirmed,
-        needs_placement: !confirmed,
-      });
-      setStops(prev => [parkingStopRecord, ...prev.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle')]);
-    } catch (e) {
-      console.error('Parking generation failed:', e);
-    }
-  };
-
-  const generateStops = async (tourData, options = {}) => {
-    const { systemRegen = false } = options;
-    if (!systemRegen) {
-      const gate = await checkManifestationGate();
-      if (!gate.allowed) {
-        setStopsError(gate.reason === 'energy'
-          ? "You're out of manifestation energy. Buy an Aura Bundle or upgrade your plan."
-          : 'Upgrade to a paid plan to generate tour stops.');
-        return;
-      }
-    }
+  const generateStops = async (tourData) => {
+    if (activeBuilds.has(tourData.id)) return;
+    activeBuilds.add(tourData.id);
     setGeneratingStops(true);
     setStopsError('');
     try {
-      // Area tours are walkable by definition (see normalizeAreaTourType) — a
-      // stored "driving" label must never strip a downtown cluster of its
-      // walking stops and parking. The auto-correct below stores the result.
-      const enforcedType = normalizeAreaTourType(tourData.tour_category, tourData.tour_type);
-      const needsCoordVerification = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
-      const coordInstruction = needsCoordVerification
-        ? '\nCOORDINATES — CRITICAL: Look up the REAL GPS coordinates of each stop using web search. There are two cases:\n- DIFFERENT BUILDINGS/STRUCTURES on the property (e.g., separate buildings at Pennhurst Asylum, separate batteries at a fort): each MUST have its OWN distinct, real GPS coordinates. Search for each one individually (e.g., "Battery 519 Fort Miles Lewes DE").\n- ROOMS/AREAS WITHIN A SINGLE BUILDING (e.g., rooms in the Farnsworth House, floors of the Anthracite Hotel, Andy Gavin\'s mansion rooms): these stops SHOULD share the SAME coordinates — the building\'s real GPS coordinates. Set same_structure: true for these stops. It is CORRECT for them to stack at the same point on the map — they are all inside one structure.\nDo NOT invent fake distinct coordinates for rooms within one building. If all stops are inside the same building, they all get that building\'s real coordinates with same_structure: true.'
-        : '\nCOORDINATES — Look up the REAL GPS coordinates of each stop using web search. Do NOT guess or estimate coordinates from training data — search for each location individually to find its actual coordinates. Each stop must have its own real coordinates at its real address.';
-      const stopCountRange = tourData.tour_category === 'cold_spot' ? '1-4' : '8-10';
-      const prompt = `Generate ${stopCountRange} stops for the paranormal tour "${tourData.title}" in ${tourData.city}, ${tourData.state}. Type: ${tourData.tour_type}. Description: ${tourData.description}
-${coordInstruction}
-Each stop is a LIGHTWEIGHT skeleton — full rich detail is generated on demand when a user opens the stop, so keep these fields brief:
-- stop_number: 1-10 in logical route order
-- name, latitude, longitude (real GPS), address
-- address: ALWAYS provide a COMPLETE STREET ADDRESS with a street number (e.g. "123 Main St, Lewes, DE 19958"). NEVER use just a city name, an intersection ("X & Y"), or words like "near", "vicinity", "various". If the location has no street address (e.g. a park), use the park entrance address or nearest street address. This address must be GPS-searchable — a user should be able to type it into Google Maps and arrive at the exact location.
-- same_structure: true if this stop is a room, area, or section WITHIN a single building or vessel (rooms in the Farnsworth House, decks on a ship, different areas of one cemetery); false if it is its own distinct building or structure on the property (separate buildings at Pennhurst Asylum, separate batteries at a fort). For AREA and ROAD TRIP tours, always false since each stop is a different property.
-- access_area: "interior" if this stop is inside a building or enclosed structure (room, basement, hall, lobby, bar, etc.), "exterior" if it's outside (garden, cemetery, courtyard, battlefield, grounds, etc.)
-- historical_info: 2-3 sentences summarizing the key history (dates, notable figures, major events). Brief summary only.
-- paranormal_info: 2-3 sentences summarizing the key paranormal activity and ghosts. Brief summary only.
-- investigation_suggestions: 3-5 items like "EVP Session", "Spirit Box Session", "EMF Sweep", "Trigger Object Experiment", "Temperature Monitoring", "Full-Spectrum Photography"
-- estimated_investigation_time: "10 minutes" / "15 minutes" / "20 minutes"
-- construction_date, famous_people
-- narration_text: 4-6 sentences of dramatic, immersive storytelling narration in a mysterious, captivating style. The narrator is a seasoned paranormal investigator speaking to fellow investigators about what awaits them. Include vivid sensory details and specific ghost stories.
-- hours_of_operation: ALWAYS provide this — never leave blank. State the location's public access hours (e.g. "Open to public daily 9am-5pm", "Grounds open dawn to dusk, building closed after 4pm", "Exterior accessible 24/7, interior tours until 10PM Friday-Saturday"). If the exterior is freely accessible at all hours, state "Exterior accessible 24/7" explicitly.
-- entry_fee: ALWAYS provide this — never leave blank. State the admission cost (e.g. "$10 adults, $5 children", "Free, donations welcome", "$25 for day tour, $45 for overnight investigation"). If completely free, state "Free" or "Free, donations welcome".
-
-ROUTING & ACCESS RULES — FOLLOW EXACTLY:
-
-1. DISTANCE MINIMIZATION: Minimize distance from stop to stop AND overall tour length. Every consecutive walking stop MUST be ≤0.33 miles from the previous. The TOTAL route distance MUST be ≤2.5 miles. Arrange stops in the most efficient order possible — shortest total route wins.
-
-2. WALKING TOURS: Stops must form a logical loop — start and end near the same point (${tourData.start_location_name}). Route must be efficient with NO crisscrossing. Stops proceed in a circle so investigators return to their starting point naturally.
-
-3. DRIVING-ONLY TOURS: Stops must follow a logical linear progression — each stop advances in a single direction with no doubling back. Minimize total driving distance.
-
-4. MIXED TOURS: The tour can start by driving to a parking area near a walking cluster, then walking stops form a logical loop (≤0.33 miles between stops, returning to that parking area). Remaining driving stops continue in a linear progression. Use this pattern when it makes the most logical sense — drive to where the walking cluster is, walk the loop, then drive to remaining stops. Walking stops must cluster within ≤0.33 miles of each other. Minimize both walking and driving distances.
-
-5. PUBLIC ACCESS AFTER 7 PM: ALL locations must be publicly accessible after 7 PM. Ghost hunts occur primarily at night. Do NOT use locations that close before 7 PM, have locked gates, or prohibit nighttime access (e.g. national battlefields, state parks closing at sunset, gated cemeteries, museums closing at 5 PM). At minimum, investigators must be able to be outside the building after 7 PM. If a location has restricted hours, note them in hours_of_operation. Do NOT use any location fully inaccessible after 7 PM.
-
-6. MOST POPULAR STOPS: Include the most popular, most talked-about paranormal hotspots near ${tourData.city}, ${tourData.state} — the locations where paranormal activity and ghosts have been observed, recorded, and discussed most. Prioritize locations with the richest documented paranormal history, famous ghost sightings, and active investigations. Do NOT include obscure or unknown locations.
-
-7. UNIQUE STOPS ONLY: Each stop must be a DIFFERENT haunted location. Do NOT include the same building or site twice with slightly different names (e.g., "Frederick City Hall" and "Frederick City Hall Main Floor" are the same stop — combine them into one). Do NOT repeat stops. Generate exactly ${stopCountRange} stops, no more.
-
-ADDRESS RESEARCH RULE — FOLLOW EXACTLY: When you learn about haunted locations from existing ghost tour companies, walking tours, or tourism websites, you MUST find the ACTUAL STREET ADDRESS of each location independently. Do NOT copy a tour company's meeting point, starting location, or vague area description — tour companies often list only where their tour GROUPS MEET (e.g., "2nd & Market St") rather than the actual haunted building's address. For every stop, look up the real street address where the actual haunted building, landmark, or site is located (e.g., "43 Cape Henlopen Dr, Lewes, DE 19958" for the ferry terminal, NOT "Near the intersection of 2nd & Market"). The address must be the physical location of the haunted site itself, not a tour company's gathering point.
-
-${BRAND_RULE_STOP}
-
-PARKING: Also include a "parking" object in the JSON for the walking cluster's parking spot. The parking should be:
-- A real parking lot, parking garage, or street parking area
-- Located between the first and last stop of the walking cluster
-- Publicly accessible at night (after 7 PM)
-- Within 0.3 miles of the walking cluster center
-Include these fields in the parking object:
-- parking_name: Name of the parking area (e.g., "Main Street Metered Parking", "City Lot #3")
-- parking_address: Complete street address of the parking area
-- parking_type: "street", "parking_lot", or "parking_garage"
-- parking_cost: e.g., "Free", "Metered ($1.50/hr, free after 6pm)", "Paid lot ($5 flat rate)"
-- parking_latitude: GPS latitude of the parking spot
-- parking_longitude: GPS longitude of the parking spot
-For driving-only tours (no walking cluster), omit the parking object.
-
-Output ONLY a valid JSON object with a "stops" array and optional "parking" object. No markdown fences, no commentary.${CONCLUSION_PHRASE_RULE}${ADDRESS_RULE}`;
-
-      let result = null;
-      try {
-        result = await callJson(prompt, { useWeb: true });
-      } catch (e) { console.error('Stop generation failed:', e); }
-      if (!result || !result.stops || result.stops.length === 0) {
-        try {
-          result = await callJson(prompt + '\n\nIMPORTANT: Use 3 detailed paragraphs each for historical_info and paranormal_info. Output ONLY valid JSON.', { useWeb: true });
-        } catch (e) { console.error('Stop generation (concise) failed:', e); }
-      }
-      if (!result || !result.stops || result.stops.length === 0) {
-        throw new Error('Could not generate stops after multiple attempts. Please try again.');
-      }
-
-      // === SINGLE-SITE COORDINATE ENFORCEMENT ===
-      // For landmark/ship/cold_spot tours, all stops are on ONE property. The
-      // LLM routinely IGNORES the same_structure instruction and invents fake
-      // distinct coordinates for rooms within one building, scattering markers
-      // across the city. Fix this programmatically — don't trust the LLM:
-      // If a stop NAME looks like a room/area (bar, lobby, basement, etc.) →
-      //   same_structure: true, use the building's start coordinates.
-      // We do NOT use "all stops share the same address" as a signal because
-      // large properties (e.g. Pennhurst Asylum) can have distinct buildings
-      // that share the same mailing address — those need their own coordinates.
-      const isSingleSite = tourData.tour_category === 'landmark' || tourData.tour_category === 'ship' || tourData.tour_category === 'cold_spot';
-      const isLargeProp = isLargeProperty(tourData);
-      if (isSingleSite && result.stops) {
-        // For a single house/building (not a large property), all stops that
-        // share the property's street address are at the same location. The
-        // LLM routinely invents fake distinct coordinates for areas of a
-        // single house ("The Garden", "The Fountain"), scattering markers
-        // across town. Collapse them to the building center. Large properties
-        // (forts, parks) are excluded — distinct buildings there can share one
-        // mailing address but need their own coordinates.
-        const normAddr = (a) => String(a || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-        const propertyAddr = isLargeProp ? null : normAddr(result.stops[0]?.address);
-        for (const stop of result.stops) {
-          if (looksLikeRoomOrArea(stop.name) || (propertyAddr && normAddr(stop.address) === propertyAddr)) {
-            stop.same_structure = true;
-            stop.latitude = tourData.start_latitude;
-            stop.longitude = tourData.start_longitude;
-          }
-        }
-      }
-
-      const processed = await enforceWalkingDistance(result.stops || [], enforcedType, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { tourCategory: tourData.tour_category, walkingLimit: getWalkingLimit(tourData) });
-      // Auto-correct tour type if stops are a mix of walking + driving
-      const methods = new Set(processed.map(s => s.travel_method));
-      const correctedType = methods.has('driving') && methods.has('walking') ? 'mixed' 
-        : methods.has('driving') ? 'driving' : 'walking';
-      if (correctedType !== tourData.tour_type) {
-        await base44.entities.Tour.update(tourData.id, { tour_type: correctedType });
-        tourData.tour_type = correctedType;
-        setTour({ ...tourData, tour_type: correctedType });
-      }
-      // DEDUP: Remove duplicate stops by normalized name and address. The LLM
-      // sometimes returns the same physical location twice (same address,
-      // slightly different name) — both would get created without this check.
-      const normKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-      const seenNames = new Set();
-      const seenAddrs = new Set();
-      const deduped = [];
-      for (const stop of processed) {
-        const nameKey = normKey(stop.name);
-        const addrKey = normKey(stop.address);
-        if (nameKey && seenNames.has(nameKey)) continue;
-        if (addrKey && seenAddrs.has(addrKey)) continue;
-        // Fuzzy name dedup — catch near-duplicates like "Frederick City Hall"
-        // vs "Frederick City Hall Main Floor" (one normalized name contains
-        // the other). Prevents the LLM from padding with variations of the
-        // same location.
-        let isFuzzyDup = false;
-        if (nameKey && nameKey.length >= 8) {
-          for (const seen of seenNames) {
-            if (seen.length >= 8 && (seen.includes(nameKey) || nameKey.includes(seen))) {
-              isFuzzyDup = true;
-              break;
-            }
-          }
-        }
-        if (isFuzzyDup) continue;
-        if (nameKey) seenNames.add(nameKey);
-        if (addrKey) seenAddrs.add(addrKey);
-        deduped.push(stop);
-      }
-      // Cap at 10 stops — the prompt asks for 8-10, but the LLM sometimes
-      // returns 15+ with near-duplicate variations. Hard limit prevents
-      // oversized tours.
-      const MAX_STOPS = tourData.tour_category === 'cold_spot' ? 4 : 10;
-      if (deduped.length > MAX_STOPS) deduped.length = MAX_STOPS;
-      // Renumber sequentially to close any gaps left by dedup removing
-      // duplicates after enforceWalkingDistance assigned stop_numbers.
-      for (let i = 0; i < deduped.length; i++) {
-        deduped[i].stop_number = i + 1;
-      }
-      // Strip conclusion-like phrases from ALL stops — no stop (not even the
-      // final one) may contain conclusion language; the tour's Conclusion
-      // field is the only place for closing statements.
-      for (let i = 0; i < deduped.length; i++) {
-        deduped[i].narration_text = stripConclusionOpeners(deduped[i].narration_text, false);
-        deduped[i].paranormal_info = stripConclusionOpeners(deduped[i].paranormal_info, false);
-      }
-      // LLM-generated coordinates are ESTIMATES, not verified. Mark as
-      // geocoded: false (amber "EST" badge) so users know to verify at the
-      // actual location. fix-collapsed-coords upgrades to geocoded: true
-      // (blue) ONLY when OSM name search or address geocode confirms the
-      // coordinates. LLM web search results stay amber — LLM can be wrong.
-      for (const stop of deduped) {
-        stop._geocoded = false;
-      }
-
-      const created = [];
-      for (const stop of deduped) {
-        if (!stop.access_area) stop.access_area = classifyStopAccess(stop.name);
-        const { _geocoded, ...rest } = stop;
-        // Coerce the model's types before saving: one field of the wrong shape
-        // used to reject the record and leave the tour with no stops at all.
-        const saved = await base44.entities.TourStop.create({
-          ...sanitizeStopRecord(rest),
-          tour_id: tourId,
-          geocoded: !!_geocoded,
-        });
-        created.push(saved);
-      }
-      // Generation was already authorized and charged by the server.
-
-      // Create parking stop — always create one for walking tours. If the LLM
-      // provided parking, geocode its address for accurate on-land coords. If
-      // geocoding fails (water/failed), fall back to the tour's start coords
-      // (verified on land by fix-collapsed-coords). If the LLM didn't provide
-      // parking at all, create one at the tour's start location.
-      if (enforcedType !== 'driving') {
-        const p = result.parking || {};
-        let pLat = tourData.start_latitude;
-        let pLon = tourData.start_longitude;
-        let pName = p.parking_name || 'Parking Area';
-        let pAddr = p.parking_address || tourData.start_location_name || '';
-        let pType = p.parking_type || 'street';
-        let pCost = p.parking_cost || 'Free';
-        // Only a lot its address actually resolved to counts as found. Without
-        // that proof the marker must not claim to be a confirmed lot — parking
-        // is settled after the loop exists, and fix-collapsed-coords (which runs
-        // right below) flags it at the loop centre for a human to place.
-        let pConfirmed = false;
-        if (p.parking_address) {
-          const geoMap = await geocodeStopsWithNames([{
-            id: 'parking', name: p.parking_name, address: p.parking_address,
-            city: tourData.city, state: tourData.state
-          }], { lat: tourData.start_latitude, lon: tourData.start_longitude, maxDistMiles: 0.5, clusterRadius: 0.3 });
-          if (geoMap.parking) { pLat = geoMap.parking.lat; pLon = geoMap.parking.lon; pConfirmed = true; }
-        }
-        try {
-          const parkingStopRecord = await base44.entities.TourStop.create({
-            tour_id: tourId, stop_type: 'parking', stop_number: 0,
-            name: pName, address: pAddr,
-            latitude: pLat, longitude: pLon,
-            parking_type: pType, parking_cost: pCost,
-            travel_method: 'walking',
-            geocoded: pConfirmed,
-            needs_placement: !pConfirmed,
-          });
-          created.push(parkingStopRecord);
-        } catch (e) { console.error('Parking stop creation failed:', e); }
-      }
-
-      // Verify ALL stops via per-stop LLM web search (verifyAll: true) —
-      // confirms or corrects each stop's coordinates against real-world data.
-      // For landmark/ship/cold_spot, also fixes water/land issues. For area/
-      // road_trip, runs the full verification pipeline (address geocode → OSM
-      // name search → LLM web search) on every stop to catch inaccurate LLM
-      // coordinates from generation.
-      try {
-        await base44.functions.invoke('fix-collapsed-coords', { tourId, verifyAll: true });
-        const verifiedStops = await base44.entities.TourStop.filter({ tour_id: tourId });
-        // Re-run enforceWalkingDistance on the corrected coordinates —
-        // fix-collapsed-coords may have moved stops to their real-world
-        // positions, so the original order (from LLM coords) may no longer
-        // be optimal. This ensures walking cluster stays first, driving last.
-        const vParking = verifiedStops.find(s => s.stop_type === 'parking');
-        const vShuttle = verifiedStops.find(s => s.stop_type === 'shuttle');
-        const vTourStops = verifiedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
-        const parkingCoords = vParking?.latitude != null && !vParking.needs_placement ? { lat: vParking.latitude, lon: vParking.longitude } : null;
-        const reordered = await enforceWalkingDistance(vTourStops, enforcedType, { lat: tourData.start_latitude, lon: tourData.start_longitude }, { tourCategory: tourData.tour_category, walkingLimit: getWalkingLimit(tourData), parkingCoords });
-        for (const s of reordered) {
-          const existing = vTourStops.find(ts => ts.id === s.id);
-          if (existing && (existing.stop_number !== s.stop_number || existing.travel_method !== s.travel_method)) {
-            await base44.entities.TourStop.update(s.id, { stop_number: s.stop_number, travel_method: s.travel_method });
-          }
-        }
-        setStops([...(vParking ? [vParking] : []), ...(vShuttle ? [vShuttle] : []), ...reordered]);
-      } catch (e) {
-        console.error('Coordinate verification failed:', e);
-        setStops(created.sort((a, b) => a.stop_number - b.stop_number));
-      }
-      // New stops are unverified — drop the tour's verified status.
-      // Mark stops_regenerated to the current version so the next view
-      // doesn't re-run the full verification (which would double load time).
-      await base44.entities.Tour.update(tourData.id, { verified: false, stops_regenerated: STOPS_VALIDATION_VERSION });
-      setGeneratingStops(false);
-    } catch (err) {
-      setStopsError(err.message || 'Failed to generate stops. Please try again.');
+      const gate = await checkManifestationGate();
+      if (!gate.allowed) throw new Error(gate.reason === 'energy'
+        ? "You're out of manifestation energy. Buy an Aura Bundle or upgrade your plan."
+        : 'Upgrade to a paid plan to generate tour stops.');
+      const result = await buildTourStops(tourData);
+      if (tourData.id !== tourId) return;
+      setTour(result.tour);
+      setStops(result.stops);
+    } catch (error) {
+      setStopsError(error?.response?.data?.error || error.message || 'The build could not be completed.');
+    } finally {
+      activeBuilds.delete(tourData.id);
       setGeneratingStops(false);
     }
   };
@@ -1385,6 +637,19 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
     );
   }
 
+  if (loadError) {
+    return (
+      <PageContainer>
+        <SectionHeader title="Could Not Load Tour" showBack />
+        <div className="p-6 space-y-4 text-center">
+          <p className="text-sm text-muted-foreground">{loadError}</p>
+          <button onClick={loadTour} className="rounded-lg bg-primary px-4 py-2 text-primary-foreground text-sm">Try Again</button>
+        </div>
+        <NavBar />
+      </PageContainer>
+    );
+  }
+
   if (!tour) {
     return (
       <PageContainer>
@@ -1463,16 +728,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
           {hasDrivingStops && <TravelModeSelector value={travelMode} onChange={setTravelMode} />}
         </div>
 
-        {regeneratingContent && (
-          <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 flex items-center gap-2">
-            <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
-            <p className="text-xs text-primary font-heading uppercase tracking-wider">
-              {regenerationProgress?.completed != null && regenerationProgress?.total
-                ? `Upgrading stop content… (${regenerationProgress.completed}/${regenerationProgress.total})`
-                : 'Upgrading stop content…'}
-            </p>
-          </div>
-        )}
+        <TourBuildStatus status={tour.build_status} />
 
         <TourAccessInfo tour={tour} stops={stops} />
 
@@ -1537,6 +793,7 @@ Output ONLY a valid JSON object with a "stops" array and optional "parking" obje
             </div>
           ) : (
             <>
+            {tourStops.length === 0 && <TourBuildPrompt canBuild={user?.role === 'admin' || isPaid} onBuild={() => generateStops(tour)} />}
             {parkingStop && (
               <div
                 onClick={() => navigate(`/stop/${parkingStop.id}`)}

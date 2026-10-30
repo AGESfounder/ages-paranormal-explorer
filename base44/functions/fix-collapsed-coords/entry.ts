@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 import { paidCoordinateSearch } from '../../shared/paidAiRequest.js';
 import { haversine } from '../../shared/geo.ts';
 import { getWalkingLimit, planParking, applyParkingPlan } from '../../shared/tourParking.ts';
+import { acquireTourLease, ownsTourLease, releaseTourLease } from '../../shared/tourLease.js';
 
 // Inline large-property detection — inlined (not imported from shared module)
 // to ensure the deployed function always uses the latest keyword list.
@@ -436,19 +437,35 @@ async function snapToNearestStreet(lat, lon, maxDistMeters = 40) {
 // existing coordinates (no grid distribution). Collapsed coordinates
 // (multiple stops at same point) trigger a wider per-stop name search.
 export default async function (req) {
+  let ownedLease = null;
+  let leaseClient = null;
+  let leasedTourId = null;
+  let leaseUserId = null;
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const tourId = body.tourId;
     const skipReorder = body.skipReorder || false;
     const verifyAll = body.verifyAll || false;
-    if (!tourId) return Response.json({ error: 'tourId required' }, { status: 400 });
+    if (typeof tourId !== 'string' || !/^[a-zA-Z0-9_-]{8,80}$/.test(tourId)) return Response.json({ error: 'tourId required' }, { status: 400 });
 
-    const tour = await base44.asServiceRole.entities.Tour.get(tourId);
+    const tour = await base44.asServiceRole.entities.Tour.get(tourId).catch(e => e.status === 404 ? null : Promise.reject(e));
     if (!tour) return Response.json({ error: 'Tour not found' }, { status: 404 });
+    if (tour.verified === true) return Response.json({ tourId, updated: 0, reason: 'validated tour is frozen' });
+    if (body.buildToken) {
+      if (!(await ownsTourLease(base44, tourId, user.id, body.buildToken))) {
+        return Response.json({ error: 'This tour build is no longer active.' }, { status: 409 });
+      }
+    } else {
+      ownedLease = await acquireTourLease(base44, tourId, user.id);
+      if (!ownedLease) return Response.json({ error: 'A tour build or coordinate update is already running.' }, { status: 409 });
+      leaseClient = base44;
+      leasedTourId = tourId;
+      leaseUserId = user.id;
+    }
 
     const allStops = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tourId });
     const stops = allStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
@@ -1283,5 +1300,9 @@ Return a JSON object with:
   } catch (error) {
     console.error('fix-collapsed-coords error:', error);
     return Response.json({ error: error.message }, { status: 500 });
+  } finally {
+    if (ownedLease && leaseClient) {
+      await releaseTourLease(leaseClient, leasedTourId, leaseUserId, ownedLease);
+    }
   }
 }

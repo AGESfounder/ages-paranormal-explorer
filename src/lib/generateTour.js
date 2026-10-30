@@ -4,6 +4,9 @@ import { US_STATES } from '@/lib/statesData';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_TOUR, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
 import { enforceWalkingDistance, normalizeAreaTourType, getWalkingLimit } from '@/lib/routeOptimizer';
 import { getVerifiedCoordsForStops, applyVerifiedCoords } from '@/lib/reuseVerifiedCoords';
+import prepareTourStops from '@/lib/prepareTourStops';
+import saveTourStopBatch from '@/lib/saveTourStopBatch';
+import finalizeTourBuild from '@/lib/finalizeTourBuild';
 
 function normalizeStateName(state) {
   if (!state) return '';
@@ -482,52 +485,22 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
     processed.tourData.tour_type = correctedType;
   }
 
-  const newTour = await base44.entities.Tour.create(processed.tourData);
-
-  const stopRecords = orderedStops.map((r) => ({ ...r, tour_id: newTour.id }));
-
-  // A single invalid stop record used to kill the whole batch write, and that
-  // failure was swallowed — leaving a tour saved with no stops that the
-  // duplicate check then refused to regenerate (this is what produced the empty
-  // tours from the July batch). Write the batch, then fall back to one-by-one so
-  // one bad record can only lose itself.
-  let savedStops = 0;
+  // Validate before writing anything. Shared-site rooms are not duplicates.
+  const records = prepareTourStops(orderedStops, processed.tourData, {
+    min: minStops, max: stopCountMax || (processed.correctedCategory === 'cold_spot' ? 4 : 10),
+  });
+  // Recheck after the long AI request: another completed build may now exist.
+  const completed = await findExistingTour(dest, state, category, accessType, undefined, specificLocations);
+  if (completed) return completed;
+  const newTour = await base44.entities.Tour.create({ ...processed.tourData, build_status: 'building' });
   try {
-    const created = await base44.entities.TourStop.bulkCreate(stopRecords);
-    savedStops = Array.isArray(created) ? created.length : stopRecords.length;
-  } catch (e) {
-    console.error('Stop batch write failed, retrying per stop:', e);
-    for (const record of stopRecords) {
-      try {
-        await base44.entities.TourStop.create(record);
-        savedStops += 1;
-      } catch (err) {
-        console.error(`Stop write failed for "${record.name}":`, err);
-      }
-    }
+    await saveTourStopBatch(newTour.id, records);
+    const result = await finalizeTourBuild(newTour);
+    return result.tour;
+  } catch (error) {
+    await base44.entities.Tour.update(newTour.id, { build_status: 'needs_review' });
+    // Never replay an uncertain save or delete potentially committed records.
+    // The saved build stays available for review instead of silently duplicating.
+    throw error;
   }
-
-  // With no stops the tour is unusable. Remove it rather than leave an empty
-  // tour behind that blocks ever generating it again.
-  if (savedStops === 0) {
-    try {
-      await base44.entities.Tour.delete(newTour.id);
-    } catch (e) {
-      console.error('Could not remove the empty tour:', e);
-    }
-    throw new Error('The stops could not be saved, so nothing was kept. Please try again.');
-  }
-
-  // For landmark/ship tours, verify coordinates via OpenStreetMap Overpass
-  // API — LLM-generated coordinates are unreliable (often in water or at
-  // wrong locations). Uses real mapped features for accuracy.
-  if (processed.correctedCategory === 'landmark' || processed.correctedCategory === 'ship' || processed.correctedCategory === 'cold_spot') {
-    try {
-      await base44.functions.invoke('fix-collapsed-coords', { tourId: newTour.id });
-    } catch (e) {
-      console.error('Coordinate verification failed (tour still created):', e);
-    }
-  }
-
-  return newTour;
 }

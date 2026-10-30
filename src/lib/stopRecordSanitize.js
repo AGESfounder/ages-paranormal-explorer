@@ -51,7 +51,9 @@ export function sanitizeStopRecord(stop) {
   }
 
   for (const field of NUMERIC_FIELDS) {
-    const value = Number(stop[field]);
+    const raw = stop[field];
+    if (raw == null || typeof raw === 'boolean' || (typeof raw === 'string' && !raw.trim())) continue;
+    const value = Number(raw);
     if (Number.isFinite(value)) out[field] = value;
   }
 
