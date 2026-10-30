@@ -6,19 +6,25 @@ import { haversineDistance, getWalkingLimit } from '@/lib/routeOptimizer';
 export default async function ensureTourParking(tour, stops) {
   const existing = stops.find(s => s.stop_type === 'parking');
   if (existing || tour.verified) return existing || null;
-  const walking = stops.filter(s => s.travel_method === 'walking' && !s.needs_placement
+  const located = stops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle'
     && Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
-  if (!walking.length) return null;
-  const lat = walking.reduce((sum, s) => sum + s.latitude, 0) / walking.length;
-  const lon = walking.reduce((sum, s) => sum + s.longitude, 0) / walking.length;
+  const walking = located.filter(s => s.travel_method === 'walking' && !s.needs_placement);
+  // When no stop qualifies as a walk (all-driving route, or every stop still
+  // unplaced) the tour still needs a lot, so the lot serves where the tour
+  // begins: its first stop. A built tour is never left with no lot.
+  const firstLocated = located.slice().sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0)).slice(0, 1);
+  const anchor = walking.length ? walking : firstLocated;
+  if (!anchor.length) return null;
+  const lat = anchor.reduce((sum, s) => sum + s.latitude, 0) / anchor.length;
+  const lon = anchor.reduce((sum, s) => sum + s.longitude, 0) / anchor.length;
   const limit = getWalkingLimit(tour);
-  const result = await callJson(`Find ONE real parking area for "${tour.title}" in ${tour.city}, ${tour.state}, publicly accessible after 7 PM and within ${limit} miles of a stop on this walking loop: ${walking.map(s => `${s.name}: ${s.address}`).join('; ')}. Return only JSON with parking_name, parking_address (complete physical address), parking_type (street, parking_lot, parking_garage), parking_cost. Do not invent a lot or claim free parking without evidence. If none can be established return {}.`, { useWeb: true });
+  const result = await callJson(`Find ONE real parking area for "${tour.title}" in ${tour.city}, ${tour.state}, publicly accessible after 7 PM and within ${limit} miles of this tour's stops: ${anchor.map(s => `${s.name}: ${s.address}`).join('; ')}. Return only JSON with parking_name, parking_address (complete physical address), parking_type (street, parking_lot, parking_garage), parking_cost. Do not invent a lot or claim free parking without evidence. If none can be established return {}.`, { useWeb: true });
   let coords = null;
   if (result?.parking_address) {
     const found = await geocodeStopsWithNames([{ id: 'parking', name: result.parking_name,
       address: result.parking_address, city: tour.city, state: tour.state }], { lat, lon, maxDistMiles: 5 });
     const candidate = found.parking;
-    if (candidate && walking.some(s => haversineDistance(candidate.lat, candidate.lon, s.latitude, s.longitude) <= limit)) coords = candidate;
+    if (candidate && anchor.some(s => haversineDistance(candidate.lat, candidate.lon, s.latitude, s.longitude) <= limit)) coords = candidate;
   }
   const fresh = await base44.entities.TourStop.filter({ tour_id: tour.id, stop_type: 'parking' });
   if (fresh.length) return fresh[0];

@@ -37,7 +37,10 @@ export default async function finalizeTourStops(tour) {
   if (updates.length) await base44.entities.TourStop.bulkUpdate(updates);
   const methods = new Set(ordered.filter(s => !s.needs_placement).map(s => s.travel_method));
   const tourType = methods.size === 2 ? 'mixed' : methods.has('driving') ? 'driving' : methods.has('walking') ? 'walking' : current.tour_type;
-  const buildStatus = ordered.some(s => s.needs_placement || s.geocoded !== true) || parking?.needs_placement ? 'needs_review' : 'ready';
+  // A tour with stops and no lot is never 'ready' — a missing parking record is
+  // a failed step, not a finished build.
+  const buildStatus = !parking || parking.needs_placement || ordered.some(s => s.needs_placement || s.geocoded !== true)
+    ? 'needs_review' : 'ready';
   const fields = { tour_type: tourType, build_status: buildStatus, stops_regenerated: STOPS_PREP_VERSION };
   await base44.entities.Tour.update(tour.id, fields);
   const shuttle = page.items.find(s => s.stop_type === 'shuttle');
