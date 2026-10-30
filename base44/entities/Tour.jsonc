@@ -125,6 +125,11 @@
       ],
       "description": "Initial build completion state. Estimated or unresolved locations and interrupted builds require review; ready is not human verification."
     },
+    "order_rebuild_pending": {
+      "type": "boolean",
+      "default": false,
+      "description": "A stop was placed after the tour was built, so its number and walking/driving tag are provisional. The route rules re-order the tour on a later opening, never for a viewer who is currently investigating this tour."
+    },
     "verified": {
       "type": "boolean",
       "default": false,

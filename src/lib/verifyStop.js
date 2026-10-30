@@ -5,6 +5,11 @@ import { base44 } from '@/api/base44Client';
 // Updates the stop with verified coordinates, then checks all sibling stops
 // — if every stop is user_verified, the tour's `verified` flag is set to true.
 export async function verifyStopLocation(stopId, tourId, latitude, longitude, userId, photoUrl) {
+  // Was this pin still unplaced? An unplaced stop's number was provisional, so
+  // placing it leaves the tour's visit order to be rebuilt by the route rules
+  // on a later opening — never in the middle of someone's investigation.
+  const before = await base44.entities.TourStop.get(stopId).catch(() => null);
+  const wasUnplaced = before?.needs_placement === true;
   const update = {
     latitude,
     longitude,
@@ -23,7 +28,9 @@ export async function verifyStopLocation(stopId, tourId, latitude, longitude, us
   // just set it — otherwise the tour's verified flag can flip to false
   // when the last stop is verified.
   const allVerified = siblings.length > 0 && siblings.every(s => s.user_verified || s.id === stopId);
-  await base44.entities.Tour.update(tourId, { verified: allVerified });
+  await base44.entities.Tour.update(tourId, wasUnplaced
+    ? { verified: allVerified, order_rebuild_pending: true }
+    : { verified: allVerified });
 
   return { allVerified, totalStops: siblings.length };
 }
