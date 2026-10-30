@@ -84,37 +84,53 @@ export function planWalkingRoute(stops, limit, endpoint, preserveOrder = false, 
   if (!preserveOrder && stops.length <= 12) {
     const n = stops.length;
     const size = 1 << n;
-    const costs = Array.from({ length: size }, () => new Float64Array(n).fill(Infinity));
-    const previous = Array.from({ length: size }, () => new Int16Array(n).fill(-1));
-    stops.forEach((s, i) => { costs[1 << i][i] = network.distance(origin, s); });
-    for (let mask = 1; mask < size; mask++) {
-      for (let last = 0; last < n; last++) {
-        if (!Number.isFinite(costs[mask][last])) continue;
-        for (let next = 0; next < n; next++) {
-          if (mask & (1 << next)) continue;
-          const nextMask = mask | (1 << next);
-          const candidate = costs[mask][last] + network.distance(stops[last], stops[next]);
-          if (candidate < costs[nextMask][next]) {
-            costs[nextMask][next] = candidate;
-            previous[nextMask][next] = last;
+    // Exact shortest order from the endpoint. Two leg costs are tried: the
+    // network (which may retrace an earlier street) and a directly walkable
+    // link between consecutive stops. The direct-link order is preferred when
+    // it costs no more than a few percent extra, so the stop list never shows
+    // a hop longer than a single walk.
+    const solve = (legCost) => {
+      const costs = Array.from({ length: size }, () => new Float64Array(n).fill(Infinity));
+      const previous = Array.from({ length: size }, () => new Int16Array(n).fill(-1));
+      const home = stops.map(s => network.distance(origin, s));
+      stops.forEach((s, i) => { costs[1 << i][i] = home[i]; });
+      for (let mask = 1; mask < size; mask++) {
+        for (let last = 0; last < n; last++) {
+          if (!Number.isFinite(costs[mask][last])) continue;
+          for (let next = 0; next < n; next++) {
+            if (mask & (1 << next)) continue;
+            const nextMask = mask | (1 << next);
+            const candidate = costs[mask][last] + legCost(stops[last], stops[next]);
+            if (candidate < costs[nextMask][next]) {
+              costs[nextMask][next] = candidate;
+              previous[nextMask][next] = last;
+            }
           }
         }
       }
-    }
-    let last = 0;
-    for (let i = 1; i < n; i++) {
-      if (costs[size - 1][i] + network.distance(stops[i], origin)
-        < costs[size - 1][last] + network.distance(stops[last], origin)) last = i;
-    }
-    const sequence = [];
-    let mask = size - 1;
-    while (last >= 0) {
-      sequence.unshift(stops[last]);
-      const before = previous[mask][last];
-      mask ^= 1 << last;
-      last = before;
-    }
-    ordered = sequence;
+      let end = 0;
+      for (let i = 1; i < n; i++) {
+        if (costs[size - 1][i] + home[i] < costs[size - 1][end] + home[end]) end = i;
+      }
+      if (!Number.isFinite(costs[size - 1][end] + home[end])) return null;
+      const sequence = [];
+      let last = end;
+      let mask = size - 1;
+      while (last >= 0) {
+        sequence.unshift(stops[last]);
+        const before = previous[mask][last];
+        mask ^= 1 << last;
+        last = before;
+      }
+      return { sequence, total: costs[size - 1][end] + home[end] };
+    };
+    const networked = solve((a, b) => network.distance(a, b));
+    const linked = solve((a, b) => {
+      const leg = distance(a, b);
+      return leg <= limit ? leg : Infinity;
+    });
+    const chosen = linked && (!networked || linked.total <= networked.total * 1.05) ? linked : networked;
+    if (chosen) ordered = chosen.sequence;
   }
   const path = [origin];
   for (const target of [...ordered, origin]) {

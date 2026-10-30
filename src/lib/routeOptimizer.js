@@ -125,10 +125,10 @@ export function orderStopsByProximity(stops, includeReturn = false, distFn) {
   return optimizeRoute2Opt(ordered, includeReturn, dist);
 }
 
-// Half a mile is a ten-minute walk, so stops on the same downtown street stay
-// in one walking loop from the parking area instead of being split into a
-// second, separate walking pocket.
-const WALKING_LIMIT = 0.5;
+// An area tour's stops can sit up to ~0.9 miles apart and still be one walking
+// chain along the same street (a 15-20 minute leg). Splitting such a chain
+// produced a tour whose walking pockets were separated by driving legs.
+const WALKING_LIMIT = 0.9;
 
 // The same walking-link tolerance is used for membership, route expansion and
 // map geometry. Parking affects where the walk starts, not which stops survive.
