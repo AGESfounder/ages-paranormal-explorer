@@ -77,9 +77,6 @@ export default async function (req) {
 
     let waterwaySegs = [];
     let bridgeSegs = [];
-    // Did Overpass actually answer? Callers that store a "no water" result
-    // must not mistake a failed query for a real answer.
-    let overpassOk = false;
     let _overpassStatus = 'not_called';
     // Try multiple Overpass endpoints — the main one is often overloaded (521).
     const overpassEndpoints = [
@@ -113,7 +110,6 @@ export default async function (req) {
               else waterwaySegs.push(seg);
             }
           }
-          overpassOk = true;
           break; // success — stop trying endpoints
         }
       } catch (e) {
@@ -122,7 +118,7 @@ export default async function (req) {
       }
     }
 
-    if (waterwaySegs.length === 0) return Response.json({ barriers: [], ok: overpassOk });
+    if (waterwaySegs.length === 0) return Response.json({ barriers: [] });
 
     // For each pair of stops, check if the straight line crosses a waterway
     // without a nearby walkable bridge.
@@ -161,9 +157,9 @@ export default async function (req) {
       }
     }
 
-    return Response.json({ barriers, ok: overpassOk });
+    return Response.json({ barriers });
   } catch (error) {
     console.error('detect-water-barriers error:', error);
-    return Response.json({ barriers: [], ok: false });
+    return Response.json({ barriers: [] });
   }
 }
