@@ -54,6 +54,7 @@ import TourBuildPrompt from '@/components/TourBuildPrompt';
 import RepairTourAction from '@/components/RepairTourAction';
 import TourAddressCorrection from '@/components/TourAddressCorrection';
 import { applyAddressCorrections } from '@/lib/correctTourAddresses';
+import reorderCorrectedStops, { orderViolatesRules } from '@/lib/reorderCorrectedStops';
 
 // Builds stay explicit. Opening only corrects unresolved, confirmed addresses.
 const activeBuilds = new Set();
@@ -66,6 +67,7 @@ export default function TourDetail() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const loadVersionRef = useRef(0);
+  const orderRepairRef = useRef(false);
   const [generatingStops, setGeneratingStops] = useState(false);
   const [stopsError, setStopsError] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
@@ -202,10 +204,30 @@ export default function TourDetail() {
 
   useEffect(() => {
     userDraggedRef.current = false;
+    orderRepairRef.current = false;
     setStopsError('');
     loadTour();
     return () => { loadVersionRef.current += 1; };
   }, [tourId]);
+
+  // A tour whose stored order breaks the route rules (a driving stop sitting
+  // before walking ones, or an impossible walking leg left behind by an
+  // earlier bad coordinate) is put back in rule order once, on opening.
+  useEffect(() => {
+    if (loading || !tour || orderRepairRef.current) return;
+    if (tour.verified || tour.manual_reorder || userDraggedRef.current) return;
+    if (!orderViolatesRules(tour, stops)) return;
+    orderRepairRef.current = true;
+    reorderCorrectedStops(tour, stops)
+      .then(result => {
+        if (!result) return;
+        setStops(result.stops);
+        if (Object.keys(result.tourUpdates).length) {
+          setTour(prev => (prev ? { ...prev, ...result.tourUpdates } : prev));
+        }
+      })
+      .catch(e => console.error('Route order repair failed:', e));
+  }, [loading, tour, stops]);
 
   useEffect(() => {
     if (loading || loadError || tour) return;
@@ -735,7 +757,24 @@ export default function TourDetail() {
         <TourAddressCorrection
           tour={tour}
           stops={stops}
-          onCorrected={updates => setStops(current => applyAddressCorrections(current, updates))}
+          onCorrected={async updates => {
+            // A corrected stop takes its real place in the tour: the route
+            // rules re-derive visit order and walking/driving from the new
+            // coordinates, exactly as a build would.
+            const corrected = applyAddressCorrections(stops, updates);
+            setStops(corrected);
+            try {
+              const result = await reorderCorrectedStops(tour, corrected);
+              if (result) {
+                setStops(result.stops);
+                if (Object.keys(result.tourUpdates).length) {
+                  setTour(prev => (prev ? { ...prev, ...result.tourUpdates } : prev));
+                }
+              }
+            } catch (e) {
+              console.error('Re-ordering corrected stops failed:', e);
+            }
+          }}
         />
 
         <TourAccessInfo tour={tour} stops={stops} />

@@ -66,10 +66,10 @@ export async function correctConfirmedTourAddresses(base44, tour, userId, nonce,
     if (tour.tour_category !== 'road_trip' && Number.isFinite(tour.start_latitude) && Number.isFinite(tour.start_longitude)
       && haversine(tour.start_latitude, tour.start_longitude, coords.lat, coords.lon) > 50) continue;
     if (!(await ownsTourLease(base44, tour.id, userId, nonce))) break;
+    // Coordinates only. Visit order and walking/driving are re-derived by the
+    // route rules after this pass (lib/reorderCorrectedStops), so a corrected
+    // stop can never keep a place the rules no longer support.
     const fields = { latitude: coords.lat, longitude: coords.lon, geocoded: true, needs_placement: false };
-    // A stop placed miles from the loop cannot still be a walking leg.
-    if (stop.travel_method === 'walking' && hasAnchor
-      && haversine(anchor.lat, anchor.lon, coords.lat, coords.lon) > 1) fields.travel_method = 'driving';
     // Conditional writes protect a pin moved/verified while geocoding was in
     // flight, without reading and then overwriting a newer user's placement.
     const result = await entities.TourStop.updateMany({
