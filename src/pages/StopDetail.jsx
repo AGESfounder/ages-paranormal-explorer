@@ -22,7 +22,7 @@ import EnergyCostBadge from '@/components/EnergyCostBadge';
 import { getNarrationLength, truncateText } from '@/lib/narrationLength';
 import { useCondensedTexts } from '@/hooks/useCondensedTexts';
 import { toast } from '@/components/ui/use-toast';
-import { verifyStopLocation } from '@/lib/verifyStop';
+import { verifyStopLocation, placeStopLocation } from '@/lib/verifyStop';
 import { parkingDisplay } from '@/lib/parkingLabel';
 import StopVerificationPhoto from '@/components/StopVerificationPhoto';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -553,14 +553,14 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       return;
     }
     try {
-      const result = await verifyStopLocation(stopId, stop.tour_id, latlng.lat, latlng.lng, user?.id);
-      setStop(prev => ({ ...prev, latitude: latlng.lat, longitude: latlng.lng, user_verified: true, needs_placement: false }));
+      // Moving the pin only moves the pin — the stop is not validated until
+      // someone stands there and presses the validate button.
+      await placeStopLocation(stopId, stop.tour_id, latlng.lat, latlng.lng);
+      setStop(prev => ({ ...prev, latitude: latlng.lat, longitude: latlng.lng, needs_placement: false, geocoded: true }));
       autoNameParking(latlng.lat, latlng.lng);
       toast({
         title: 'Position Saved',
-        description: result.allVerified
-          ? 'All stops validated — tour is now fully validated!'
-          : 'Stop location validated by admin.',
+        description: 'Not validated yet — tap Mark Vantage Point when you are standing there.',
       });
     } catch (e) {
       toast({ title: 'Save Failed', description: e?.message || 'Please try again.', variant: 'destructive' });

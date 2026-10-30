@@ -40,7 +40,7 @@ import NarrationToggle from '@/components/NarrationToggle';
 import { useNarrationMode } from '@/hooks/useNarrationMode';
 import { useObserverNarrationGate } from '@/hooks/useObserverNarrationGate';
 import { canUseEnhanced } from '@/lib/narrationMode';
-import { verifyStopLocation } from '@/lib/verifyStop';
+import { placeStopLocation } from '@/lib/verifyStop';
 import { changeParkingLocation } from '@/lib/parkingChange';
 import ParkingChangeDialog from '@/components/ParkingChangeDialog';
 import { Input } from '@/components/ui/input';
@@ -462,16 +462,13 @@ export default function TourDetail() {
     // Compute updated stops with the new coordinates
     const updatedStops = stops.map(s =>
       s.id === stopId
-        ? { ...s, latitude: latLng.lat, longitude: latLng.lng, needs_placement: false, geocoded: true, user_verified: true }
+        ? { ...s, latitude: latLng.lat, longitude: latLng.lng, needs_placement: false, geocoded: true }
         : s
     );
-    let allVerified = false;
+    // A drag only places the pin. Verification belongs to the validate button,
+    // so nothing here marks the stop — or the tour — as verified.
     try {
-      const result = await verifyStopLocation(stopId, tourId, latLng.lat, latLng.lng, user?.id);
-      allVerified = result.allVerified;
-      if (allVerified) {
-        setTour(prev => prev ? { ...prev, verified: true } : prev);
-      }
+      await placeStopLocation(stopId, tourId, latLng.lat, latLng.lng);
     } catch (e) {
       console.error('Failed to update stop coordinates:', e);
     }
@@ -482,10 +479,8 @@ export default function TourDetail() {
     // based on the new coordinates, preserving the current stop order and
     // stop numbers. Coordinates are never changed.
     //
-    // AFTER VALIDATION: When the last stop is validated (allVerified), clear
-    // user_reordered so the NEXT tour load reorders stops by proximity for the
-    // optimal loop. Until then, keep user_reordered: true to preserve the
-    // current order for the rest of this tour session.
+    // Placement never completes validation, so the order stays frozen for the
+    // rest of this session. A validated tour is never auto-reordered anyway.
     const pStop = updatedStops.find(s => s.stop_type === 'parking');
     const sStop = updatedStops.find(s => s.stop_type === 'shuttle');
     const tourStopsOnly = updatedStops.filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle');
@@ -517,13 +512,7 @@ export default function TourDetail() {
     // list (manual_reorder: true), NEVER clear user_reordered — their custom
     // order is permanent and takes precedence over proximity auto-reordering.
     try {
-      const newReordered = allVerified ? false : true;
-      const updateData = { user_reordered: newReordered };
-      if (tour.manual_reorder) {
-        // Manual reorder is permanent — keep user_reordered true so the
-        // custom order is always respected on next load.
-        updateData.user_reordered = true;
-      }
+      const updateData = { user_reordered: true };
       await base44.entities.Tour.update(tourId, updateData);
       setTour(prev => prev ? { ...prev, user_reordered: updateData.user_reordered } : prev);
     } catch (e) {}
