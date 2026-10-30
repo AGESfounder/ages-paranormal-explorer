@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import LongPressMarker from './LongPressMarker';
 import StopMarkers from './map/StopMarkers';
-import { makeNeedsPlacementIcon, makeParkingIcon, makeShuttleIcon, makeUnconfirmedParkingIcon } from './map/stopMarkerIcons';
+import { makeParkingIcon, makeShuttleIcon, makeUnconfirmedParkingIcon } from './map/stopMarkerIcons';
 import { makeAmenityIcon } from './amenities/AmenityMarkerIcon';
 import { getCategory } from '@/lib/amenityCategories';
 import tourRouteGeometry from '@/lib/tourRouteGeometry';
@@ -160,24 +160,13 @@ export default function TourMap({ stops, tour, highlightedStopId, height = 'h-64
             </Popup>
           </LongPressMarker>
         )}
-        <StopMarkers stops={validStops} draggable={draggable} onMarkerDragEnd={onMarkerDragEnd} />
-        {needsPlacementStops.map(stop => (
-          <LongPressMarker
-            key={stop.id}
-            position={[stop.latitude, stop.longitude]}
-            icon={makeNeedsPlacementIcon(stop.stop_number)}
-            draggable
-            stopId={stop.id}
-            onMarkerDragEnd={onMarkerDragEnd}
-          >
-            <Popup>
-              <div className="text-xs font-heading">
-                <strong>Stop {stop.stop_number}:</strong> {stop.name}
-                <div className="text-pink-400 text-[10px] mt-1">Needs Placement — long press to drag</div>
-              </div>
-            </Popup>
-          </LongPressMarker>
-        ))}
+        {/* Unplaced stops share the same overlap layout as placed ones, so a
+            cluster of them can no longer stack on top of itself. */}
+        <StopMarkers
+          stops={[...validStops, ...needsPlacementStops]}
+          draggable={draggable}
+          onMarkerDragEnd={onMarkerDragEnd}
+        />
 
         {showAmenities && amenities.filter(a => a.latitude != null && a.longitude != null).map(a => {
           const cat = getCategory(a.category);

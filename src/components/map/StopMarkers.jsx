@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CircleMarker, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import LongPressMarker from '../LongPressMarker';
-import { makeArrowIcon, makeStackedIcon, makeStopIcon } from './stopMarkerIcons';
+import { makeArrowIcon, makeNeedsPlacementIcon, makeStackedIcon, makeStopIcon } from './stopMarkerIcons';
 
 // Two markers closer than this on screen sit on top of each other. Stops that
 // close are drawn as a small dot at the stop's real point plus the numbered
@@ -87,7 +87,9 @@ function StopPopup({ stop }) {
     <Popup>
       <div className="text-xs font-heading">
         <strong>Stop {stop.stop_number}:</strong> {stop.name}
-        {stop.geocoded === false && <div className="text-amber-400 text-[10px] mt-1">Estimated — needs verification</div>}
+        {stop.needs_placement
+          ? <div className="text-pink-400 text-[10px] mt-1">Needs Placement — long press to drag</div>
+          : stop.geocoded === false && <div className="text-amber-400 text-[10px] mt-1">Estimated — needs verification</div>}
       </div>
     </Popup>
   );
@@ -96,6 +98,13 @@ function StopPopup({ stop }) {
 export default function StopMarkers({ stops, draggable = false, onMarkerDragEnd }) {
   const map = useMap();
   const [zoom, setZoom] = useState(14);
+  // An unplaced stop keeps its pink "Needs Placement" pin and stays draggable
+  // so a visitor can drop it on the real spot, but it takes part in the same
+  // overlap layout as every other stop so the pins never hide each other.
+  const iconFor = (stop) => (stop.needs_placement
+    ? makeNeedsPlacementIcon(stop.stop_number)
+    : makeStopIcon(stop.stop_number, stop.geocoded === false));
+  const canDrag = (stop) => draggable || stop.needs_placement === true;
 
   useEffect(() => {
     const syncZoom = () => setZoom(map.getZoom());
@@ -157,8 +166,8 @@ export default function StopMarkers({ stops, draggable = false, onMarkerDragEnd 
             <LongPressMarker
               key={stop.id}
               position={[stop.latitude, stop.longitude]}
-              icon={makeStopIcon(stop.stop_number, stop.geocoded === false)}
-              draggable={draggable}
+              icon={iconFor(stop)}
+              draggable={canDrag(stop)}
               stopId={stop.id}
               onMarkerDragEnd={onMarkerDragEnd}
             >
@@ -211,8 +220,8 @@ export default function StopMarkers({ stops, draggable = false, onMarkerDragEnd 
                   <Marker position={[arrow.lat, arrow.lng]} icon={makeArrowIcon(rotation)} interactive={false} />
                   <LongPressMarker
                     position={[callout.lat, callout.lng]}
-                    icon={makeStopIcon(item.stop.stop_number, item.stop.geocoded === false)}
-                    draggable={draggable}
+                    icon={iconFor(item.stop)}
+                    draggable={canDrag(item.stop)}
                     stopId={item.stop.id}
                     onMarkerDragEnd={onMarkerDragEnd}
                   >
