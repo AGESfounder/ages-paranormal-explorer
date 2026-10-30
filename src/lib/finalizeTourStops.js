@@ -25,8 +25,13 @@ export default async function finalizeTourStops(tour) {
   const start = { lat: current.start_latitude, lon: current.start_longitude };
   const classified = await enforceWalkingDistance(regular, type, start, { ...options, preserveOrder: true });
   const parking = await ensureTourParking(current, [ ...page.items.filter(s => s.stop_type === 'parking'), ...classified ]);
-  const ordered = await enforceWalkingDistance(regular, type, start, { ...options,
+  const routed = await enforceWalkingDistance(regular, type, start, { ...options,
     parkingCoords: parking && !parking.needs_placement ? { lat: parking.latitude, lon: parking.longitude } : null });
+  // The drive belongs at the END: walking stops keep their relative order, then
+  // every driving stop follows. A kept order (manual or user order) can only
+  // choose the sequence WITHIN each group, never put a drive before a walk.
+  const ordered = [...routed.filter(s => s.travel_method !== 'driving'), ...routed.filter(s => s.travel_method === 'driving')]
+    .map((s, i) => (s.stop_number === i + 1 ? s : { ...s, stop_number: i + 1 }));
   const updates = ordered.filter(s => regular.some(old => old.id === s.id && (old.stop_number !== s.stop_number || old.travel_method !== s.travel_method)))
     .map(s => ({ id: s.id, stop_number: s.stop_number, travel_method: s.travel_method }));
   if (updates.length) await base44.entities.TourStop.bulkUpdate(updates);
