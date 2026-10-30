@@ -107,67 +107,6 @@ function optimizeRoute2Opt(route, includeReturn, distFn) {
   return route;
 }
 
-// Order the stops reached by car as one continuous drive. It starts where the
-// walk left off (or at the lot on a fully driving tour) and finishes at the stop
-// nearest the lot, so the furthest point always falls mid-route — the same loop
-// rule the walk follows. Without this the drive is strung outward stop by stop
-// and the last stop is the one furthest from the car.
-function orderDrive(stops, startPoint, endPoint, dist) {
-  if (stops.length <= 1) return stops;
-  const start = startPoint || stops[0];
-  const end = endPoint || start;
-
-  // Above the tour's ten-stop ceiling, take the nearest stop each time.
-  if (stops.length > 12) {
-    const remaining = [...stops];
-    const ordered = [];
-    let at = start;
-    while (remaining.length) {
-      let best = 0;
-      for (let i = 1; i < remaining.length; i++) {
-        if (dist(at, remaining[i]) < dist(at, remaining[best])) best = i;
-      }
-      at = remaining.splice(best, 1)[0];
-      ordered.push(at);
-    }
-    return ordered;
-  }
-
-  // Exact shortest drive between the two fixed ends.
-  const n = stops.length;
-  const size = 1 << n;
-  const cost = Array.from({ length: size }, () => new Float64Array(n).fill(Infinity));
-  const previous = Array.from({ length: size }, () => new Int16Array(n).fill(-1));
-  for (let i = 0; i < n; i++) cost[1 << i][i] = dist(start, stops[i]);
-  for (let mask = 1; mask < size; mask++) {
-    for (let last = 0; last < n; last++) {
-      if (!Number.isFinite(cost[mask][last])) continue;
-      for (let next = 0; next < n; next++) {
-        if (mask & (1 << next)) continue;
-        const nextMask = mask | (1 << next);
-        const candidate = cost[mask][last] + dist(stops[last], stops[next]);
-        if (candidate < cost[nextMask][next]) {
-          cost[nextMask][next] = candidate;
-          previous[nextMask][next] = last;
-        }
-      }
-    }
-  }
-  let last = 0;
-  for (let i = 1; i < n; i++) {
-    if (cost[size - 1][i] + dist(stops[i], end) < cost[size - 1][last] + dist(stops[last], end)) last = i;
-  }
-  const sequence = [];
-  let mask = size - 1;
-  while (last >= 0) {
-    sequence.unshift(stops[last]);
-    const before = previous[mask][last];
-    mask ^= 1 << last;
-    last = before;
-  }
-  return sequence;
-}
-
 export function orderStopsByProximity(stops, includeReturn = false, distFn) {
   if (stops.length <= 1) return stops;
   const dist = distFn || ((a, b) => haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude));
@@ -233,9 +172,6 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   const withCoords = stops.filter(isLocatedStop);
   const unlocated = stops.filter(s => !isLocatedStop(s));
   const refCoords = parkingCoords?.lat != null && parkingCoords?.lon != null ? parkingCoords : startCoords;
-  const lotPoint = refCoords?.lat != null && refCoords?.lon != null
-    ? { latitude: refCoords.lat, longitude: refCoords.lon }
-    : null;
   const pocketDistance = (group) => refCoords?.lat != null && refCoords?.lon != null
     ? Math.min(...group.map(s => haversineDistance(refCoords.lat, refCoords.lon, s.latitude, s.longitude)))
     : Infinity;
@@ -308,10 +244,8 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
     // driving order either. Append them after the real route.
     const awaiting = stops.filter(s => s.needs_placement);
     const routed = stops.filter(s => !s.needs_placement);
-    // A driving tour is a loop from the lot too: out from the nearest stop and
-    // back to it, with the furthest point mid-route.
     return [
-      ...orderDrive(routed, lotPoint, lotPoint, dist),
+      ...orderStopsByProximity(routed, false, dist),
       ...awaiting,
     ].map((s, i) => ({ ...s, travel_method: 'driving', stop_number: i + 1 }));
   }
@@ -322,12 +256,10 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   const orderedCluster = plan.ordered;
   const drivingStops = withCoords.filter(s => !walkingSet.has(s));
   const clusterEnd = orderedCluster[orderedCluster.length - 1];
-  // The drive carries on from where the walk ends and finishes back beside the
-  // lot, so the tour closes as a loop instead of stranding its last stop at the
-  // furthest point.
-  const driveStart = clusterEnd || lotPoint;
-  const driveEnd = lotPoint || driveStart;
-  const final = [...orderedCluster, ...orderDrive(drivingStops, driveStart, driveEnd, dist), ...unlocated];
+  if (drivingStops.length && clusterEnd) {
+    drivingStops.sort((a, b) => dist(clusterEnd, a) - dist(clusterEnd, b));
+  }
+  const final = [...orderedCluster, ...orderStopsByProximity(drivingStops, false, dist), ...unlocated];
   return final.map((s, i) => ({
     ...s,
     travel_method: !isLocatedStop(s) ? pendingMethod(s) : walkingSet.has(s) ? 'walking' : 'driving',
