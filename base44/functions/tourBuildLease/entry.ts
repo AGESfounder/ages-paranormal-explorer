@@ -6,7 +6,7 @@ export default async function(req) {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me().catch(e => e.status === 401 ? null : Promise.reject(e));
     if (!user) return Response.json({ error: 'Sign in to build tour stops.' }, { status: 401 });
-    const { tourId, action, token } = await req.json().catch(() => ({}));
+    const { tourId, action, nonce } = await req.json().catch(() => ({}));
     if (typeof tourId !== 'string' || !/^[a-zA-Z0-9_-]{8,80}$/.test(tourId) || !['acquire', 'release'].includes(action)) {
       return Response.json({ error: 'A valid tour and action are required.' }, { status: 400 });
     }
@@ -14,10 +14,10 @@ export default async function(req) {
     const tour = await entities.Tour.get(tourId).catch(e => e.status === 404 ? null : Promise.reject(e));
     if (!tour) return Response.json({ error: 'Tour not found.' }, { status: 404 });
     if (action === 'release') {
-      if (typeof token !== 'string' || token.length > 64 || tour.maintenance_token !== token || tour.maintenance_user_id !== user.id) {
+      if (typeof nonce !== 'string' || nonce.length > 64 || !nonce || tour.maintenance_nonce !== nonce || tour.maintenance_user_id !== user.id) {
         return Response.json({ error: 'This build does not belong to this request.' }, { status: 403 });
       }
-      await releaseTourLease(base44, tourId, user.id, token);
+      await releaseTourLease(base44, tourId, user.id, nonce);
       return Response.json({ released: true });
     }
     if (tour.verified) return Response.json({ error: 'Validated tours cannot be rebuilt automatically.' }, { status: 409 });
@@ -29,7 +29,7 @@ export default async function(req) {
       await releaseTourLease(base44, tourId, user.id, claimed);
       return Response.json({ error: 'This tour already has a saved build. Reopen it.' }, { status: 409 });
     }
-    return Response.json({ token: claimed });
+    return Response.json({ nonce: claimed });
   } catch (error) {
     console.error('Tour build lease failed:', error);
     return Response.json({ error: 'Could not coordinate this tour build. Please try again.' }, { status: 500 });

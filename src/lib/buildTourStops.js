@@ -9,7 +9,7 @@ const builds = new Map();
 
 async function performBuild(tour) {
   const { data } = await base44.functions.invoke('tourBuildLease', { tourId: tour.id, action: 'acquire' });
-  const token = data.token;
+  const nonce = data.nonce;
   try {
     await base44.entities.Tour.update(tour.id, { build_status: 'building' });
     const singleSite = ['landmark', 'ship', 'cold_spot'].includes(tour.tour_category);
@@ -26,12 +26,12 @@ ${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`, { useWeb: true });
     if (!Array.isArray(result?.stops)) throw new Error('No usable stops were returned. Nothing new was saved.');
     const records = prepareTourStops(result.stops, tour, { min: tour.tour_category === 'cold_spot' ? 1 : 5, max: tour.tour_category === 'cold_spot' ? 4 : 10 });
     await saveTourStopBatch(tour.id, records);
-    return await finalizeTourBuild(tour, token);
+    return await finalizeTourBuild(tour, nonce);
   } catch (error) {
     await base44.entities.Tour.update(tour.id, { build_status: 'needs_review' });
     throw error;
   } finally {
-    await base44.functions.invoke('tourBuildLease', { tourId: tour.id, action: 'release', token })
+    await base44.functions.invoke('tourBuildLease', { tourId: tour.id, action: 'release', nonce })
       .catch(error => console.error('Tour build lease release failed; it will expire:', error));
   }
 }

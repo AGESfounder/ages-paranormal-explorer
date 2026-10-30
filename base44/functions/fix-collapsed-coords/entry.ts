@@ -455,8 +455,8 @@ export default async function (req) {
     const tour = await base44.asServiceRole.entities.Tour.get(tourId).catch(e => e.status === 404 ? null : Promise.reject(e));
     if (!tour) return Response.json({ error: 'Tour not found' }, { status: 404 });
     if (tour.verified === true) return Response.json({ tourId, updated: 0, reason: 'validated tour is frozen' });
-    if (body.buildToken) {
-      if (!(await ownsTourLease(base44, tourId, user.id, body.buildToken))) {
+    if (body.buildNonce) {
+      if (!(await ownsTourLease(base44, tourId, user.id, body.buildNonce))) {
         return Response.json({ error: 'This tour build is no longer active.' }, { status: 409 });
       }
     } else {

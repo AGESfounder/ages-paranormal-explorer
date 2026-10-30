@@ -157,8 +157,9 @@
       "type": "boolean",
       "default": false
     },
-    "maintenance_token": {
+    "maintenance_nonce": {
       "type": "string",
+      "description": "Opaque lease id for an in-flight build or coordinate update. Never named 'token' \u2014 that word is redacted on read.",
       "rls": {
         "read": {
           "user_condition": {
