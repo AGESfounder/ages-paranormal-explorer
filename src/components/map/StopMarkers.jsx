@@ -9,8 +9,12 @@ import { makeArrowIcon, makeStackedIcon, makeStopIcon } from './stopMarkerIcons'
 // marker pushed out on a short leader line with an arrow back to that dot, so
 // the number stays readable and still shows exactly where the stop is.
 const CLOSE_PX = 34;
-const CALLOUT_PX = 52;
+const MARKER_PX = 28;
 const ARROW_GAP_PX = 11;
+// The callout ring grows only as far as the numbers need to stay apart, so
+// every leader line stays as short as it can be.
+const CALLOUT_MIN_PX = 26;
+const CALLOUT_MAX_PX = 66;
 
 // Single-linkage grouping in screen pixels at the current zoom, so the result
 // matches what the visitor can actually see at any zoom level.
@@ -128,19 +132,27 @@ export default function StopMarkers({ stops, draggable = false, onMarkerDragEnd 
           );
         }
 
-        // Fan the numbers around the group's shared point, evenly and upward
-        // first, so none of them cover the dots they point at.
+        // Numbers read in stop order, clockwise from the top, on the smallest
+        // ring that keeps them from touching — so consecutive stops sit beside
+        // each other instead of scrambled around the cluster.
+        const ordered = cluster
+          .slice()
+          .sort((a, b) => (a.stop.stop_number || 0) - (b.stop.stop_number || 0));
         const anchor = cluster
           .reduce((sum, item) => sum.add(item.point), L.point(0, 0))
           .divideBy(cluster.length);
-        const step = cluster.length <= 4 ? 52 : 360 / cluster.length;
+        const ringPx = Math.min(
+          CALLOUT_MAX_PX,
+          Math.max(CALLOUT_MIN_PX, (MARKER_PX / 2 + 4) / Math.sin(Math.PI / ordered.length)),
+        );
+        const stepDeg = 360 / ordered.length;
 
         return (
           <React.Fragment key={first.stop.id}>
-            {cluster.map((item, i) => {
-              const angle = (-90 + (i - (cluster.length - 1) / 2) * step) * (Math.PI / 180);
-              const offsetX = Math.cos(angle) * CALLOUT_PX;
-              const offsetY = Math.sin(angle) * CALLOUT_PX;
+            {ordered.map((item, i) => {
+              const angle = (-90 + i * stepDeg) * (Math.PI / 180);
+              const offsetX = Math.cos(angle) * ringPx;
+              const offsetY = Math.sin(angle) * ringPx;
               const callout = map.unproject(anchor.add(L.point(offsetX, offsetY)), zoom);
               const dot = map.unproject(item.point, zoom);
               const dotPixel = item.point;
