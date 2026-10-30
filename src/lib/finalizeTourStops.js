@@ -48,6 +48,12 @@ export default async function finalizeTourStops(tour) {
     || ordered.some(s => s.needs_placement || s.geocoded !== true)
     ? 'needs_review' : 'ready';
   const fields = { tour_type: tourType, build_status: buildStatus, stops_regenerated: STOPS_PREP_VERSION };
+  // A tour that has grown back to a full stop count no longer carries the
+  // shortfall label — the area supports a proper tour after all.
+  if (ordered.length >= (current.tour_category === 'cold_spot' ? 1 : 5)) {
+    fields.special_circumstance = false;
+    fields.special_circumstance_reason = '';
+  }
   await base44.entities.Tour.update(tour.id, fields);
   const shuttle = page.items.find(s => s.stop_type === 'shuttle');
   // Which stops the water cuts off is settled with the coordinates, so the map

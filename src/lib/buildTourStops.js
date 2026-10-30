@@ -2,6 +2,7 @@ import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { BRAND_RULE_STOP, ADDRESS_RULE, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
 import prepareTourStops from '@/lib/prepareTourStops';
+import auditThinTour from '@/lib/auditThinTour';
 import saveTourStopBatch from '@/lib/saveTourStopBatch';
 import finalizeTourBuild from '@/lib/finalizeTourBuild';
 
@@ -24,9 +25,33 @@ stop_number, name, latitude, longitude, address (complete real street address), 
 Find coordinates from real mapped sources; do not fabricate room coordinates or pad the count with duplicates.
 ${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`, { useWeb: true });
     if (!Array.isArray(result?.stops)) throw new Error('No usable stops were returned. Nothing new was saved.');
-    const records = prepareTourStops(result.stops, tour, { min: tour.tour_category === 'cold_spot' ? 1 : 5, max: tour.tour_category === 'cold_spot' ? 4 : 10 });
+    const limits = { min: tour.tour_category === 'cold_spot' ? 1 : 5, max: tour.tour_category === 'cold_spot' ? 4 : 10, allowShort: true };
+    let records = prepareTourStops(result.stops, tour, limits);
+    if (!records.length) throw new Error('No usable stops were returned. Nothing new was saved.');
+    // The audit runs ONLY on a shortfall, so a healthy area never pays for a
+    // second call. It either recovers the stops the first pass skipped, or it
+    // earns the tour its Special Circumstance label by naming what it rejected.
+    // A failed audit must never discard real stops: it falls back to the label.
+    let shortfall = '';
+    if (records.length < limits.min) {
+      let audit = { recovered: [], reason: '' };
+      try {
+        audit = await auditThinTour(tour, records, limits.min);
+      } catch (error) {
+        console.error('Shortfall audit failed; keeping the stops it returned:', error);
+      }
+      if (audit.recovered.length) records = prepareTourStops([...result.stops, ...audit.recovered], tour, limits);
+      if (records.length < limits.min) {
+        shortfall = audit.reason || `Only ${records.length} documented stops exist in ${tour.city}.`;
+      }
+    }
     await saveTourStopBatch(tour.id, records);
-    return await finalizeTourBuild(tour, nonce);
+    const built = await finalizeTourBuild(tour, nonce);
+    const label = shortfall
+      ? { special_circumstance: true, special_circumstance_reason: shortfall }
+      : { special_circumstance: false, special_circumstance_reason: '' };
+    await base44.entities.Tour.update(tour.id, label);
+    return { ...built, tour: { ...built.tour, ...label } };
   } catch (error) {
     await base44.entities.Tour.update(tour.id, { build_status: 'needs_review' });
     throw error;

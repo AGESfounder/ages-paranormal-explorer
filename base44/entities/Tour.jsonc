@@ -135,6 +135,15 @@
       "default": false,
       "description": "Human-validated tour. Automated coordinate and content maintenance must not change it."
     },
+    "special_circumstance": {
+      "type": "boolean",
+      "default": false,
+      "description": "true = this tour finished correctly but is smaller than a full tour because the area genuinely cannot support more stops. Set only after a shortfall audit found no qualifying stops left out; cleared automatically once the tour reaches full size. Never set to excuse a lazy or broken build."
+    },
+    "special_circumstance_reason": {
+      "type": "string",
+      "description": "One sentence, written for the visitor, explaining why this tour is short (e.g. which documented locations this town has and why nothing else qualifies). Shown under the Special Circumstance label."
+    },
     "parking_name": {
       "type": "string"
     },

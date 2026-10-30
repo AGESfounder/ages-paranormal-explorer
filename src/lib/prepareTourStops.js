@@ -8,7 +8,10 @@ export const stopIdentity = value => String(value || '').normalize('NFKD').repla
 
 // Structural checks precede every initial stop write. They are not a claim of
 // real-world verification: AI coordinates always start as estimates.
-export default function prepareTourStops(rawStops, tour, { min = 1, max = 10 } = {}) {
+// allowShort: the caller is prepared to handle a count below `min` itself (a
+// shortfall it will audit), so a surplus is trimmed to `max` and a shortfall is
+// returned rather than thrown. Every structural check still throws.
+export default function prepareTourStops(rawStops, tour, { min = 1, max = 10, allowShort = false } = {}) {
   const singleSite = ['landmark', 'ship', 'cold_spot'].includes(tour.tour_category);
   const names = new Set();
   const addresses = new Set();
@@ -40,6 +43,10 @@ export default function prepareTourStops(rawStops, tour, { min = 1, max = 10 } =
     stops.push({ ...stop, stop_type: 'tour', stop_number: stops.length + 1,
       access_area: stop.access_area || classifyStopAccess(stop.name), geocoded: stop.user_verified === true });
   }
-  if (stops.length < min || stops.length > max) throw new Error(`The build needs ${min}-${max} unique stops; it produced ${stops.length}. Nothing new was saved.`);
+  if (allowShort) {
+    if (stops.length > max) stops.length = max;
+  } else if (stops.length < min || stops.length > max) {
+    throw new Error(`The build needs ${min}-${max} unique stops; it produced ${stops.length}. Nothing new was saved.`);
+  }
   return stops;
 }

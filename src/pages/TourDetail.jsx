@@ -14,6 +14,7 @@ import { getOfflineAudio, clearTourAudio } from '@/lib/offlineAudio';
 import buildTourStops from '@/lib/buildTourStops';
 import BePatient from '@/components/BePatient';
 import TourCategoryBadge from '@/components/TourCategoryBadge';
+import SpecialCircumstanceBadge from '@/components/SpecialCircumstanceBadge';
 import TourAccessInfo from '@/components/TourAccessInfo';
 import VerificationBadge from '@/components/VerificationBadge';
 import { useEnergyGate, checkManifestationGate } from '@/hooks/useEnergyGate';
@@ -715,6 +716,7 @@ export default function TourDetail() {
       />
 
       <div className="px-4 pb-28 space-y-4 pt-3">
+        <SpecialCircumstanceBadge tour={tour} />
         <div className="p-4 rounded-xl border border-border/40 bg-card/40 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <VerificationBadge verified={tour.verified} />
