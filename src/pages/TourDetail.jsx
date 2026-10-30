@@ -51,6 +51,7 @@ import { parkingDisplay } from '@/lib/parkingLabel';
 import tourRouteGeometry from '@/lib/tourRouteGeometry';
 import readTourSnapshot from '@/lib/readTourSnapshot';
 import TourBuildPrompt from '@/components/TourBuildPrompt';
+import RepairTourAction from '@/components/RepairTourAction';
 
 // Build preparation is explicit. Viewing never starts a maintenance job.
 const activeBuilds = new Set();
@@ -774,6 +775,15 @@ export default function TourDetail() {
           <h3 className="font-heading text-xs font-semibold tracking-wider uppercase text-foreground mb-3 flex items-center gap-2">
             <Map className="w-4 h-4 text-primary" /> {visibleTourStops.length} Investigation Stops
           </h3>
+          {tourStops.length > 0 && !tour.verified && !generatingStops && (user?.role === 'admin' || isPaid) && (
+            <RepairTourAction
+              tour={tour}
+              onRepaired={(result) => {
+                if (result?.tour) setTour(prev => (prev ? { ...prev, ...result.tour } : prev));
+                if (result?.stops) setStops(result.stops);
+              }}
+            />
+          )}
           {stopsError ? (
             <div className="flex flex-col items-center py-8 gap-3">
               <AlertTriangle className="w-10 h-10 text-yellow-500" />
