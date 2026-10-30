@@ -1,6 +1,7 @@
 import { base44 } from '@/api/base44Client';
 import { enforceWalkingDistance } from '@/lib/routeOptimizer';
-import { walkRuleOptions } from '@/lib/walkRules';
+import { walkRuleOptions, getWalkingCeiling } from '@/lib/walkRules';
+import { haversineDistance } from '@/lib/walkingRoute';
 
 // Cheap local sanity check — does the stored order break the route rules?
 // Walking stops must come first as one loop, driving stops last, and no leg
@@ -11,7 +12,7 @@ export function orderViolatesRules(tour, stops) {
       && s.latitude != null && s.longitude != null && !s.needs_placement)
     .sort((a, b) => (a.stop_number || 0) - (b.stop_number || 0));
   if (located.length < 2) return false;
-  const limit = getWalkingLimit(tour);
+  const ceiling = getWalkingCeiling(tour);
   let sawDriving = false;
   for (let i = 0; i < located.length; i++) {
     const stop = located[i];
@@ -19,8 +20,8 @@ export function orderViolatesRules(tour, stops) {
     else if (sawDriving) return true; // a walking stop after a driving one
     const prev = located[i - 1];
     if (prev && stop.travel_method === 'walking'
-      && Math.hypot((stop.latitude - prev.latitude) * 69, (stop.longitude - prev.longitude) * 53) > limit * 2) {
-      return true; // an impossible walking leg
+      && haversineDistance(prev.latitude, prev.longitude, stop.latitude, stop.longitude) > ceiling) {
+      return true; // a walking leg over the walk ceiling
     }
   }
   return false;
