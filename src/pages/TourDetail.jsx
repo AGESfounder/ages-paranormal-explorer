@@ -210,15 +210,13 @@ export default function TourDetail() {
     return () => { loadVersionRef.current += 1; };
   }, [tourId]);
 
-  // Visit order is rebuilt by the route rules on opening, never mid-tour: a
+  // Visit order is rebuilt by the route rules the moment the tour is opened: a
   // stop placed after the build (order_rebuild_pending) or an order that
-  // outright breaks the rules is fixed here — but only for a viewer who is not
-  // currently investigating this tour. The person placing the pin keeps their
-  // numbering until they finish; the rebuild waits for a later opening.
+  // outright breaks the rules is fixed here, before anyone walks the tour, so
+  // no visitor is ever sent to stops in the wrong place.
   useEffect(() => {
     if (loading || !tour || orderRepairRef.current) return;
     if (tour.verified || tour.manual_reorder || userDraggedRef.current) return;
-    if (user?.last_tour_id === tour.id) return;
     if (!tour.order_rebuild_pending && !orderViolatesRules(tour, stops)) return;
     orderRepairRef.current = true;
     reorderCorrectedStops(tour, stops)
@@ -235,7 +233,7 @@ export default function TourDetail() {
         }
       })
       .catch(e => console.error('Route order repair failed:', e));
-  }, [loading, tour, stops, user?.last_tour_id]);
+  }, [loading, tour, stops]);
 
   useEffect(() => {
     if (loading || loadError || tour) return;
@@ -771,13 +769,6 @@ export default function TourDetail() {
             // coordinates, exactly as a build would.
             const corrected = applyAddressCorrections(stops, updates);
             setStops(corrected);
-            // Somebody mid-investigation keeps their numbering; the rebuild is
-            // handed to the next opening instead.
-            if (user?.last_tour_id === tour.id) {
-              await base44.entities.Tour.update(tour.id, { order_rebuild_pending: true });
-              setTour(prev => (prev ? { ...prev, order_rebuild_pending: true } : prev));
-              return;
-            }
             try {
               const result = await reorderCorrectedStops(tour, corrected);
               if (result) {
