@@ -125,7 +125,10 @@ export function orderStopsByProximity(stops, includeReturn = false, distFn) {
   return optimizeRoute2Opt(ordered, includeReturn, dist);
 }
 
-const WALKING_LIMIT = 0.33;
+// Half a mile is a ten-minute walk, so stops on the same downtown street stay
+// in one walking loop from the parking area instead of being split into a
+// second, separate walking pocket.
+const WALKING_LIMIT = 0.5;
 
 // The same walking-link tolerance is used for membership, route expansion and
 // map geometry. Parking affects where the walk starts, not which stops survive.
@@ -139,7 +142,7 @@ export const getWalkingLimit = (tour) => {
   if (cat === 'landmark' || cat === 'ship' || cat === 'cold_spot') {
     return isLargeProperty(tour) ? 1.0 : 0.33;
   }
-  return 0.33;
+  return WALKING_LIMIT;
 };
 
 
@@ -178,14 +181,7 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   const components = walkingComponents(withCoords, walkingLimit * WALK_LINK_GRACE);
   components.sort((a, b) => b.length - a.length || pocketDistance(a) - pocketDistance(b));
   const walkingCluster = components[0]?.length > 1 || withCoords.length === 1 ? components[0] : [];
-  // Every chain of short legal links is a walk, not only the biggest one. A
-  // long tour can hold two walkable pockets — a downtown pair, a midtown trio
-  // — with driving in between. The largest pocket still drives the ordering
-  // loop; members of the other pockets are marked walking where they sit, so
-  // the map draws each pocket as its own short walk instead of demoting them.
-  const walkingSet = new Set(
-    components.filter(c => c.length > 1 || withCoords.length === 1).flat(),
-  );
+  const walkingSet = new Set(walkingCluster);
   const pendingMethod = s => s.travel_method || (tourType === 'driving' ? 'driving' : 'walking');
   if (preserveOrder) {
     return stops.map(s => ({
@@ -261,10 +257,7 @@ export async function enforceWalkingDistance(stops, tourType, startCoords, optio
   // return along the same street instead of demoting the tail to driving.
   const plan = planWalkingRoute(walkingCluster, walkingLimit * WALK_LINK_GRACE, parkingCoords, false, dist);
   const orderedCluster = plan.ordered;
-  // Everything outside the primary loop still needs its place in the route,
-  // including the other walking pockets.
-  const primarySet = new Set(walkingCluster);
-  const drivingStops = withCoords.filter(s => !primarySet.has(s));
+  const drivingStops = withCoords.filter(s => !walkingSet.has(s));
   const clusterEnd = orderedCluster[orderedCluster.length - 1];
   if (drivingStops.length && clusterEnd) {
     drivingStops.sort((a, b) => dist(clusterEnd, a) - dist(clusterEnd, b));
