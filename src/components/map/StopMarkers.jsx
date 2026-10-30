@@ -47,6 +47,41 @@ function clusterByProximity(map, stops, zoom) {
   return clusters;
 }
 
+// Every number keeps its own stop's true bearing from the cluster's middle, so
+// the callouts read in the same direction as the ground beneath them. Bearings
+// too close together to keep the numbers apart are eased apart, never shuffled
+// into a different order.
+function layoutCallouts(cluster, anchor, ringPx) {
+  const entries = cluster
+    .map(item => ({
+      ...item,
+      angle: Math.atan2(item.point.y - anchor.y, item.point.x - anchor.x),
+    }))
+    .sort((a, b) => a.angle - b.angle);
+
+  const minGap = Math.min(Math.PI, 2 * Math.asin(Math.min(1, (MARKER_PX + 3) / (2 * ringPx))));
+  const twoPi = Math.PI * 2;
+
+  for (let pass = 0; pass < 80; pass++) {
+    let moved = false;
+    for (let i = 0; i < entries.length; i++) {
+      const next = entries[(i + 1) % entries.length];
+      const gap = i + 1 < entries.length
+        ? next.angle - entries[i].angle
+        : next.angle + twoPi - entries[i].angle;
+      if (gap < minGap - 1e-6) {
+        const push = (minGap - gap) / 2;
+        entries[i].angle -= push;
+        next.angle += push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+
+  return entries;
+}
+
 function StopPopup({ stop }) {
   return (
     <Popup>
@@ -132,27 +167,23 @@ export default function StopMarkers({ stops, draggable = false, onMarkerDragEnd 
           );
         }
 
-        // Numbers read in stop order, clockwise from the top, on the smallest
-        // ring that keeps them from touching — so consecutive stops sit beside
-        // each other instead of scrambled around the cluster.
-        const ordered = cluster
-          .slice()
-          .sort((a, b) => (a.stop.stop_number || 0) - (b.stop.stop_number || 0));
+        // Each number sits on its own stop's side of the cluster, on the
+        // smallest ring that keeps the numbers from touching, so the callouts
+        // follow the layout of the streets instead of a fixed ring order.
         const anchor = cluster
           .reduce((sum, item) => sum.add(item.point), L.point(0, 0))
           .divideBy(cluster.length);
         const ringPx = Math.min(
           CALLOUT_MAX_PX,
-          Math.max(CALLOUT_MIN_PX, (MARKER_PX / 2 + 4) / Math.sin(Math.PI / ordered.length)),
+          Math.max(CALLOUT_MIN_PX, (MARKER_PX / 2 + 4) / Math.sin(Math.PI / cluster.length)),
         );
-        const stepDeg = 360 / ordered.length;
+        const ordered = layoutCallouts(cluster, anchor, ringPx);
 
         return (
           <React.Fragment key={first.stop.id}>
-            {ordered.map((item, i) => {
-              const angle = (-90 + i * stepDeg) * (Math.PI / 180);
-              const offsetX = Math.cos(angle) * ringPx;
-              const offsetY = Math.sin(angle) * ringPx;
+            {ordered.map(item => {
+              const offsetX = Math.cos(item.angle) * ringPx;
+              const offsetY = Math.sin(item.angle) * ringPx;
               const callout = map.unproject(anchor.add(L.point(offsetX, offsetY)), zoom);
               const dot = map.unproject(item.point, zoom);
               const dotPixel = item.point;
