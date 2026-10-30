@@ -273,7 +273,11 @@ Output ONLY a valid JSON object. No markdown fences, no commentary.${CONCLUSION_
   // MINIMUM STOP ENFORCEMENT — prevents low-quality tours (e.g. 1-stop tours)
   // from being created. The LLM sometimes returns too few stops; we retry up to
   // 3 attempts and reject if the minimum still isn't met.
-  const MIN_STOPS_FOR = (cat) => stopCountMin ? stopCountMin : (cat === 'cold_spot' ? 1 : 5);
+  // An area tour is a walking/driving route through a neighbourhood, so five
+  // stops is not a route — it is the prompt's 8-10 asked for, with a floor of 7
+  // so a thin result is retried instead of saved as a tour.
+  const MIN_STOPS_FOR = (cat) => stopCountMin ? stopCountMin
+    : (cat === 'cold_spot' ? 1 : cat === 'area' ? 7 : 5);
 
   // Process a raw LLM result into normalized tour data + stop records.
   const processResult = (raw) => {
