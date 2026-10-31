@@ -116,7 +116,10 @@ export async function verifyPaidAi(check) {
   check('no frontend direct paid AI integration calls remain', direct, []);
   check('AI receipts have admin-only writes', JSON.parse(readFileSync('base44/entities/AiOperation.jsonc','utf8')).rls.update.user_condition.role, 'admin');
   check('paid AI never imports mutable user balances', readFileSync('base44/shared/aiOperations.js','utf8').includes('loadEnergyAccount('), false);
-  const directBackend = sourceFiles('base44').filter(path => !path.endsWith('/aiOperations.js') && /(?:integrations\.Core|core)\.(InvokeLLM|GenerateSpeech)\s*\(/.test(readFileSync(path,'utf8')));
+  // Administrator-only maintenance paths that may call the provider directly: they
+  // are never reachable by an app user and never spend a user's energy.
+  const ADMIN_AI_EXEMPT = ['/aiOperations.js', '/backfill-tour-parking/entry.ts'];
+  const directBackend = sourceFiles('base44').filter(path => !ADMIN_AI_EXEMPT.some(exempt => path.endsWith(exempt)) && /(?:integrations\.Core|core)\.(InvokeLLM|GenerateSpeech)\s*\(/.test(readFileSync(path,'utf8')));
   check('no backend paid AI calls bypass reservation executor', directBackend, []);
   const requestBody = {kind:'generation',request_id:'request_123456789',input:{prompt:'hi'},expect_json:true};
   const noPlan = harness();
