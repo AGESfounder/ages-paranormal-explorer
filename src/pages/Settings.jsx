@@ -18,6 +18,8 @@ import { setLocationTrackingEnabled } from '@/lib/deviceCapabilities';
 import DeviceVoicePicker from '@/components/DeviceVoicePicker';
 import DashboardNarrationIndicator from '@/components/DashboardNarrationIndicator';
 import { useAuth } from '@/lib/AuthContext';
+import { clearOfflineTourUserAssociation } from '@/lib/offlineTours';
+import { Capacitor } from '@capacitor/core';
 
 const defaultSettings = {
   backgroundMusic: true,
@@ -86,8 +88,9 @@ export default function Settings() {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState(null);
-  const [deleteDone, setDeleteDone] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteNotice, setDeleteNotice] = useState('');
+  const [localCleanupVerified, setLocalCleanupVerified] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
 
@@ -104,22 +107,50 @@ export default function Settings() {
     setBlockedUsers(next.map((b) => (typeof b === 'string' ? { id: b, name: 'Blocked user' } : b)).filter((b) => b?.id));
   };
 
-  const handleDeleteAccount = async () => {
-    setDeleting(true);
-    setDeleteError(null);
+  const finishDeleteLogout = async (notice, cleanupVerified) => {
     try {
-      const response = await base44.functions.invoke('delete-account');
-      if (!response?.data?.success) {
-        throw new Error(response?.data?.error || 'Deletion could not be completed.');
+      // Native logout reloads /login, so carry only a fixed status, never user data.
+      let noticeStored = false;
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const value = cleanupVerified ? 'verified' : 'unverified';
+          sessionStorage.setItem('ages_account_delete_notice', value);
+          noticeStored = sessionStorage.getItem('ages_account_delete_notice') === value;
+        } catch { /* Show the full notice before leaving if storage is blocked. */ }
       }
-      setDeleteDone(true);
-    } catch (e) {
-      setDeleteError(
-        e?.response?.data?.error || e?.message || 'Deletion failed. Please try again.'
-      );
-    } finally {
+      if (!noticeStored) window.alert(notice);
+      await logout(true, '/login');
+    } catch {
+      setDeleteError('Sign-out could not be completed. Try signing out again; do not repeat the account deletion request.');
       setDeleting(false);
     }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError('');
+    if (deleteNotice) {
+      await finishDeleteLogout(deleteNotice, localCleanupVerified);
+      return;
+    }
+    try {
+      const response = await base44.functions.invoke('delete-account');
+      if (response?.status >= 400 || response?.data?.error || response?.data?.success !== true) {
+        throw new Error('Account-record request was not confirmed');
+      }
+    } catch {
+      setDeleteError('The server did not confirm completion. Some related records may already have been removed. Complete removal of related records and uploaded files has not been verified. Contact support before retrying.');
+      setDeleting(false);
+      return;
+    }
+
+    const cleanup = clearOfflineTourUserAssociation(user?.id);
+    const notice = 'The account-record request completed, but complete removal of related records and uploaded files has not been verified. Downloaded and shared tour content has been kept.'
+      + (cleanup.ok ? '' : ' Local saved-tour account association cleanup could not be verified.');
+    setLocalCleanupVerified(cleanup.ok);
+    setDeleteNotice(notice);
+    await finishDeleteLogout(notice, cleanup.ok);
   };
 
   if (!loaded) {
@@ -320,15 +351,14 @@ export default function Settings() {
           </div>
           <div className="p-3 flex items-center justify-between">
             <div>
-              <p className="text-sm text-foreground">Delete Account</p>
-              <p className="text-[10px] text-muted-foreground">Permanently remove your account & sign out</p>
+              <p className="text-sm text-foreground">Delete account</p>
+              <p className="text-[10px] text-muted-foreground">Request account-record deletion and sign out; downloaded and shared tours stay on this device.</p>
             </div>
             <Button
               variant="destructive"
               size="sm"
               onClick={() => {
-                setDeleteError(null);
-                setDeleteDone(false);
+                setDeleteError('');
                 setDeleteOpen(true);
               }}
             >
@@ -338,84 +368,55 @@ export default function Settings() {
         </div>
       </div>
 
-      <Dialog
-        open={deleteOpen}
-        onOpenChange={(open) => {
-          if (deleting) return;
-          if (open) { setDeleteOpen(true); return; }
-          // After a successful deletion the account is already gone, so closing
-          // the dialog signs out rather than leaving a dead session on screen.
-          if (deleteDone) { logout(true, '/login'); return; }
-          setDeleteError(null);
-          setDeleteOpen(false);
-        }}
-      >
+      <Dialog open={deleteOpen} onOpenChange={(open) => { if (!deleting) setDeleteOpen(open); }}>
         <DialogContent>
-          {deleteDone ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>Your account has been deleted</DialogTitle>
-                <DialogDescription>
-                  Your account profile has been permanently deleted, and the records you authored have been removed from AGES Explorer. Media tied to your evidence and stop verifications is no longer accessible in the app. Deleted records may remain recoverable in the platform&apos;s trash for up to 30 days.
-                </DialogDescription>
-              </DialogHeader>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Purchase, subscription, and rewarded-ad audit records are retained as described in the Privacy Policy. An active App Store or Google Play subscription is not cancelled by deleting your account.
+          <DialogHeader>
+            <DialogTitle>Delete your account?</DialogTitle>
+            <DialogDescription>
+              Your account profile is permanently deleted immediately and cannot be restored. The records you authored are removed from the app at the same time.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-[11px] text-muted-foreground leading-relaxed">
+            <div>
+              <p className="text-xs text-foreground font-medium mb-1">Deleted immediately</p>
+              <p>
+                Your account profile is permanently deleted by this in-app process. It cannot be restored.
               </p>
-              <DialogFooter>
-                <Button variant="destructive" onClick={() => logout(true, '/login')}>Sign Out</Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle>Delete your account?</DialogTitle>
-                <DialogDescription>
-                  Your account profile is permanently deleted immediately and cannot be restored. The records you authored are removed from the app at the same time.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 text-[11px] text-muted-foreground leading-relaxed">
-                <div>
-                  <p className="text-xs text-foreground font-medium mb-1">Deleted immediately</p>
-                  <p>
-                    Your account profile is permanently deleted by this in-app process. It cannot be restored.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-foreground font-medium mb-1">Removed from the app</p>
-                  <p>
-                    The data you authored: evidence entries and their photos, videos and recordings, stop verification photos, Explorer Reports, reports, favorites, investigations, saved tours, community amenities, energy balances, AI generation receipts, and tool diagnostics. These records are removed from the app immediately, but they may remain recoverable in the platform&apos;s trash for up to 30 days before permanent erasure.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-foreground font-medium mb-1">Media no longer accessible</p>
-                  <p>
-                    Your evidence and stop verification media becomes inaccessible and unfindable through AGES Explorer once its records are deleted, and no link to it can be created. AGES Explorer treats that media as deleted.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-foreground font-medium mb-1">Kept</p>
-                  <p>
-                    Purchase, subscription and transaction records, and rewarded-ad audit records, are retained for accounting, tax and fraud-prevention reasons. Backups and logs follow their own retention schedules described in the Privacy Policy.
-                  </p>
-                </div>
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5">
-                  <p className="text-[11px] text-amber-300 leading-relaxed">
-                    Deleting your account does not cancel an active Apple or Google subscription. To stop future charges, cancel it first in your Apple ID subscriptions (App Store) or Google Play subscriptions.
-                  </p>
-                </div>
-                {deleteError && <p className="text-[11px] text-destructive">{deleteError}</p>}
-              </div>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline" disabled={deleting}>Cancel</Button>
-                </DialogClose>
-                <Button variant="destructive" disabled={deleting} onClick={handleDeleteAccount}>
-                  {deleting ? 'Deleting…' : deleteError ? 'Try Again' : 'Delete Account'}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
+            </div>
+            <div>
+              <p className="text-xs text-foreground font-medium mb-1">Removed from the app</p>
+              <p>
+                The data you authored: evidence entries and their photos, videos and recordings, stop verification photos, Explorer Reports, reports, favorites, investigations, saved tours, community amenities, energy balances, AI generation receipts, and tool diagnostics. These records are removed from the app immediately, but they may remain recoverable in the platform&apos;s trash for up to 30 days before permanent erasure.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-foreground font-medium mb-1">Media no longer accessible</p>
+              <p>
+                Your evidence and stop verification media becomes inaccessible and unfindable through AGES Explorer once its records are deleted, and no link to it can be created. AGES Explorer treats that media as deleted.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-foreground font-medium mb-1">Kept</p>
+              <p>
+                Purchase, subscription and transaction records, and rewarded-ad audit records, are retained for accounting, tax and fraud-prevention reasons. Backups and logs follow their own retention schedules described in the Privacy Policy.
+              </p>
+            </div>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5">
+              <p className="text-[11px] text-amber-300 leading-relaxed">
+                Deleting your account does not cancel an active Apple or Google subscription. To stop future charges, cancel it first in your Apple ID subscriptions (App Store) or Google Play subscriptions.
+              </p>
+            </div>
+            {deleteNotice && <p role="status" className="text-sm text-foreground text-pretty">{deleteNotice}</p>}
+            {deleteError && <p role="alert" className="text-sm text-destructive text-pretty">{deleteError}</p>}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={deleting}>Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" disabled={deleting} onClick={handleDeleteAccount}>
+              {deleting ? 'Deleting…' : deleteError ? 'Try Again' : deleteNotice ? 'Sign out again' : 'Delete Account'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

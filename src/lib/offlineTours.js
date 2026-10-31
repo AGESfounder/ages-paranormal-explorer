@@ -22,6 +22,39 @@ export function isTourOffline(tourId) {
 }
 
 /**
+ * Detach only this user's saved-tour association, preserving every snapshot.
+ * Unlike readAll(), fail closed on unreadable storage so it is never overwritten.
+ * @returns {{ ok: boolean }}
+ */
+export function clearOfflineTourUserAssociation(userId) {
+  if (typeof userId !== 'string' || !userId.trim()) return { ok: false };
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw === null) return { ok: true };
+    const map = JSON.parse(raw);
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return { ok: false };
+
+    let changed = false;
+    for (const entry of Object.values(map)) {
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)
+          && entry.saved_by_user_id === userId) {
+        entry.saved_by_user_id = null;
+        changed = true;
+      }
+    }
+    if (!changed) return { ok: true };
+
+    const expected = JSON.stringify(map);
+    // Do not overwrite a concurrent change observed before the write.
+    if (localStorage.getItem(KEY) !== raw) return { ok: false };
+    localStorage.setItem(KEY, expected);
+    return { ok: localStorage.getItem(KEY) === expected };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
  * Persist a tour + stops snapshot for offline reading after server fetch failure.
  * Scope is intentionally limited to the tour/stop JSON snapshot — not media, maps,
  * or full filesystem downloads.

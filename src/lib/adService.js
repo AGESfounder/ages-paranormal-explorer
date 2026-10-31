@@ -390,7 +390,7 @@ async function resolveSsvUserId(options) {
  * Optional options.userId is forwarded to AdMob SSV; otherwise auth.me() is used.
  *
  * @param {{ userId?: string }} [options]
- * @returns {Promise<{ rewarded: boolean, amount?: number }>}
+ * @returns {Promise<{ rewarded: boolean, amount?: number, reason?: string }>}
  */
 export async function showRewardedAd(options) {
   if (isNativePlatform()) {

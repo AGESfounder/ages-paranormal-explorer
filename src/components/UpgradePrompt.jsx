@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Sparkles, Zap, X, Play, Loader2, Check } from 'lucide-react';
+import { Sparkles, Zap, X, Play, Loader2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { showRewardedAd } from '@/lib/adService';
 import { AD_REWARD_ENERGY } from '@/lib/adRewards';

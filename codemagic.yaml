@@ -189,3 +189,148 @@ workflows:
         # Store Connect; submit the build to TestFlight beta review manually after
         # answering the export compliance question there.
         submit_to_testflight: false
+
+  ios-capacitor-adhoc-test:
+    name: AGES iOS Ad Hoc device test artifact
+    # Manual-only: no triggering block. Start only after explicit user approval.
+    # Requires an uploaded matching distribution certificate and Ad Hoc profile
+    # containing the designated registered iPhone and iPad. No assets are created.
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      ios_signing:
+        distribution_type: ad_hoc
+        bundle_identifier: com.ages.explorer
+      node: 20
+      xcode: latest
+      cocoapods: default
+      groups:
+        - AGES Explorer Production
+        - AGES Explorer Ad Hoc Test
+      vars:
+        XCODE_WORKSPACE: ios/App/App.xcworkspace
+        XCODE_SCHEME: App
+        VITE_BASE44_APP_ID: 6a2dfe40e73c2bacfe73eeb1
+        VITE_BASE44_APP_BASE_URL: https://accessible-ghost-exploration-solutions.base44.app
+    scripts:
+      - name: Verify required Ad Hoc device identifiers
+        script: |
+          set +x
+          set -eu
+          # Never print environment values or the required device identifiers.
+          node --input-type=module <<'NODE'
+          const first = process.env.AGES_ADHOC_REQUIRED_UDID_1 || '';
+          const second = process.env.AGES_ADHOC_REQUIRED_UDID_2 || '';
+          const valid = value => (value.length === 40 || value.length === 25) &&
+            !/[^0-9a-fA-F-]/.test(value) && /^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{8}-[0-9a-fA-F]{16})$/.test(value);
+          if (!valid(first) || !valid(second) || first.toLowerCase() === second.toLowerCase()) {
+            console.error('Both required UDID variables must contain distinct valid iPhone/iPad identifiers.');
+            process.exit(1);
+          }
+          NODE
+      - name: Install npm dependencies
+        script: npm ci
+      - name: Build the existing Vite app
+        script: npm run build
+      - name: Sync the existing web app into Capacitor iOS
+        script: npx cap sync ios
+      - name: Install iOS CocoaPods dependencies
+        script: |
+          cd "$CM_BUILD_DIR/ios/App"
+          pod install
+      - name: Set up Ad Hoc code signing on the Xcode project
+        script: |
+          cd "$CM_BUILD_DIR"
+          xcode-project use-profiles
+      - name: Verify the native iOS modules are linked
+        script: |
+          set -eu
+          cd "$CM_BUILD_DIR/ios/App"
+          for MODULE in AgesSensorsPlugin AgesDepthPlugin AgesSaveToDevicePlugin; do
+            COUNT="$(grep -c "$MODULE.swift in Sources" App.xcodeproj/project.pbxproj || true)"
+            echo "$MODULE.swift in Sources entries: $COUNT"
+            test "$COUNT" -ge 1 || {
+              echo "$MODULE.swift is not linked into the App target. Failing the Ad Hoc build."
+              exit 1
+            }
+          done
+      - name: Verify the iOS native plugin bridge registration
+        script: |
+          cd "$CM_BUILD_DIR"
+          npm run verify:native-plugins
+      - name: Build the signed Ad Hoc IPA without changing the build number
+        script: |
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --config Release \
+            --ipa-directory "$CM_BUILD_DIR/build/ios/ipa"
+      - name: Verify Ad Hoc IPA metadata and embedded provisioning
+        script: |
+          set +x
+          set -eu
+          EXPECTED_UDID_1="${AGES_ADHOC_REQUIRED_UDID_1:-}"
+          EXPECTED_UDID_2="${AGES_ADHOC_REQUIRED_UDID_2:-}"
+          # Accept legacy 40-hex and current 8-hex/16-hex hyphenated UDIDs.
+          # Length checks also reject multiline values; do not echo either ID.
+          for REQUIRED_UDID in "$EXPECTED_UDID_1" "$EXPECTED_UDID_2"; do
+            case "$REQUIRED_UDID" in
+              *[!0123456789ABCDEFabcdef-]*) echo "A required UDID has an invalid format."; exit 1 ;;
+            esac
+            case "${#REQUIRED_UDID}" in
+              40|25) ;;
+              *) echo "A required UDID is missing or invalid."; exit 1 ;;
+            esac
+            printf '%s\n' "$REQUIRED_UDID" | /usr/bin/grep -E -x -q '([0-9A-Fa-f]{40}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16})' || {
+              echo "A required UDID has an invalid format."
+              exit 1
+            }
+          done
+          NORMALIZED_1="$(printf '%s' "$EXPECTED_UDID_1" | /usr/bin/tr '[:upper:]' '[:lower:]')"
+          NORMALIZED_2="$(printf '%s' "$EXPECTED_UDID_2" | /usr/bin/tr '[:upper:]' '[:lower:]')"
+          [ "$NORMALIZED_1" != "$NORMALIZED_2" ] || { echo "The two required UDIDs must be distinct."; exit 1; }
+          IPA_DIR="$CM_BUILD_DIR/build/ios/ipa"
+          IPA="$(ls "$IPA_DIR"/*.ipa 2>/dev/null | head -n 1 || true)"
+          test -n "$IPA" && test -f "$IPA" || { echo "No Ad Hoc IPA found in $IPA_DIR."; exit 1; }
+          TMP_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TMP_DIR"' EXIT
+          /usr/bin/unzip -o -q "$IPA" -d "$TMP_DIR"
+          APP_PLIST="$(ls "$TMP_DIR"/Payload/*.app/Info.plist 2>/dev/null | head -n 1 || true)"
+          test -n "$APP_PLIST" && test -f "$APP_PLIST" || { echo "The IPA contains no app Info.plist."; exit 1; }
+          APP_DIR="$(dirname "$APP_PLIST")"
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PLIST")"
+          SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PLIST")"
+          BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PLIST")"
+          [ "$BUNDLE_ID" = "com.ages.explorer" ] || { echo "Unexpected IPA bundle identifier."; exit 1; }
+          [ "$SHORT_VERSION" = "1.0" ] || { echo "Unexpected IPA marketing version."; exit 1; }
+          [ "$BUNDLE_VERSION" = "35" ] || { echo "Expected the unchanged build number 35."; exit 1; }
+          /usr/bin/codesign --verify --deep --strict "$APP_DIR"
+          test -f "$APP_DIR/embedded.mobileprovision" || { echo "The IPA has no embedded provisioning profile."; exit 1; }
+          PROFILE="$TMP_DIR/adhoc-profile.plist"
+          /usr/bin/security cms -D -i "$APP_DIR/embedded.mobileprovision" > "$PROFILE"
+          /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices:0' "$PROFILE" >/dev/null 2>&1 || {
+            echo "The profile has no registered devices. An Ad Hoc profile is required."
+            exit 1
+          }
+          ALL_DEVICES="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$PROFILE" 2>/dev/null || true)"
+          DEBUG_ALLOWED="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$PROFILE" 2>/dev/null || true)"
+          [ "$ALL_DEVICES" != "true" ] || { echo "Enterprise provisioning is not permitted."; exit 1; }
+          [ "$DEBUG_ALLOWED" = "false" ] || { echo "A distribution profile, not a development profile, is required."; exit 1; }
+          RAW_DEVICES="$TMP_DIR/profile-devices.raw"
+          DEVICE_LIST="$TMP_DIR/profile-devices.txt"
+          /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$PROFILE" > "$RAW_DEVICES" 2>/dev/null || {
+            echo "Could not read the profile's registered-device list."
+            exit 1
+          }
+          /usr/bin/sed '1d;$d;s/^[[:space:]]*//;s/[[:space:]]*$//' "$RAW_DEVICES" > "$DEVICE_LIST"
+          test -s "$DEVICE_LIST" || { echo "The profile has no registered devices."; exit 1; }
+          for REQUIRED_UDID in "$EXPECTED_UDID_1" "$EXPECTED_UDID_2"; do
+            /usr/bin/grep -F -x -q "$REQUIRED_UDID" "$DEVICE_LIST" || {
+              echo "The embedded Ad Hoc profile is missing a required designated device."
+              exit 1
+            }
+          done
+          echo "Ad Hoc IPA verified: com.ages.explorer 1.0 (35); both required devices are present."
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log

@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
@@ -14,6 +14,7 @@ import HauntedMusic from '@/components/HauntedMusic';
 import PageLoader from '@/components/PageLoader';
 import { Navigate } from 'react-router-dom';
 import { initializeAdMob } from '@/lib/adService';
+import { Capacitor } from '@capacitor/core';
 // Lazy page imports — loaded on-demand for smaller initial bundle
 const PageNotFound = lazy(() => import('./lib/PageNotFound'));
 const Login = lazy(() => import('@/pages/Login'));
@@ -49,9 +50,33 @@ const PlanAnalysis = lazy(() => import('@/pages/PlanAnalysis'));
 // Routes that must stay publicly reachable without an authenticated session,
 // even when the global auth flow (authError 'auth_required') would otherwise
 // redirect every route to login. The Privacy Policy must be open to anonymous
-// visitors (App Store / Google Play policy-link requirement); every other
-// route keeps the existing authentication behavior.
+// visitors (App Store / Google Play policy-link requirement). Native auth screens
+// must also remain reachable to recover an expired session inside the shell.
 const PUBLIC_ROUTES = new Set(['/privacy']);
+const NATIVE_AUTH_ROUTES = new Set(['/login', '/register', '/forgot-password', '/reset-password']);
+
+function PostLogoutNotice() {
+  const { pathname } = useLocation();
+  const [notice, setNotice] = useState(null);
+
+  useEffect(() => {
+    if ((pathname.replace(/\/+$/, '') || '/') !== '/login') return;
+    try {
+      const result = sessionStorage.getItem('ages_account_delete_notice');
+      if (result !== 'verified' && result !== 'unverified') return;
+      sessionStorage.removeItem('ages_account_delete_notice');
+      setNotice(result);
+    } catch { /* Settings shows the notice before logout if storage is unavailable. */ }
+  }, [pathname]);
+
+  if (!notice || (pathname.replace(/\/+$/, '') || '/') !== '/login') return null;
+  return (
+    <div role="status" className="border-b border-border bg-card p-4 text-sm text-foreground text-pretty">
+      The account-record request completed, but complete removal of related records and uploaded files has not been verified. Downloaded and shared tour content has been kept.
+      {notice === 'unverified' && ' Local saved-tour account association cleanup could not be verified.'}
+    </div>
+  );
+}
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, isAuthenticated } = useAuth();
@@ -105,9 +130,17 @@ const AuthenticatedApp = () => {
       // Redirect to login automatically — except on public routes, which
       // render anonymously below. Trailing slashes are normalized so
       // "/privacy/" stays public too.
-      if (!PUBLIC_ROUTES.has(location.pathname.replace(/\/+$/, '') || '/')) {
-        navigateToLogin();
-        return null;
+      const pathname = location.pathname.replace(/\/+$/, '') || '/';
+      if (!PUBLIC_ROUTES.has(pathname)) {
+        if (Capacitor.isNativePlatform()) {
+          // Recover inside either native shell without reopening hosted login.
+          if (!NATIVE_AUTH_ROUTES.has(pathname)) {
+            return <Navigate to="/login" replace />;
+          }
+        } else {
+          navigateToLogin();
+          return null;
+        }
       }
     }
   }
@@ -170,6 +203,7 @@ function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <ScrollToTop />
+          <PostLogoutNotice />
           <ErrorBoundary>
             <AuthenticatedApp />
           </ErrorBoundary>

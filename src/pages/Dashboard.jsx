@@ -596,7 +596,6 @@ export default function Dashboard() {
         ) : null}
       />
       <div className="px-4 pb-28 space-y-5 pt-3">
-
         {/* ── Current Plan Card ── */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
