@@ -17,6 +17,7 @@ import { setMusicSettings } from '@/lib/hauntedAudio';
 import { setLocationTrackingEnabled } from '@/lib/deviceCapabilities';
 import DeviceVoicePicker from '@/components/DeviceVoicePicker';
 import DashboardNarrationIndicator from '@/components/DashboardNarrationIndicator';
+import { useAuth } from '@/lib/AuthContext';
 
 const defaultSettings = {
   backgroundMusic: true,
@@ -31,6 +32,7 @@ const defaultSettings = {
 };
 
 export default function Settings() {
+  const { logout } = useAuth();
   const [settings, setSettings] = useState(defaultSettings);
   const [loaded, setLoaded] = useState(false);
   const [user, setUser] = useState(null);
@@ -343,7 +345,7 @@ export default function Settings() {
           if (open) { setDeleteOpen(true); return; }
           // After a successful deletion the account is already gone, so closing
           // the dialog signs out rather than leaving a dead session on screen.
-          if (deleteDone) { base44.auth.logout('/login'); return; }
+          if (deleteDone) { logout(true, '/login'); return; }
           setDeleteError(null);
           setDeleteOpen(false);
         }}
@@ -361,7 +363,7 @@ export default function Settings() {
                 Purchase, subscription, and rewarded-ad audit records are retained as described in the Privacy Policy. An active App Store or Google Play subscription is not cancelled by deleting your account.
               </p>
               <DialogFooter>
-                <Button variant="destructive" onClick={() => base44.auth.logout('/login')}>Sign Out</Button>
+                <Button variant="destructive" onClick={() => logout(true, '/login')}>Sign Out</Button>
               </DialogFooter>
             </>
           ) : (
