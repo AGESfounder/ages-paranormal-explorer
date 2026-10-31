@@ -155,6 +155,10 @@
         }
       }
     },
+    "verification_photo_by_id": {
+      "type": "string",
+      "description": "User ID of the person who uploaded this stop's reference photo. Tracked separately from verified_by_id (who validated the coordinates), because any investigator can add a photo to an already-validated stop. Account deletion clears the photo only for the uploader, so a photo contributed by someone else survives the validator leaving; empty means the photo predates this field and is attributed to the validator."
+    },
     "has_verification_photo": {
       "type": "boolean",
       "default": false,

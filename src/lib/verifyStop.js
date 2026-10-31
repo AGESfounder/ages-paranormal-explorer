@@ -45,6 +45,10 @@ export async function verifyStopLocation(stopId, tourId, latitude, longitude, us
   if (photoUri) {
     update.verification_photo_uri = photoUri;
     update.has_verification_photo = true;
+    // Record who supplied the photo. This is tracked separately from the
+    // validator (verified_by_id) so account deletion can clear only the photos
+    // that person actually contributed.
+    update.verification_photo_by_id = userId;
     // Clear any legacy public photo so the old one can't keep displaying in
     // place of the replacement (and stops being reachable at a permanent URL).
     update.verification_photo_url = '';

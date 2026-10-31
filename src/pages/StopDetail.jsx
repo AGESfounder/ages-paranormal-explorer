@@ -599,7 +599,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
   // stops don't need GPS re-validation — just persist the new private photo URI.
   const handleAddPhoto = async (photoUri) => {
     try {
-      await base44.entities.TourStop.update(stop.id, { verification_photo_uri: photoUri, has_verification_photo: true, verification_photo_url: '' });
+      // Stamp the uploader separately from the stop's validator: a photo added by
+      // another investigator is theirs, and must survive the validator leaving.
+      await base44.entities.TourStop.update(stop.id, { verification_photo_uri: photoUri, has_verification_photo: true, verification_photo_by_id: user?.id, verification_photo_url: '' });
       invalidateSignedMedia('stop_photo', stop.id);
       setStop(prev => ({ ...prev, verification_photo_uri: photoUri, has_verification_photo: true, verification_photo_url: '' }));
       toast({ title: 'Photo Added', description: 'The stop photo has been updated.' });

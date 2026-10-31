@@ -77,7 +77,7 @@ export function sanitizeStopRecord(stop) {
     if (people.length) out.people = people;
   }
 
-  for (const field of ['tour_id', 'image_url', 'verified_by_id', 'verification_photo_url', 'verification_photo_uri', 'verified_date']) {
+  for (const field of ['tour_id', 'image_url', 'verified_by_id', 'verification_photo_url', 'verification_photo_uri', 'verification_photo_by_id', 'verified_date']) {
     const value = asText(stop[field]);
     if (value) out[field] = value;
   }

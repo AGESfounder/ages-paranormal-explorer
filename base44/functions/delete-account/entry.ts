@@ -35,14 +35,29 @@ Deno.serve(async (req) => {
     // user, so created_by_id never matches them. Clear the photo fields only and
     // keep latitude, longitude, user_verified and verified_by_id so tour building,
     // address correction and route ordering behave exactly as before.
+    //
+    // Photos are cleared by UPLOADER, not by validator: verification_photo_by_id
+    // records who supplied the picture, while verified_by_id records who confirmed
+    // the coordinates. A photo another investigator added to a stop this user
+    // validated is theirs and must survive this deletion. Photos saved before the
+    // uploader field existed have no uploader, so they fall back to the validator
+    // — the attribution they had before this split.
     try {
-      const stops = await base44.asServiceRole.entities.TourStop.filter({ verified_by_id: user.id });
-      for (const stop of stops) {
+      const [byPhotoOwner, byValidator] = await Promise.all([
+        base44.asServiceRole.entities.TourStop.filter({ verification_photo_by_id: user.id }),
+        base44.asServiceRole.entities.TourStop.filter({ verified_by_id: user.id }),
+      ]);
+      const candidates = new Map<string, any>();
+      for (const stop of [...byPhotoOwner, ...byValidator]) candidates.set(stop.id, stop);
+      for (const stop of candidates.values()) {
         if (!stop.verification_photo_uri && !stop.verification_photo_url && !stop.has_verification_photo) continue;
+        const legacyOwner = !stop.verification_photo_by_id && stop.verified_by_id === user.id;
+        if (stop.verification_photo_by_id !== user.id && !legacyOwner) continue;
         await base44.asServiceRole.entities.TourStop.update(stop.id, {
           verification_photo_uri: '',
           verification_photo_url: '',
           has_verification_photo: false,
+          verification_photo_by_id: '',
         });
       }
     } catch (e) {
