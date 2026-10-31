@@ -229,16 +229,16 @@ for (const plugin of ['AgesSensorsPlugin', 'AgesDepthPlugin', 'AgesSaveToDeviceP
 
 // ── 8. Protected version guards (regression tripwires only — nothing here edits)
 const androidGradle = read('android/app/build.gradle');
-check('Android test build is versionCode 30', !!androidGradle && androidGradle.includes('versionCode 30'));
+check('Android test build is versionCode 31', !!androidGradle && androidGradle.includes('versionCode 31'));
 const appConfigurationList = objects.find((object) => /isa = XCConfigurationList;/.test(object.body) && appTarget?.body.includes(`buildConfigurationList = ${object.id} `));
 const appConfigurations = objects.filter((object) => /isa = XCBuildConfiguration;/.test(object.body) && appConfigurationList?.body.includes(object.id));
 check('App target has Debug and Release build configurations', appConfigurations.length === 2 && ['Debug', 'Release'].every((name) => appConfigurations.some((object) => object.body.includes(`name = ${name};`))));
 for (const name of ['Debug', 'Release']) {
   const settings = appConfigurations.find((object) => object.body.includes(`name = ${name};`))?.body ?? '';
-  check(`iOS ${name} is com.ages.explorer 1.0 (35)`, /CURRENT_PROJECT_VERSION = 35;/.test(settings) && /MARKETING_VERSION = 1\.0;/.test(settings) && /PRODUCT_BUNDLE_IDENTIFIER = com\.ages\.explorer;/.test(settings));
+  check(`iOS ${name} is com.ages.explorer 1.0 (36)`, /CURRENT_PROJECT_VERSION = 36;/.test(settings) && /MARKETING_VERSION = 1\.0;/.test(settings) && /PRODUCT_BUNDLE_IDENTIFIER = com\.ages\.explorer;/.test(settings));
 }
 const codemagic = read('codemagic.yaml') ?? '';
-check('iOS has exactly two Build 35 stamps and Codemagic stamps/guards the same build', (pbxproj?.match(/CURRENT_PROJECT_VERSION = 35;/g) ?? []).length === 2 && (pbxproj?.match(/CURRENT_PROJECT_VERSION = [^;]+;/g) ?? []).length === 2 && codemagic.includes('agvtool new-version -all 35') && codemagic.includes('CURRENT_PROJECT_VERSION = 35;') && codemagic.includes('[ "$BUNDLE_VERSION" = "35" ]') && !/Build 34|CFBundleVersion 34|build number 34/.test(codemagic));
+check('iOS has exactly two Build 36 stamps and Codemagic stamps/guards the same build', (pbxproj?.match(/CURRENT_PROJECT_VERSION = 36;/g) ?? []).length === 2 && (pbxproj?.match(/CURRENT_PROJECT_VERSION = [^;]+;/g) ?? []).length === 2 && codemagic.includes('agvtool new-version -all 36') && codemagic.includes('CURRENT_PROJECT_VERSION = 36;') && codemagic.includes('[ "$BUNDLE_VERSION" = "36" ]') && !/Build 34|CFBundleVersion 34|build number 34/.test(codemagic));
 
 // ── Report
 const width = Math.max(...results.map((r) => r.label.length));
