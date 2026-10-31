@@ -26,7 +26,7 @@ const SECTIONS = [
   },
   {
     h: 'Purchases',
-    p: 'The App does not include an in-app store. Product merchandise is offered through external, out-of-app storefronts (such as our eBay store); those purchases are completed directly with the seller and governed by that storefront\'s terms and applicable law. Digital subscriptions, if offered, are billed through the platform (Apple App Store / Google Play) and governed by Apple\'s and Google\'s respective terms and applicable law.',
+    p: 'The App does not include an in-app store. Merchandise is offered through our external eBay store (ebay.com/usr/ages4you), which opens outside the App; those purchases are completed directly with the seller and governed by eBay\'s terms and applicable law. Subscriptions, one-time access, and in-app energy bundles are purchased through the Apple App Store or Google Play and are governed by Apple\'s and Google\'s respective terms and applicable law.',
   },
   {
     h: 'Account Termination',
@@ -54,7 +54,7 @@ export default function TermsOfService() {
         <div className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-card/40">
           <ScrollText className="w-6 h-6 text-primary shrink-0" />
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Last updated: July 2026. These terms govern your use of AGES Paranormal Explorer.
+            Last updated: October 31, 2026. These terms govern your use of AGES Paranormal Explorer.
           </p>
         </div>
         {SECTIONS.map((s) => (
