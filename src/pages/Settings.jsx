@@ -354,7 +354,7 @@ export default function Settings() {
               <DialogHeader>
                 <DialogTitle>Your account has been deleted</DialogTitle>
                 <DialogDescription>
-                  Your profile and the data you authored have been removed from AGES Explorer. Media tied to your evidence and stop verifications is no longer accessible in the app.
+                  Your account profile has been permanently deleted, and the records you authored have been removed from AGES Explorer. Media tied to your evidence and stop verifications is no longer accessible in the app. Deleted records may remain recoverable in the platform&apos;s trash for up to 30 days.
                 </DialogDescription>
               </DialogHeader>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -369,26 +369,32 @@ export default function Settings() {
               <DialogHeader>
                 <DialogTitle>Delete your account?</DialogTitle>
                 <DialogDescription>
-                  This permanently deletes your AGES account. It cannot be undone, and there is no recovery period.
+                  Your account profile is permanently deleted immediately and cannot be restored. The records you authored are removed from the app at the same time.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 text-[11px] text-muted-foreground leading-relaxed">
                 <div>
                   <p className="text-xs text-foreground font-medium mb-1">Deleted immediately</p>
                   <p>
-                    Your profile, plus the data you authored: evidence entries and their photos, videos and recordings, stop verification photos, Explorer Reports, reports, favorites, investigations, saved tours, community amenities, energy balances, AI generation receipts, and tool diagnostics.
+                    Your account profile is permanently deleted by this in-app process. It cannot be restored.
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-foreground font-medium mb-1">No longer accessible</p>
+                  <p className="text-xs text-foreground font-medium mb-1">Removed from the app</p>
                   <p>
-                    Your evidence and stop verification media become inaccessible and unfindable through the app, and no link to them can be created.
+                    The data you authored: evidence entries and their photos, videos and recordings, stop verification photos, Explorer Reports, reports, favorites, investigations, saved tours, community amenities, energy balances, AI generation receipts, and tool diagnostics. These records are removed from the app immediately, but they may remain recoverable in the platform&apos;s trash for up to 30 days before permanent erasure.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-foreground font-medium mb-1">Media no longer accessible</p>
+                  <p>
+                    Your evidence and stop verification media becomes inaccessible and unfindable through AGES Explorer once its records are deleted, and no link to it can be created. AGES Explorer treats that media as deleted.
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-foreground font-medium mb-1">Kept</p>
                   <p>
-                    Purchase, subscription and transaction records, and rewarded-ad audit records, are retained for accounting, tax and fraud-prevention reasons. Deleted database records may sit in the platform&apos;s trash for up to 30 days; backups and logs follow their own retention schedules in the Privacy Policy.
+                    Purchase, subscription and transaction records, and rewarded-ad audit records, are retained for accounting, tax and fraud-prevention reasons. Backups and logs follow their own retention schedules described in the Privacy Policy.
                   </p>
                 </div>
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5">
