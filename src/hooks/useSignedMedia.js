@@ -27,9 +27,16 @@ export async function fetchSignedMedia(kind, id, { force = false } = {}) {
   return entry;
 }
 
-/** Forget a record's link — used when the record itself is deleted. */
+// Mounted viewers listen here so a record whose media was replaced (a stop
+// photo) drops the stale link and asks for the new one immediately, instead of
+// showing the previous file until the page reloads.
+const listeners = new Set();
+
+/** Forget a record's link — used when its media is deleted or replaced. */
 export function invalidateSignedMedia(kind, id) {
-  cache.delete(keyOf(kind, id));
+  const key = keyOf(kind, id);
+  cache.delete(key);
+  listeners.forEach((notify) => notify(key));
 }
 
 /**
@@ -63,6 +70,14 @@ export default function useSignedMedia({ kind = 'evidence', id, enabled = true, 
       cancelled = true;
     };
   }, [kind, id, enabled, legacyUrl, attempt]);
+
+  // This record's media was replaced: refetch instead of showing the old file.
+  useEffect(() => {
+    const key = keyOf(kind, id);
+    const notify = (changed) => { if (changed === key) setAttempt((n) => n + 1); };
+    listeners.add(notify);
+    return () => { listeners.delete(notify); };
+  }, [kind, id]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 

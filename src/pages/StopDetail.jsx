@@ -26,6 +26,7 @@ import { verifyStopLocation, placeStopLocation } from '@/lib/verifyStop';
 import { parkingDisplay } from '@/lib/parkingLabel';
 import StopVerificationPhoto from '@/components/StopVerificationPhoto';
 import EvidenceMedia from '@/components/EvidenceMedia';
+import { invalidateSignedMedia } from '@/hooks/useSignedMedia';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
@@ -475,7 +476,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
       }
       verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id, photoUri)
         .then((result) => {
-          setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false, ...(photoUri ? { verification_photo_uri: photoUri, has_verification_photo: true } : {}) }));
+          // A new photo means the cached link still points at the previous one.
+          if (photoUri) invalidateSignedMedia('stop_photo', stop.id);
+          setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false, ...(photoUri ? { verification_photo_uri: photoUri, has_verification_photo: true, verification_photo_url: '' } : {}) }));
           autoNameParking(latitude, longitude);
           toast({
             title: 'Vantage Point Marked!',
@@ -596,8 +599,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
   // stops don't need GPS re-validation — just persist the new private photo URI.
   const handleAddPhoto = async (photoUri) => {
     try {
-      await base44.entities.TourStop.update(stop.id, { verification_photo_uri: photoUri, has_verification_photo: true });
-      setStop(prev => ({ ...prev, verification_photo_uri: photoUri, has_verification_photo: true }));
+      await base44.entities.TourStop.update(stop.id, { verification_photo_uri: photoUri, has_verification_photo: true, verification_photo_url: '' });
+      invalidateSignedMedia('stop_photo', stop.id);
+      setStop(prev => ({ ...prev, verification_photo_uri: photoUri, has_verification_photo: true, verification_photo_url: '' }));
       toast({ title: 'Photo Added', description: 'The stop photo has been updated.' });
     } catch (e) {
       toast({ title: 'Update Failed', description: e?.message || 'Please try again.', variant: 'destructive' });

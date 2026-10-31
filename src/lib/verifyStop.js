@@ -45,6 +45,9 @@ export async function verifyStopLocation(stopId, tourId, latitude, longitude, us
   if (photoUri) {
     update.verification_photo_uri = photoUri;
     update.has_verification_photo = true;
+    // Clear any legacy public photo so the old one can't keep displaying in
+    // place of the replacement (and stops being reachable at a permanent URL).
+    update.verification_photo_url = '';
   }
   await base44.entities.TourStop.update(stopId, update);
 
