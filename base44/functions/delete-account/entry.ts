@@ -1,29 +1,81 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
 
+// Tables whose rows belong to the deleting user, purged before the account is
+// removed (App Store guideline 5.1.1(v)). Order rows hold shipping details and
+// are purged as before. Billing ledgers (Base44Purchase, RevenueCatPurchase) and
+// AdMob audit records are deliberately NOT listed: they are retained for
+// accounting, tax, and fraud reasons.
+const OWNER_TABLES = [
+  'Evidence',
+  'StopComment',
+  'Report',
+  'Favorite',
+  'Investigation',
+  'Order',
+  'SavedTour',
+  'TourAmenity',
+  'DepthCameraDiagnostic',
+];
+
+// Server-owned tables keyed by user_id rather than created_by_id.
+const USER_ID_TABLES = [
+  'EnergyAccount',
+  'AiOperation',
+];
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Per App Store guideline 5.1.1(v), deleting an account must also delete the
-    // data associated with it. Service role has full access, so we purge every
-    // entity the user may have authored before removing the user record itself.
-    // Each purge is best-effort: a failure in one collection must not stop the
-    // others (or the account deletion) from completing.
-    const purge = (entityName: string) =>
-      base44.asServiceRole.entities[entityName]
-        .deleteMany({ created_by_id: user.id })
-        .catch((e) => console.error(`delete-account: purge ${entityName} failed:`, e));
+    const failures: string[] = [];
 
-    await Promise.all([
-      purge('Evidence'),
-      purge('StopComment'),
-      purge('Report'),
-      purge('Favorite'),
-      purge('Investigation'),
-      purge('Order'),
-    ]);
+    // Stop verification photos live on TourStop rows owned by the tour, not the
+    // user, so created_by_id never matches them. Clear the photo fields only and
+    // keep latitude, longitude, user_verified and verified_by_id so tour building,
+    // address correction and route ordering behave exactly as before.
+    try {
+      const stops = await base44.asServiceRole.entities.TourStop.filter({ verified_by_id: user.id });
+      for (const stop of stops) {
+        if (!stop.verification_photo_uri && !stop.verification_photo_url && !stop.has_verification_photo) continue;
+        await base44.asServiceRole.entities.TourStop.update(stop.id, {
+          verification_photo_uri: '',
+          verification_photo_url: '',
+          has_verification_photo: false,
+        });
+      }
+    } catch (e) {
+      console.error('delete-account: clearing stop verification photos failed:', e);
+      failures.push('stop verification photos');
+    }
+
+    for (const entityName of OWNER_TABLES) {
+      try {
+        await base44.asServiceRole.entities[entityName].deleteMany({ created_by_id: user.id });
+      } catch (e) {
+        console.error(`delete-account: purge ${entityName} failed:`, e);
+        failures.push(entityName);
+      }
+    }
+
+    for (const entityName of USER_ID_TABLES) {
+      try {
+        await base44.asServiceRole.entities[entityName].deleteMany({ user_id: user.id });
+      } catch (e) {
+        console.error(`delete-account: purge ${entityName} failed:`, e);
+        failures.push(entityName);
+      }
+    }
+
+    // Never remove the profile while any personal data could not be cleared: a
+    // partial purge would orphan that data with no account left to retry from.
+    if (failures.length > 0) {
+      return Response.json({
+        error: `Account not deleted because some data could not be removed (${failures.join(', ')}). Please try again.`,
+        failed: failures,
+      }, { status: 500 });
+    }
 
     await base44.asServiceRole.entities.User.delete(user.id);
     return Response.json({ success: true });

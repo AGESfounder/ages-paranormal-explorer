@@ -84,6 +84,8 @@ export default function Settings() {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+  const [deleteDone, setDeleteDone] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
 
@@ -102,10 +104,18 @@ export default function Settings() {
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
+    setDeleteError(null);
     try {
-      await base44.functions.invoke('delete-account');
-      base44.auth.logout('/login');
+      const response = await base44.functions.invoke('delete-account');
+      if (!response?.data?.success) {
+        throw new Error(response?.data?.error || 'Deletion could not be completed.');
+      }
+      setDeleteDone(true);
     } catch (e) {
+      setDeleteError(
+        e?.response?.data?.error || e?.message || 'Deletion failed. Please try again.'
+      );
+    } finally {
       setDeleting(false);
     }
   };
@@ -311,23 +321,93 @@ export default function Settings() {
               <p className="text-sm text-foreground">Delete Account</p>
               <p className="text-[10px] text-muted-foreground">Permanently remove your account & sign out</p>
             </div>
-            <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>Delete</Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteDone(false);
+                setDeleteOpen(true);
+              }}
+            >
+              Delete
+            </Button>
           </div>
         </div>
       </div>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          if (deleting) return;
+          if (open) { setDeleteOpen(true); return; }
+          // After a successful deletion the account is already gone, so closing
+          // the dialog signs out rather than leaving a dead session on screen.
+          if (deleteDone) { base44.auth.logout('/login'); return; }
+          setDeleteError(null);
+          setDeleteOpen(false);
+        }}
+      >
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete your account?</DialogTitle>
-            <DialogDescription>This permanently removes your AGES account and all associated data. This action cannot be undone. You will be signed out immediately.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline" disabled={deleting}>Cancel</Button>
-            </DialogClose>
-            <Button variant="destructive" disabled={deleting} onClick={handleDeleteAccount}>{deleting ? 'Deleting…' : 'Delete Account'}</Button>
-          </DialogFooter>
+          {deleteDone ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Your account has been deleted</DialogTitle>
+                <DialogDescription>
+                  Your profile and the data you authored have been removed from AGES Explorer. Media tied to your evidence and stop verifications is no longer accessible in the app.
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Purchase, subscription, and rewarded-ad audit records are retained as described in the Privacy Policy. An active App Store or Google Play subscription is not cancelled by deleting your account.
+              </p>
+              <DialogFooter>
+                <Button variant="destructive" onClick={() => base44.auth.logout('/login')}>Sign Out</Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Delete your account?</DialogTitle>
+                <DialogDescription>
+                  This permanently deletes your AGES account. It cannot be undone, and there is no recovery period.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 text-[11px] text-muted-foreground leading-relaxed">
+                <div>
+                  <p className="text-xs text-foreground font-medium mb-1">Deleted immediately</p>
+                  <p>
+                    Your profile, plus the data you authored: evidence entries and their photos, videos and recordings, stop verification photos, Explorer Reports, reports, favorites, investigations, saved tours, community amenities, energy balances, AI generation receipts, and tool diagnostics.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-foreground font-medium mb-1">No longer accessible</p>
+                  <p>
+                    Your evidence and stop verification media become inaccessible and unfindable through the app, and no link to them can be created.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-foreground font-medium mb-1">Kept</p>
+                  <p>
+                    Purchase, subscription and transaction records, and rewarded-ad audit records, are retained for accounting, tax and fraud-prevention reasons. Deleted database records may sit in the platform&apos;s trash for up to 30 days; backups and logs follow their own retention schedules in the Privacy Policy.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5">
+                  <p className="text-[11px] text-amber-300 leading-relaxed">
+                    Deleting your account does not cancel an active Apple or Google subscription. To stop future charges, cancel it first in your Apple ID subscriptions (App Store) or Google Play subscriptions.
+                  </p>
+                </div>
+                {deleteError && <p className="text-[11px] text-destructive">{deleteError}</p>}
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline" disabled={deleting}>Cancel</Button>
+                </DialogClose>
+                <Button variant="destructive" disabled={deleting} onClick={handleDeleteAccount}>
+                  {deleting ? 'Deleting…' : deleteError ? 'Try Again' : 'Delete Account'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
