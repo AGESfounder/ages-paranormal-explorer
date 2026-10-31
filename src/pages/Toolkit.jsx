@@ -15,6 +15,7 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { getEffectivePlanId } from '@/lib/access';
 import { withAppleLedger } from '@/lib/appleLedger';
 import useAppResumeRefresh from '@/hooks/useAppResumeRefresh';
@@ -343,7 +344,7 @@ export default function Toolkit() {
       const file = Capacitor.getPlatform() === 'ios'
         ? new File([recordedBlob], `evp_session.${mediaExtension(recordedBlob, 'bin')}`, { type: recordedBlob.type })
         : new File([recordedBlob], 'evp_session.webm', { type: 'audio/webm' });
-      const uploadRes = await base44.integrations.Core.UploadFile({ file });
+      const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
       const date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
       const time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
@@ -370,7 +371,9 @@ export default function Toolkit() {
         type: 'evp',
         source_tool: 'recorder',
         description,
-        file_url: uploadRes.file_url,
+        media_uri: file_uri,
+        media_duration_seconds: duration_seconds,
+        has_media: true,
         date,
         time,
         is_private: isPrivate,

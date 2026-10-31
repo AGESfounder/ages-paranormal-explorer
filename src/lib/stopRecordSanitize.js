@@ -61,7 +61,7 @@ export function sanitizeStopRecord(stop) {
     if (allowed.includes(stop[field])) out[field] = stop[field];
   }
 
-  for (const field of ['same_structure', 'geocoded', 'needs_placement', 'user_verified']) {
+  for (const field of ['same_structure', 'geocoded', 'needs_placement', 'user_verified', 'has_verification_photo']) {
     if (typeof stop[field] === 'boolean') out[field] = stop[field];
   }
 
@@ -77,7 +77,7 @@ export function sanitizeStopRecord(stop) {
     if (people.length) out.people = people;
   }
 
-  for (const field of ['tour_id', 'image_url', 'verified_by_id', 'verification_photo_url', 'verified_date']) {
+  for (const field of ['tour_id', 'image_url', 'verified_by_id', 'verification_photo_url', 'verification_photo_uri', 'verified_date']) {
     const value = asText(stop[field]);
     if (value) out[field] = value;
   }

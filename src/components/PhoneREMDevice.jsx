@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Square, X, Video, AlertTriangle, Zap, Activity } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
@@ -632,7 +633,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       // GPS flow does NOT consume a daily evidence save.
       const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const file = new File([displayBlob], `rem_session.${ext}`, { type: displayBlob.type });
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
@@ -651,7 +652,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
         type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'rem',
         description: `Vibration Communicator session — ${formatDuration(sessionDuration)} — ${events.length} disturbance event(s) detected${events.length ? `, strongest peak ${Math.max(...events.map((e) => e.level))}` : ''}.${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
-        file_url,
+        media_uri: file_uri,
+        media_duration_seconds: duration_seconds,
+        has_media: true,
         date,
         time,
         is_private: isPrivate,

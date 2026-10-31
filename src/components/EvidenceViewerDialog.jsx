@@ -1,11 +1,16 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { MapPin, Calendar, User, Star, FileText } from 'lucide-react';
+import { MapPin, Calendar, User, Star } from 'lucide-react';
+import EvidenceMedia from '@/components/EvidenceMedia';
 
 const typeLabel = { evp: 'EVP', photo: 'Photograph', video: 'Video', note: 'Note' };
 
 export default function EvidenceViewerDialog({ evidence, authorName, open, onOpenChange }) {
   if (!evidence) return null;
+
+  // Private media is resolved to a short-lived signed URL by EvidenceMedia;
+  // legacy records still holding a public URL render that URL directly.
+  const hasMedia = !!(evidence.file_url || evidence.has_media);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -16,19 +21,23 @@ export default function EvidenceViewerDialog({ evidence, authorName, open, onOpe
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-heading">{typeLabel[evidence.type]}</p>
 
-          {evidence.file_url && evidence.type === 'photo' && (
-            <img src={evidence.file_url} alt={evidence.title} className="w-full rounded-lg border border-border/40" />
-          )}
-          {evidence.file_url && evidence.type === 'video' && (
-            <video src={evidence.file_url} controls className="w-full rounded-lg border border-border/40" />
-          )}
-          {evidence.file_url && evidence.type === 'evp' && (
-            <audio src={evidence.file_url} controls className="w-full" />
-          )}
-          {evidence.file_url && evidence.type === 'note' && (
-            <a href={evidence.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline flex items-center gap-1">
-              <FileText className="w-3 h-3" /> View attached file
-            </a>
+          {hasMedia && (
+            <EvidenceMedia
+              recordId={evidence.id}
+              mediaType={evidence.type}
+              legacyUrl={evidence.file_url}
+              lazy={false}
+              alt={evidence.title}
+              className={
+                evidence.type === 'photo'
+                  ? 'w-full rounded-lg border border-border/40'
+                  : evidence.type === 'video'
+                    ? 'w-full rounded-lg border border-border/40'
+                    : evidence.type === 'evp'
+                      ? 'w-full'
+                      : 'text-xs text-primary underline flex items-center gap-1'
+              }
+            />
           )}
 
           {evidence.description && (

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Library, MapPin, Play, Square, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle, Camera, Layers } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { paidGenerate } from '@/lib/paidAi';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { toast } from '@/components/ui/use-toast';
@@ -606,7 +607,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       // GPS flow does NOT consume a daily evidence save.
       const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const file = new File([displayBlob], `term_bank_session.${ext}`, { type: displayBlob.type });
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
@@ -632,7 +633,9 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'termbank',
         description: `Term Sweeper session at ${locationLabel} — ${formatDuration(sessionDuration)} — ${captured.length} term(s) captured via environment trigger: ${captured.map(c => c.word).join(', ') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (${trigger.lastMethod === 'depth' ? 'depth sensor' : 'camera'}).${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
-        file_url,
+        media_uri: file_uri,
+        media_duration_seconds: duration_seconds,
+        has_media: true,
         date,
         time,
         is_private: isPrivate,

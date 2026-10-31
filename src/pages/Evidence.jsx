@@ -13,6 +13,9 @@ import PageContainer from '../components/PageContainer';
 import NavBar from '../components/NavBar';
 import SectionHeader from '../components/SectionHeader';
 import { base44 } from '@/api/base44Client';
+import { uploadPrivateMedia } from '@/lib/privateMedia';
+import { invalidateSignedMedia } from '@/hooks/useSignedMedia';
+import EvidenceMedia from '@/components/EvidenceMedia';
 import PullToRefresh from '@/components/PullToRefresh';
 import BePatient from '@/components/BePatient';
 import EvidenceMiniMap from '@/components/EvidenceMiniMap';
@@ -94,6 +97,9 @@ export default function Evidence() {
     time: initialTime,
     equipment: [],
     file_url: '',
+    media_uri: '',
+    media_duration_seconds: null,
+    has_media: false,
     activity_level: 0,
     emf_activity: 0,
     evp_quality: 0,
@@ -161,8 +167,8 @@ export default function Evidence() {
     if (!file) return;
     setUploading(true);
     try {
-      const result = await base44.integrations.Core.UploadFile({ file });
-      setForm(prev => ({ ...prev, file_url: result.file_url }));
+      const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
+      setForm(prev => ({ ...prev, media_uri: file_uri, media_duration_seconds: duration_seconds, has_media: true }));
     } catch (err) {
       console.error('Upload failed', err);
     }
@@ -255,6 +261,9 @@ export default function Evidence() {
       time: initialTime,
       equipment: [],
       file_url: '',
+      media_uri: '',
+      media_duration_seconds: null,
+      has_media: false,
       activity_level: 0,
       emf_activity: 0,
       evp_quality: 0,
@@ -290,6 +299,12 @@ export default function Evidence() {
     }
 
     const payload = { ...form };
+    // Only send the private-media fields when something was actually uploaded.
+    if (!payload.media_uri) {
+      delete payload.media_uri;
+      delete payload.media_duration_seconds;
+      delete payload.has_media;
+    }
     if (payload.equipment.includes('Other') && otherDeviceText.trim()) {
       payload.equipment = payload.equipment.map(e => e === 'Other' ? 'Other: ' + otherDeviceText.trim() : e);
     }
@@ -346,7 +361,7 @@ export default function Evidence() {
         : await base44.entities.Evidence.filter({ stop_id: stopId }, '-created_date');
       setStopEvidences(stopData);
     } else {
-      setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0, latitude: '', longitude: '', location_source: '', is_private: true });
+      setForm({ title: '', type: 'note', description: '', tour_id: '', stop_id: '', location_name: '', date: '', time: '', equipment: [], file_url: '', media_uri: '', media_duration_seconds: null, has_media: false, activity_level: 0, emf_activity: 0, evp_quality: 0, personal_experience: 0, latitude: '', longitude: '', location_source: '', is_private: true });
       setOtherDeviceText('');
       setEquipmentOpen(false);
       setShowForm(false);
@@ -356,6 +371,8 @@ export default function Evidence() {
 
   const handleDelete = async (id) => {
     await base44.entities.Evidence.delete(id);
+    // A deleted record must never hand out another link to its media.
+    invalidateSignedMedia('evidence', id);
     if (cameFromStop) {
       const me = await base44.auth.me().catch(() => null);
       const stopData = me?.id
@@ -530,11 +547,11 @@ export default function Evidence() {
           <div>
             <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Upload Evidence File</label>
             <input ref={fileInputRef} type="file" onChange={handleFileUpload} accept="image/*,video/*,audio/*" className="hidden" />
-            {form.file_url ? (
+            {form.media_uri ? (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
                 <Check className="w-4 h-4 text-primary" />
                 <span className="text-xs text-primary flex-1 truncate">File uploaded</span>
-                <button onClick={() => setForm({...form, file_url: ''})} className="p-1 text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+                <button onClick={() => setForm({...form, media_uri: '', media_duration_seconds: null, has_media: false})} className="p-1 text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
               </div>
             ) : (
               <button
@@ -624,17 +641,23 @@ export default function Evidence() {
                         <button onClick={() => handleDelete(e.id)} className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                       {e.description && <p className="text-log text-xs text-foreground/60 mt-2 ml-3 leading-relaxed">{e.description}</p>}
-                      {e.file_url && (
+                      {(e.file_url || e.has_media) && (
                         <div className="mt-2 ml-3">
-                          {e.type === 'photo' ? (
-                            <img src={e.file_url} alt={e.title} className="w-full max-h-48 object-cover rounded-lg" />
-                          ) : e.type === 'video' ? (
-                            <video src={e.file_url} controls className="w-full max-h-48 rounded-lg" />
-                          ) : e.type === 'evp' ? (
-                            <audio src={e.file_url} controls className="w-full" />
-                          ) : (
-                            <a href={e.file_url} target="_blank" rel="noreferrer" className="text-xs text-primary underline">View Attachment</a>
-                          )}
+                          <EvidenceMedia
+                            recordId={e.id}
+                            mediaType={e.type}
+                            legacyUrl={e.file_url}
+                            alt={e.title}
+                            className={
+                              e.type === 'photo'
+                                ? 'w-full max-h-48 object-cover rounded-lg'
+                                : e.type === 'video'
+                                  ? 'w-full max-h-48 rounded-lg'
+                                  : e.type === 'evp'
+                                    ? 'w-full'
+                                    : 'text-xs text-primary underline'
+                            }
+                          />
                         </div>
                       )}
                       <button
@@ -766,11 +789,11 @@ export default function Evidence() {
           <div>
             <label className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground block mb-1">Upload Evidence File</label>
             <input ref={fileInputRef} type="file" onChange={handleFileUpload} accept="image/*,video/*,audio/*" className="hidden" />
-            {form.file_url ? (
+            {form.media_uri ? (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
                 <Check className="w-4 h-4 text-primary" />
                 <span className="text-xs text-primary flex-1 truncate">File uploaded</span>
-                <button onClick={() => setForm({...form, file_url: ''})} className="p-1 text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+                <button onClick={() => setForm({...form, media_uri: '', media_duration_seconds: null, has_media: false})} className="p-1 text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
               </div>
             ) : (
               <button
@@ -913,9 +936,23 @@ export default function Evidence() {
                   <button onClick={() => handleDelete(e.id)} className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
                 {e.description && <p className="text-log text-xs text-foreground/60 mt-2 leading-relaxed">{e.description}</p>}
-                {e.file_url && e.type === 'photo' && <img src={e.file_url} alt={e.title} className="mt-2 w-full max-h-48 object-cover rounded-lg" />}
-                {e.file_url && e.type === 'video' && <video src={e.file_url} controls className="mt-2 w-full max-h-48 rounded-lg" />}
-                {e.file_url && e.type === 'evp' && <audio src={e.file_url} controls className="mt-2 w-full" />}
+                {(e.file_url || e.has_media) && (
+                  <EvidenceMedia
+                    recordId={e.id}
+                    mediaType={e.type}
+                    legacyUrl={e.file_url}
+                    alt={e.title}
+                    className={
+                      e.type === 'photo'
+                        ? 'mt-2 w-full max-h-48 object-cover rounded-lg'
+                        : e.type === 'video'
+                          ? 'mt-2 w-full max-h-48 rounded-lg'
+                          : e.type === 'evp'
+                            ? 'mt-2 w-full'
+                            : 'mt-2 text-xs text-primary underline inline-block'
+                    }
+                  />
+                )}
                 <button
                   onClick={() => handleToggleShare(e)}
                   className={`mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-heading uppercase tracking-wider border transition-colors ${(!e.is_private && e.latitude && e.longitude) ? 'border-primary/30 text-primary bg-primary/5' : 'border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40'}`}

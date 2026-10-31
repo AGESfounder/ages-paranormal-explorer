@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Camera, CameraOff, Video, X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
@@ -498,7 +499,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       // GPS flow does NOT consume a daily evidence save.
       const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const file = new File([displayBlob], `anomaly_session.${ext}`, { type: displayBlob.type });
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
@@ -515,7 +516,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
         type: recordedBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'sls',
         description: `Anomaly Camera session — ${formatDuration(recordDuration)} recorded.${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
-        file_url,
+        media_uri: file_uri,
+        media_duration_seconds: duration_seconds,
+        has_media: true,
         date: now.toISOString().split('T')[0],
         time: now.toTimeString().slice(0, 5),
         is_private: isPrivate,

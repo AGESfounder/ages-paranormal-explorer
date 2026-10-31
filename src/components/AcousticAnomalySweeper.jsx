@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Square, X, Info, Video, Activity, AlertTriangle, Bookmark, Zap } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
@@ -538,7 +539,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
       // GPS flow does NOT consume a daily evidence save.
       const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const file = new File([displayBlob], `acoustic_anomaly_session.${ext}`, { type: displayBlob.type });
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
@@ -558,7 +559,9 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'audio',
         description: `Acoustic Anomaly Sweeper session — ${formatDuration(sessionDuration)} — ${eventCountRef.current} acoustic event(s) above the room baseline, ${marked} marked moment(s). Room baseline measured in-device; levels are relative, not calibrated sound pressure.${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
-        file_url,
+        media_uri: file_uri,
+        media_duration_seconds: duration_seconds,
+        has_media: true,
         date,
         time,
         is_private: isPrivate,

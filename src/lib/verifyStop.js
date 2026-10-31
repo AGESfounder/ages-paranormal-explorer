@@ -25,7 +25,7 @@ export async function placeStopLocation(stopId, tourId, latitude, longitude) {
 // the validation photo.
 // Updates the stop with verified coordinates, then checks all sibling stops
 // — if every stop is user_verified, the tour's `verified` flag is set to true.
-export async function verifyStopLocation(stopId, tourId, latitude, longitude, userId, photoUrl) {
+export async function verifyStopLocation(stopId, tourId, latitude, longitude, userId, photoUri) {
   // Was this pin still unplaced? An unplaced stop's number was provisional, so
   // placing it leaves the tour's visit order to be rebuilt by the route rules
   // on a later opening — never in the middle of someone's investigation.
@@ -40,7 +40,12 @@ export async function verifyStopLocation(stopId, tourId, latitude, longitude, us
     verified_by_id: userId,
     verified_date: new Date().toISOString(),
   };
-  if (photoUrl) update.verification_photo_url = photoUrl;
+  // The reference photo lives in private storage; only its URI is stored, and
+  // the flag lets the stop screen show it without reading that URI.
+  if (photoUri) {
+    update.verification_photo_uri = photoUri;
+    update.has_verification_photo = true;
+  }
   await base44.entities.TourStop.update(stopId, update);
 
   const siblings = await base44.entities.TourStop.filter({ tour_id: tourId });

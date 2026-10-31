@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Square, Zap, Info, X, Activity, Video, AlertTriangle, Type, Camera, Layers } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
@@ -492,7 +493,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       // GPS flow does NOT consume a daily evidence save.
       const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const file = new File([displayBlob], `alphabet_sweeper_session.${ext}`, { type: displayBlob.type });
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
       const date = now.toISOString().split('T')[0];
       const time = now.toTimeString().slice(0, 5);
@@ -518,7 +519,9 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'alphabet',
         description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.join('') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (${trigger.lastMethod === 'depth' ? 'depth sensor' : 'camera'}).${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
-        file_url,
+        media_uri: file_uri,
+        media_duration_seconds: duration_seconds,
+        has_media: true,
         date,
         time,
         is_private: isPrivate,

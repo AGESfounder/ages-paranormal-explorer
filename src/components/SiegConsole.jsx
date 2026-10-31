@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import useGhostVoice from '@/hooks/useGhostVoice';
@@ -1128,7 +1129,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
           : recordedType === 'audio/webm' ? 'weba'
             : 'webm';
       const file = new File([displayBlob], `sieg_session.${ext}`, { type: displayBlob.type });
-      const upload = await base44.integrations.Core.UploadFile({ file });
+      const upload = await uploadPrivateMedia(file);
       const now = new Date();
       const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -1165,7 +1166,9 @@ export default function SiegConsole({ gateSave, refundSave }) {
         type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'sieg',
         description,
-        file_url: upload.file_url,
+        media_uri: upload.file_uri,
+        media_duration_seconds: upload.duration_seconds,
+        has_media: true,
         date,
         time,
         is_private: isPrivate,

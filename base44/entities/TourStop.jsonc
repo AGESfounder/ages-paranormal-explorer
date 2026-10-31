@@ -142,7 +142,23 @@
     },
     "verification_photo_url": {
       "type": "string",
-      "description": "Public URL of a reference photo taken from the stop's best vantage point. Captured by a paid user or admin during validation (or added later to an already-verified stop). Visible to all users as a dimmed backdrop behind the stop's narration text, with a button to view full-size. A new photo replaces the old one. Stored publicly via UploadPublicFile."
+      "description": "LEGACY ONLY. Permanent public URL of a reference photo saved before private storage. New photos are stored in verification_photo_uri; this field is kept so existing photos still display."
+    },
+    "verification_photo_uri": {
+      "type": "string",
+      "description": "Private-storage URI of this stop's reference photo, taken from the stop's best vantage point. Only ever read by the evidence-media-link function, which mints a short-lived signed viewing URL for any signed-in user. Unreadable by clients. A new photo replaces the old one.",
+      "rls": {
+        "read": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
+    },
+    "has_verification_photo": {
+      "type": "boolean",
+      "default": false,
+      "description": "true when this stop's reference photo is stored privately in verification_photo_uri. Lets the stop screen show and open the photo without reading the private URI."
     }
   },
   "required": [

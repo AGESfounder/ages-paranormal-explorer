@@ -1,13 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { Camera, Loader2, X, Lock } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { toast } from '@/components/ui/use-toast';
 
 /**
  * Stop validation photo capture.
  * - Unverified stops: button reads "Validate & Add Photo". After the photo is
- *   uploaded (stored publicly), calls onValidateWithPhoto(photoUrl) so the
- *   parent can run GPS validation and persist the photo in one update.
+ *   uploaded (stored privately), calls onValidateWithPhoto(photoUri) so the
+ *   parent can run GPS validation and persist the photo's private URI in one update.
  *   Includes a "Validate location only" option (onValidateOnly) for users who
  *   can't or don't want to take a photo.
  * - Verified stops: button reads "Add Photo". After upload, calls
@@ -21,7 +21,7 @@ export default function StopVerificationPhoto({ stop, disabled, isAdmin, onValid
   const adminFileInputRef = useRef(null);
 
   const isVerified = stop.user_verified;
-  const hasPhoto = !!stop.verification_photo_url;
+  const hasPhoto = !!(stop.verification_photo_url || stop.has_verification_photo);
   // Once a verified stop has a photo, it's locked — only admins can replace it.
   const canCapture = !isVerified || !hasPhoto || isAdmin;
 
@@ -35,13 +35,13 @@ export default function StopVerificationPhoto({ stop, disabled, isAdmin, onValid
     }
     setUploading(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_uri } = await uploadPrivateMedia(file);
       setUploading(false);
       setShowInstructions(false);
       if (isVerified) {
-        onPhotoAdded?.(file_url);
+        onPhotoAdded?.(file_uri);
       } else {
-        onValidateWithPhoto?.(file_url);
+        onValidateWithPhoto?.(file_uri);
       }
     } catch (err) {
       toast({ title: 'Upload Failed', description: 'Could not upload photo. Please try again.', variant: 'destructive' });
@@ -60,9 +60,9 @@ export default function StopVerificationPhoto({ stop, disabled, isAdmin, onValid
     }
     setUploading(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const { file_uri } = await uploadPrivateMedia(file);
       setUploading(false);
-      onPhotoAdded?.(file_url);
+      onPhotoAdded?.(file_uri);
     } catch (err) {
       toast({ title: 'Upload Failed', description: 'Could not upload photo. Please try again.', variant: 'destructive' });
       setUploading(false);

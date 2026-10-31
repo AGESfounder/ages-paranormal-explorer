@@ -18,7 +18,28 @@
       "type": "string"
     },
     "file_url": {
-      "type": "string"
+      "type": "string",
+      "description": "LEGACY ONLY. Permanent public URL of media saved before private storage. New evidence stores its media in media_uri instead; this field is kept so existing records still display."
+    },
+    "media_uri": {
+      "type": "string",
+      "description": "Private-storage URI of this record's media. Only ever read by the evidence-media-link function, which mints a short-lived signed viewing URL after checking the viewer's permission. Unreadable by clients.",
+      "rls": {
+        "read": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
+    },
+    "media_duration_seconds": {
+      "type": "number",
+      "description": "Actual playing time of the saved recording, in whole seconds (after any trim). Drives how long a signed viewing link lives: duration + 5 minutes, capped at the signed-URL maximum. Null for stills."
+    },
+    "has_media": {
+      "type": "boolean",
+      "default": false,
+      "description": "true when this record's media is stored privately in media_uri. Lets a viewer know media exists without reading the private URI."
     },
     "tour_id": {
       "type": "string"

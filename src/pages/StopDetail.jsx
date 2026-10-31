@@ -25,6 +25,7 @@ import { toast } from '@/components/ui/use-toast';
 import { verifyStopLocation, placeStopLocation } from '@/lib/verifyStop';
 import { parkingDisplay } from '@/lib/parkingLabel';
 import StopVerificationPhoto from '@/components/StopVerificationPhoto';
+import EvidenceMedia from '@/components/EvidenceMedia';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { stripConclusionOpeners, CONCLUSION_PHRASE_RULE, BRAND_RULE_STOP, STOP_CONTENT_VERSION, ADDRESS_RULE } from '@/lib/stopContent';
@@ -408,7 +409,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
 
   // Paid users mark their current GPS position as the best vantage point.
   // Admins can also drag the map marker to set the exact location.
-  const handleMarkVantagePoint = async (photoUrl) => {
+  const handleMarkVantagePoint = async (photoUri) => {
     if (!navigator.geolocation) {
       toast({ title: 'GPS Unavailable', description: 'Your device does not support GPS.', variant: 'destructive' });
       return;
@@ -472,9 +473,9 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         setVerifying(false);
         return;
       }
-      verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id, photoUrl)
+      verifyStopLocation(stop.id, stop.tour_id, latitude, longitude, user?.id, photoUri)
         .then((result) => {
-          setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false, ...(photoUrl ? { verification_photo_url: photoUrl } : {}) }));
+          setStop(prev => ({ ...prev, latitude, longitude, user_verified: true, needs_placement: false, ...(photoUri ? { verification_photo_uri: photoUri, has_verification_photo: true } : {}) }));
           autoNameParking(latitude, longitude);
           toast({
             title: 'Vantage Point Marked!',
@@ -592,11 +593,11 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
   };
 
   // Add or replace the reference photo on an already-verified stop. Verified
-  // stops don't need GPS re-validation — just persist the new public photo URL.
-  const handleAddPhoto = async (photoUrl) => {
+  // stops don't need GPS re-validation — just persist the new private photo URI.
+  const handleAddPhoto = async (photoUri) => {
     try {
-      await base44.entities.TourStop.update(stop.id, { verification_photo_url: photoUrl });
-      setStop(prev => ({ ...prev, verification_photo_url: photoUrl }));
+      await base44.entities.TourStop.update(stop.id, { verification_photo_uri: photoUri, has_verification_photo: true });
+      setStop(prev => ({ ...prev, verification_photo_uri: photoUri, has_verification_photo: true }));
       toast({ title: 'Photo Added', description: 'The stop photo has been updated.' });
     } catch (e) {
       toast({ title: 'Update Failed', description: e?.message || 'Please try again.', variant: 'destructive' });
@@ -909,9 +910,17 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
 
         {stop.narration_text && (
           <div className="relative rounded-lg border border-primary/20 overflow-hidden">
-            {stop.verification_photo_url && (
+            {(stop.verification_photo_url || stop.has_verification_photo) && (
               <>
-                <img src={stop.verification_photo_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                <EvidenceMedia
+                  kind="stop_photo"
+                  recordId={stop.id}
+                  legacyUrl={stop.verification_photo_url}
+                  mediaType="photo"
+                  lazy={false}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
                 <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/75 to-black/85" />
               </>
             )}
@@ -922,7 +931,7 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
                   <span className="text-[10px] font-heading uppercase tracking-wider text-primary">Ghost Story</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {stop.verification_photo_url && (
+                  {(stop.verification_photo_url || stop.has_verification_photo) && (
                     <button onClick={() => setShowPhotoViewer(true)} className="flex items-center gap-1 px-2 py-1 rounded-full bg-black/40 border border-white/20 text-white/80 text-[10px] font-heading uppercase tracking-wider hover:bg-black/60 transition-colors">
                       <ImageIcon className="w-3 h-3" /> View Photo
                     </button>
@@ -1058,12 +1067,20 @@ Return JSON with a "people" array, each item { name, story }. Output ONLY valid 
         onConfirm={handleDeleteStop}
         deleting={deletingStop}
       />
-      {showPhotoViewer && stop.verification_photo_url && (
+      {showPhotoViewer && (stop.verification_photo_url || stop.has_verification_photo) && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4" onClick={() => setShowPhotoViewer(false)}>
           <button className="absolute top-4 right-4 text-white/70 hover:text-white z-10" onClick={() => setShowPhotoViewer(false)}>
             <X className="w-6 h-6" />
           </button>
-          <img src={stop.verification_photo_url} alt={stop.name} className="max-w-full max-h-full rounded-lg object-contain" />
+          <EvidenceMedia
+            kind="stop_photo"
+            recordId={stop.id}
+            legacyUrl={stop.verification_photo_url}
+            mediaType="photo"
+            lazy={false}
+            alt={stop.name}
+            className="max-w-full max-h-full rounded-lg object-contain"
+          />
         </div>
       )}
       {narrationAdGateEl}
