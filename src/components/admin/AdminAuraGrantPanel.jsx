@@ -50,7 +50,7 @@ export default function AdminAuraGrantPanel({ user, onChanged, flush = false }) 
 
   return (
     <div className={`space-y-2 ${flush ? '' : 'border-t border-border/20 pt-2 mt-1'}`}>
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+      <p className="text-[11px] uppercase tracking-wider font-bold text-white flex items-center justify-center gap-1">
         <Sparkles className="w-3 h-3" /> Aura Energy Grant
       </p>
 

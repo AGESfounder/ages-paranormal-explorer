@@ -8,7 +8,7 @@ export default function AdminGrantsSection({ user, onSubscriptionChanged, onAura
   return (
     <div className="rounded-lg border border-border/30 bg-card/20 p-2.5 space-y-2.5">
       <p
-        className="font-heading text-sm font-semibold uppercase tracking-[0.18em] text-primary"
+        className="font-heading text-sm font-bold uppercase tracking-[0.18em] text-primary text-center w-full"
         style={{ textShadow: '0 0 12px hsl(199 89% 48% / 0.55), 0 0 24px hsl(199 89% 48% / 0.25)' }}
       >
         Admin Access Grants
