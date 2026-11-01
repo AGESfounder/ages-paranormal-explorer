@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { PLANS } from '@/lib/plans';
 import { hashIosDiagId } from '@/lib/iosPurchaseDiagnostics';
 import AdminGrantPanel from '@/components/admin/AdminGrantPanel';
+import AdminAuraGrantPanel from '@/components/admin/AdminAuraGrantPanel';
 import {
   getEffectivePlanId,
   getEffectiveExpirationDate,
@@ -284,6 +285,12 @@ export default function AdminUsersTab() {
                       loadUsers();
                       setHistoryCache((prev) => ({ ...prev, [u.id]: undefined }));
                     }}
+                  />
+
+                  {/* Admin Aura energy grant — add a bundle's energy to the account. */}
+                  <AdminAuraGrantPanel
+                    user={u}
+                    onChanged={() => loadUsers()}
                   />
 
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">

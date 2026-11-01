@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
-import { PLANS } from '../../shared/plans.js';
-import { planForLedgerProduct, planIdFromLedgerRows, fetchLedgerRows } from '../../shared/entitlement.js';
+import { PLANS, AURA_BUNDLES } from '../../shared/plans.js';
+import { planForLedgerProduct, planIdFromLedgerRows, fetchLedgerRows, resolveTrustedEntitlement } from '../../shared/entitlement.js';
+import { loadEnergyAccount, grantEnergy } from '../../shared/energy.js';
 import { computeAppleSubscriptionGrantFields } from '../../shared/appleSubscriptionGrant.js';
 import {
   ADMIN_GRANT_ENVIRONMENT,
@@ -184,6 +185,49 @@ async function revokeAccess(base44, body, now) {
   return Response.json({ ok: true, plan_id: remainingPlanId });
 }
 
+// Aura energy grant: adds one Aura bundle's energy to the server-owned energy
+// account (the User record only mirrors it). The pool split follows a real
+// purchase: Seeker/Technician route everything to save energy, higher tiers keep
+// the 90/10 narration/manifestation split.
+async function grantAura(base44, adminUser, body, now) {
+  const userId = String(body?.user_id || '').trim();
+  if (!userId) return fail('user_id is required');
+
+  const bundleId = String(body?.bundle_id || '').trim();
+  const bundle = AURA_BUNDLES[bundleId];
+  if (!bundle) return fail(`bundle_id must be one of: ${Object.keys(AURA_BUNDLES).join(', ')}`);
+
+  const target = await base44.asServiceRole.entities.User
+    .get(userId)
+    .catch((e) => (e?.status === 404 ? null : Promise.reject(e)));
+  if (!target) return fail('User not found', 404);
+
+  const entitlement = await resolveTrustedEntitlement(base44, target, now);
+  // Creates the account on first use, absorbing the record's mirror.
+  await loadEnergyAccount(base44, target, entitlement);
+
+  const saveOnly = entitlement.planId === 'seeker' || entitlement.planId === 'technician';
+  const deltas = saveOnly
+    ? { aura_save: bundle.energy }
+    : {
+        aura_narration: Math.round(bundle.energy * bundle.narration_pct),
+        aura_manifestation: Math.round(bundle.energy * bundle.manifestation_pct),
+      };
+
+  const updated = await grantEnergy(base44, userId, deltas);
+  if (!updated) return fail('Energy account unavailable for this user', 409);
+
+  console.log('Admin Aura grant:', bundleId, JSON.stringify(deltas), 'for', userId, 'by', adminUser.id);
+  return Response.json({
+    ok: true,
+    bundle_id: bundleId,
+    granted: deltas,
+    aura_narration: updated.aura_narration || 0,
+    aura_manifestation: updated.aura_manifestation || 0,
+    aura_save: updated.aura_save || 0,
+  });
+}
+
 export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
@@ -196,7 +240,8 @@ export default async function (req) {
 
     if (body?.action === 'grant') return await grantAccess(base44, adminUser, body, now);
     if (body?.action === 'revoke') return await revokeAccess(base44, body, now);
-    return fail('action must be "grant" or "revoke"');
+    if (body?.action === 'grant_aura') return await grantAura(base44, adminUser, body, now);
+    return fail('action must be "grant", "revoke" or "grant_aura"');
   } catch (error) {
     console.error('admin-grant-access failed:', error?.message || error);
     return Response.json({ error: error?.message || 'Access change failed' }, { status: 500 });
