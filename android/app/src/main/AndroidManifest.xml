@@ -14,12 +14,22 @@
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
-            android:launchMode="standard"
+            android:launchMode="singleTask"
             android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Password-reset hand-off: agesexplorer://login?email=… opens the
+                 sign-in screen in the running app instead of a second instance.
+                 Matches the scheme declared in ios/App/App/Info.plist. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="agesexplorer" />
             </intent-filter>
 
         </activity>

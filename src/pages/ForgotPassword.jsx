@@ -16,6 +16,11 @@ export default function ForgotPassword() {
     e.preventDefault();
     setLoading(true);
     try {
+      // Remembered only to prefill the native sign-in screen after a reset in
+      // this same browser. Never sent with the password.
+      try {
+        sessionStorage.setItem("ages_reset_email", email.trim());
+      } catch { /* prefill is optional */ }
       await base44.auth.resetPasswordRequest(email);
     } catch {
       // Always show success regardless

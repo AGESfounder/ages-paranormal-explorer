@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,15 @@ import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
+  // Prefilled by the password-reset hand-off link (agesexplorer://login?email=…).
+  // The screen is often already open when the link arrives, so the address is
+  // also applied when it changes, not only on first render.
+  const [searchParams] = useSearchParams();
+  const linkedEmail = searchParams.get("email") || "";
+  const [email, setEmail] = useState(linkedEmail);
+  useEffect(() => {
+    if (linkedEmail) setEmail(linkedEmail);
+  }, [linkedEmail]);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);

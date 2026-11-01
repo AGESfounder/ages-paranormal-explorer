@@ -6,6 +6,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, Loader2, AlertTriangle } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
+import PasswordResetSuccess from "@/components/PasswordResetSuccess";
+
+// Best-effort address for the hand-off link's prefill. The reset call may echo
+// it back; otherwise fall back to what the visitor typed on the request screen
+// in this same browser. Never the password or the reset token.
+const resolveResetEmail = (result) => {
+  const fromResponse = result?.data?.email || result?.email || result?.data?.user?.email;
+  if (typeof fromResponse === "string" && fromResponse.includes("@")) return fromResponse;
+  try {
+    const stored = sessionStorage.getItem("ages_reset_email") || "";
+    sessionStorage.removeItem("ages_reset_email");
+    return stored;
+  } catch {
+    return "";
+  }
+};
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -15,6 +31,8 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [accountEmail, setAccountEmail] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,14 +43,21 @@ export default function ResetPassword() {
     }
     setLoading(true);
     try {
-      await base44.auth.resetPassword({ resetToken, newPassword });
-      window.location.href = "/login";
+      const result = await base44.auth.resetPassword({ resetToken, newPassword });
+      setAccountEmail(resolveResetEmail(result));
+      setDone(true);
     } catch (err) {
       setError(err.message || "Failed to reset password");
     } finally {
       setLoading(false);
     }
   };
+
+  // Reset succeeded: hand the visitor back to the native app instead of the
+  // Base44 web sign-in page.
+  if (done) {
+    return <PasswordResetSuccess email={accountEmail} />;
+  }
 
   if (!resetToken) {
     return (
