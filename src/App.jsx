@@ -50,10 +50,17 @@ const PlanAnalysis = lazy(() => import('@/pages/PlanAnalysis'));
 // Routes that must stay publicly reachable without an authenticated session,
 // even when the global auth flow (authError 'auth_required') would otherwise
 // redirect every route to login. The Privacy Policy must be open to anonymous
-// visitors (App Store / Google Play policy-link requirement). Native auth screens
-// must also remain reachable to recover an expired session inside the shell.
-const PUBLIC_ROUTES = new Set(['/privacy']);
-const NATIVE_AUTH_ROUTES = new Set(['/login', '/register', '/forgot-password', '/reset-password']);
+// visitors (App Store / Google Play policy-link requirement). The auth screens
+// must stay reachable on web and native alike: a password-reset link opens in the
+// browser, so redirecting it to sign-in while the session check fails is what made
+// the reset page bounce between the two.
+const PUBLIC_ROUTES = new Set([
+  '/privacy',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+]);
 
 function PostLogoutNotice() {
   const { pathname } = useLocation();
@@ -134,9 +141,7 @@ const AuthenticatedApp = () => {
       if (!PUBLIC_ROUTES.has(pathname)) {
         if (Capacitor.isNativePlatform()) {
           // Recover inside either native shell without reopening hosted login.
-          if (!NATIVE_AUTH_ROUTES.has(pathname)) {
-            return <Navigate to="/login" replace />;
-          }
+          return <Navigate to="/login" replace />;
         } else {
           navigateToLogin();
           return null;
