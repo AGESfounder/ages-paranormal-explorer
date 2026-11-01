@@ -5,8 +5,7 @@ import { base44 } from '@/api/base44Client';
 import { Input } from '@/components/ui/input';
 import { PLANS } from '@/lib/plans';
 import { hashIosDiagId } from '@/lib/iosPurchaseDiagnostics';
-import AdminGrantPanel from '@/components/admin/AdminGrantPanel';
-import AdminAuraGrantPanel from '@/components/admin/AdminAuraGrantPanel';
+import AdminGrantsSection from '@/components/admin/AdminGrantsSection';
 import {
   getEffectivePlanId,
   getEffectiveExpirationDate,
@@ -278,19 +277,14 @@ export default function AdminUsersTab() {
 
               {isOpen && (
                 <div className="border-t border-border/30 px-3 py-3 bg-secondary/20 space-y-2">
-                  {/* Admin access grants — dated tier grants with early revoke. */}
-                  <AdminGrantPanel
+                  {/* Admin grants — subscription on the left, Aura on the right. */}
+                  <AdminGrantsSection
                     user={u}
-                    onChanged={() => {
+                    onSubscriptionChanged={() => {
                       loadUsers();
                       setHistoryCache((prev) => ({ ...prev, [u.id]: undefined }));
                     }}
-                  />
-
-                  {/* Admin Aura energy grant — add a bundle's energy to the account. */}
-                  <AdminAuraGrantPanel
-                    user={u}
-                    onChanged={() => loadUsers()}
+                    onAuraChanged={() => loadUsers()}
                   />
 
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">

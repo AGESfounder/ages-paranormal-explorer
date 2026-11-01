@@ -36,7 +36,7 @@ function isLive(grant, now = new Date()) {
   return Number.isFinite(ms) && ms > now.getTime();
 }
 
-export default function AdminGrantPanel({ user, onChanged }) {
+export default function AdminGrantPanel({ user, onChanged, flush = false }) {
   const [grants, setGrants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [planId, setPlanId] = useState('explorer');
@@ -130,9 +130,9 @@ export default function AdminGrantPanel({ user, onChanged }) {
   };
 
   return (
-    <div className="border-t border-border/20 pt-2 mt-1 space-y-2">
+    <div className={`space-y-2 ${flush ? '' : 'border-t border-border/20 pt-2 mt-1'}`}>
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-        <Gift className="w-3 h-3" /> Admin Access Grant
+        <Gift className="w-3 h-3" /> Subscription Grant
       </p>
 
       {loading ? (
@@ -147,13 +147,13 @@ export default function AdminGrantPanel({ user, onChanged }) {
             return (
               <div key={g.id} className="flex items-start justify-between gap-2 text-xs py-1.5 px-2 rounded bg-card/30">
                 <div className="min-w-0">
-                  <p className="text-foreground truncate">
+                  <p className={`truncate ${live ? 'text-emerald-300' : 'text-foreground'}`}>
                     {PLANS[grantedPlan]?.name || grantedPlan || 'Grant'}
                     <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded border uppercase tracking-wider ${live ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30' : 'bg-muted/20 text-muted-foreground border-muted-foreground/30'}`}>
                       {live ? 'active' : 'ended'}
                     </span>
                   </p>
-                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <p className={`text-[10px] flex items-center gap-1 ${live ? 'text-emerald-300/90' : 'text-muted-foreground'}`}>
                     <CalendarDays className="w-2.5 h-2.5" />
                     Ends {formatDay(g.plan_expiration_date)}
                   </p>

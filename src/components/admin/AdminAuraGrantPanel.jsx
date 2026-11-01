@@ -10,7 +10,7 @@ import { AURA_BUNDLES } from '@/lib/plans';
 // reports what actually landed.
 const BUNDLE_IDS = ['flicker', 'apparition', 'haunting', 'spectral'];
 
-export default function AdminAuraGrantPanel({ user, onChanged }) {
+export default function AdminAuraGrantPanel({ user, onChanged, flush = false }) {
   const [bundleId, setBundleId] = useState('apparition');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -49,7 +49,7 @@ export default function AdminAuraGrantPanel({ user, onChanged }) {
   };
 
   return (
-    <div className="border-t border-border/20 pt-2 mt-1 space-y-2">
+    <div className={`space-y-2 ${flush ? '' : 'border-t border-border/20 pt-2 mt-1'}`}>
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
         <Sparkles className="w-3 h-3" /> Aura Energy Grant
       </p>
