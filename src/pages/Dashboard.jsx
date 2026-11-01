@@ -110,7 +110,9 @@ export default function Dashboard() {
         : Promise.resolve([])
       ).catch(() => []);
       const normalized = [
-        ...(rcHistory || []).map((p) => ({
+        // Admin-granted access is not a purchase: it stays out of the billing
+        // history (it has no price and is not a store transaction).
+        ...(rcHistory || []).filter((p) => p.store !== 'ADMIN_GRANT').map((p) => ({
           id: p.id,
           // product_id / store / plan_expiration_date are what identify the
           // user's current billing term (monthly vs annual) further down.

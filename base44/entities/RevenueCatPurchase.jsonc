@@ -1,7 +1,7 @@
 {
   "name": "RevenueCatPurchase",
   "type": "object",
-  "description": "Provider-isolated ledger for RevenueCat / Google Play purchases. Do not reuse Base44Purchase (Wix-only).",
+  "description": "Provider-isolated ledger for RevenueCat / Google Play purchases. Do not reuse Base44Purchase (Wix-only). Also carries admin access grants (store ADMIN_GRANT) \u2014 dated rows that resolve like a purchased plan and stop counting when they expire.",
   "properties": {
     "event_id": {
       "type": "string",
@@ -28,15 +28,15 @@
     },
     "product_id": {
       "type": "string",
-      "description": "Store product id, e.g. trailblazer.30month"
+      "description": "Store product id, e.g. trailblazer.30month. Admin grants use admin_grant.<planId>."
     },
     "store": {
       "type": "string",
-      "description": "RevenueCat store, e.g. PLAY_STORE"
+      "description": "RevenueCat store, e.g. PLAY_STORE. Admin grants use ADMIN_GRANT."
     },
     "environment": {
       "type": "string",
-      "description": "SANDBOX or PRODUCTION"
+      "description": "SANDBOX or PRODUCTION. Admin grants use ADMIN (never cleared by the sandbox tester reset)."
     },
     "transaction_id": {
       "type": "string",
@@ -63,7 +63,7 @@
     "plan_expiration_date": {
       "type": "string",
       "format": "date-time",
-      "description": "App-owned expiry: purchase_date + 27 calendar months (UTC clamp)"
+      "description": "App-owned expiry: purchase_date + 27 calendar months (UTC clamp). For an admin grant, the moment the granted access ends."
     },
     "expiration_at": {
       "type": "string",
@@ -95,6 +95,14 @@
         "expired"
       ],
       "default": "paid"
+    },
+    "grant_note": {
+      "type": "string",
+      "description": "Admin-only note explaining an access grant (contest prize, support credit, testing). Never set on store purchases."
+    },
+    "granted_by_id": {
+      "type": "string",
+      "description": "Base44 user id of the admin who created an access grant. Never set on store purchases."
     },
     "aura_narration_granted": {
       "type": "number",

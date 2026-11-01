@@ -26,6 +26,7 @@ import {
   GOOGLE_TRAILBLAZER_STORE,
 } from './revenuecat.js';
 import { AD_REWARD_DAILY_LIMIT, getAdRewardSplit } from './adRewards.js';
+import { planForAdminGrantProduct } from './adminGrants.js';
 
 // Ledger row statuses that represent money paid and not refunded:
 // 'active' = auto-renewing subscription, 'paid' = one-time purchase.
@@ -38,6 +39,10 @@ const PAID_ROW_STATUSES = new Set(['active', 'paid']);
  */
 export function planForLedgerProduct(productId) {
   if (!productId) return null;
+  // Admin grants ride the same ledger with their own product ids, so a granted
+  // tier resolves exactly like a purchased one — including its expiry.
+  const adminGranted = planForAdminGrantProduct(productId);
+  if (adminGranted) return adminGranted;
   const apple = APPLE_SUBSCRIPTION_PRODUCTS[productId];
   if (apple?.plan_id) return apple.plan_id;
   const google = GOOGLE_SUBSCRIPTION_PRODUCTS[productId];

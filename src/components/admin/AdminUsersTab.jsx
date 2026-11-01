@@ -5,6 +5,7 @@ import { base44 } from '@/api/base44Client';
 import { Input } from '@/components/ui/input';
 import { PLANS } from '@/lib/plans';
 import { hashIosDiagId } from '@/lib/iosPurchaseDiagnostics';
+import AdminGrantPanel from '@/components/admin/AdminGrantPanel';
 import {
   getEffectivePlanId,
   getEffectiveExpirationDate,
@@ -14,6 +15,8 @@ import {
 
 const PLAN_BADGE = {
   observer: 'bg-muted/20 text-muted-foreground border-muted-foreground/30',
+  seeker: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
+  technician: 'bg-sky-500/15 text-sky-300 border-sky-400/30',
   explorer: 'bg-primary/20 text-primary border-primary/40',
   investigator: 'bg-accent/20 text-accent-foreground border-accent/40',
   trailblazer: 'bg-amber-500/15 text-amber-300 border-amber-400/40',
@@ -274,6 +277,15 @@ export default function AdminUsersTab() {
 
               {isOpen && (
                 <div className="border-t border-border/30 px-3 py-3 bg-secondary/20 space-y-2">
+                  {/* Admin access grants — dated tier grants with early revoke. */}
+                  <AdminGrantPanel
+                    user={u}
+                    onChanged={() => {
+                      loadUsers();
+                      setHistoryCache((prev) => ({ ...prev, [u.id]: undefined }));
+                    }}
+                  />
+
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                     <ShoppingBag className="w-3 h-3" /> Purchase History
                   </p>

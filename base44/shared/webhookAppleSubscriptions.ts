@@ -13,6 +13,7 @@ import {
 } from './revenuecat.js';
 import { eventAlreadyApplied, jsonResponse, mergeEventIds } from './webhookCommon.ts';
 import { computeAppleSubscriptionGrantFields } from './appleSubscriptionGrant.js';
+import { ADMIN_GRANT_STORE, highestActiveAdminGrant } from './adminGrants.js';
 
 /**
  * Locate the ledger row for an Apple subscription. Renewals, cancellations,
@@ -143,6 +144,24 @@ async function recomputeAppleAccessAfterRevoke(
 
   if (!ownsGenericPlan) {
     console.log('Apple revoke: generic plan belongs to another subscription, untouched:', user.id);
+    return;
+  }
+
+  // An active admin grant is not an Apple row, so it would be invisible to the
+  // query above — mirror it instead of wiping the account. The granted access
+  // still ends on its own expiration.
+  const grantRows = await base44.asServiceRole.entities.RevenueCatPurchase.filter({
+    user_id: user.id,
+    store: ADMIN_GRANT_STORE,
+  }).catch(() => []);
+  const adminGrant = highestActiveAdminGrant(grantRows || [], new Date());
+  if (adminGrant) {
+    await base44.asServiceRole.entities.User.update(user.id, {
+      plan: adminGrant.planId,
+      plan_expiration_date: adminGrant.expiration,
+      subscription_status: 'active',
+    });
+    console.log('Apple revoke: kept active admin grant for', user.id);
     return;
   }
 
