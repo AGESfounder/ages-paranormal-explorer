@@ -58,3 +58,8 @@ export default async function(req) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
+
+// Deployment refresh: redeploying this function so it bundles the CURRENT shared
+// entitlement module, which resolves admin-granted plans (admin_grant.<plan>).
+// A grant written to the ledger is otherwise unmapped by an older bundle and the
+// whole app reads the account as Observer. No behavior change of its own.

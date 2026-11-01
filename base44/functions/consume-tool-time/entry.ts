@@ -101,3 +101,6 @@ export default async function(req) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
+
+// Deployment refresh: rebuild so this function bundles the current shared
+// entitlement module (admin grants resolve as a plan). No behavior change.

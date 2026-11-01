@@ -686,3 +686,6 @@ export default async function (req) {
     return jsonResponse({ error: 'Internal error' }, 500);
   }
 }
+
+// Deployment refresh: rebuild so this function bundles the current shared
+// entitlement module (admin grants resolve as a plan). No behavior change.
