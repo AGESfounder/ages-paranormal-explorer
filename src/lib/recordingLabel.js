@@ -18,6 +18,14 @@ export function isAndroidRecording() {
   }
 }
 
+export function isIosRecording() {
+  try {
+    return Capacitor.getPlatform() === 'ios';
+  } catch {
+    return false;
+  }
+}
+
 // The type a finished recording should carry. Sources are tried in order: what
 // the recorder reports it actually produced, then the chunks, then what was
 // requested, then the container fallback for this path.

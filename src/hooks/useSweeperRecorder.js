@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
-import { isAndroidRecording, recordingBlobType } from '@/lib/recordingLabel';
+import { isAndroidRecording, isIosRecording, recordingBlobType } from '@/lib/recordingLabel';
 
 // Shared MediaRecorder lifecycle for the canvas-based sweeper tools (Terms,
 // Alphabet, Yes/No/IDK). All three recorded a <canvas> + mic into a
@@ -220,8 +220,19 @@ export default function useSweeperRecorder({
       // The audio-only path takes the boosted mic-only track (micRecordChain),
       // which is the same microphone with the same lift, without the tools' own
       // audio added electrically.
+      // iOS records the phone's plain microphone track, exactly as SIEG and the
+      // Anomaly Camera do — the two tools whose sessions prepare and save on the
+      // device. A Web Audio destination track (what these sweepers used on every
+      // platform) is not readable by the phone's own media exporter once it sits
+      // inside the file beside the picture, so the session recorded and then
+      // refused to prepare: that is what stopped these tools saving on iOS.
+      // The tools' own sound still reaches the recording acoustically through the
+      // speaker — echo cancellation is off — which is how the camera tools get it.
+      const plainMicTrack = audioStream.getAudioTracks?.()[0] || null;
       let audioTrack = null;
-      if (canvasCapture) {
+      if (isIosRecording()) {
+        audioTrack = plainMicTrack;
+      } else if (canvasCapture) {
         try {
           const mixed = attachMicToRecording ? attachMicToRecording(audioStream) : null;
           if (mixed && mixed.readyState !== 'ended') audioTrack = mixed;
@@ -236,7 +247,7 @@ export default function useSweeperRecorder({
           if (boosted && boosted.readyState !== 'ended') audioTrack = boosted;
         } catch {}
       }
-      if (!audioTrack) audioTrack = audioStream.getAudioTracks()[0] || null;
+      if (!audioTrack) audioTrack = plainMicTrack;
       if (audioTrack) canvasStream.addTrack(audioTrack);
 
       const candidates = canvasCapture ? MIME_CANDIDATES : AUDIO_MIME_CANDIDATES;
