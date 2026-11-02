@@ -29,7 +29,7 @@ export const needsRecordingExport = (seconds, { forDeviceSave = false, mediaType
       && (mimeType.startsWith('video/') || mimeType === 'audio/webm'));
 };
 
-export function prepareRecording(blob, seconds = null, signal, { forDeviceSave = false, trimMode = 'unknown' } = {}) {
+export function prepareRecording(blob, seconds = null, signal, { forDeviceSave = false, trimMode = 'unknown', forceRetry = false } = {}) {
   if (!blob?.size) return Promise.reject(new Error('The recording is empty.'));
   const android = Capacitor.getPlatform() === 'android';
   let intent;
@@ -50,6 +50,7 @@ export function prepareRecording(blob, seconds = null, signal, { forDeviceSave =
   let exports = exportsBySource.get(blob);
   if (!exports) { exports = new Map(); exportsBySource.set(blob, exports); }
   const key = android ? `${intent.trimMode}:${seconds > 0 ? seconds : 'full'}` : seconds > 0 ? seconds : 'full';
+  if (forceRetry) exports.delete(key);
   if (!exports.has(key)) {
     rememberAndroidSaveMetrics(blob, intent || { requestedTrimMs: seconds > 0 ? seconds * 1000 : 0 });
     // Android must never fall back to WebView decode/re-record after a native
@@ -59,7 +60,9 @@ export function prepareRecording(blob, seconds = null, signal, { forDeviceSave =
       : exportBrowserRecording(blob, seconds, signal);
     const pending = work.then((result) => { preparedBlobs.add(result); if (android) preparedTrimIntents.set(result, intent); return result; }).catch((error) => {
       rememberAndroidSaveFailure(blob, error, 'preparation', seconds);
-      exports.delete(key); throw error;
+      // An older cancelled export must not evict a newer explicit retry.
+      if (exports.get(key) === pending) exports.delete(key);
+      throw error;
     });
     exports.set(key, pending);
   }
