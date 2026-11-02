@@ -90,6 +90,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   const chunksRef = useRef([]);
   const chunkPumpRef = useRef(null);
   const canvasStreamRef = useRef(null);
+  const framePushRef = useRef(null);
   const mimeRef = useRef('');
   const audioOnlyRef = useRef(false);
   const anomalyTimerRef = useRef(null);
@@ -189,6 +190,20 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     }
     const stream = canvasCapture ? canvas.captureStream(30) : new MediaStream();
     canvasStreamRef.current = stream;
+    // Ask for a frame on every paint. Left to sample itself, a canvas painted
+    // from a timer goes quiet after its first frame under the phone's web view,
+    // and the clip that comes out holds one still — which the native preparation
+    // step then rejects when saving. Same treatment SIEG's recorder uses.
+    if (canvasCapture) {
+      const track = stream.getVideoTracks()[0];
+      if (track?.requestFrame) {
+        const push = () => {
+          try { track.requestFrame(); } catch { /* track already closed */ }
+          framePushRef.current = requestAnimationFrame(push);
+        };
+        framePushRef.current = requestAnimationFrame(push);
+      }
+    }
     // The microphone goes into the recording through the shared lift and
     // limiter (micRecordChain), never raw, so a voice and the room sit at a
     // usable level. If that mixed destination is unavailable, the plain
@@ -213,6 +228,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
       stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
+      if (framePushRef.current) { cancelAnimationFrame(framePushRef.current); framePushRef.current = null; }
       const actualMime = recordingBlobType({
         recorderMime: mr.mimeType,
         chunkMime: chunksRef.current.find((c) => c.blob.type)?.blob.type,

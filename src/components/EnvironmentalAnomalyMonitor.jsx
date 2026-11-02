@@ -8,6 +8,9 @@ import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import useGhostVoice from '@/hooks/useGhostVoice';
 import useSweeperRecorder from '@/hooks/useSweeperRecorder';
+import usePreparedRecording from '@/hooks/usePreparedRecording';
+import RecordTrimPicker from './RecordTrimPicker';
+import { TRIM_OPTIONS } from '@/lib/recordTrim';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 import { sensorSupport, startSensors, stopSensors, onSensorReading, onSensorError } from '@/lib/nativeSensors';
 import {
@@ -66,6 +69,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [tonesOn, setTonesOn] = useState(() => monitorTonesEnabled());
+  const [trimMode, setTrimMode] = useState('full');
 
   const canvasRef = useRef(null);
   const latestRef = useRef(null);
@@ -110,6 +114,10 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     setSensorError,
     componentName: 'EnvironmentMonitor',
   });
+
+  const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const displayBlob = preparedRecording.blob;
 
   useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
 
@@ -478,14 +486,14 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!videoBlob) return;
+    if (!displayBlob) return;
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled GPS
       // flow does NOT consume a daily evidence save.
-      const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
-      const file = new File([videoBlob], `environment_monitor_session.${ext}`, { type: videoBlob.type });
+      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const file = new File([displayBlob], `environment_monitor_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
       const date = now.toISOString().split('T')[0];
@@ -505,9 +513,9 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
       const ctxData = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Environmental Anomaly Monitor — ${date}`,
-        type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
+        type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'environment',
-        description: `Environmental Anomaly Monitor session — ${formatDuration(sessionDuration)} — ${magnetic} magnetic departure(s), ${pressure} pressure departure(s), ${together} with both sensors departing together. Both channels measured against the in-device baseline; readings are relative, not calibrated measurements.`,
+        description: `Environmental Anomaly Monitor session — ${formatDuration(sessionDuration)} — ${magnetic} magnetic departure(s), ${pressure} pressure departure(s), ${together} with both sensors departing together. Both channels measured against the in-device baseline; readings are relative, not calibrated measurements.${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         media_uri: file_uri,
         media_duration_seconds: duration_seconds,
         has_media: true,
@@ -731,13 +739,14 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              {videoBlob.type.startsWith('audio') ? (
-                <audio src={URL.createObjectURL(videoBlob)} controls className="w-full" />
+              {(displayBlob || videoBlob).type.startsWith('audio') ? (
+                <audio src={URL.createObjectURL(displayBlob || videoBlob)} controls className="w-full" />
               ) : (
-                <video src={URL.createObjectURL(videoBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
+                <video src={URL.createObjectURL(displayBlob || videoBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
               )}
             </div>
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={videoBlob} originalBlob={videoBlob} devicePrefix="environment_monitor" />
+            <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="environment_monitor" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

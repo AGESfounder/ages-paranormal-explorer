@@ -67,6 +67,7 @@ export default function useSweeperRecorder({
   const audioOnlyRef = useRef(false);
   const userStoppedRef = useRef(false);
   const heartbeatRef = useRef(null);
+  const framePushRef = useRef(null);
   const chunkPumpRef = useRef(null);
   const restartCountRef = useRef(0);
   const startedAtRef = useRef(0);
@@ -75,6 +76,26 @@ export default function useSweeperRecorder({
   const stopHeartbeat = useCallback(() => {
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
   }, []);
+
+  // Canvas frame push. A canvas stream samples itself when it is handed to a
+  // recorder, but under the phone's web view a canvas painted from a timer goes
+  // quiet after its first frame — the clip then holds a single still, which the
+  // native preparation step rejects when saving. SIEG solved this by asking for
+  // a frame on every paint; the sweepers get the same treatment here, once, for
+  // every tool that records its canvas.
+  const stopFramePush = useCallback(() => {
+    if (framePushRef.current) { cancelAnimationFrame(framePushRef.current); framePushRef.current = null; }
+  }, []);
+
+  const startFramePush = useCallback((track) => {
+    stopFramePush();
+    if (!track || typeof track.requestFrame !== 'function') return;
+    const push = () => {
+      try { track.requestFrame(); } catch { /* track already closed */ }
+      framePushRef.current = requestAnimationFrame(push);
+    };
+    framePushRef.current = requestAnimationFrame(push);
+  }, [stopFramePush]);
 
   const startHeartbeat = useCallback(() => {
     stopHeartbeat();
@@ -102,7 +123,8 @@ export default function useSweeperRecorder({
       try { audioStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
       audioStreamRef.current = null;
     }
-  }, []);
+    stopFramePush();
+  }, [stopFramePush]);
 
   // Auto-restart teardown: the session's microphone stream stays alive (see
   // spinup) so the phone is not asked to re-negotiate its input mid-session.
@@ -111,7 +133,8 @@ export default function useSweeperRecorder({
       try { canvasStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
       canvasStreamRef.current = null;
     }
-  }, []);
+    stopFramePush();
+  }, [stopFramePush]);
 
   // Assemble the session into the one file it is. The declared type is the
   // container the recorder actually produced, and on Android it carries the
@@ -189,6 +212,7 @@ export default function useSweeperRecorder({
       } catch {}
       const canvasStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
       canvasStreamRef.current = canvasStream;
+      if (canvasCapture) startFramePush(canvasStream.getVideoTracks()[0]);
       // Prefer the Web Audio mixed track (mic + dictated speech) when it is
       // still live; on a restart after the AudioContext suspended the mixed
       // track is ended, so fall back to the raw mic track (the TTS is still
@@ -287,7 +311,7 @@ export default function useSweeperRecorder({
       diag('error', `${componentName} spinup failed`, { msg: e?.message });
       return false;
     }
-  }, [canvasRef, attachMicToRecording, boostMicStream, setSensorError, componentName, stopTracks, stopCanvasTracks, finalizeTake]);
+  }, [canvasRef, attachMicToRecording, boostMicStream, setSensorError, componentName, stopTracks, stopCanvasTracks, finalizeTake, startFramePush]);
 
   const startRecording = useCallback(async () => {
     userStoppedRef.current = false;

@@ -96,6 +96,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   const canvasRef = useRef(null);
   const canvasIntervalRef = useRef(null);
   const audioStreamRef = useRef(null);
+  const framePushRef = useRef(null);
   // Recording destination on the beep engine. The vibration beeps are routed
   // into the recording here instead of relying on the mic picking them up
   // acoustically — the tool is meant to lie face-down on a surface, which
@@ -367,6 +368,20 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       }
 
       const canvasStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
+      // Ask for a frame on every paint. Left to sample itself, a canvas painted
+      // from a timer goes quiet after its first frame under the phone's web view,
+      // and the clip that comes out holds one still — which the native preparation
+      // step then rejects when saving. Same treatment SIEG's recorder uses.
+      if (canvasCapture) {
+        const track = canvasStream.getVideoTracks()[0];
+        if (track?.requestFrame) {
+          const push = () => {
+            try { track.requestFrame(); } catch { /* track already closed */ }
+            framePushRef.current = requestAnimationFrame(push);
+          };
+          framePushRef.current = requestAnimationFrame(push);
+        }
+      }
       // The microphone goes into the recording through the shared lift and
       // limiter (micRecordChain), never raw: the phone's speaker sits about a
       // centimetre from its mic, so the beeps arrive enormously louder than the
@@ -417,6 +432,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push({ blob: e.data, t: Date.now() }); };
       mr.onstop = () => {
         stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
+        if (framePushRef.current) { cancelAnimationFrame(framePushRef.current); framePushRef.current = null; }
         const actualMime = recordingBlobType({
           recorderMime: mr.mimeType,
           chunkMime: videoChunksRef.current.find((c) => c.blob.type)?.blob.type,
