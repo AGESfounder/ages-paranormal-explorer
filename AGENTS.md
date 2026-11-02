@@ -46,7 +46,7 @@
 - `npm run cap:open:android` opens the Android project in Android Studio.
 
 ## Native notes
-- Android `MainActivity` launchMode is `standard` (required for Google Play purchase flows).
+- Android `MainActivity` launchMode is `singleTop` as selected for this release. RevenueCat-safe Google Play purchase modes are `standard` or `singleTop`; `singleTask` is not allowed because external purchase verification must return safely to the purchase flow. Verify purchases and back behavior on physical devices.
 - AdMob App IDs, ATT usage description, and SKAdNetwork items are configured in the native shells; exercise consent/ads/SSV on physical devices before release.
 
 ## Android recording/export route
@@ -55,5 +55,5 @@
 - Full untrimmed Android exports may proceed when source duration metadata is unavailable if source tracks are readable; validate the transformed output's expected tracks and positive duration. Keep strict duration/sample-timeline checks for trimmed exports.
 - Prepared Android audio is M4A in `Music/AGES`; the save result and UI should report that destination. MediaStore writes use pending rows where supported and remove an inserted row after a failed write.
 - An Android-only `Copy save diagnostics` action is available beside save errors. Reports are session-local and include build/platform, stage, MIME/size, trim request, and safe native diagnostics; never include recording bytes, paths, or account data.
-- Android `versionCode` 30 is prepared for the next physical-device test build. CatDoes cannot compile or test the Android Java/Gradle path for this target. Do not run native builds, Codemagic, or Play Store uploads. Report native code as written but unverified until the user builds it in Android Studio and tests a physical Android phone and tablet.
+- Android `versionCode` 33 is prepared for the next physical-device test build. CatDoes cannot compile or test the Android Java/Gradle path for this target. Do not run native builds, Codemagic, or Play Store uploads. Report native code as written but unverified until the user builds it in Android Studio and tests a physical Android phone and tablet.
 - Preserve visible save errors and the original recording for retry when preparation or Journal save fails. Avoid claiming Media3 can process every device codec or long/unseekable source until physical-device testing confirms it.

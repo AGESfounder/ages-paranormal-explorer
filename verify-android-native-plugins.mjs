@@ -20,7 +20,7 @@ const java = (path) => read(path).replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/
 const nativePath = 'android/app/src/main/java/com/ages/explorer/';
 
 const gradle = read('android/app/build.gradle');
-for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '32'], ['versionName', '"1.0"']]) {
+for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '33'], ['versionName', '"1.0"']]) {
   const values = [...gradle.matchAll(new RegExp(`^\\s*${key}\\s+([^\\r\\n]+)`, 'gm'))];
   check(`Android ${key} is exactly ${value}`, values.length === 1 && values[0][1].trim() === value);
 }
@@ -225,10 +225,10 @@ check('Save-time Retry clears prior errors, shows progress, rejects a missing so
   && deviceAttempt.includes('setDeviceSaving(false)')
   && saveButtons.includes('deviceSaving && <p role="status"')
   && !/setOriginalBlob|setDeviceBlob|onSave\(/.test(deviceAttempt));
-check('Retry diagnostics use the actual attempted source and Build 30 copy',
+check('Retry diagnostics use the actual attempted source and Build 33 copy',
   deviceAttempt.includes('setDeviceAttemptBlob(input)')
   && saveButtons.includes('deviceError ? deviceAttemptBlob || deviceBlob : originalBlob')
-  && saveButtons.includes('Build 30 tester report.'));
+  && saveButtons.includes('Build 33 tester report.'));
 check('Brief, Standard and Full retain last-30s, last-90s and whole-source intent',
   /id: 'brief', label: 'Brief', seconds: 30, desc: 'last 30 seconds'/.test(trimOptions)
   && /id: 'standard', label: 'Standard', seconds: 90, desc: 'last 90 seconds'/.test(trimOptions)
@@ -280,7 +280,8 @@ const permissions = manifest.match(/<uses-permission\b[^>]*>/g) ?? [];
 const writes = permissions.filter((tag) => /android:name="android\.permission\.WRITE_EXTERNAL_STORAGE"/.test(tag));
 check('Manifest has one write permission capped at maxSdkVersion 28', writes.length === 1 && /android:maxSdkVersion="28"/.test(writes[0]));
 check('Manifest and Save do not request broad read-media or all-files access', !/android\.permission\.(?:READ_EXTERNAL_STORAGE|READ_MEDIA_\w+|MANAGE_EXTERNAL_STORAGE|MANAGE_MEDIA)\b/.test(manifest) && !/(?:Manifest\.permission\.|android\.permission\.)(?:READ_EXTERNAL_STORAGE|READ_MEDIA_\w+|MANAGE_EXTERNAL_STORAGE|MANAGE_MEDIA)\b/.test(save));
-check('MainActivity retains standard launch mode', /<activity\b[^>]*android:name="\.MainActivity"[^>]*android:launchMode="standard"/.test(manifest));
+const mainActivities = [...manifest.matchAll(/<activity\b[^>]*android:name="\.MainActivity"[^>]*>/g)];
+check('MainActivity uses RevenueCat-safe standard or singleTop launch mode; singleTask is not allowed', mainActivities.length === 1 && /android:launchMode="(?:standard|singleTop)"/.test(mainActivities[0][0]));
 for (const permission of ['INTERNET', 'ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'CAMERA', 'RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS', 'VIBRATE']) {
   check(`Manifest retains ${permission}`, permissions.some((tag) => tag.includes(`android:name="android.permission.${permission}"`)));
 }
@@ -340,10 +341,10 @@ const sync = workflow.indexOf('script: npx cap sync android');
 const verify = workflow.indexOf('npm run verify:android-native-plugins');
 const compile = workflow.indexOf('./gradlew assembleRelease bundleRelease');
 check('Android workflow orders web build, Android sync, static gate, then Gradle', build >= 0 && sync > build && verify > sync && compile > verify);
-check('Current CI and native metadata identify Android Build 32 alongside iOS Build 37',
-  workflow.includes('Verify Android Version 32 and native plugin wiring before Gradle')
-  && /\bversionCode\s+32\b/.test(gradle)
-  && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 37;'));
+check('Current CI and native metadata identify Android Build 33 alongside iOS Build 38',
+  workflow.includes('Verify Android Version 33 and native plugin wiring before Gradle')
+  && /\bversionCode\s+33\b/.test(gradle)
+  && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 38;'));
 check('Android workflow keeps signing and signature verification', workflow.includes('- ages-explorer-upload') && workflow.includes('jarsigner -verify -verbose -certs'));
 
 for (const { label, ok } of results) console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
