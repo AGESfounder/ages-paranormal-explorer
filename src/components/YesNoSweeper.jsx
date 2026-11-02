@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Play, Square, Info, X, Activity, Zap, Video, AlertTriangle, MessageCircle, Camera, Layers } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { uploadPrivateMedia } from '@/lib/privateMedia';
+import { mediaExtension } from '@/lib/deviceMedia';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
@@ -73,7 +74,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   // Web Audio–based voice (unlocked on the Start tap) so the spoken answer
   // plays reliably on iOS even though it's triggered by a sensor event. Called
   // WITHOUT the creepy flag → normal-speed delivery.
-  const { stop: stopVoice, unlock, attachMicToRecording, boostMicStream, resumeContext, refreshRecordingDestination, playCue } = useGhostVoice();
+  const { stop: stopVoice, unlock, resumeContext, playCue } = useGhostVoice();
 
   // Local on-device TTS announces each phrase as it cycles in the user's own
   // device narration voice via the shared Tool speech adapter — native TTS on
@@ -120,7 +121,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   };
 
   const stepRef = useRef(null);
-  const drawRef = useRef(null);
+
   const canvasRef = useRef(null);
   const lastTriggerRef = useRef(0);
   const lockedRef = useRef(false);
@@ -131,14 +132,8 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
   const timerRef = useRef(null);
-  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
-    canvasRef,
-    attachMicToRecording,
-    boostMicStream,
-    resumeAudioContext: resumeContext,
-    refreshRecordingDestination,
-    setSensorError,
-    componentName: 'YesNoSweeper',
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, startFrames, stopFrames } = useSweeperRecorder({
+    canvasRef, resumeAudioContext: resumeContext, setSensorError,
   });
   const [trimMode, setTrimMode] = useState('full');
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
@@ -161,7 +156,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const stopEverything = () => {
     sessionActiveRef.current = false;
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
-    if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
+    stopFrames();
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
     stopSweeperSensors();
@@ -350,11 +345,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     ctx.fillText('YES · NO · IDK · ' + formatDuration(sessionDurRef.current), w - 14, h - 14);
   };
 
-  const startDrawing = () => {
-    if (drawRef.current) clearInterval(drawRef.current);
-    draw();
-    drawRef.current = setInterval(draw, 33);
-  };
+  const startDrawing = () => startFrames(draw);
 
   const startSession = async () => {
     setCaptured([]);
@@ -388,10 +379,14 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     // Start the sensor layer (permissions + native sensor calibration begins
     // during the settle pause so magnetic/barometric baselines are ready).
     await startSweeperSensors();
+    if (!sessionActiveRef.current) { stopSweeperSensors(); return; }
     await trigger.start();
+    if (!sessionActiveRef.current) { trigger.stop(); return; }
     await new Promise(r => setTimeout(r, 80));
+    if (!sessionActiveRef.current) return;
     startDrawing();
     await startRecording();
+    if (!sessionActiveRef.current) return;
     // Arm sensors after the device has settled so tapping the permission
     // prompts doesn't fire a false lock.
     armSweeperSensors();
@@ -406,16 +401,16 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     }, 1000);
   };
 
-  const stopSession = () => {
+  const stopSession = async () => {
     sessionActiveRef.current = false;
     if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
+    stopFrames();
     stopSweeperSensors();
     trigger.stop();
     if (askingNextTimerRef.current) { clearTimeout(askingNextTimerRef.current); askingNextTimerRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
-    stopRecording();
+    await stopRecording();
     if (resumeFallbackRef.current) { clearTimeout(resumeFallbackRef.current); resumeFallbackRef.current = null; }
     setAskingNext(false);
     askingNextRef.current = false;
@@ -430,13 +425,14 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!displayBlob) return;
+    if (!displayBlob || saving || preparedRecording.preparing || preparedRecording.error) return;
+    setError('');
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `yes_no_idk_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
@@ -461,7 +457,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
         : '';
       await base44.entities.Evidence.create({
         title: `Yes/No/IDK Sweeper — ${date}`,
-        type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
+        type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'yesno',
         description: `Yes/No/IDK Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} answer(s) captured via environment trigger: ${captured.join(', ') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (${trigger.lastMethod === 'depth' ? 'depth sensor' : 'camera'}).${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         media_uri: file_uri,
@@ -604,6 +600,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   if (phase === 'stopped') {
     return (
       <div className="space-y-4">
+        {error && <p role="alert" className="text-xs text-destructive text-center">{error}</p>}
         <div className="p-4 rounded-lg bg-card/30 border border-border/30 space-y-2">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Session Complete</p>
           <div className="flex gap-4 text-xs text-muted-foreground">

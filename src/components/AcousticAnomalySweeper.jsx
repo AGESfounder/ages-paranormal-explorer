@@ -6,7 +6,8 @@ import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
-import { buildMicChain } from '@/lib/micRecordChain';
+import useSweeperRecorder from '@/hooks/useSweeperRecorder';
+import { mediaExtension } from '@/lib/deviceMedia';
 import { toast } from '@/components/ui/use-toast';
 import { ACOUSTIC_BANDS, createBaselineTracker, measureLevels, eventThresholdDb, dominantBand } from '@/lib/acousticAnalysis';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
@@ -15,8 +16,7 @@ import { TRIM_OPTIONS } from '@/lib/recordTrim';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
-import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
-import { recordingBlobType } from '@/lib/recordingLabel';
+
 
 // Listen-only acoustic monitor. It never emits sound: it listens through the
 // device microphone, measures the room's own baseline first, then watches for
@@ -53,7 +53,6 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   const [anomalyActive, setAnomalyActive] = useState(false);
   const [sensorError, setSensorError] = useState('');
   const [recordingError, setRecordingError] = useState('');
-  const [videoBlob, setVideoBlob] = useState(null);
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -82,17 +81,10 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   const armedRef = useRef(true);
   const lastEventRef = useRef(0);
   const sampleTimerRef = useRef(null);
-  const drawTimerRef = useRef(null);
   const sessionTimerRef = useRef(null);
   const heartbeatRef = useRef(null);
   const sessionStartRef = useRef(0);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const chunkPumpRef = useRef(null);
-  const canvasStreamRef = useRef(null);
-  const framePushRef = useRef(null);
-  const mimeRef = useRef('');
-  const audioOnlyRef = useRef(false);
+
   const anomalyTimerRef = useRef(null);
   const recordingRef = useRef(false);
   const ambienceHeldRef = useRef(false);
@@ -101,15 +93,15 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
 
   useEffect(() => () => stopEverything(), []);
 
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, startFrames } = useSweeperRecorder({
+    canvasRef, micStreamRef, setSensorError: setRecordingError,
+    resumeAudioContext: () => ctxRef.current?.resume(),
+  });
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds, trimMode);
   const displayBlob = preparedRecording.blob;
 
   const closeAudio = () => {
-    if (canvasStreamRef.current) {
-      try { canvasStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
-      canvasStreamRef.current = null;
-    }
     if (micStreamRef.current) {
       try { micStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
       micStreamRef.current = null;
@@ -133,19 +125,13 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     ambienceHeldRef.current = null;
   };
 
-  const stopEverything = () => {
+  const stopEverything = async () => {
     sessionActiveRef.current = false;
-    [sampleTimerRef, drawTimerRef, sessionTimerRef, heartbeatRef, anomalyTimerRef].forEach((r) => {
+    [sampleTimerRef, sessionTimerRef, heartbeatRef, anomalyTimerRef].forEach((r) => {
       if (r.current) { clearInterval(r.current); r.current = null; }
     });
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') {
-      // The recorder releases the microphone and the audio context in its own
-      // onstop, once the final chunk has been flushed.
-      try { recorder.stop(); } catch {}
-    } else {
-      closeAudio();
-    }
+    await stopRecording();
+    closeAudio();
     recordingRef.current = false;
     setRecording(false);
     setAnomalyActive(false);
@@ -172,87 +158,14 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     freqDataRef.current = new Float32Array(analyser.frequencyBinCount);
   };
 
-  // ── Recording. The canvas carries the strip chart; the microphone carries the
-  // room. There is no app audio to mix in, so the mic goes through the shared
-  // lift-and-limiter chain (micRecordChain) as the recording's only input. ──
-  const startRecording = async () => {
-    const canvas = canvasRef.current;
-    const ctx = ctxRef.current;
-    const micStream = micStreamRef.current;
-    if (!canvas || !ctx || !micStream) {
-      setRecordingError('The session recording could not start on this device.');
-      return;
-    }
-    const canvasCapture = typeof canvas.captureStream === 'function';
-    audioOnlyRef.current = !canvasCapture;
-    if (!canvasCapture) {
-      setRecordingError('Recording the session audio — this device cannot record the on-screen trace.');
-    }
-    const stream = canvasCapture ? canvas.captureStream(30) : new MediaStream();
-    canvasStreamRef.current = stream;
-    // Ask for a frame on every paint. Left to sample itself, a canvas painted
-    // from a timer goes quiet after its first frame under the phone's web view,
-    // and the clip that comes out holds one still — which the native preparation
-    // step then rejects when saving. Same treatment SIEG's recorder uses.
-    if (canvasCapture) {
-      const track = stream.getVideoTracks()[0];
-      if (track?.requestFrame) {
-        const push = () => {
-          try { track.requestFrame(); } catch { /* track already closed */ }
-          framePushRef.current = requestAnimationFrame(push);
-        };
-        framePushRef.current = requestAnimationFrame(push);
-      }
-    }
-    // The microphone goes into the recording through the shared lift and
-    // limiter (micRecordChain), never raw, so a voice and the room sit at a
-    // usable level. If that mixed destination is unavailable, the plain
-    // microphone track is recorded rather than nothing.
-    let audioTrack = null;
-    try {
-      const dest = ctx.createMediaStreamDestination();
-      buildMicChain(ctx, micStream).connect(dest);
-      const t = dest.stream.getAudioTracks()[0];
-      if (t && t.readyState === 'live') audioTrack = t;
-    } catch {}
-    if (!audioTrack) audioTrack = micStream.getAudioTracks()[0] || null;
-    if (audioTrack) stream.addTrack(audioTrack);
-    const candidates = canvasCapture
-      ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
-      : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
-    const mime = candidates.find((t) => MediaRecorder.isTypeSupported(t)) || '';
-    mimeRef.current = mime;
-    const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
-    mediaRecorderRef.current = mr;
-    chunksRef.current = [];
-    mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
-    mr.onstop = () => {
-      stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
-      if (framePushRef.current) { cancelAnimationFrame(framePushRef.current); framePushRef.current = null; }
-      const actualMime = recordingBlobType({
-        recorderMime: mr.mimeType,
-        chunkMime: chunksRef.current.find((c) => c.blob.type)?.blob.type,
-        requestedMime: mimeRef.current,
-        fallback: audioOnlyRef.current ? 'audio/webm' : 'video/webm',
-      });
-      const blob = new Blob(chunksRef.current.map((c) => c.blob), { type: actualMime });
-      setVideoBlob(blob);
-      // Release the microphone and the audio context only once the recorder has
-      // flushed its final chunk — stopping the tracks first can drop it.
-      closeAudio();
-    };
-    mr.start(1000);
-    chunkPumpRef.current = startChunkPump(mr);
-    recordingRef.current = true;
-    setRecording(true);
-  };
-
+  // The shared recorder uses this session's microphone, just like SIEG.
   // The baseline is measured first and the recording starts with it: the video
   // and the session clock both begin the moment it is set, so neither carries
   // the calibration. The trace display is on screen by then, which is also what
   // the recorder needs to attach to.
-  const beginRecording = () => {
+  const beginRecording = async () => {
     if (!sessionActiveRef.current || recordingRef.current) return;
+    recordingRef.current = true;
     sessionStartRef.current = Date.now();
     durationRef.current = 0;
     setSessionDuration(0);
@@ -261,7 +174,10 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
       durationRef.current = elapsed;
       setSessionDuration(elapsed);
     }, 1000);
-    startRecording();
+    const ok = await startRecording();
+    if (!sessionActiveRef.current) return;
+    recordingRef.current = ok;
+    setRecording(ok);
   };
 
   // ── One measurement frame ──
@@ -528,8 +444,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     // mount the canvas before anything is drawn onto it.
     await new Promise((r) => setTimeout(r, 150));
     holdAmbience();
-    draw();
-    drawTimerRef.current = setInterval(draw, 33);
+    startFrames(draw);
     sampleTimerRef.current = setInterval(sampleFrame, SAMPLE_MS);
     // The phone can suspend the audio engine under its own timer throttling: a
     // suspended engine flatlines the analyser and ends the recording's audio
@@ -539,21 +454,22 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
     }, 1500);
   };
 
-  const stopSession = () => {
-    stopEverything();
+  const stopSession = async () => {
+    await stopEverything();
     setPhase('stopped');
     setCalibrating(false);
     setError('');
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!displayBlob) return;
+    if (!displayBlob || saving || preparedRecording.preparing || preparedRecording.error) return;
+    setError('');
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `acoustic_anomaly_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
@@ -572,7 +488,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
       const ctxData = await buildEvidenceContext(gpsResult, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Acoustic Anomaly Sweeper — ${date}`,
-        type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
+        type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'audio',
         description: `Acoustic Anomaly Sweeper session — ${formatDuration(sessionDuration)} — ${eventCountRef.current} acoustic event(s) above the room baseline, ${marked} marked moment(s). Room baseline measured in-device; levels are relative, not calibrated sound pressure.${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         media_uri: file_uri,
@@ -714,6 +630,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   if (phase === 'stopped') {
     return (
       <div className="space-y-4">
+        {error && <p role="alert" className="text-xs text-destructive text-center">{error}</p>}
         <div className="p-4 rounded-lg bg-card/30 border border-border/30 space-y-2">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Session Complete</p>
           <div className="flex gap-4 text-xs text-muted-foreground">
@@ -746,7 +663,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
             <RecordingPreparation {...preparedRecording} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="acoustic_anomaly" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="acoustic_anomaly" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} trimMode={trimMode} trimSeconds={trimSeconds} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

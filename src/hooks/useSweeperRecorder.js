@@ -1,367 +1,91 @@
-import { useCallback, useRef, useState } from 'react';
-import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
-import { isAndroidRecording, isIosRecording, recordingBlobType } from '@/lib/recordingLabel';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import sessionCanvasRecorder from '@/lib/sessionCanvasRecorder';
 
-// Shared MediaRecorder lifecycle for the canvas-based sweeper tools (Terms,
-// Alphabet, Yes/No/IDK). All three recorded a <canvas> + mic into a
-// MediaRecorder and assembled the blob on stop, but the recorder could
-// silently die a few seconds in (audio track ending when the Web Audio
-// AudioContext suspends on iOS, or the canvas track starving under WKWebView
-// timer throttling) while the on-screen REC timer kept counting — so a 20s
-// session saved only the first 3-5s.
-//
-// This hook fixes that with:
-//   1. Hidden diagnostics — onerror, per-track onended, and onstop timing are
-//      logged to the console with a [SweeperRec] prefix so a TestFlight run
-//      shows exactly when/why the recorder stopped vs. the session timer.
-//   2. AudioContext heartbeat — resumes the Web Audio context every 1.5s while
-//      recording so the mixed-audio destination track does not end (the
-//      primary suspected cause on iOS).
-//   3. Auto-restart — if onstop fires without a user-initiated stop, a fresh
-//      recorder is spun up on a new canvas stream + mic and chunks keep
-//      accumulating into the same buffer, so the rest of the session is
-//      captured instead of lost.
-//
-// The hook owns the recorder/chunk/audio refs and the videoBlob state so the
-// fix lives in exactly one place. Components pass their canvasRef, the
-// useGhostVoice attachMicToRecording + resumeContext callbacks, and their
-// setSensorError, and call startRecording()/stopRecording()/cleanup().
-
-const MIME_CANDIDATES = [
-  'video/mp4',
-  'video/webm;codecs=vp9,opus',
-  'video/webm;codecs=vp8,opus',
-  'video/webm',
-];
-
-// iPhone's web view cannot record a canvas, so the sweepers there record the
-// session audio instead of a video (see spinup).
-const AUDIO_MIME_CANDIDATES = [
-  'audio/mp4',
-  'audio/webm;codecs=opus',
-  'audio/webm',
-];
-
-function diag(level, msg, data) {
-  try {
-    const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-    const suffix = data !== undefined ? ` ${JSON.stringify(data)}` : '';
-    fn(`[SweeperRec] ${msg}${suffix}`);
-  } catch {}
-}
-
-export default function useSweeperRecorder({
-  canvasRef,
-  attachMicToRecording,
-  boostMicStream,
-  resumeAudioContext,
-  refreshRecordingDestination,
-  setSensorError,
-  componentName = 'Sweeper',
-}) {
-  const mediaRecorderRef = useRef(null);
-  const videoChunksRef = useRef([]);
-  const audioStreamRef = useRef(null);
-  const canvasStreamRef = useRef(null);
-  const mimeTypeRef = useRef('');
-  const audioOnlyRef = useRef(false);
-  const userStoppedRef = useRef(false);
-  const heartbeatRef = useRef(null);
-  const framePushRef = useRef(null);
-  const chunkPumpRef = useRef(null);
-  const restartCountRef = useRef(0);
-  const startedAtRef = useRef(0);
+// All six standalone tools use SIEG's plain-mic/canvas capture and full-file
+// preparation path. Painting and frame delivery share the same animation tick.
+export default function useSweeperRecorder(options) {
+  const config = useRef(options);
+  config.current = options;
+  const state = useRef({ take: null, mic: null, generation: 0, starting: false, finishing: null });
+  const mounted = useRef(true);
+  const frame = useRef(null);
+  const heartbeat = useRef(null);
   const [videoBlob, setVideoBlob] = useState(null);
-
-  const stopHeartbeat = useCallback(() => {
-    if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+  const stopFrames = useCallback(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
   }, []);
-
-  // Canvas frame push. A canvas stream samples itself when it is handed to a
-  // recorder, but under the phone's web view a canvas painted from a timer goes
-  // quiet after its first frame — the clip then holds a single still, which the
-  // native preparation step rejects when saving. SIEG solved this by asking for
-  // a frame on every paint; the sweepers get the same treatment here, once, for
-  // every tool that records its canvas.
-  const stopFramePush = useCallback(() => {
-    if (framePushRef.current) { cancelAnimationFrame(framePushRef.current); framePushRef.current = null; }
-  }, []);
-
-  const startFramePush = useCallback((track) => {
-    stopFramePush();
-    if (!track || typeof track.requestFrame !== 'function') return;
-    const push = () => {
-      try { track.requestFrame(); } catch { /* track already closed */ }
-      framePushRef.current = requestAnimationFrame(push);
+  const startFrames = useCallback((draw) => {
+    stopFrames();
+    const paint = () => {
+      draw();
+      state.current.take?.requestFrame();
+      frame.current = requestAnimationFrame(paint);
     };
-    framePushRef.current = requestAnimationFrame(push);
-  }, [stopFramePush]);
-
-  const startHeartbeat = useCallback(() => {
-    stopHeartbeat();
-    heartbeatRef.current = setInterval(async () => {
-      try {
-        if (resumeAudioContext) await resumeAudioContext();
-      } catch {}
-      diag('info', `${componentName} heartbeat`, {
-        elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
-        chunks: videoChunksRef.current.length,
-        recorderState: mediaRecorderRef.current?.state ?? 'none',
-      });
-      // 1.5s (not 3s): the phone's speech session can suspend the engine in the
-      // gap between spoken items, and a suspension left standing for seconds
-      // drops the recording's audio mix down to thin mic-only sound.
-    }, 1500);
-  }, [resumeAudioContext, componentName, stopHeartbeat]);
-
-  const stopTracks = useCallback(() => {
-    if (canvasStreamRef.current) {
-      try { canvasStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
-      canvasStreamRef.current = null;
-    }
-    if (audioStreamRef.current) {
-      try { audioStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
-      audioStreamRef.current = null;
-    }
-    stopFramePush();
-  }, [stopFramePush]);
-
-  // Auto-restart teardown: the session's microphone stream stays alive (see
-  // spinup) so the phone is not asked to re-negotiate its input mid-session.
-  const stopCanvasTracks = useCallback(() => {
-    if (canvasStreamRef.current) {
-      try { canvasStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
-      canvasStreamRef.current = null;
-    }
-    stopFramePush();
-  }, [stopFramePush]);
-
-  // Assemble the session into the one file it is. The declared type is the
-  // container the recorder actually produced, and on Android it carries the
-  // container name alone — the same declaration the camera tools make, because
-  // the device save reads that string to decide how to hand the file on. A blob
-  // that declares its codecs is refused there.
-  const finalizeTake = useCallback((reason) => {
-    stopHeartbeat();
-    stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
-    const mr = mediaRecorderRef.current;
-    const blobType = recordingBlobType({
-      recorderMime: mr?.mimeType,
-      chunkMime: videoChunksRef.current.find((c) => c.blob.type)?.blob.type,
-      requestedMime: mimeTypeRef.current,
-      fallback: audioOnlyRef.current ? 'audio/webm' : 'video/webm',
+    frame.current = requestAnimationFrame(paint);
+  }, [stopFrames]);
+  const stopRecording = useCallback(() => {
+    const current = state.current;
+    current.generation += 1; // Cancels microphone permission/startup still pending.
+    if (current.finishing) return current.finishing;
+    clearInterval(heartbeat.current);
+    heartbeat.current = null;
+    const take = current.take;
+    const mic = current.mic;
+    current.finishing = (take ? take.stop() : Promise.resolve(null)).finally(() => {
+      stopFrames();
+      mic?.getTracks().forEach((track) => track.stop());
+      if (current.take === take) current.take = null;
+      if (current.mic === mic) current.mic = null;
+      current.finishing = null;
     });
-    const blob = new Blob(videoChunksRef.current.map((c) => c.blob), { type: blobType });
-    diag('info', `${componentName} recorder stopped (${reason})`, {
-      elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
-      chunks: videoChunksRef.current.length,
-      blobSize: blob.size,
-      declaredType: blob.type,
-      recorderReported: mr?.mimeType || '',
-    });
-    setVideoBlob(blob);
-    stopTracks();
-  }, [componentName, stopHeartbeat, stopTracks]);
-
-  // Spin up a fresh MediaRecorder on a new canvas stream + mic. Used for both
-  // the initial recording and auto-restarts. Chunks always accumulate into
-  // the same videoChunksRef so the final blob spans the whole session.
-  const spinup = useCallback(async () => {
+    return current.finishing;
+  }, [stopFrames]);
+  const startRecording = useCallback(async () => {
+    const current = state.current;
+    if (current.starting || current.finishing || current.take) return false;
+    current.starting = true;
+    const generation = ++current.generation;
+    let ownedMic = null;
     try {
-      // Mic capture is the phone's plain feed, deliberately WITHOUT echo
-      // cancellation or noise suppression: both remove exactly what these
-      // recordings are for — the dictated items leave through the phone's own
-      // speaker, and room tone is evidence. Automatic gain stays ON so a voice
-      // across the room arrives at a usable level.
-      //
-      // The microphone is opened once per session and reused across
-      // auto-restarts: re-opening it mid-session makes the phone re-negotiate
-      // its input mode, which is both what the iOS recorder flakiness feeds on
-      // and a chance for the phone to switch the mic into a speech-only mode.
-      let audioStream = audioStreamRef.current;
-      const liveMicTrack = audioStream?.getAudioTracks?.()[0];
-      if (!audioStream || !liveMicTrack || liveMicTrack.readyState === 'ended') {
-        audioStream = await navigator.mediaDevices.getUserMedia({
+      let micStream = config.current.micStreamRef?.current;
+      if (!micStream) {
+        ownedMic = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
         });
-        audioStreamRef.current = audioStream;
+        micStream = ownedMic;
       }
-      await new Promise((r) => setTimeout(r, 150));
-      // The device's web view may have no canvas recording at all (every iPhone):
-      // a session there used to run and save nothing. Record the session audio
-      // instead — the dictated items and the trigger cues leave the phone's own
-      // speaker right beside the mic, so they are captured acoustically — and the
-      // tools save it as audio evidence (they read the blob type at save time).
-      const canvasCapture = !!canvasRef.current && typeof canvasRef.current.captureStream === 'function';
-      audioOnlyRef.current = !canvasCapture;
-      if (!canvasCapture) {
-        diag('warn', `${componentName} canvas capture unavailable — recording session audio only`);
+      if (!mounted.current || generation !== current.generation) {
+        ownedMic?.getTracks().forEach((track) => track.stop());
+        return false;
       }
-      // Record what the phone ACTUALLY applied to the microphone — the plain
-      // feed we ask for can be ignored. If echo cancellation or noise
-      // suppression come back true, the phone is processing the input and room
-      // tone will be filtered out no matter what the app does.
-      try {
-        const applied = audioStream.getAudioTracks?.()[0]?.getSettings?.() || {};
-        diag('info', `${componentName} mic settings applied`, {
-          capturePath: canvasCapture ? 'canvas+mix' : 'audio-only',
-          echoCancellation: applied.echoCancellation ?? 'unknown',
-          noiseSuppression: applied.noiseSuppression ?? 'unknown',
-          autoGainControl: applied.autoGainControl ?? 'unknown',
-        });
-      } catch {}
-      const canvasStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
-      canvasStreamRef.current = canvasStream;
-      if (canvasCapture) startFramePush(canvasStream.getVideoTracks()[0]);
-      // Prefer the Web Audio mixed track (mic + dictated speech) when it is
-      // still live; on a restart after the AudioContext suspended the mixed
-      // track is ended, so fall back to the raw mic track (the TTS is still
-      // captured acoustically — see the echo-cancellation disable comment).
-      // The audio-only path takes the boosted mic-only track (micRecordChain),
-      // which is the same microphone with the same lift, without the tools' own
-      // audio added electrically.
-      // iOS records the phone's plain microphone track, exactly as SIEG and the
-      // Anomaly Camera do — the two tools whose sessions prepare and save on the
-      // device. A Web Audio destination track (what these sweepers used on every
-      // platform) is not readable by the phone's own media exporter once it sits
-      // inside the file beside the picture, so the session recorded and then
-      // refused to prepare: that is what stopped these tools saving on iOS.
-      // The tools' own sound still reaches the recording acoustically through the
-      // speaker — echo cancellation is off — which is how the camera tools get it.
-      const plainMicTrack = audioStream.getAudioTracks?.()[0] || null;
-      let audioTrack = null;
-      if (isIosRecording()) {
-        audioTrack = plainMicTrack;
-      } else if (canvasCapture) {
-        try {
-          const mixed = attachMicToRecording ? attachMicToRecording(audioStream) : null;
-          if (mixed && mixed.readyState !== 'ended') audioTrack = mixed;
-        } catch {}
-      } else {
-        // Audio-only session: the microphone is the recording's only input, so
-        // it goes through the same lift and limiter as the mixed path. Without
-        // it the saved file was the phone's plain feed, with the speaker right
-        // beside the mic drowning the room and the investigator's own voice.
-        try {
-          const boosted = boostMicStream ? boostMicStream(audioStream) : null;
-          if (boosted && boosted.readyState !== 'ended') audioTrack = boosted;
-        } catch {}
-      }
-      if (!audioTrack) audioTrack = plainMicTrack;
-      if (audioTrack) canvasStream.addTrack(audioTrack);
-
-      const candidates = canvasCapture ? MIME_CANDIDATES : AUDIO_MIME_CANDIDATES;
-      const mimeType = candidates.find((t) => MediaRecorder.isTypeSupported(t)) || '';
-      mimeTypeRef.current = mimeType;
-      const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
-      mediaRecorderRef.current = mr;
-
-      mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push({ blob: e.data, t: Date.now() }); };
-      mr.onerror = (e) => {
-        diag('error', `${componentName} recorder onerror`, {
-          elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
-          error: e?.error?.name || 'unknown',
-          chunks: videoChunksRef.current.length,
-        });
-      };
-      // Log if either recorded track ends early — the direct signal that the
-      // recorder is about to auto-stop.
-      const onTrackEnded = (which) => (e) => {
-        diag('warn', `${componentName} ${which} track ended`, {
-          elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
-          readyState: e?.target?.readyState,
-        });
-      };
-      canvasStream.getVideoTracks().forEach((t) => t.addEventListener('ended', onTrackEnded('video')));
-      if (audioTrack) audioTrack.addEventListener('ended', onTrackEnded('audio'));
-
-      mr.onstop = () => {
-        if (userStoppedRef.current) {
-          // User-initiated stop — assemble the final blob from every chunk
-          // collected across the whole session.
-          finalizeTake('user');
-          return;
-        }
-        // Android: a stopped recorder cannot be resumed into the same file. A
-        // second recorder's chunks glued onto the first make a file with two
-        // container headers and timestamps that restart mid-way, which the
-        // device save refuses. Finalize the one take instead of gluing another
-        // onto it, and say so rather than passing off a short file as the whole
-        // session.
-        if (isAndroidRecording()) {
-          diag('warn', `${componentName} recorder stopped before the session ended`, {
-            elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
-            chunks: videoChunksRef.current.length,
-          });
-          setSensorError?.('The session recording ended early on this device. Save what was captured, then start a new session.');
-          finalizeTake('ended early');
-          return;
-        }
-        stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
-        // Auto-stop (track ended / WebKit fragility) while the session is
-        // still running — restart a fresh recorder so the rest of the
-        // session is captured. Chunks already collected are preserved.
-        diag('warn', `${componentName} recorder auto-stopped — restarting`, {
-          elapsed: Math.round((Date.now() - startedAtRef.current) / 1000),
-          chunks: videoChunksRef.current.length,
-          restart: restartCountRef.current + 1,
-        });
-        // Keep the microphone stream alive across the restart — only the canvas
-        // stream is torn down (see spinup).
-        stopCanvasTracks();
-        restartCountRef.current += 1;
-        // Spin up asynchronously; failure is non-fatal (session continues).
-        spinup().catch((e) => diag('error', `${componentName} restart spinup failed`, { msg: e?.message }));
-      };
-
-      mr.start(1000);
-      chunkPumpRef.current = startChunkPump(mr);
+      current.mic = ownedMic;
+      setVideoBlob(null);
+      current.take = sessionCanvasRecorder({
+        canvas: config.current.canvasRef.current,
+        micStream,
+        onFinished: (blob) => { if (mounted.current) setVideoBlob(blob); },
+        onError: (message) => { if (mounted.current) config.current.setSensorError?.(message); },
+      });
+      // Resume analysis/cue playback without routing its generated destination
+      // into the recording or awaiting a suspended audio engine.
+      heartbeat.current = setInterval(() => { config.current.resumeAudioContext?.()?.catch?.(() => {}); }, 1500);
       return true;
-    } catch (e) {
-      setSensorError?.('Microphone access denied. Grant permission to record the session.');
-      diag('error', `${componentName} spinup failed`, { msg: e?.message });
+    } catch (error) {
+      ownedMic?.getTracks().forEach((track) => track.stop());
+      current.mic = null;
+      if (mounted.current && generation === current.generation) {
+        config.current.setSensorError?.('Recording could not start. Check microphone permission and try again.');
+      }
       return false;
+    } finally {
+      current.starting = false;
     }
-  }, [canvasRef, attachMicToRecording, boostMicStream, setSensorError, componentName, stopTracks, stopCanvasTracks, finalizeTake, startFramePush]);
-
-  const startRecording = useCallback(async () => {
-    userStoppedRef.current = false;
-    restartCountRef.current = 0;
-    videoChunksRef.current = [];
-    setVideoBlob(null);
-    startedAtRef.current = Date.now();
-    diag('info', `${componentName} recording started`);
-    // Android: begin the session on a live mixed audio track, so the whole take
-    // records on one audio path — a dead destination left over from an earlier
-    // session would send this one to the plain microphone instead.
-    if (isAndroidRecording() && refreshRecordingDestination) {
-      try { refreshRecordingDestination(); } catch {}
-    }
-    const ok = await spinup();
-    if (ok) startHeartbeat();
-    return ok;
-  }, [spinup, startHeartbeat, componentName, refreshRecordingDestination]);
-
-  // User-initiated stop (Stop Session button). Flags the stop so the onstop
-  // handler builds the blob instead of restarting.
-  const stopRecording = useCallback(() => {
-    userStoppedRef.current = true;
-    stopHeartbeat();
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop(); } catch {}
-    }
-  }, [stopHeartbeat]);
-
-  // Unmount / teardown — never restarts.
-  const cleanup = useCallback(() => {
-    userStoppedRef.current = true;
-    stopHeartbeat();
-    stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop(); } catch {}
-    }
-    stopTracks();
-  }, [stopHeartbeat, stopTracks]);
-
-  return { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup };
+  }, []);
+  const cleanup = useCallback(() => { stopRecording(); }, [stopRecording]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; cleanup(); };
+  }, [cleanup]);
+  return { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, startFrames, stopFrames };
 }

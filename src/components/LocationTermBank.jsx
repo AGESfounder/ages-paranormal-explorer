@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Library, MapPin, Play, Square, RefreshCw, Loader2, Zap, Info, X, Activity, Video, AlertTriangle, Camera, Layers } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { uploadPrivateMedia } from '@/lib/privateMedia';
+import { mediaExtension } from '@/lib/deviceMedia';
 import { paidGenerate } from '@/lib/paidAi';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { toast } from '@/components/ui/use-toast';
@@ -164,7 +165,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
     setSensorError,
   });
 
-  const { unlock, attachMicToRecording, boostMicStream, resumeContext, refreshRecordingDestination, playCue } = useGhostVoice();
+  const { unlock, resumeContext, playCue } = useGhostVoice();
   const { gateManifestation, showUpgrade, setShowUpgrade, gateReason } = useEnergyGate();
 
   const speakNormal = (word) => {
@@ -210,7 +211,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   };
 
   const rotRef = useRef(null);
-  const drawRef = useRef(null);
+
   const shuffleBagRef = useRef([]); // no-repeat-until-all-used shuffle bag
   const canvasRef = useRef(null);
   const lastTriggerRef = useRef(0);
@@ -222,18 +223,12 @@ export default function LocationTermBank({ gateSave, refundSave }) {
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
   const timerRef = useRef(null);
-  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
-    canvasRef,
-    attachMicToRecording,
-    boostMicStream,
-    resumeAudioContext: resumeContext,
-    refreshRecordingDestination,
-    setSensorError,
-    componentName: 'TermsSweeper',
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, startFrames, stopFrames } = useSweeperRecorder({
+    canvasRef, resumeAudioContext: resumeContext, setSensorError,
   });
   const [trimMode, setTrimMode] = useState('full');
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds, trimMode);
   const displayBlob = preparedRecording.blob;
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
@@ -251,7 +246,7 @@ export default function LocationTermBank({ gateSave, refundSave }) {
     stopNormalVoice();
     epochRef.current++; // invalidate any pending scheduleNextWord callback
     if (rotRef.current) { clearInterval(rotRef.current); rotRef.current = null; }
-    if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
+    stopFrames();
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     stopSweeperSensors();
     trigger.stop();
@@ -530,17 +525,14 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     ctx.fillText((locationLabel || '').slice(0, 30), w - 14, h - 14);
   };
 
-  const startDrawing = () => {
-    if (drawRef.current) clearInterval(drawRef.current);
-    draw();
-    drawRef.current = setInterval(draw, 33);
-  };
+  const startDrawing = () => startFrames(draw);
 
   const stopDrawing = () => {
-    if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
+    stopFrames();
   };
 
   const startSession = async () => {
+    const startupEpoch = ++epochRef.current;
     unlock();
     setCaptured([]);
     setVideoBlob(null);
@@ -561,13 +553,17 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     // Start the sensor layer (permissions + native sensor calibration begins
     // during the settle pause so magnetic/barometric baselines are ready).
     await startSweeperSensors();
+    if (startupEpoch !== epochRef.current) { stopSweeperSensors(); return; }
     await trigger.start({ scan: false });
+    if (startupEpoch !== epochRef.current) { trigger.stop(); return; }
     startDrawing();
     await startRecording();
+    if (startupEpoch !== epochRef.current) return;
     // 3-second pause after the last permission prompt (mic) — tapping the
     // screen to grant permission sets off the motion sensor, so we wait for
     // the device to settle before starting the word rotation.
     await new Promise(r => setTimeout(r, 3000));
+    if (startupEpoch !== epochRef.current) return;
     armSweeperSensors();
     trigger.beginScan();
     startRotation();
@@ -582,7 +578,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     }, 1000);
   };
 
-  const stopSession = () => {
+  const stopSession = async () => {
     stopNormalVoice();
     epochRef.current++; // invalidate any pending scheduleNextWord callback
     if (rotRef.current) { clearInterval(rotRef.current); rotRef.current = null; }
@@ -590,7 +586,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     stopDrawing();
     stopSweeperSensors();
     trigger.stop();
-    stopRecording();
+    await stopRecording();
     // End of session, speech stopped: hand the phone's audio session back so the
     // app's music and every other sound return to full volume.
     releaseToolSpeech();
@@ -599,13 +595,14 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!displayBlob) return;
+    if (!displayBlob || saving || preparedRecording.preparing || preparedRecording.error) return;
+    setError('');
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `term_bank_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
@@ -630,7 +627,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         : '';
       await base44.entities.Evidence.create({
         title: `Term Sweeper — ${locationLabel} — ${date}`,
-        type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
+        type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'termbank',
         description: `Term Sweeper session at ${locationLabel} — ${formatDuration(sessionDuration)} — ${captured.length} term(s) captured via environment trigger: ${captured.map(c => c.word).join(', ') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (${trigger.lastMethod === 'depth' ? 'depth sensor' : 'camera'}).${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         media_uri: file_uri,
@@ -804,6 +801,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   if (phase === 'stopped') {
     return (
       <div className="space-y-4">
+        {error && <p role="alert" className="text-xs text-destructive text-center">{error}</p>}
         <div className="p-4 rounded-lg bg-card/30 border border-border/30 space-y-2">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Session Complete</p>
           <div className="flex gap-4 text-xs text-muted-foreground">
@@ -834,7 +832,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
             <RecordingPreparation {...preparedRecording} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="term_sweeper" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="term_sweeper" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} trimMode={trimMode} trimSeconds={trimSeconds} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

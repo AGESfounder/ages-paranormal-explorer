@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Play, Square, Zap, Info, X, Activity, Video, AlertTriangle, Type, Camera, Layers } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { uploadPrivateMedia } from '@/lib/privateMedia';
+import { mediaExtension } from '@/lib/deviceMedia';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
@@ -75,7 +76,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     setSensorError,
   });
 
-  const { stop: stopVoice, unlock, attachMicToRecording, boostMicStream, resumeContext, refreshRecordingDestination, playCue } = useGhostVoice();
+  const { stop: stopVoice, unlock, resumeContext, playCue } = useGhostVoice();
 
   // Speak a letter aloud via the shared Tool speech adapter (native TTS on
   // iOS/Android, browser speechSynthesis on web), in the user's own device
@@ -119,7 +120,6 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   };
 
   const stepRef = useRef(null);
-  const drawRef = useRef(null);
   const canvasRef = useRef(null);
   const lastTriggerRef = useRef(0);
   const lockedRef = useRef(false);
@@ -130,18 +130,12 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const sessionDurRef = useRef(0);
   const capturedRef = useRef([]);
   const timerRef = useRef(null);
-  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
-    canvasRef,
-    attachMicToRecording,
-    boostMicStream,
-    resumeAudioContext: resumeContext,
-    refreshRecordingDestination,
-    setSensorError,
-    componentName: 'AlphabetSweeper',
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, startFrames, stopFrames } = useSweeperRecorder({
+    canvasRef, resumeAudioContext: resumeContext, setSensorError,
   });
   const [trimMode, setTrimMode] = useState('full');
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds, trimMode);
   const displayBlob = preparedRecording.blob;
   const femaleBusyRef = useRef(false);
   const pendingMaleRef = useRef(null);
@@ -202,7 +196,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
     if (stepRef.current) { clearTimeout(stepRef.current); stepRef.current = null; }
-    if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
+    stopFrames();
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     stopSweeperSensors();
     trigger.stop();
@@ -371,11 +365,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     ctx.fillText(durText, w - 14, h - 14);
   };
 
-  const startDrawing = () => {
-    if (drawRef.current) clearInterval(drawRef.current);
-    draw();
-    drawRef.current = setInterval(draw, 33);
-  };
+  const startDrawing = () => startFrames(draw);
 
   const startSession = async () => {
     unlock();
@@ -404,6 +394,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     // Start the sensor layer (permissions + native sensor calibration begins
     // during the settle pause so magnetic/barometric baselines are ready).
     await startSweeperSensors();
+    if (!sessionActiveRef.current) { stopSweeperSensors(); return; }
     startDrawing();
     // Show "Get Ready…" while the directions play. Directions play FIRST,
     // before the mic prompt, camera, or alphabet.
@@ -418,12 +409,15 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       if (!sessionActiveRef.current) return;
       // Mic prompt AFTER directions.
       await startRecording();
+      if (!sessionActiveRef.current) return;
       // Start camera AFTER directions and mic prompt.
       await trigger.start({ scan: false });
+      if (!sessionActiveRef.current) { trigger.stop(); return; }
       // 3-second pause after the last permission prompt (camera) — tapping the
       // screen to grant permission sets off the motion sensor, so we wait for
       // the device to settle before starting the investigation.
       await new Promise(r => setTimeout(r, 3000));
+      if (!sessionActiveRef.current) return;
       pausedRef.current = false;
       setPaused(false);
       startStepping();
@@ -462,19 +456,19 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     }, 5000);
   };
 
-  const stopSession = () => {
+  const stopSession = async () => {
     sessionActiveRef.current = false;
     pausedRef.current = false;
     setPaused(false);
     if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
     if (stepRef.current) { clearTimeout(stepRef.current); stepRef.current = null; }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (drawRef.current) { clearInterval(drawRef.current); drawRef.current = null; }
+    stopFrames();
     stopSweeperSensors();
     trigger.stop();
     if (resumeIntervalRef.current) { clearInterval(resumeIntervalRef.current); resumeIntervalRef.current = null; }
     if (resumeDelayRef.current) { clearTimeout(resumeDelayRef.current); resumeDelayRef.current = null; }
-    stopRecording();
+    await stopRecording();
     lockedRef.current = false;
     stopFemaleAudio();
     // End of session, speech stopped: hand the phone's audio session back so the
@@ -485,13 +479,14 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!displayBlob) return;
+    if (!displayBlob || saving || preparedRecording.preparing || preparedRecording.error) return;
+    setError('');
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `alphabet_sweeper_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
@@ -516,7 +511,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         : '';
       await base44.entities.Evidence.create({
         title: `Alphabet Sweeper — ${date}`,
-        type: videoBlob.type.startsWith('audio') ? 'evp' : 'video',
+        type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'alphabet',
         description: `Alphabet Sweeper session — ${formatDuration(sessionDuration)} — ${captured.length} letter(s) captured via environment trigger: ${captured.join('') || 'none'}. ${triggerLine}Sensors: motion, orientation, magnetic, barometric, anomaly (${trigger.lastMethod === 'depth' ? 'depth sensor' : 'camera'}).${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         media_uri: file_uri,
@@ -661,6 +656,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   if (phase === 'stopped') {
     return (
       <div className="space-y-4">
+        {error && <p role="alert" className="text-xs text-destructive text-center">{error}</p>}
         <div className="p-4 rounded-lg bg-card/30 border border-border/30 space-y-2">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Session Complete</p>
           <div className="flex gap-4 text-xs text-muted-foreground">
@@ -688,7 +684,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
             <RecordingPreparation {...preparedRecording} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="alphabet_sweeper" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="alphabet_sweeper" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} trimMode={trimMode} trimSeconds={trimSeconds} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

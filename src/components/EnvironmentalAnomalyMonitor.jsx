@@ -3,6 +3,9 @@ import { motion } from 'framer-motion';
 import { Play, Square, X, Info, Video, Activity, AlertTriangle, Compass, Gauge, Volume2, VolumeX } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { uploadPrivateMedia } from '@/lib/privateMedia';
+import { mediaExtension } from '@/lib/deviceMedia';
+import RecordingPreview from '@/components/RecordingPreview';
+import RecordingPreparation from '@/components/RecordingPreparation';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
@@ -52,7 +55,7 @@ function formatDuration(sec) {
 
 export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
-  const { unlock, attachMicToRecording, boostMicStream, resumeContext, refreshRecordingDestination, playCue } = useGhostVoice();
+  const { unlock, resumeContext, playCue } = useGhostVoice();
 
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
   const [available, setAvailable] = useState(null);
@@ -91,7 +94,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const sessionStartRef = useRef(0);
   const eventCountRef = useRef(0);
   const sampleTimerRef = useRef(null);
-  const drawTimerRef = useRef(null);
+
   const sessionTimerRef = useRef(null);
   const anomalyTimerRef = useRef(null);
   const watchTimerRef = useRef(null);
@@ -105,18 +108,12 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   // second "both sensors" entry and sounding the combined tone again.
   const combinedAlertRef = useRef(0);
 
-  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup } = useSweeperRecorder({
-    canvasRef,
-    attachMicToRecording,
-    boostMicStream,
-    resumeAudioContext: resumeContext,
-    refreshRecordingDestination,
-    setSensorError,
-    componentName: 'EnvironmentMonitor',
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, startFrames } = useSweeperRecorder({
+    canvasRef, resumeAudioContext: resumeContext, setSensorError: setRecordingError,
   });
 
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds, trimMode);
   const displayBlob = preparedRecording.blob;
 
   useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
@@ -161,15 +158,15 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     ambienceHeldRef.current = null;
   };
 
-  const stopEverything = () => {
+  const stopEverything = async () => {
     sessionActiveRef.current = false;
-    [sampleTimerRef, drawTimerRef, sessionTimerRef, anomalyTimerRef, watchTimerRef].forEach((r) => {
+    [sampleTimerRef, sessionTimerRef, anomalyTimerRef, watchTimerRef].forEach((r) => {
       if (r.current) { clearInterval(r.current); clearTimeout(r.current); r.current = null; }
     });
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (sensorErrorUnsubRef.current) { sensorErrorUnsubRef.current(); sensorErrorUnsubRef.current = null; }
     stopSensors();
-    if (recordingRef.current) stopRecording();
+    await stopRecording();
     recordingRef.current = false;
     setRecording(false);
     setAnomaly(null);
@@ -347,6 +344,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
 
   const beginRecording = async () => {
     if (!sessionActiveRef.current || recordingRef.current) return;
+    recordingRef.current = true;
     sessionStartRef.current = Date.now();
     durationRef.current = 0;
     setSessionDuration(0);
@@ -363,6 +361,8 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     // attaches, so the mic chain is live from the first sample.
     resumeContext();
     const ok = await startRecording();
+    if (!sessionActiveRef.current) return;
+    recordingRef.current = ok;
     if (ok) {
       recordingRef.current = true;
       setRecording(true);
@@ -468,8 +468,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     calibrationEndRef.current = Date.now() + CALIBRATION_MS;
     await new Promise((r) => setTimeout(r, 150));
     holdAmbience();
-    draw();
-    drawTimerRef.current = setInterval(draw, 33);
+    startFrames(draw);
     sampleTimerRef.current = setInterval(sampleFrame, SAMPLE_MS);
     watchTimerRef.current = setTimeout(() => {
       if (!latestRef.current) {
@@ -478,21 +477,22 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     }, 5000);
   };
 
-  const stopSession = () => {
-    stopEverything();
+  const stopSession = async () => {
+    await stopEverything();
     setPhase('stopped');
     setCalibrating(false);
     setError('');
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!displayBlob) return;
+    if (!displayBlob || saving || preparedRecording.preparing || preparedRecording.error) return;
+    setError('');
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled GPS
       // flow does NOT consume a daily evidence save.
-      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `environment_monitor_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
@@ -709,6 +709,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   if (phase === 'stopped') {
     return (
       <div className="space-y-4">
+        {error && <p role="alert" className="text-xs text-destructive text-center">{error}</p>}
         <div className="p-4 rounded-lg bg-card/30 border border-border/30 space-y-2">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Session Complete</p>
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
@@ -739,14 +740,11 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
               <p className="text-[10px] font-heading uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Video className="w-3 h-3" /> Session Recording Ready
               </p>
-              {(displayBlob || videoBlob).type.startsWith('audio') ? (
-                <audio src={URL.createObjectURL(displayBlob || videoBlob)} controls className="w-full" />
-              ) : (
-                <video src={URL.createObjectURL(displayBlob || videoBlob)} controls className="w-full rounded" style={{ maxHeight: 180 }} />
-              )}
+              <RecordingPreview blob={displayBlob} />
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="environment_monitor" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
+            <RecordingPreparation {...preparedRecording} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="environment_monitor" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} trimMode={trimMode} trimSeconds={trimSeconds} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">

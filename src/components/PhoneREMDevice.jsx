@@ -6,15 +6,15 @@ import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import EvidenceSaveButtons from './EvidenceSaveButtons';
 import { toast } from '@/components/ui/use-toast';
-import { buildMicChain } from '@/lib/micRecordChain';
+import useSweeperRecorder from '@/hooks/useSweeperRecorder';
+import { mediaExtension } from '@/lib/deviceMedia';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
-import { startChunkPump, stopChunkPump } from '@/lib/recorderChunkPump';
-import { recordingBlobType } from '@/lib/recordingLabel';
+
 
 // Quiet window the sensor baseline is measured over, before the session — and
 // its recording — begin.
@@ -64,8 +64,8 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   // The disturbance currently running, shown as one live row until it ends.
   const [liveEvent, setLiveEvent] = useState(null);
   const [sessionDuration, setSessionDuration] = useState(0);
-  const [videoBlob, setVideoBlob] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [sensorError, setSensorError] = useState(null);
   const [trimMode, setTrimMode] = useState('full');
 
@@ -89,29 +89,18 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   const sessionStartRef = useRef(0);
   const beepCtxRef = useRef(null);
   const beepIntervalRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const videoChunksRef = useRef([]);
-  const chunkPumpRef = useRef(null);
-  const videoBlobRef = useRef(null);
   const canvasRef = useRef(null);
-  const canvasIntervalRef = useRef(null);
-  const audioStreamRef = useRef(null);
-  const framePushRef = useRef(null);
-  // Recording destination on the beep engine. The vibration beeps are routed
-  // into the recording here instead of relying on the mic picking them up
-  // acoustically — the tool is meant to lie face-down on a surface, which
-  // muffles the mic and is why the beeps were only sometimes in the saved video.
-  const recordDestRef = useRef(null);
-  // Mic-only recording destination for the devices whose web view cannot record
-  // the on-screen display (every iPhone): the microphone is that recording's
-  // only input, so it needs its own destination (see startRecording).
-  const micOnlyDestRef = useRef(null);
+  const calibrationTimerRef = useRef(null);
+  const sessionActiveRef = useRef(false);
   // This session's own hold on the app's background music (ref-guarded, so the
   // ambience is never released more often than it was held).
   const ambienceHeldRef = useRef(false);
 
+  const { videoBlob, setVideoBlob, startRecording, stopRecording, cleanup, startFrames, stopFrames } = useSweeperRecorder({
+    canvasRef, setSensorError, resumeAudioContext: () => beepCtxRef.current?.resume(),
+  });
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
-  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds);
+  const preparedRecording = usePreparedRecording(videoBlob, trimSeconds, trimMode);
   const displayBlob = preparedRecording.blob;
 
   // Sensor handlers
@@ -180,9 +169,6 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
 
     osc.connect(gain); gain.connect(ctx.destination);
     osc2.connect(gain2); gain2.connect(ctx.destination);
-    if (recordDestRef.current) {
-      try { gain.connect(recordDestRef.current); gain2.connect(recordDestRef.current); } catch {}
-    }
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + duration);
     osc2.start(ctx.currentTime);
@@ -216,16 +202,13 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     }
     beepCtxRef.current = ctx;
     if (ctx.state === 'suspended') { try { ctx.resume().catch(() => {}); } catch {} }
-    // Mixing point for the recording: beeps + ambient mic.
-    try { recordDestRef.current = ctx.createMediaStreamDestination(); } catch { recordDestRef.current = null; }
-    try { micOnlyDestRef.current = ctx.createMediaStreamDestination(); } catch { micOnlyDestRef.current = null; }
+    // Playback only; the recording takes the plain microphone, as SIEG does.
   };
 
   const stopAudioEngine = () => {
     if (beepIntervalRef.current) { clearInterval(beepIntervalRef.current); beepIntervalRef.current = null; }
     if (beepCtxRef.current) { beepCtxRef.current.close(); beepCtxRef.current = null; }
-    recordDestRef.current = null;
-    micOnlyDestRef.current = null;
+
   };
 
   // The app's own music is held quiet from the moment a session begins — the
@@ -321,139 +304,8 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     });
   };
 
-  const startCanvasDrawing = () => {
-    if (canvasIntervalRef.current) clearInterval(canvasIntervalRef.current);
-    drawCanvas();
-    canvasIntervalRef.current = setInterval(drawCanvas, 33); // ~30fps
-  };
-
-  const stopCanvasDrawing = () => {
-    if (canvasIntervalRef.current) { clearInterval(canvasIntervalRef.current); canvasIntervalRef.current = null; }
-  };
-
-  // Record from canvas (what's shown on screen) + audio from mic
-  const startRecording = async () => {
-    try {
-      // Request audio only — video comes from the canvas. Echo cancellation and
-      // noise suppression stay OFF: both remove exactly what this recording is
-      // for (the beeps leave through the phone's own speaker, and room tone is
-      // the evidence). Automatic gain stays ON so a voice across the room
-      // arrives at a usable level.
-      const audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
-      });
-      audioStreamRef.current = audioStream;
-      // Log what the phone ACTUALLY applied — the plain feed we ask for can be
-      // ignored, and if cancellation comes back on, room tone is being filtered
-      // out no matter what the app does.
-      try {
-        const applied = audioStream.getAudioTracks?.()[0]?.getSettings?.() || {};
-        console.log(`[REMRec] mic settings applied ${JSON.stringify({
-          echoCancellation: applied.echoCancellation ?? 'unknown',
-          noiseSuppression: applied.noiseSuppression ?? 'unknown',
-          autoGainControl: applied.autoGainControl ?? 'unknown',
-        })}`);
-      } catch {}
-
-      // Wait for canvas to be ready
-      await new Promise(r => setTimeout(r, 200));
-
-      // iPhone's web view cannot record a canvas, so this tool used to run a
-      // session there and save nothing. Record the session audio instead: the
-      // beeps leave the phone's own speaker right beside the mic, so they are
-      // captured acoustically, and the session saves as audio evidence.
-      const canvasCapture = !!canvasRef.current && typeof canvasRef.current.captureStream === 'function';
-      if (!canvasCapture) {
-        setSensorError('Recording the session audio — this device cannot record the on-screen display.');
-      }
-
-      const canvasStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
-      // Ask for a frame on every paint. Left to sample itself, a canvas painted
-      // from a timer goes quiet after its first frame under the phone's web view,
-      // and the clip that comes out holds one still — which the native preparation
-      // step then rejects when saving. Same treatment SIEG's recorder uses.
-      if (canvasCapture) {
-        const track = canvasStream.getVideoTracks()[0];
-        if (track?.requestFrame) {
-          const push = () => {
-            try { track.requestFrame(); } catch { /* track already closed */ }
-            framePushRef.current = requestAnimationFrame(push);
-          };
-          framePushRef.current = requestAnimationFrame(push);
-        }
-      }
-      // The microphone goes into the recording through the shared lift and
-      // limiter (micRecordChain), never raw: the phone's speaker sits about a
-      // centimetre from its mic, so the beeps arrive enormously louder than the
-      // room. The limiter caps those peaks, which is what lets a voice and the
-      // room sit at a usable level beside them. The mic is fed only into the
-      // recording, never to the speaker, so there is no feedback. Devices that
-      // cannot record the canvas take the mic-only destination, since their
-      // recording has no other input.
-      let audioTrack = null;
-      if (canvasCapture) {
-        try {
-          const ctx = beepCtxRef.current;
-          const dest = recordDestRef.current;
-          // Only while the engine is actually running: a suspended engine's
-          // destination track still exists but carries silence, and the plain
-          // mic track below is recorded instead of a silent one.
-          if (dest && ctx && ctx.state === 'running') {
-            buildMicChain(ctx, audioStream).connect(dest);
-            const t = dest.stream.getAudioTracks()[0];
-            if (t && t.readyState === 'live') audioTrack = t;
-          }
-        } catch {}
-      } else {
-        try {
-          const ctx = beepCtxRef.current;
-          const dest = micOnlyDestRef.current;
-          // That destination only carries sound while the engine is actually
-          // running, so it is used only then — otherwise the phone's plain mic
-          // track is recorded instead of a silent one.
-          if (ctx && ctx.state === 'running' && dest) {
-            buildMicChain(ctx, audioStream).connect(dest);
-            const t = dest.stream.getAudioTracks()[0];
-            if (t && t.readyState === 'live') audioTrack = t;
-          }
-        } catch {}
-      }
-      if (!audioTrack) audioTrack = audioStream.getAudioTracks()[0] || null;
-      if (audioTrack) canvasStream.addTrack(audioTrack);
-
-      const mimeType = (canvasCapture
-        ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
-        : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'])
-        .find(t => MediaRecorder.isTypeSupported(t)) || '';
-
-      const mr = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
-      mediaRecorderRef.current = mr;
-      videoChunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push({ blob: e.data, t: Date.now() }); };
-      mr.onstop = () => {
-        stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
-        if (framePushRef.current) { cancelAnimationFrame(framePushRef.current); framePushRef.current = null; }
-        const actualMime = recordingBlobType({
-          recorderMime: mr.mimeType,
-          chunkMime: videoChunksRef.current.find((c) => c.blob.type)?.blob.type,
-          requestedMime: mimeType,
-          fallback: canvasCapture ? 'video/webm' : 'audio/webm',
-        });
-        const blob = new Blob(videoChunksRef.current.map((c) => c.blob), { type: actualMime });
-        videoBlobRef.current = blob;
-        setVideoBlob(blob);
-        canvasStream.getTracks().forEach(t => t.stop());
-        audioStream.getTracks().forEach(t => t.stop());
-        audioStreamRef.current = null;
-      };
-      mr.start(1000);
-      chunkPumpRef.current = startChunkPump(mr);
-      return true;
-    } catch (e) {
-      setSensorError('Microphone access denied. Grant permission to record the session.');
-      return false;
-    }
-  };
+  const startCanvasDrawing = () => startFrames(drawCanvas);
+  const stopCanvasDrawing = () => stopFrames();
 
   const calibrateBaseline = () => {
     const s = currentSensor.current;
@@ -520,8 +372,10 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
 
   const activate = async () => {
     setSensorError(null);
+    setError('');
+    sessionActiveRef.current = true;
     setVideoBlob(null);
-    videoBlobRef.current = null;
+
     setEvents([]);
     eventsRef.current = [];
     excursionRef.current = null;
@@ -555,12 +409,13 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     // two before the phone was even set down is what flooded the log with
     // detections the instant a session began.
     const calibrationEnd = Date.now() + CALIBRATION_MS;
-    const cdInterval = setInterval(() => {
+    calibrationTimerRef.current = setInterval(() => {
       calibrateBaseline();
       setCountdown(Math.max(0, Math.ceil((calibrationEnd - Date.now()) / 1000)));
       if (Date.now() >= calibrationEnd) {
-        clearInterval(cdInterval);
-        beginSession();
+        clearInterval(calibrationTimerRef.current);
+        calibrationTimerRef.current = null;
+        if (sessionActiveRef.current) beginSession();
       }
     }, 300);
   };
@@ -570,11 +425,10 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     // Wait for canvas to render
     await new Promise(r => setTimeout(r, 100));
 
+    if (!sessionActiveRef.current) return;
     startCanvasDrawing();
-    // The engine (and the music hold) were started when the session was
-    // activated; the recorder built below mixes the beeps through its
-    // destination.
     await startRecording();
+    if (!sessionActiveRef.current) return;
 
     sessionStartRef.current = Date.now();
     timerRef.current = setInterval(() => {
@@ -618,36 +472,31 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     }, 300);
   };
 
-  const deactivate = () => {
+  const deactivate = async () => {
+    sessionActiveRef.current = false;
     if (timerRef.current) clearInterval(timerRef.current);
     // A disturbance still running when the session ends is logged with the peak
     // it reached, so the last one is never lost.
     finalizeExcursion(Date.now());
-    stopCanvasDrawing();
+    await stopRecording();
     stopAudioEngine();
     releaseAmbience();
     window.removeEventListener('devicemotion', handleMotion);
     window.removeEventListener('deviceorientationabsolute', handleOrientation);
     window.removeEventListener('deviceorientation', handleOrientation);
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    } else if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach(t => t.stop());
-      audioStreamRef.current = null;
-    }
-
     setPhase('stopped');
   };
 
   const saveSession = async (isPrivate = true) => {
-    if (!displayBlob) return;
+    if (!displayBlob || saving || preparedRecording.preparing || preparedRecording.error) return;
+    setError('');
     setSaving(true);
     let gateSucceeded = false;
     try {
       // Upload and capture GPS BEFORE gating so a failed upload or cancelled
       // GPS flow does NOT consume a daily evidence save.
-      const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `rem_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
       const now = new Date();
@@ -678,7 +527,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
         ...ctx,
       });
       setVideoBlob(null);
-      videoBlobRef.current = null;
+  
       setPhase('idle');
       setEvents([]);
       eventsRef.current = [];
@@ -687,13 +536,14 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     } catch (e) {
       if (gateSucceeded && refundSave) await refundSave();
       console.error('Save failed', e);
+      setError('Save failed. Try again.');
     }
     setSaving(false);
   };
 
   const discard = () => {
     setVideoBlob(null);
-    videoBlobRef.current = null;
+
     setPhase('idle');
     setEvents([]);
     eventsRef.current = [];
@@ -712,12 +562,9 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       window.removeEventListener('devicemotion', handleMotion);
       window.removeEventListener('deviceorientationabsolute', handleOrientation);
       window.removeEventListener('deviceorientation', handleOrientation);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try { mediaRecorderRef.current.stop(); } catch (e) {}
-      }
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach(t => t.stop());
-      }
+      sessionActiveRef.current = false;
+      if (calibrationTimerRef.current) clearInterval(calibrationTimerRef.current);
+      cleanup();
     };
   }, []);
 
@@ -869,6 +716,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   if (phase === 'stopped') {
     return (
       <div className="space-y-4">
+        {error && <p role="alert" className="text-xs text-destructive text-center">{error}</p>}
         <div className="p-4 rounded-lg bg-card/30 border border-border/30 space-y-2">
           <p className="text-[10px] font-heading uppercase tracking-wider text-primary">Session Complete</p>
           <div className="flex gap-4 text-xs text-muted-foreground">
@@ -900,7 +748,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
             </div>
             <RecordTrimPicker value={trimMode} onChange={setTrimMode} />
             <RecordingPreparation {...preparedRecording} />
-            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="vibration_communicator" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} />
+            <EvidenceSaveButtons onSave={saveSession} saving={saving} deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob} devicePrefix="vibration_communicator" preparing={preparedRecording.preparing} preparationError={preparedRecording.error} trimMode={trimMode} trimSeconds={trimSeconds} />
           </div>
         ) : (
           <div className="p-3 rounded-lg bg-card/30 border border-border/30 text-center">
