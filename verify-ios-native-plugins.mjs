@@ -131,7 +131,7 @@ const trimCallers = ['AcousticAnomalySweeper', 'AlphabetSweeper', 'LocationTermB
 const siegReview = read('src/components/sieg/SiegReview.jsx') ?? '';
 const siegSource = read('src/components/SiegConsole.jsx') ?? '';
 const environmentSource = read('src/components/EnvironmentalAnomalyMonitor.jsx') ?? '';
-check('All seven trim tools and Environmental Monitor pass distinct finished/original inputs to shared saving', trimCallers.every((name) => /<EvidenceSaveButtons[^>]*deviceBlob=\{displayBlob\} originalBlob=\{preparedRecording.originalBlob\}[^>]*preparationError=\{preparedRecording.error\}/.test(read(`src/components/${name}.jsx`) ?? '')) && siegSource.includes('usePreparedRecording(') && siegSource.includes('preparation={preparedRecording}') && siegReview.includes('deviceBlob={blob} originalBlob={preparation?.originalBlob}') && environmentSource.includes('usePreparedRecording(videoBlob, trimSeconds)') && environmentSource.includes('const displayBlob = preparedRecording.blob') && /<EvidenceSaveButtons[^>]*deviceBlob=\{displayBlob\} originalBlob=\{preparedRecording.originalBlob\}[^>]*preparing=\{preparedRecording.preparing\} preparationError=\{preparedRecording.error\}/.test(environmentSource) && saveButtons.includes("from '@/lib/saveToDevice'"));
+check('All seven trim tools and Environmental Monitor pass distinct finished/original inputs to shared saving', trimCallers.every((name) => /<EvidenceSaveButtons[^>]*deviceBlob=\{displayBlob\} originalBlob=\{preparedRecording.originalBlob\}[^>]*preparationError=\{preparedRecording.error\}/.test(read(`src/components/${name}.jsx`) ?? '')) && siegSource.includes('usePreparedRecording(') && siegSource.includes('preparation={preparedRecording}') && siegReview.includes('deviceBlob={blob} originalBlob={preparation?.originalBlob}') && environmentSource.includes('usePreparedRecording(videoBlob, trimSeconds, trimMode)') && environmentSource.includes('const displayBlob = preparedRecording.blob') && /<EvidenceSaveButtons[^>]*deviceBlob=\{displayBlob\} originalBlob=\{preparedRecording.originalBlob\}[^>]*preparing=\{preparedRecording.preparing\} preparationError=\{preparedRecording.error\}/.test(environmentSource) && saveButtons.includes("from '@/lib/saveToDevice'"));
 
 // Audio Recorder opts into a direct, unchanged iOS Files copy. These guards
 // inspect source contracts, not a physical microphone, Files app or Photos write.
@@ -235,10 +235,10 @@ const appConfigurations = objects.filter((object) => /isa = XCBuildConfiguration
 check('App target has Debug and Release build configurations', appConfigurations.length === 2 && ['Debug', 'Release'].every((name) => appConfigurations.some((object) => object.body.includes(`name = ${name};`))));
 for (const name of ['Debug', 'Release']) {
   const settings = appConfigurations.find((object) => object.body.includes(`name = ${name};`))?.body ?? '';
-  check(`iOS ${name} is com.ages.explorer 1.0 (41)`, /CURRENT_PROJECT_VERSION = 41;/.test(settings) && /MARKETING_VERSION = 1\.0;/.test(settings) && /PRODUCT_BUNDLE_IDENTIFIER = com\.ages\.explorer;/.test(settings));
+  check(`iOS ${name} is com.ages.explorer 1.0 (42)`, /CURRENT_PROJECT_VERSION = 42;/.test(settings) && /MARKETING_VERSION = 1\.0;/.test(settings) && /PRODUCT_BUNDLE_IDENTIFIER = com\.ages\.explorer;/.test(settings));
 }
 const codemagic = read('codemagic.yaml') ?? '';
-check('iOS has exactly two Build 41 stamps and Codemagic stamps/guards the same build', (pbxproj?.match(/CURRENT_PROJECT_VERSION = 41;/g) ?? []).length === 2 && (pbxproj?.match(/CURRENT_PROJECT_VERSION = [^;]+;/g) ?? []).length === 2 && codemagic.includes('agvtool new-version -all 41') && codemagic.includes('CURRENT_PROJECT_VERSION = 41;') && codemagic.includes('[ "$BUNDLE_VERSION" = "41" ]') && !/Build 37|CFBundleVersion 37|build number 37/.test(codemagic));
+check('iOS has exactly two Build 42 stamps and Codemagic stamps/guards the same build', (pbxproj?.match(/CURRENT_PROJECT_VERSION = 42;/g) ?? []).length === 2 && (pbxproj?.match(/CURRENT_PROJECT_VERSION = [^;]+;/g) ?? []).length === 2 && codemagic.includes('agvtool new-version -all 42') && codemagic.includes('CURRENT_PROJECT_VERSION = 42;') && codemagic.includes('[ "$BUNDLE_VERSION" = "42" ]') && !/Build 37|CFBundleVersion 37|build number 37/.test(codemagic));
 
 // ── Report
 const width = Math.max(...results.map((r) => r.label.length));
