@@ -20,7 +20,7 @@ const java = (path) => read(path).replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/
 const nativePath = 'android/app/src/main/java/com/ages/explorer/';
 
 const gradle = read('android/app/build.gradle');
-for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '33'], ['versionName', '"1.0"']]) {
+for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '34'], ['versionName', '"1.0"']]) {
   const values = [...gradle.matchAll(new RegExp(`^\\s*${key}\\s+([^\\r\\n]+)`, 'gm'))];
   check(`Android ${key} is exactly ${value}`, values.length === 1 && values[0][1].trim() === value);
 }
@@ -341,10 +341,10 @@ const sync = workflow.indexOf('script: npx cap sync android');
 const verify = workflow.indexOf('npm run verify:android-native-plugins');
 const compile = workflow.indexOf('./gradlew assembleRelease bundleRelease');
 check('Android workflow orders web build, Android sync, static gate, then Gradle', build >= 0 && sync > build && verify > sync && compile > verify);
-check('Current CI and native metadata identify Android Build 33 alongside iOS Build 38',
-  workflow.includes('Verify Android Version 33 and native plugin wiring before Gradle')
-  && /\bversionCode\s+33\b/.test(gradle)
-  && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 38;'));
+check('Current CI and native metadata identify Android Build 34 alongside iOS Build 39',
+  workflow.includes('Verify Android Version 34 and native plugin wiring before Gradle')
+  && /\bversionCode\s+34\b/.test(gradle)
+  && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 39;'));
 check('Android workflow keeps signing and signature verification', workflow.includes('- ages-explorer-upload') && workflow.includes('jarsigner -verify -verbose -certs'));
 
 for (const { label, ok } of results) console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
