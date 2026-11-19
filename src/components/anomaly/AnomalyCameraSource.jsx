@@ -27,5 +27,5 @@ export default function AnomalyCameraSource({ videoRef, visible }) {
     };
   }, [videoRef]);
 
-  return <video ref={videoRef} playsInline muted controls={false} disablePictureInPicture disableRemotePlayback className={`absolute inset-0 w-full h-full object-cover ${visible ? 'opacity-100' : 'opacity-0'} pointer-events-none`} />;
+  return <video ref={videoRef} playsInline muted controls={false} disablePictureInPicture disableRemotePlayback className={`absolute inset-0 w-full h-full object-contain ${visible ? 'opacity-100' : 'opacity-0'} pointer-events-none`} />;
 }

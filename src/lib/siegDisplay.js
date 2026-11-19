@@ -34,8 +34,8 @@ export const CORRELATION_COLOR = '#ffffff';
 export const SIEG_W = 640;
 export const SIEG_H = 480;
 
-export const SIEG_CAMERA_Y = 60;
-export const SIEG_CAMERA_H = 250;
+export const SIEG_CAMERA_Y = 84;
+export const SIEG_CAMERA_H = 226;
 const HEADER_H = SIEG_CAMERA_Y;
 const CAM_Y = SIEG_CAMERA_Y;
 const CAM_H = SIEG_CAMERA_H;
@@ -206,14 +206,14 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillText(conditions, condX, 27);
   ctx.fillStyle = C.name;
   ctx.font = '14px sans-serif';
-  ctx.fillText(s.sessionName || '', 11, 51);
+  ctx.fillText(fitStampText(ctx, s.sessionName || '', 310), 11, 51);
   ctx.textAlign = 'right';
   ctx.fillStyle = s.calibrating ? C.muted : C.text;
   ctx.font = 'bold 24px monospace';
   ctx.fillText(s.calibrating ? '—:—' : formatClock(s.remaining), SIEG_W - 10, 28);
   ctx.font = '9px sans-serif';
   ctx.fillStyle = C.muted;
-  ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 45);
+  ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 74);
   // Real time on the line opposite the session's name: the phone's own clock, so a
   // time written down from the screen matches the recording and the event log.
   ctx.fillStyle = C.text;
@@ -229,6 +229,11 @@ export function drawSiegFrame(ctx, canvas, s) {
     ctx.fillText(s.stampDate, SIEG_W - 22 - wallClockWidth, 51);
   }
   ctx.textAlign = 'left';
+  // Keep the location on its own high-contrast header row, clear of both clocks
+  // and the playback controls that cover the bottom of a saved video.
+  ctx.fillStyle = C.text;
+  ctx.font = '14px monospace';
+  ctx.fillText(fitStampText(ctx, s.location || '', SIEG_W - 116), 11, 74);
 
   // ── Camera pane. The full frame is fitted inside the pane (no crop) so the
   // outline drawn around a detected form lands on the form it belongs to. ──
@@ -336,16 +341,6 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillStyle = C.muted;
   ctx.font = '9px monospace';
   ctx.fillText(`EVENTS ${s.eventCount || 0}   ·   CORRELATED ${s.correlatedCount || 0}`, 10, FOOT_Y + 18);
-  if (s.location) {
-    // Where the session began, in the one strip with room for it.
-    ctx.textAlign = 'center';
-    ctx.fillStyle = C.name;
-    ctx.font = '10px monospace';
-    ctx.fillText(fitStampText(ctx, s.location, 210), SIEG_W / 2, FOOT_Y + 18);
-    ctx.textAlign = 'left';
-    ctx.fillStyle = C.muted;
-    ctx.font = '9px monospace';
-  }
   ctx.textAlign = 'right';
   ctx.fillText(s.statusText || '', SIEG_W - 10, FOOT_Y + 18);
   if (s.recording) {
