@@ -5,6 +5,7 @@ import { base44 } from '@/api/base44Client';
 import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { mediaExtension } from '@/lib/deviceMedia';
 import RecordingPreview from '@/components/RecordingPreview';
+import useRecordingStamp from '@/hooks/useRecordingStamp';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -55,6 +56,7 @@ function formatDuration(sec) {
 
 export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
+  const { beginStamp, stampLine, stampLocation, stampRecord } = useRecordingStamp();
   const { unlock, resumeContext, playCue } = useGhostVoice();
 
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
@@ -389,6 +391,8 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
       sensitivity: sensitivityRef.current,
       recording: recordingRef.current,
       duration: durationRef.current,
+      stampLine: stampLine(),
+      location: stampLocation(),
     });
   }, []);
 
@@ -431,6 +435,9 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
     movingRef.current = false;
     setMoving(false);
     latestRef.current = null;
+
+    // The stamp this session burns: the date it began and where it began.
+    beginStamp();
 
     // The audio engine is opened from this tap (iOS requires a user gesture) so the
     // session recording has one.
@@ -495,9 +502,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
       const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `environment_monitor_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
-      const now = new Date();
-      const date = now.toISOString().split('T')[0];
-      const time = now.toTimeString().slice(0, 5);
+      const { date, time } = stampRecord();
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
@@ -510,7 +515,11 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
       const magnetic = events.filter((e) => e.channel === 'magnetic').length;
       const pressure = events.filter((e) => e.channel === 'pressure').length;
       const together = events.filter((e) => e.combined).length;
-      const ctxData = await buildEvidenceContext(gpsResult, { skipGps: true });
+      // The record carries the same location the frames were stamped with.
+      const saveContext = { ...gpsResult };
+      const burnedLocation = stampLocation();
+      if (burnedLocation && gpsResult.location_source !== 'NONE') saveContext.location_name = burnedLocation;
+      const ctxData = await buildEvidenceContext(saveContext, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Environmental Anomaly Monitor — ${date}`,
         type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
@@ -522,7 +531,7 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
         date,
         time,
         is_private: isPrivate,
-        ...gpsResult,
+        ...saveContext,
         ...ctxData,
       });
       setVideoBlob(null);

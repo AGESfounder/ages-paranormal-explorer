@@ -6,6 +6,7 @@ import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import useGhostVoice from '@/hooks/useGhostVoice';
 import useWakeLock from '@/hooks/useWakeLock';
+import useRecordingStamp from '@/hooks/useRecordingStamp';
 import SiegSessionPicker from '@/components/sieg/SiegSessionPicker';
 import SiegReview from '@/components/sieg/SiegReview';
 import SiegEventLog from '@/components/sieg/SiegEventLog';
@@ -79,6 +80,7 @@ const newEnvChannel = () => ({ armed: true, since: 0, quietSince: 0, lastEvent: 
 
 export default function SiegConsole({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
+  const { beginStamp, stampDate, stampLocation, stampRecord } = useRecordingStamp();
   const { stop: stopSpeech } = useGhostVoice();
 
   const [phase, setPhase] = useState('idle'); // idle | calibrating | live | review
@@ -580,6 +582,8 @@ export default function SiegConsole({ gateSave, refundSave }) {
       statusText: phaseRef.current === 'calibrating' ? 'BASELINE' : phaseRef.current === 'live' ? 'MEASURING' : '',
       recording: phaseRef.current === 'live',
       scales: SCALES,
+      stampDate: stampDate(),
+      location: stampLocation(),
     };
     drawSiegFrame(ctx, canvas, snapshot);
     // Push the complete camera-and-chart composite to the existing recorder.
@@ -1024,6 +1028,9 @@ export default function SiegConsole({ gateSave, refundSave }) {
   };
 
   const beginLive = async () => {
+    // The stamp belongs to the session, not to a recorder restart: it is set
+    // here, once, so an auto-restart never moves the date the frames carry.
+    beginStamp();
     phaseRef.current = 'live';
     setPhase('live');
     startedAtRef.current = Date.now();
@@ -1130,9 +1137,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
             : 'webm';
       const file = new File([displayBlob], `sieg_session.${ext}`, { type: displayBlob.type });
       const upload = await uploadPrivateMedia(file);
-      const now = new Date();
-      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const { date, time } = stampRecord();
       const laneCounts = SIEG_LANES.map((l) => `${l.label} ${countsRef.current[l.id] || 0}`).join(' · ');
       const logLines = eventsRef.current.slice().reverse()
         .map((e) => `${e.time}  ${SIEG_LANES.find((l) => l.id === e.lane)?.label || e.lane}  ${e.label}${e.correlated ? '  [correlated]' : ''}`)
@@ -1160,7 +1165,11 @@ export default function SiegConsole({ gateSave, refundSave }) {
         if (!allowed) { setSaving(false); return; }
       }
       gateSucceeded = true;
-      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
+      // The record carries the same location the frames were stamped with.
+      const saveContext = { ...gpsResult };
+      const burnedLocation = stampLocation();
+      if (burnedLocation && gpsResult.location_source !== 'NONE') saveContext.location_name = burnedLocation;
+      const ctx = await buildEvidenceContext(saveContext, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `SIEG Session ${date}`,
         type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
@@ -1172,7 +1181,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
         date,
         time,
         is_private: isPrivate,
-        ...gpsResult,
+        ...saveContext,
         ...ctx,
       });
       toast({ title: 'Session saved', description: `${sessionRef.current.name} — one evidence record.` });

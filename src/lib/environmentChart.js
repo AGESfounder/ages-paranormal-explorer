@@ -9,6 +9,8 @@
 // the baseline, so two resting traces lying on the centre line do not sum into a
 // glow across the whole chart.
 
+import { fitStampText } from '@/lib/recordingStamp';
+
 const PRESSURE_FULL = 0.6;   // ± hPa spans half the chart height
 const MAGNETIC_FULL = 8;     // ± µT spans half the chart height
 export const PRESSURE_COLOR = '#22d3ee';
@@ -94,7 +96,11 @@ export function drawEnvironmentChart(ctx, canvas, s) {
     ctx.fillText('REC ' + formatDuration(s.duration), w - 14, 24);
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '10px monospace';
-    ctx.fillText(new Date().toLocaleTimeString(), w - 14, 38);
+    ctx.fillText(s.stampLine || new Date().toLocaleTimeString(), w - 14, 38);
+    if (s.location) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(fitStampText(ctx, s.location, w - 28), w - 14, 52);
+    }
     ctx.textAlign = 'left';
   }
 

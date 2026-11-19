@@ -23,6 +23,8 @@ import useSweeperSensors from '@/hooks/useSweeperSensors';
 import { drawSweeperBadges } from '@/lib/sweeperBadges';
 import RecordTrimPicker from './RecordTrimPicker';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
+import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { fitStampText } from '@/lib/recordingStamp';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
@@ -49,6 +51,7 @@ function formatDuration(sec) {
 
 export default function AlphabetSweeper({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
+  const { beginStamp, stampLine, stampLocation, stampRecord } = useRecordingStamp();
   const [phase, setPhase] = useState('idle'); // idle | running | stopped
   const [currentLetter, setCurrentLetter] = useState('A');
   const [lockedLetter, setLockedLetter] = useState(null);
@@ -302,7 +305,12 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
     ctx.fillText('REC ' + formatDuration(sessionDurRef.current), w - 14, 26);
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '10px monospace';
-    ctx.fillText(new Date().toLocaleTimeString(), w - 14, 40);
+    ctx.fillText(stampLine(), w - 14, 40);
+    const burnedLocation = stampLocation();
+    if (burnedLocation) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(fitStampText(ctx, burnedLocation, w - 28), w - 14, 54);
+    }
 
     ctx.textAlign = 'center';
     if (pausedRef.current) {
@@ -368,6 +376,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
   const startDrawing = () => startFrames(draw);
 
   const startSession = async () => {
+    beginStamp();
     unlock();
     setCaptured([]);
     setVideoBlob(null);
@@ -489,9 +498,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `alphabet_sweeper_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
-      const now = new Date();
-      const date = now.toISOString().split('T')[0];
-      const time = now.toTimeString().slice(0, 5);
+      const { date, time } = stampRecord();
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
@@ -501,7 +508,11 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
-      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
+      // The record carries the same location the frames were stamped with.
+      const saveContext = { ...gpsResult };
+      const burnedLocation = stampLocation();
+      if (burnedLocation && gpsResult.location_source !== 'NONE') saveContext.location_name = burnedLocation;
+      const ctx = await buildEvidenceContext(saveContext, { skipGps: true });
       const fireSummary = Object.entries(sensorFireCountRef.current)
         .filter(([, n]) => n > 0)
         .map(([s, n]) => `${s}: ${n}`)
@@ -520,7 +531,7 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
         date,
         time,
         is_private: isPrivate,
-        ...gpsResult,
+        ...saveContext,
         ...ctx,
       });
       setVideoBlob(null);

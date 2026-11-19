@@ -288,6 +288,32 @@ async function resolveGpsLocationName(lat, lon) {
 }
 
 /**
+ * Resolve the location label burned into a recording at its start.
+ *
+ * Same precedence the journal save uses: a known AGES stop within the proximity
+ * threshold, otherwise "City, State"; and the active tour/stop name when no fix
+ * is available at all. Resolved once at the start so the burned label and the
+ * saved record carry the same string. Returns null when nothing resolves — a
+ * session is never held up waiting for a location.
+ */
+export async function resolveRecordingLocation(timeoutMs = 5000) {
+  const cached = lastGps && Date.now() - lastGps.at < 30 * 60 * 1000 ? lastGps : null;
+  const gps = cached || await Promise.race([
+    captureGPS(),
+    new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
+  if (!gps?.latitude) {
+    const activeCtx = await getActiveContext();
+    return activeCtx.location_name || null;
+  }
+  const [locality, nearestStop] = await Promise.all([
+    reverseGeocodeLocality(gps.latitude, gps.longitude),
+    findNearestStop(gps.latitude, gps.longitude),
+  ]);
+  return nearestStop?.name || locality || null;
+}
+
+/**
  * Forward-geocode a typed address to GPS coordinates using Nominatim.
  * Returns { latitude, longitude } or null if geocoding fails.
  */

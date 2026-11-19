@@ -18,6 +18,8 @@ import useDepthDetection from '@/hooks/useDepthDetection';
 import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
+import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { fitStampText } from '@/lib/recordingStamp';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
@@ -29,6 +31,7 @@ const DEPTH_UNSUPPORTED_MESSAGE = 'Depth Scan is unavailable on this device/came
 
 export default function SLSCamera({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
+  const { beginStamp, stampLine, stampLocation, stampRecord } = useRecordingStamp();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -166,6 +169,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // figure detection or overlay. The raw camera stream (video + audio) is
   // recorded directly — no canvas, no processing loop.
   const startDeviceCamera = async () => {
+    beginStamp();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -195,6 +199,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   };
 
   const startCamera = async () => {
+    beginStamp();
     setError('');
     setRecordedBlob(null);
     setRecordDuration(0);
@@ -261,6 +266,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // method uses, so the recording and the Evidence save are unchanged — and the
   // saved file carries the depth image exactly as it looked on screen.
   const startDepthCamera = async () => {
+    beginStamp();
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.width = 640;
@@ -387,7 +393,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
       if (anomalyTimerRef.current) clearTimeout(anomalyTimerRef.current);
       anomalyTimerRef.current = setTimeout(() => setAnomalyDetected(false), 3000);
     }
-    drawDepthFrame(canvas.getContext('2d'), canvas, frame, { figureCount: count });
+    drawDepthFrame(canvas.getContext('2d'), canvas, frame, {
+      figureCount: count,
+      stampLine: stampLine(),
+      location: stampLocation(),
+    });
     animFrameRef.current = requestAnimationFrame(processDepthFrame);
   };
 
@@ -485,7 +495,14 @@ export default function SLSCamera({ gateSave, refundSave }) {
     ctx.font = '10px monospace';
     ctx.fillText('ANOMALY CAM · FIGURE SCAN', 8, 16);
     ctx.fillText(`FIGURES: ${figures.length}`, 8, 30);
-    ctx.fillText(new Date().toLocaleTimeString(), w - 72, 16);
+    ctx.textAlign = 'right';
+    ctx.fillText(stampLine(), w - 8, 16);
+    const burnedLocation = stampLocation();
+    if (burnedLocation) {
+      ctx.fillStyle = 'rgba(0, 255, 100, 0.55)';
+      ctx.fillText(fitStampText(ctx, burnedLocation, w - 90), w - 8, 30);
+    }
+    ctx.textAlign = 'left';
 
     animFrameRef.current = requestAnimationFrame(processFrame);
   };
@@ -500,7 +517,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       const ext = displayBlob.type.includes('mp4') ? 'mp4' : 'webm';
       const file = new File([displayBlob], `anomaly_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
-      const now = new Date();
+      const { date, time } = stampRecord();
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
@@ -510,19 +527,23 @@ export default function SLSCamera({ gateSave, refundSave }) {
       }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
-      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
+      // The record carries the same location the frames were stamped with.
+      const saveContext = { ...gpsResult };
+      const burnedLocation = stampLocation();
+      if (burnedLocation && gpsResult.location_source !== 'NONE') saveContext.location_name = burnedLocation;
+      const ctx = await buildEvidenceContext(saveContext, { skipGps: true });
       await base44.entities.Evidence.create({
-        title: `Anomaly Camera Session ${now.toISOString().split('T')[0]}`,
+        title: `Anomaly Camera Session ${date}`,
         type: recordedBlob.type.startsWith('audio') ? 'evp' : 'video',
         source_tool: 'sls',
         description: `Anomaly Camera session — ${formatDuration(recordDuration)} recorded.${trimMode !== 'full' ? ` Saved: last ${trimSeconds} seconds.` : ''}`,
         media_uri: file_uri,
         media_duration_seconds: duration_seconds,
         has_media: true,
-        date: now.toISOString().split('T')[0],
-        time: now.toTimeString().slice(0, 5),
+        date,
+        time,
         is_private: isPrivate,
-        ...gpsResult,
+        ...saveContext,
         ...ctx,
       });
       setRecordedBlob(null);

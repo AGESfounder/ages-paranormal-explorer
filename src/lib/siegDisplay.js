@@ -16,6 +16,7 @@
 // the white band the tools' additive-colour idea implies.
 
 import { drawSiegAnomalyScan } from '@/components/sieg/anomalyScanDisplay';
+import { fitStampText } from '@/lib/recordingStamp';
 import { drawFigureSkeleton } from '@/lib/figureSkeleton';
 import { figureIsMoving } from '@/lib/figureMotion';
 
@@ -217,7 +218,16 @@ export function drawSiegFrame(ctx, canvas, s) {
   // time written down from the screen matches the recording and the event log.
   ctx.fillStyle = C.text;
   ctx.font = 'bold 15px monospace';
-  ctx.fillText(formatWallClock(now), SIEG_W - 10, 51);
+  const wallClock = formatWallClock(now);
+  const wallClockWidth = ctx.measureText(wallClock).width;
+  ctx.fillText(wallClock, SIEG_W - 10, 51);
+  // The date the session began, fixed beside the live clock: a frame then always
+  // says both when the session started and what time it is now.
+  if (s.stampDate) {
+    ctx.fillStyle = C.muted;
+    ctx.font = '12px monospace';
+    ctx.fillText(s.stampDate, SIEG_W - 22 - wallClockWidth, 51);
+  }
   ctx.textAlign = 'left';
 
   // ── Camera pane. The full frame is fitted inside the pane (no crop) so the
@@ -326,6 +336,16 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillStyle = C.muted;
   ctx.font = '9px monospace';
   ctx.fillText(`EVENTS ${s.eventCount || 0}   ·   CORRELATED ${s.correlatedCount || 0}`, 10, FOOT_Y + 18);
+  if (s.location) {
+    // Where the session began, in the one strip with room for it.
+    ctx.textAlign = 'center';
+    ctx.fillStyle = C.name;
+    ctx.font = '10px monospace';
+    ctx.fillText(fitStampText(ctx, s.location, 210), SIEG_W / 2, FOOT_Y + 18);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = C.muted;
+    ctx.font = '9px monospace';
+  }
   ctx.textAlign = 'right';
   ctx.fillText(s.statusText || '', SIEG_W - 10, FOOT_Y + 18);
   if (s.recording) {

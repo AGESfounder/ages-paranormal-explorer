@@ -27,6 +27,8 @@ import RecordTrimPicker from './RecordTrimPicker';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
+import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { fitStampText } from '@/lib/recordingStamp';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
@@ -142,6 +144,7 @@ ${stopText}`,
 
 export default function LocationTermBank({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
+  const { beginStamp, stampLine, stampLocation, stampRecord } = useRecordingStamp();
   const [phase, setPhase] = useState('idle'); // idle | loading | ready | running | stopped
   const [terms, setTerms] = useState([]);
   const [locationLabel, setLocationLabel] = useState('');
@@ -487,7 +490,12 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     ctx.fillText('REC ' + formatDuration(sessionDurRef.current), w - 14, 26);
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '10px monospace';
-    ctx.fillText(new Date().toLocaleTimeString(), w - 14, 40);
+    ctx.fillText(stampLine(), w - 14, 40);
+    const burnedLocation = stampLocation();
+    if (burnedLocation) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(fitStampText(ctx, burnedLocation, w - 28), w - 14, 54);
+    }
 
     // main word
     ctx.textAlign = 'center';
@@ -532,6 +540,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   };
 
   const startSession = async () => {
+    beginStamp();
     const startupEpoch = ++epochRef.current;
     unlock();
     setCaptured([]);
@@ -605,9 +614,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `term_bank_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
-      const now = new Date();
-      const date = now.toISOString().split('T')[0];
-      const time = now.toTimeString().slice(0, 5);
+      const { date, time } = stampRecord();
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
@@ -617,7 +624,11 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
       }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
-      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
+      // The record carries the same location the frames were stamped with.
+      const saveContext = { ...gpsResult };
+      const burnedLocation = stampLocation();
+      if (burnedLocation && gpsResult.location_source !== 'NONE') saveContext.location_name = burnedLocation;
+      const ctx = await buildEvidenceContext(saveContext, { skipGps: true });
       const fireSummary = Object.entries(sensorFireCountRef.current)
         .filter(([, n]) => n > 0)
         .map(([s, n]) => `${s}: ${n}`)
@@ -636,7 +647,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
         date,
         time,
         is_private: isPrivate,
-        ...gpsResult,
+        ...saveContext,
         ...ctx,
       });
       setVideoBlob(null);

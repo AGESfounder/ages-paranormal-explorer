@@ -14,6 +14,8 @@ import { TRIM_OPTIONS } from '@/lib/recordTrim';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
+import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { fitStampText } from '@/lib/recordingStamp';
 
 
 // Quiet window the sensor baseline is measured over, before the session — and
@@ -57,6 +59,7 @@ function levelLabel(level) {
 
 export default function PhoneREMDevice({ gateSave, refundSave }) {
   const { captureGpsForSave, gpsDialog, trackingOffDialog } = useToolGpsSave();
+  const { beginStamp, stampLine, stampLocation, stampRecord } = useRecordingStamp();
   const [phase, setPhase] = useState('idle'); // idle | countdown | active | stopped
   const [countdown, setCountdown] = useState(3);
   const [alertLevel, setAlertLevel] = useState(0);
@@ -287,7 +290,13 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     ctx.textAlign = 'right';
     ctx.fillText('REC ' + formatDuration(dur), w - 15, 29);
     ctx.fillStyle = '#cbd5e1';
-    ctx.fillText(new Date().toLocaleTimeString(), w - 15, 43);
+    ctx.font = '10px monospace';
+    ctx.fillText(stampLine(), w - 15, 43);
+    const burnedLocation = stampLocation();
+    if (burnedLocation) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(fitStampText(ctx, burnedLocation, w - 30), w - 15, 57);
+    }
 
     // Event log
     ctx.textAlign = 'left';
@@ -421,6 +430,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   };
 
   const beginSession = async () => {
+    beginStamp();
     setPhase('active');
     // Wait for canvas to render
     await new Promise(r => setTimeout(r, 100));
@@ -499,9 +509,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       const ext = mediaExtension(displayBlob);
       const file = new File([displayBlob], `rem_session.${ext}`, { type: displayBlob.type });
       const { file_uri, duration_seconds } = await uploadPrivateMedia(file);
-      const now = new Date();
-      const date = now.toISOString().split('T')[0];
-      const time = now.toTimeString().slice(0, 5);
+      const { date, time } = stampRecord();
       const gpsResult = await captureGpsForSave();
       if (!gpsResult) { setSaving(false); return; }
       if (!isPrivate && (gpsResult.location_source === 'NONE' || gpsResult.latitude == null)) {
@@ -511,7 +519,11 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
       }
       if (gateSave && !(await gateSave())) { setSaving(false); return; }
       gateSucceeded = true;
-      const ctx = await buildEvidenceContext(gpsResult, { skipGps: true });
+      // The record carries the same location the frames were stamped with.
+      const saveContext = { ...gpsResult };
+      const burnedLocation = stampLocation();
+      if (burnedLocation && gpsResult.location_source !== 'NONE') saveContext.location_name = burnedLocation;
+      const ctx = await buildEvidenceContext(saveContext, { skipGps: true });
       await base44.entities.Evidence.create({
         title: `Vibration Communicator Session ${date}`,
         type: displayBlob.type.startsWith('audio') ? 'evp' : 'video',
@@ -523,7 +535,7 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
         date,
         time,
         is_private: isPrivate,
-        ...gpsResult,
+        ...saveContext,
         ...ctx,
       });
       setVideoBlob(null);
