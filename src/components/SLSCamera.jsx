@@ -19,7 +19,7 @@ import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
-import { drawAnomalyRecordingStamp } from '@/lib/anomalyRecordingStamp';
+import { fitStampText } from '@/lib/recordingStamp';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
@@ -39,11 +39,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const chunkPumpRef = useRef(null);
-  const frameTrackRef = useRef(null);
   const timerRef = useRef(null);
 
   const [active, setActive] = useState(false);
-  const [frameSize, setFrameSize] = useState({ width: 640, height: 480 });
   const [error, setError] = useState('');
   const [figureCount, setFigureCount] = useState(0);
   const [movingCount, setMovingCount] = useState(0);
@@ -83,9 +81,8 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const formatDuration = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 
   const stopCamera = useCallback(() => {
-    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    frameTrackRef.current = null;
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
     // Turn off the torch before stopping the track (Torch mode).
     if (streamRef.current) disableTorch(streamRef.current);
     // A depth session runs on the native module rather than a web stream, so it is
@@ -151,7 +148,6 @@ export default function SLSCamera({ gateSave, refundSave }) {
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
     const mr = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
     mediaRecorderRef.current = mr;
-    frameTrackRef.current = recordStream.getVideoTracks()[0] || null;
     chunksRef.current = [];
     mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
@@ -161,7 +157,6 @@ export default function SLSCamera({ gateSave, refundSave }) {
       // different one still saves under the right extension.
       const actualType = (mr.mimeType || mimeType || 'video/webm').split(';')[0];
       setRecordedBlob(new Blob(chunksRef.current.map((c) => c.blob), { type: actualType }));
-      frameTrackRef.current = null;
       recordStream.getTracks().forEach(t => t.stop());
       if (onFinish) onFinish();
     };
@@ -174,6 +169,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // figure detection or overlay. The raw camera stream (video + audio) is
   // recorded directly — no canvas, no processing loop.
   const startDeviceCamera = async () => {
+    beginStamp();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -182,7 +178,6 @@ export default function SLSCamera({ gateSave, refundSave }) {
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
-      setFrameSize({ width: videoRef.current.videoWidth || 640, height: videoRef.current.videoHeight || 480 });
       setActive(true);
       startSessionRecorder(stream, () => {
         streamRef.current = null;
@@ -271,11 +266,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // method uses, so the recording and the Evidence save are unchanged — and the
   // saved file carries the depth image exactly as it looked on screen.
   const startDepthCamera = async () => {
+    beginStamp();
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.width = 640;
     canvas.height = 480;
-    setFrameSize({ width: 640, height: 480 });
     depthFrameRef.current = null;
     depthDiagRef.current = createDepthDiagTracker('sls', `d_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, {
       protrusion: depthDetection.protrusion,
@@ -403,7 +398,6 @@ export default function SLSCamera({ gateSave, refundSave }) {
       stampLine: stampLine(),
       location: stampLocation(),
     });
-    frameTrackRef.current?.requestFrame?.();
     animFrameRef.current = requestAnimationFrame(processDepthFrame);
   };
 
@@ -417,12 +411,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
     const w = video.videoWidth || 640;
     const h = video.videoHeight || 480;
-    // Assigning either dimension resets the canvas and its capture surface.
-    // Only resize when the camera actually changes orientation or resolution.
-    if (canvas.width !== w || canvas.height !== h) {
-      canvas.width = w; canvas.height = h;
-      setFrameSize({ width: w, height: h });
-    }
+    canvas.width = w; canvas.height = h;
 
     const ctx = canvas.getContext('2d');
 
@@ -502,14 +491,19 @@ export default function SLSCamera({ gateSave, refundSave }) {
       ctx.fillText('ANOMALY DETECTED', x, y - 8);
     });
 
-    drawAnomalyRecordingStamp(ctx, w, {
-      title: 'ANOMALY CAM · FIGURE SCAN',
-      figureText: `FIGURES: ${figures.length}`,
-      stampLine: stampLine(),
-      location: stampLocation(),
-    });
+    ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';
+    ctx.font = '10px monospace';
+    ctx.fillText('ANOMALY CAM · FIGURE SCAN', 8, 16);
+    ctx.fillText(`FIGURES: ${figures.length}`, 8, 30);
+    ctx.textAlign = 'right';
+    ctx.fillText(stampLine(), w - 8, 16);
+    const burnedLocation = stampLocation();
+    if (burnedLocation) {
+      ctx.fillStyle = 'rgba(0, 255, 100, 0.55)';
+      ctx.fillText(fitStampText(ctx, burnedLocation, w - 90), w - 8, 30);
+    }
+    ctx.textAlign = 'left';
 
-    frameTrackRef.current?.requestFrame?.();
     animFrameRef.current = requestAnimationFrame(processFrame);
   };
 
@@ -563,9 +557,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
   return (
     <div className="space-y-3">
-      <div className="relative rounded-lg overflow-hidden bg-black border border-green-500/30" style={{ aspectRatio: `${frameSize.width}/${frameSize.height}` }}>
+      <div className="relative rounded-lg overflow-hidden bg-black border border-green-500/30" style={{ aspectRatio: '4/3' }}>
         <AnomalyCameraSource videoRef={videoRef} visible={mode === 'device'} />
-        <canvas ref={canvasRef} className={`absolute inset-0 w-full h-full object-contain ${mode === 'device' ? 'opacity-0' : ''}`} />
+        <canvas ref={canvasRef} className={`absolute inset-0 w-full h-full object-cover ${mode === 'device' ? 'opacity-0' : ''}`} />
 
         {!active && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80">

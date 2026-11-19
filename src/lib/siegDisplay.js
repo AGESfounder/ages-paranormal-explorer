@@ -34,8 +34,8 @@ export const CORRELATION_COLOR = '#ffffff';
 export const SIEG_W = 640;
 export const SIEG_H = 480;
 
-export const SIEG_CAMERA_Y = 84;
-export const SIEG_CAMERA_H = 226;
+export const SIEG_CAMERA_Y = 60;
+export const SIEG_CAMERA_H = 250;
 const HEADER_H = SIEG_CAMERA_Y;
 const CAM_Y = SIEG_CAMERA_Y;
 const CAM_H = SIEG_CAMERA_H;
@@ -206,14 +206,14 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillText(conditions, condX, 27);
   ctx.fillStyle = C.name;
   ctx.font = '14px sans-serif';
-  ctx.fillText(fitStampText(ctx, s.sessionName || '', 310), 11, 51);
+  ctx.fillText(s.sessionName || '', 11, 51);
   ctx.textAlign = 'right';
   ctx.fillStyle = s.calibrating ? C.muted : C.text;
   ctx.font = 'bold 24px monospace';
   ctx.fillText(s.calibrating ? '—:—' : formatClock(s.remaining), SIEG_W - 10, 28);
   ctx.font = '9px sans-serif';
   ctx.fillStyle = C.muted;
-  ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 74);
+  ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 45);
   // Real time on the line opposite the session's name: the phone's own clock, so a
   // time written down from the screen matches the recording and the event log.
   ctx.fillStyle = C.text;
@@ -229,11 +229,6 @@ export function drawSiegFrame(ctx, canvas, s) {
     ctx.fillText(s.stampDate, SIEG_W - 22 - wallClockWidth, 51);
   }
   ctx.textAlign = 'left';
-  // Keep the location on its own high-contrast header row, clear of both clocks
-  // and the playback controls that cover the bottom of a saved video.
-  ctx.fillStyle = C.text;
-  ctx.font = '14px monospace';
-  ctx.fillText(fitStampText(ctx, s.location || '', SIEG_W - 116), 11, 74);
 
   // ── Camera pane. The full frame is fitted inside the pane (no crop) so the
   // outline drawn around a detected form lands on the form it belongs to. ──
@@ -254,6 +249,18 @@ export function drawSiegFrame(ctx, canvas, s) {
     try { drawSiegAnomalyScan(ctx, vid, fit, s.figureBoxes); } catch { /* frame not readable yet */ }
   }
   drawSiegCameraOverlay(ctx, s, fit);
+
+  // The session's location, stamped over the camera pane: legible on a phone and
+  // never hidden by a player's controls on the saved file.
+  if (s.location) {
+    ctx.font = '13px monospace';
+    const label = fitStampText(ctx, s.location, SIEG_W - 40);
+    const chipY = CAM_Y + CAM_H - 30;
+    ctx.fillStyle = 'rgba(4, 6, 11, 0.78)';
+    ctx.fillRect(8, chipY, ctx.measureText(label).width + 16, 22);
+    ctx.fillStyle = C.text;
+    ctx.fillText(label, 16, chipY + 16);
+  }
 
   // ── Lanes ──
   ctx.fillStyle = C.panel;
