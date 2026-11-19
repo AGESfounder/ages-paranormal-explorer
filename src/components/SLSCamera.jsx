@@ -20,6 +20,7 @@ import { toast } from '@/components/ui/use-toast';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import useInlineCameraPlayback from '@/hooks/useInlineCameraPlayback';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { notifyToolSessionStart } from '@/lib/toolSessionEvents';
 import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
@@ -214,6 +215,8 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
   const startCamera = async () => {
     if (startingRef.current || runningRef.current || mediaRecorderRef.current) return;
+    // Scroll on the press, before the camera permission prompt.
+    notifyToolSessionStart();
     startingRef.current = true;
     runningRef.current = true;
     setStarting(true);

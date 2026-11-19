@@ -6,6 +6,7 @@ import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { mediaExtension } from '@/lib/deviceMedia';
 import RecordingPreview from '@/components/RecordingPreview';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { notifyToolSessionStart } from '@/lib/toolSessionEvents';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import { buildEvidenceContext } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -397,6 +398,8 @@ export default function EnvironmentalAnomalyMonitor({ gateSave, refundSave }) {
   }, []);
 
   const startSession = async () => {
+    // Scroll on the press, before the sensor check and the calibration wait.
+    notifyToolSessionStart();
     const sensors = availableRef.current || (await sensorSupport());
     if (!sensors.magnetometer && !sensors.barometer) {
       // Three different reasons to have nothing to read: a browser (no path to

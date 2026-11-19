@@ -23,6 +23,7 @@ import { toast } from '@/components/ui/use-toast';
 import RecordTrimPicker from './RecordTrimPicker';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { notifyToolSessionStart } from '@/lib/toolSessionEvents';
 import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
@@ -356,6 +357,7 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
   const startDrawing = () => startFrames(draw);
 
   const startSession = async () => {
+    notifyToolSessionStart();
     beginStamp();
     setCaptured([]);
     setVideoBlob(null);

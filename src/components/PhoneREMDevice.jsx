@@ -15,6 +15,7 @@ import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { notifyToolSessionStart } from '@/lib/toolSessionEvents';
 import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 
 
@@ -380,6 +381,8 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
   };
 
   const activate = async () => {
+    // Scroll on the press, so the calibration countdown is in view.
+    notifyToolSessionStart();
     setSensorError(null);
     setError('');
     sessionActiveRef.current = true;

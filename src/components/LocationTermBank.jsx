@@ -28,6 +28,7 @@ import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { notifyToolSessionStart } from '@/lib/toolSessionEvents';
 import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 
@@ -538,6 +539,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
   };
 
   const startSession = async () => {
+    notifyToolSessionStart();
     beginStamp();
     const startupEpoch = ++epochRef.current;
     unlock();

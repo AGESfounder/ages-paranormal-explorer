@@ -7,6 +7,7 @@ import { useToolGpsSave } from '@/hooks/useToolGpsSave';
 import useGhostVoice from '@/hooks/useGhostVoice';
 import useWakeLock from '@/hooks/useWakeLock';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
+import { notifyToolSessionStart } from '@/lib/toolSessionEvents';
 import SiegSessionPicker from '@/components/sieg/SiegSessionPicker';
 import SiegReview from '@/components/sieg/SiegReview';
 import SiegEventLog from '@/components/sieg/SiegEventLog';
@@ -831,6 +832,9 @@ export default function SiegConsole({ gateSave, refundSave }) {
 
   const startSession = async (preset) => {
     if (phaseRef.current !== 'idle') return;
+    // The session option is the start: the console comes into sight now, so the
+    // calibration countdown is watchable instead of happening above the fold.
+    notifyToolSessionStart();
     setError('');
     setEvents([]); eventsRef.current = [];
     setCounts({}); countsRef.current = {};
