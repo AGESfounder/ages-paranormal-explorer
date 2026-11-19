@@ -288,13 +288,13 @@ async function resolveGpsLocationName(lat, lon) {
 }
 
 /**
- * Resolve the location label burned into a recording at its start.
+ * Resolve the location label burned into a recording.
  *
- * Same precedence the journal save uses: a known AGES stop within the proximity
- * threshold, otherwise "City, State"; and the active tour/stop name when no fix
- * is available at all. Resolved once at the start so the burned label and the
- * saved record carry the same string. Returns null when nothing resolves — a
- * session is never held up waiting for a location.
+ * Builds the label with resolveGpsLocationName — the exact function a GPS
+ * evidence save uses — so the burned line and the saved record read the same
+ * string. Callers retry this while the session runs, so a fix that arrives late
+ * still gets stamped. Returns null only when there is no fix at all yet (the
+ * active tour/stop name when one is open), which is what keeps a retry going.
  */
 export async function resolveRecordingLocation(timeoutMs = 5000) {
   const cached = lastGps && Date.now() - lastGps.at < 30 * 60 * 1000 ? lastGps : null;
@@ -306,11 +306,7 @@ export async function resolveRecordingLocation(timeoutMs = 5000) {
     const activeCtx = await getActiveContext();
     return activeCtx.location_name || null;
   }
-  const [locality, nearestStop] = await Promise.all([
-    reverseGeocodeLocality(gps.latitude, gps.longitude),
-    findNearestStop(gps.latitude, gps.longitude),
-  ]);
-  return nearestStop?.name || locality || null;
+  return resolveGpsLocationName(gps.latitude, gps.longitude);
 }
 
 /**

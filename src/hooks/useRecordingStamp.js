@@ -1,34 +1,62 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { resolveRecordingLocation } from '@/lib/evidenceContext';
 import { formatStampDate, formatStampLine, stampRecordFields } from '@/lib/recordingStamp';
+
+// Retry schedule for the location, measured after each failed attempt. The
+// first attempt is immediate; the rest cover roughly five minutes, so a fix
+// that arrives after the session has already started still gets burned in.
+const RETRY_DELAYS_MS = [5000, 10000, 15000, 25000, 40000, 60000, 60000, 60000, 60000];
 
 /**
  * One stamp per recording session.
  *
  * The date is fixed at the moment the session began and never moves; the clock
- * stays live. The location is resolved once, at the start, with the same rules
- * the journal save uses, so the label burned into the frames and the label on
- * the saved record are the same string. The record's date and time come from
+ * stays live. The location keeps resolving in the background until it succeeds
+ * — a session is never held up waiting for a fix, and a late fix is still
+ * burned in. It uses the journal's own label builder, so the burned label and
+ * the saved record carry the same string. The record's date and time come from
  * the same start moment, so the two can never disagree.
- *
- * The location resolves in the background — a session is never held up waiting
- * for a fix, and a session with no location simply burns no location line.
  */
 export default function useRecordingStamp() {
   const startRef = useRef(null);
   const locationRef = useRef(null);
+  const timerRef = useRef(null);
+
+  const stopResolving = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
 
   const beginStamp = useCallback(() => {
     const start = new Date();
     startRef.current = start;
     locationRef.current = null;
-    resolveRecordingLocation()
-      .then((label) => {
-        // Ignore a late answer from a session that has already been replaced.
-        if (startRef.current === start) locationRef.current = label;
-      })
-      .catch(() => {});
-  }, []);
+    stopResolving();
+
+    let attempt = 0;
+    const attemptLocation = () => {
+      // Ignore a late answer from a session that has already been replaced.
+      if (startRef.current !== start || locationRef.current) return;
+      const retry = () => {
+        if (startRef.current !== start || locationRef.current) return;
+        if (attempt < RETRY_DELAYS_MS.length) {
+          timerRef.current = setTimeout(attemptLocation, RETRY_DELAYS_MS[attempt++]);
+        }
+      };
+      resolveRecordingLocation()
+        .then((label) => {
+          if (startRef.current !== start) return;
+          if (label) locationRef.current = label;
+          else retry();
+        })
+        .catch(retry);
+    };
+    attemptLocation();
+  }, [stopResolving]);
+
+  useEffect(() => stopResolving, [stopResolving]);
 
   const stampLine = useCallback(() => formatStampLine(startRef.current), []);
   const stampDate = useCallback(() => formatStampDate(startRef.current), []);
