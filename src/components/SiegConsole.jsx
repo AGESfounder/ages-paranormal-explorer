@@ -13,7 +13,7 @@ import SiegReview from '@/components/sieg/SiegReview';
 import SiegEventLog from '@/components/sieg/SiegEventLog';
 import SiegViewport from '@/components/sieg/SiegViewport';
 import useSiegCameraPlayback from '@/components/sieg/useSiegCameraPlayback';
-import { micAudioConstraints } from '@/lib/micCapture';
+import { micAudioConstraints, isAndroidPlatform } from '@/lib/micCapture';
 import SiegCameraControls from '@/components/sieg/SiegCameraControls';
 import { SIEG_LANES, SIEG_W, SIEG_H, drawSiegFrame, moonPhase, formatClock, formatWallClock } from '@/lib/siegDisplay';
 import { SIEG_CALIBRATION_MS } from '@/lib/siegSessions';
@@ -876,17 +876,24 @@ export default function SiegConsole({ gateSave, refundSave }) {
     // session button is the one we get.
     const motionOk = await requestMotionPermission();
 
-    try {
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: micAudioConstraints() });
-      micStreamRef.current = mic;
-    } catch (e) {
-      const name = e?.name || '';
-      setError(name === 'NotAllowedError' || name === 'PermissionDeniedError'
-        ? 'Microphone access denied. SIEG needs the microphone for both the acoustic lane and the session recording.'
-        : 'The microphone could not be opened. Close other audio apps and try again.');
-      return;
-    }
-    setAvailability((a) => ({ ...a, mic: true, vibration: motionOk }));
+    const openSessionMic = async () => {
+      try {
+        const mic = await navigator.mediaDevices.getUserMedia({ audio: micAudioConstraints() });
+        micStreamRef.current = mic;
+      } catch (e) {
+        const name = e?.name || '';
+        setError(name === 'NotAllowedError' || name === 'PermissionDeniedError'
+          ? 'Microphone access denied. SIEG needs the microphone for both the acoustic lane and the session recording.'
+          : 'The microphone could not be opened. Close other audio apps and try again.');
+        return false;
+      }
+      setAvailability((a) => ({ ...a, mic: true, vibration: motionOk }));
+      return true;
+    };
+    // Android opens the camera before the microphone: requesting the camera while
+    // the mic is already recording can re-negotiate the audio input and quiet the
+    // track. Apple keeps its existing order.
+    if (!isAndroidPlatform() && !(await openSessionMic())) return;
 
     // The composite canvas and the camera element have to exist before anything
     // is attached to them.
@@ -935,6 +942,12 @@ export default function SiegConsole({ gateSave, refundSave }) {
           : 'The live camera could not start. The other lanes can still run, but the camera image is unavailable.');
       }
       setAvailability((a) => ({ ...a, camera: camOk }));
+    }
+    if (isAndroidPlatform() && !(await openSessionMic())) {
+      // The camera is already open on this path, so hand it back before stopping.
+      teardownDevices();
+      setPhase('idle');
+      return;
     }
 
     // Acoustic lane: one analyser on the session's microphone.

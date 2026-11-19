@@ -10,6 +10,7 @@ import EvidenceSaveButtons from './EvidenceSaveButtons';
 import useGhostVoice from '../hooks/useGhostVoice';
 import useSensitivity from '../hooks/useSensitivity';
 import useDepthDetection from '@/hooks/useDepthDetection';
+import { isAndroidPlatform } from '@/lib/micCapture';
 import useAnomalyTrigger from '@/hooks/useAnomalyTrigger';
 import SweeperTriggerControl from './SweeperTriggerControl';
 import AnomalyFigureBadge from './AnomalyFigureBadge';
@@ -418,15 +419,24 @@ export default function AlphabetSweeper({ gateSave, refundSave }) {
       begun = true;
       if (startDelayRef.current) { clearTimeout(startDelayRef.current); startDelayRef.current = null; }
       if (!sessionActiveRef.current) return;
-      // Mic prompt AFTER directions.
-      await startRecording();
-      if (!sessionActiveRef.current) return;
-      // Start camera AFTER directions and mic prompt.
-      await trigger.start({ scan: false });
-      if (!sessionActiveRef.current) { trigger.stop(); return; }
-      // 3-second pause after the last permission prompt (camera) — tapping the
-      // screen to grant permission sets off the motion sensor, so we wait for
-      // the device to settle before starting the investigation.
+      // Android opens the camera before the microphone: requesting the camera
+      // while the mic is already recording can re-negotiate the audio input and
+      // quiet the track. Apple keeps its existing order.
+      if (isAndroidPlatform()) {
+        await trigger.start({ scan: false });
+        if (!sessionActiveRef.current) { trigger.stop(); return; }
+        await startRecording();
+      } else {
+        // Mic prompt AFTER directions.
+        await startRecording();
+        if (!sessionActiveRef.current) return;
+        // Start camera AFTER directions and mic prompt.
+        await trigger.start({ scan: false });
+        if (!sessionActiveRef.current) { trigger.stop(); return; }
+      }
+      // 3-second pause after the last permission prompt — tapping the screen to
+      // grant permission sets off the motion sensor, so we wait for the device
+      // to settle before starting the investigation.
       await new Promise(r => setTimeout(r, 3000));
       if (!sessionActiveRef.current) return;
       pausedRef.current = false;
