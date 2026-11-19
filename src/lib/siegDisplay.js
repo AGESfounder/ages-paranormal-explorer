@@ -53,6 +53,7 @@ const C = {
   name: '#a9bccf',
   muted: '#7588a3',
   accent: '#2dd4bf',
+  stamp: '#60a5fa',
   rec: '#ef4444',
 };
 
@@ -184,50 +185,46 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, SIEG_W, SIEG_H);
 
-  // ── Header ──
-  // Line one carries the three things an investigator glancing at the phone needs
-  // together: the tool's own name, the room's conditions (moon phase and local
-  // weather, at a size that can be read from across the room), and the countdown.
-  // The chosen session sits on its own line under SIEG, where there is room for it.
+  // ── Header: separate rows for conditions/countdown, session/live clock,
+  // and the centered date + location. The camera pane keeps its original size.
   ctx.fillStyle = C.panel;
   ctx.fillRect(0, 0, SIEG_W, HEADER_H);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = C.accent;
   ctx.font = 'bold 24px monospace';
-  ctx.fillText('SIEG', 10, 28);
-  const siegW = ctx.measureText('SIEG').width;
-  const condX = 24 + siegW;
-  const condMax = SIEG_W - 96 - condX;
-  ctx.font = '15px sans-serif';
-  let conditions = s.conditions || '—';
-  while (ctx.measureText(conditions).width > condMax && conditions.length > 6) {
-    conditions = `${conditions.slice(0, -3)}…`;
-  }
+  ctx.fillText('SIEG', 10, 25);
+  const condX = 24 + ctx.measureText('SIEG').width;
+  const countdown = s.calibrating ? '—:—' : formatClock(s.remaining);
+  const countdownWidth = ctx.measureText(countdown).width;
   ctx.fillStyle = C.text;
-  ctx.fillText(conditions, condX, 27);
-  ctx.fillStyle = C.name;
-  ctx.font = '14px sans-serif';
-  ctx.fillText(s.sessionName || '', 11, 51);
+  ctx.font = '15px sans-serif';
+  ctx.fillText(fitStampText(ctx, s.conditions || '—', SIEG_W - countdownWidth - 26 - condX), condX, 24);
   ctx.textAlign = 'right';
   ctx.fillStyle = s.calibrating ? C.muted : C.text;
   ctx.font = 'bold 24px monospace';
-  ctx.fillText(s.calibrating ? '—:—' : formatClock(s.remaining), SIEG_W - 10, 28);
-  ctx.font = '9px sans-serif';
-  ctx.fillStyle = C.muted;
-  ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 45);
-  // Real time on the line opposite the session's name: the phone's own clock, so a
-  // time written down from the screen matches the recording and the event log.
-  ctx.fillStyle = C.text;
-  ctx.font = 'bold 15px monospace';
+  ctx.fillText(countdown, SIEG_W - 10, 25);
+
   const wallClock = formatWallClock(now);
+  ctx.font = 'bold 15px monospace';
   const wallClockWidth = ctx.measureText(wallClock).width;
-  ctx.fillText(wallClock, SIEG_W - 10, 51);
-  // The date the session began, fixed beside the live clock: a frame then always
-  // says both when the session started and what time it is now.
-  if (s.stampDate) {
-    ctx.fillStyle = C.muted;
-    ctx.font = '12px monospace';
-    ctx.fillText(s.stampDate, SIEG_W - 22 - wallClockWidth, 51);
-  }
+  ctx.textAlign = 'center';
+  ctx.fillStyle = C.text;
+  ctx.fillText(wallClock, SIEG_W / 2, 40);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = C.name;
+  ctx.font = '13px sans-serif';
+  ctx.fillText(fitStampText(ctx, s.sessionName || '', SIEG_W / 2 - wallClockWidth / 2 - 24), 11, 40);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = C.muted;
+  ctx.font = '9px sans-serif';
+  ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 40);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = C.stamp;
+  ctx.font = 'bold 13px monospace';
+  const stamp = [s.stampDate, s.location].filter(Boolean).join(' · ');
+  ctx.fillText(fitStampText(ctx, stamp, SIEG_W - 24), SIEG_W / 2, 56);
   ctx.textAlign = 'left';
 
   // ── Camera pane. The full frame is fitted inside the pane (no crop) so the
@@ -249,18 +246,6 @@ export function drawSiegFrame(ctx, canvas, s) {
     try { drawSiegAnomalyScan(ctx, vid, fit, s.figureBoxes); } catch { /* frame not readable yet */ }
   }
   drawSiegCameraOverlay(ctx, s, fit);
-
-  // The session's location, stamped over the camera pane: legible on a phone and
-  // never hidden by a player's controls on the saved file.
-  if (s.location) {
-    ctx.font = '13px monospace';
-    const label = fitStampText(ctx, s.location, SIEG_W - 40);
-    const chipY = CAM_Y + CAM_H - 30;
-    ctx.fillStyle = 'rgba(4, 6, 11, 0.78)';
-    ctx.fillRect(8, chipY, ctx.measureText(label).width + 16, 22);
-    ctx.fillStyle = C.text;
-    ctx.fillText(label, 16, chipY + 16);
-  }
 
   // ── Lanes ──
   ctx.fillStyle = C.panel;

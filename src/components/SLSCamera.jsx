@@ -18,6 +18,7 @@ import useDepthDetection from '@/hooks/useDepthDetection';
 import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
+import useInlineCameraPlayback from '@/hooks/useInlineCameraPlayback';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
 import { fitStampText } from '@/lib/recordingStamp';
 import RecordTrimPicker from './RecordTrimPicker';
@@ -40,8 +41,12 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const chunksRef = useRef([]);
   const chunkPumpRef = useRef(null);
   const timerRef = useRef(null);
+  const frameTrackRef = useRef(null);
+  const runningRef = useRef(false);
+  const startingRef = useRef(false);
 
   const [active, setActive] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
   const [figureCount, setFigureCount] = useState(0);
   const [movingCount, setMovingCount] = useState(0);
@@ -77,12 +82,15 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const trimSeconds = TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds;
   const preparedRecording = usePreparedRecording(recordedBlob, trimSeconds);
   const displayBlob = preparedRecording.blob;
+  useInlineCameraPlayback(videoRef, active && mode !== 'depth', setError);
 
   const formatDuration = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
 
   const stopCamera = useCallback(() => {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    if (timerRef.current) clearInterval(timerRef.current);
+    runningRef.current = false;
+    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null; }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    frameTrackRef.current = null;
     // Turn off the torch before stopping the track (Torch mode).
     if (streamRef.current) disableTorch(streamRef.current);
     // A depth session runs on the native module rather than a web stream, so it is
@@ -96,9 +104,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
     stopDepthStream();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-    } else if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
+    } else {
+      streamRef.current?.getTracks().forEach(t => t.stop());
       streamRef.current = null;
+      depthAudioRef.current?.getTracks().forEach(t => t.stop());
+      depthAudioRef.current = null;
     }
     setActive(false);
     setRecording(false);
@@ -148,9 +158,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
       .find(t => MediaRecorder.isTypeSupported(t)) || '';
     const mr = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
     mediaRecorderRef.current = mr;
+    frameTrackRef.current = recordStream.getVideoTracks()[0] || null;
     chunksRef.current = [];
     mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push({ blob: e.data, t: Date.now() }); };
     mr.onstop = () => {
+      if (mediaRecorderRef.current === mr) { mediaRecorderRef.current = null; frameTrackRef.current = null; }
       stopChunkPump(chunkPumpRef.current); chunkPumpRef.current = null;
       // Name the file after the format the recorder actually produced. It reports
       // its real container in .mimeType, so a device that silently used a
@@ -169,15 +181,16 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // figure detection or overlay. The raw camera stream (video + audio) is
   // recorded directly — no canvas, no processing loop.
   const startDeviceCamera = async () => {
-    beginStamp();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
       });
+      if (!runningRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
+      if (!runningRef.current) return;
       setActive(true);
       startSessionRecorder(stream, () => {
         streamRef.current = null;
@@ -185,6 +198,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       setRecordDuration(0);
       timerRef.current = setInterval(() => setRecordDuration(prev => prev + 1), 1000);
     } catch (e) {
+      stopCamera();
       const name = e?.name || '';
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
         setError('Camera access denied. Allow camera and microphone permissions in your device settings, then try again.');
@@ -199,53 +213,54 @@ export default function SLSCamera({ gateSave, refundSave }) {
   };
 
   const startCamera = async () => {
+    if (startingRef.current || runningRef.current || mediaRecorderRef.current) return;
+    startingRef.current = true;
+    runningRef.current = true;
+    setStarting(true);
     beginStamp();
     setError('');
     setRecordedBlob(null);
     setRecordDuration(0);
-    if (mode === 'device') { await startDeviceCamera(); return; }
-    if (mode === 'depth') {
-      if (depthAvailable) await startDepthCamera();
-      else setError(DEPTH_UNSUPPORTED_MESSAGE);
-      return;
-    }
     try {
+      if (mode === 'device') { await startDeviceCamera(); return; }
+      if (mode === 'depth') {
+        if (depthAvailable) await startDepthCamera();
+        else { runningRef.current = false; setError(DEPTH_UNSUPPORTED_MESSAGE); }
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
       });
+      if (!runningRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
+      if (!runningRef.current) return;
 
-      // Torch mode: turn on the phone's torch for the duration of the session.
       if (isTorchActive(sensitivityRef.current)) {
         const ok = await enableTorch(stream);
         if (!ok) setError('Torch not supported on this device — using Dark mode detection instead.');
       }
-
+      if (!runningRef.current) return;
       setActive(true);
       processFrame();
 
-      // Record from canvas (what's shown on screen) + audio from camera. A device
-      // whose web view cannot capture a canvas is fed the live camera feed instead,
-      // so a session there still saves a file — the raw feed, without the overlay.
+      // Keep the existing canvas + camera microphone recording path.
       await new Promise(r => setTimeout(r, 300));
+      if (!runningRef.current) return;
       const canvasCapture = !!canvasRef.current && typeof canvasRef.current.captureStream === 'function';
       const recordStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
       if (!canvasCapture) stream.getVideoTracks().forEach((t) => recordStream.addTrack(t));
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) recordStream.addTrack(audioTrack);
-
       startSessionRecorder(recordStream, () => {
         stream.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       });
-
-      // Timer
-      setRecordDuration(0);
       timerRef.current = setInterval(() => setRecordDuration(prev => prev + 1), 1000);
     } catch (e) {
+      stopCamera();
       const name = e?.name || '';
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
         setError('Camera access denied. Allow camera and microphone permissions in your device settings, then try again.');
@@ -258,6 +273,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
       } else {
         setError('Could not start the camera. Please try again.');
       }
+    } finally {
+      startingRef.current = false;
+      setStarting(false);
     }
   };
 
@@ -266,9 +284,8 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // method uses, so the recording and the Evidence save are unchanged — and the
   // saved file carries the depth image exactly as it looked on screen.
   const startDepthCamera = async () => {
-    beginStamp();
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) { runningRef.current = false; return; }
     canvas.width = 640;
     canvas.height = 480;
     depthFrameRef.current = null;
@@ -276,6 +293,19 @@ export default function SLSCamera({ gateSave, refundSave }) {
       protrusion: depthDetection.protrusion,
       minHeight: depthDetection.minSize,
     });
+
+    // Match SIEG's startup order: acquire the microphone before the native
+    // camera starts, so audio setup cannot interrupt an already-running sensor.
+    let audioTrack = null;
+    try {
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+      });
+      if (!runningRef.current) { audioStream.getTracks().forEach(t => t.stop()); return; }
+      depthAudioRef.current = audioStream;
+      audioTrack = audioStream.getAudioTracks()[0] || null;
+    } catch { /* record the picture without sound */ }
+    if (!runningRef.current) return;
 
     // The failure listener goes up before the session starts, so an ARKit fault
     // at startup can never arrive unobserved. A fatal native error ends the
@@ -298,8 +328,10 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
     try {
       await startDepthStream(8);
+      if (!runningRef.current) return;
     } catch (e) {
-      if (depthErrorUnsubRef.current) { depthErrorUnsubRef.current(); depthErrorUnsubRef.current = null; }
+      setDepthDiagError(depthDiagRef.current, e?.message || e?.category || 'native depth error');
+      stopCamera();
       if (e?.category === 'unsupported') {
         setDepthAvailable(false);
         setDepthUnavailable(true);
@@ -319,7 +351,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       const receivedAt = Date.now();
       const imageEl = new Image();
       imageEl.onload = () => {
-        if ((depthFrameRef.current?.receivedAt || 0) <= receivedAt) depthFrameRef.current = stampDepthFrame(data, imageEl, receivedAt, depthFrameRef.current);
+        if (runningRef.current && (depthFrameRef.current?.receivedAt || 0) <= receivedAt) depthFrameRef.current = stampDepthFrame(data, imageEl, receivedAt, depthFrameRef.current);
       };
       imageEl.src = data.image;
       setCenterDepth(data.centerDepth ?? null);
@@ -336,17 +368,6 @@ export default function SLSCamera({ gateSave, refundSave }) {
     setFigureCount(0);
     setActive(true);
     processDepthFrame();
-
-    // The depth module owns the camera, so the session's own microphone is opened
-    // separately and recorded alongside the canvas.
-    let audioTrack = null;
-    try {
-      const audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
-      });
-      depthAudioRef.current = audioStream;
-      audioTrack = audioStream.getAudioTracks()[0] || null;
-    } catch { /* record the picture without sound */ }
 
     if (typeof canvas.captureStream === 'function') {
       const recordStream = canvas.captureStream(30);
@@ -381,6 +402,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   };
 
   const processDepthFrame = () => {
+    if (!runningRef.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const frame = depthFrameRef.current;
@@ -398,10 +420,12 @@ export default function SLSCamera({ gateSave, refundSave }) {
       stampLine: stampLine(),
       location: stampLocation(),
     });
+    frameTrackRef.current?.requestFrame?.();
     animFrameRef.current = requestAnimationFrame(processDepthFrame);
   };
 
   const processFrame = () => {
+    if (!runningRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || video.readyState < 2) {
@@ -411,9 +435,11 @@ export default function SLSCamera({ gateSave, refundSave }) {
 
     const w = video.videoWidth || 640;
     const h = video.videoHeight || 480;
-    canvas.width = w; canvas.height = h;
+    // Like SIEG, preserve the recording surface between frames. Reassigning
+    // even the same dimensions resets the canvas and its captured frame buffer.
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     ctx.drawImage(video, 0, 0, w, h);
     const imageData = ctx.getImageData(0, 0, w, h);
@@ -503,6 +529,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       ctx.fillText(fitStampText(ctx, burnedLocation, w - 90), w - 8, 30);
     }
     ctx.textAlign = 'left';
+    frameTrackRef.current?.requestFrame?.();
 
     animFrameRef.current = requestAnimationFrame(processFrame);
   };
@@ -625,8 +652,8 @@ export default function SLSCamera({ gateSave, refundSave }) {
             <CameraOff className="w-3 h-3" /> Stop & Save
           </button>
         ) : (
-          <button onClick={startCamera} disabled={mode === 'depth' && !depthAvailable} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-[10px] uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            <Video className="w-3 h-3" /> Activate
+          <button onClick={startCamera} disabled={starting || !!mediaRecorderRef.current || (mode === 'depth' && !depthAvailable)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 font-heading text-[10px] uppercase tracking-wider hover:bg-green-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            <Video className="w-3 h-3" /> {starting ? 'Starting…' : 'Activate'}
           </button>
         )}
       </div>
