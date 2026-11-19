@@ -195,6 +195,7 @@ export default function Toolkit() {
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const scrollRef = useRef(null);
+  const panelRef = useRef(null);
   const recordingStartedAtRef = useRef(null);
   const { isSpeaking: narrating, isGenerating, narrate: rawNarrate, stop: stopNarration } = useGhostVoice();
   const { gateNarration, gateManifestation, showUpgrade, setShowUpgrade, gateReason, setGateReason, user: gateUser } = useEnergyGate();
@@ -246,13 +247,25 @@ export default function Toolkit() {
     };
   }, []);
 
-  // When a tool is opened (or a guide detail expands), scroll the panel into
-  // view at the top of the list.
+  // Every tool lands at the top when it is opened (and when a guide detail
+  // expands): the opened panel itself is brought to the top of the tool list,
+  // for every tool without exception. The jump is instant and re-asserted on the
+  // next frame, because a camera tool lays out its own view as it mounts and a
+  // smooth animation gets cut short mid-flight — which is what left Anomaly
+  // Camera and SIEG below the fold while the rest landed at the top.
   useEffect(() => {
-    if (activeTool && scrollRef.current) {
-      scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [activeTool, guideDetail]);
+    const scroller = scrollRef.current;
+    if (!scroller || (!activeTool && !adGateTool && !guideDetail)) return;
+    const jump = () => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const top = panel.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      scroller.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+    };
+    jump();
+    const raf = requestAnimationFrame(jump);
+    return () => cancelAnimationFrame(raf);
+  }, [activeTool, adGateTool, guideDetail]);
 
   // Weather is now fetched only when the user explicitly presses the
   // "Get My Location" button — no auto-fire on tool open (saves credits).
@@ -1461,6 +1474,7 @@ Best Practices
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
+            ref={panelRef}
             className={`tkd-frame tkd-${adGateTool.type} p-4 bg-card/40 mb-4`}
           >
             <div className="flex items-center justify-between mb-4">
@@ -1492,6 +1506,7 @@ Best Practices
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
+            ref={panelRef}
             className={`tkd-frame tkd-${activeTool.type} p-4 bg-card/40 mb-4`}
           >
             <div className="flex items-center justify-between mb-4">
