@@ -65,8 +65,12 @@ export function drawDepthFrame(ctx, canvas, frame, { figureCount, stampLine, loc
   });
 
   const moving = movingFigureCount(live, now);
+  // Black band behind the two stamp lines, so the white text always stands out
+  // against whatever the depth image is showing.
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, w, 40);
   ctx.fillStyle = RECORDING_STAMP_COLOR;
-  ctx.font = '10px monospace';
+  ctx.font = 'bold 10px monospace';
   ctx.textAlign = 'left';
   ctx.fillText('ANOMALY CAM · DEPTH SCAN', 8, 16);
   ctx.fillText(`FIGURES: ${figureCount}${moving ? ` · ${moving} MOVING` : ''}`, 8, 30);

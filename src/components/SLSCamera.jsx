@@ -517,8 +517,12 @@ export default function SLSCamera({ gateSave, refundSave }) {
       ctx.fillText('ANOMALY DETECTED', x, y - 8);
     });
 
+    // Black band behind the two stamp lines, so the white text always stands out
+    // against whatever the camera is seeing.
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, w, 40);
     ctx.fillStyle = RECORDING_STAMP_COLOR;
-    ctx.font = '10px monospace';
+    ctx.font = 'bold 10px monospace';
     ctx.fillText('ANOMALY CAM · FIGURE SCAN', 8, 16);
     ctx.fillText(`FIGURES: ${figures.length}`, 8, 30);
     ctx.textAlign = 'right';
