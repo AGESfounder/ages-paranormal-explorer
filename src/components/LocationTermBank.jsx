@@ -529,9 +529,6 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     ctx.fillStyle = '#64748b';
     ctx.font = '11px monospace';
     ctx.fillText('CAPTURED: ' + capturedRef.current.length, 14, h - 14);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = RECORDING_STAMP_COLOR;
-    ctx.fillText((locationLabel || '').slice(0, 30), w - 14, h - 14);
   };
 
   const startDrawing = () => startFrames(draw);
