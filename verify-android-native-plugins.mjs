@@ -20,7 +20,7 @@ const java = (path) => read(path).replace(/"(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/
 const nativePath = 'android/app/src/main/java/com/ages/explorer/';
 
 const gradle = read('android/app/build.gradle');
-for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '34'], ['versionName', '"1.0"']]) {
+for (const [key, value] of [['namespace', '"com.ages.explorer"'], ['applicationId', '"com.ages.explorer"'], ['versionCode', '35'], ['versionName', '"1.0"']]) {
   const values = [...gradle.matchAll(new RegExp(`^\\s*${key}\\s+([^\\r\\n]+)`, 'gm'))];
   check(`Android ${key} is exactly ${value}`, values.length === 1 && values[0][1].trim() === value);
 }
@@ -66,7 +66,9 @@ check('Trim, full Android video and WebM audio device saves require preparation 
 check('Full Android video preparation precedes native-save staging and MediaStore', saveJs.includes("Capacitor.getPlatform() === 'android' ? trimSeconds : null, undefined, { forDeviceSave: true, trimMode }") && saveJs.includes("trimSeconds = null") && saveJs.indexOf('await prepareRecording(') < saveJs.indexOf('await writeMediaTempFile(prepared)') && saveJs.indexOf('await writeMediaTempFile(prepared)') < saveJs.indexOf('await deviceMedia.saveMedia('));
 check('JS uses normalized audio/video prepareMedia routing and reads output bytes', deviceMediaJs.includes("deviceMedia.prepareMedia({ filePath: input, mediaType: audioOnly ? 'audio' : 'video', trimSeconds })") && deviceMediaJs.includes('const mimeType = baseMediaMime(blob.type)') && deviceMediaJs.includes("const audioOnly = mimeType.startsWith('audio/')") && deviceMediaJs.includes('output = result.filePath') && deviceMediaJs.includes('Filesystem.readFile({ path: output })') && deviceMediaJs.includes('type: result.mimeType'));
 check('Android rejects non-MP4 video and non-AAC/MP4 prepared audio', deviceMediaJs.includes("Capacitor.getPlatform() === 'android' && baseMediaMime(mimeType) !== 'video/mp4'") && deviceMediaJs.includes("Capacitor.getPlatform() === 'android' && baseMediaMime(mimeType) !== 'audio/mp4'") && deviceMediaJs.includes('assertPreparedVideoType(result.mimeType)') && deviceMediaJs.includes('assertPreparedAudioType(result.mimeType)') && deviceMediaJs.includes("'audio/mp4': 'm4a'") && saveJs.includes('mediaExtension(prepared)'));
-check('Failed preparation is retryable and temporary copies are cleaned up', preparationJs.includes('exports.delete(key); throw error;') && deviceMediaJs.includes('finally') && deviceMediaJs.includes('removeMediaTempFile(uri).catch(() => {})'));
+const failedExport = preparationJs.split('.catch((error) => {')[1]?.split('exports.set(key, pending)')[0] ?? '';
+const exportCleanup = deviceMediaJs.split('export async function exportNativeRecording(')[1]?.split('} finally {')[1] ?? '';
+check('Failed preparation evicts only its own cached attempt and cleans up temporary copies', /if \(exports\.get\(key\) === pending\) exports\.delete\(key\);\s*throw error;/.test(failedExport) && preparationJs.includes('exports.set(key, pending)') && exportCleanup.includes('new Set([input, output].filter(Boolean))') && exportCleanup.includes('removeMediaTempFile(uri).catch(() => {})'));
 
 check('Full sources can reach transformation without strict duration evidence; trims retain it', save.includes('inspectMedia(source, "source", requestedTrimMs > 0)') && /if \(requireExactDuration\)\s*\{\s*scanTimelines\(extractor, tracks\)/.test(save) && save.includes('durationMs = resolveDurationMs(containerDurationMs, tracks, stage)') && save.includes('durationMs = Math.max(0L, containerDurationMs)'));
 check('All outputs require positive duration and expected tracks, with exact measured-duration checks only for trims', save.includes('inspectMedia(output, "output", trimRequested)') && save.includes('if (outputInfo.durationMs <= 0)') && /long measuredDurationMs = outputInfo\.declaredDurationMs > 0\s*\? outputInfo\.declaredDurationMs\s*: outputInfo\.durationMs;/.test(save) && save.includes('if (trimRequested && Math.abs(measuredDurationMs - expectedDurationMs) > DURATION_TOLERANCE_MS)') && save.includes('DURATION_TOLERANCE_MS = 750L') && save.includes('!outputInfo.hasAudio || outputInfo.hasVideo || !outputInfo.hasAacAudio') && save.includes('!outputInfo.hasVideo || !outputInfo.hasH264Video') && save.includes('sourceHadAudio && (!outputInfo.hasAudio || !outputInfo.hasAacAudio)'));
@@ -92,22 +94,26 @@ check('Full exports require readable tracks; trims require bounded sample-backed
   && save.includes('inspectMedia(output, "output", trimRequested)')
   && /if \(outputInfo.durationMs <= 0\)\s*\{\s*throw new MediaPreparationException\(/.test(save)
   && save.includes('if (trimRequested && Math.abs(measuredDurationMs - expectedDurationMs) > DURATION_TOLERANCE_MS)'));
-const recordingLabel = read('src/lib/recordingLabel.js');
-const structuredMimeResolution = recordingLabel.includes("import { Capacitor } from '@capacitor/core';")
-  && /export function isAndroidRecording\(\) \{\s*try \{\s*return Capacitor\.getPlatform\(\) === 'android';\s*\} catch \{\s*return false;\s*\}\s*\}/.test(recordingLabel)
-  && /export function recordingBlobType\(\{ recorderMime, chunkMime, requestedMime, fallback \}\) \{\s*const reported = recorderMime \|\| chunkMime \|\| requestedMime \|\| fallback \|\| '';\s*if \(!isAndroidRecording\(\)\) return reported;\s*return String\(reported\)\.split\(';'\)\[0\]\.trim\(\) \|\| fallback;\s*\}/.test(recordingLabel);
-const structuredMimeAssemblies = {
-  'src/components/PhoneREMDevice.jsx': /const actualMime = recordingBlobType\(\{\s*recorderMime: mr\.mimeType,\s*chunkMime: videoChunksRef\.current\.find\(\(c\) => c\.blob\.type\)\?\.blob\.type,\s*requestedMime: mimeType,\s*fallback: canvasCapture \? 'video\/webm' : 'audio\/webm',\s*\}\);\s*const blob = new Blob\(videoChunksRef\.current\.map\(\(c\) => c\.blob\), \{ type: actualMime \}\);/,
-  'src/components/AcousticAnomalySweeper.jsx': /const actualMime = recordingBlobType\(\{\s*recorderMime: mr\.mimeType,\s*chunkMime: chunksRef\.current\.find\(\(c\) => c\.blob\.type\)\?\.blob\.type,\s*requestedMime: mimeRef\.current,\s*fallback: audioOnlyRef\.current \? 'audio\/webm' : 'video\/webm',\s*\}\);\s*const blob = new Blob\(chunksRef\.current\.map\(\(c\) => c\.blob\), \{ type: actualMime \}\);/,
-  'src/hooks/useSweeperRecorder.js': /const blobType = recordingBlobType\(\{\s*recorderMime: mr\?\.mimeType,\s*chunkMime: videoChunksRef\.current\.find\(\(c\) => c\.blob\.type\)\?\.blob\.type,\s*requestedMime: mimeTypeRef\.current,\s*fallback: audioOnlyRef\.current \? 'audio\/webm' : 'video\/webm',\s*\}\);\s*const blob = new Blob\(videoChunksRef\.current\.map\(\(c\) => c\.blob\), \{ type: blobType \}\);/,
-};
+// The tools now delegate recording through the hook to one shared recorder.
+// Follow that live path rather than requiring the removed inline assemblies.
+const sweeperRecorder = read('src/hooks/useSweeperRecorder.js');
+const sessionRecorder = read('src/lib/sessionCanvasRecorder.js');
+const sharedMimeResolution = sweeperRecorder.includes("import sessionCanvasRecorder from '@/lib/sessionCanvasRecorder'")
+  && sweeperRecorder.includes('current.take = sessionCanvasRecorder({')
+  && sweeperRecorder.includes('onFinished: (blob) => { if (mounted.current) setVideoBlob(blob); }')
+  && sessionRecorder.includes('recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {})')
+  && sessionRecorder.includes('recorder.ondataavailable = ({ data }) => { if (data?.size) chunks.push(data); }')
+  && sessionRecorder.includes("const type = (recorder.mimeType || chunks.find((chunk) => chunk.type)?.type || mime || (picture ? 'video/webm' : 'audio/webm')).split(';')[0].trim()")
+  && sessionRecorder.includes('const blob = new Blob(chunks, { type })')
+  && sessionRecorder.includes('onFinished(blob)');
 for (const path of ['src/components/PhoneREMDevice.jsx', 'src/components/AcousticAnomalySweeper.jsx', 'src/hooks/useSweeperRecorder.js', 'src/components/SiegConsole.jsx']) {
   const recorder = read(path);
   check(`${path} prefers actual recorder/chunk MIME without guessing MP4 audio`, path === 'src/components/SiegConsole.jsx'
     ? /mr\.mimeType \|\| [^\n]+find\(\(c\) => c\.blob\.type\)\?\.blob\.type/.test(recorder) && recorder.includes("'audio/webm' : 'video/webm'") || (recorder.includes("mr.mimeType || ") && recorder.includes('find((c) => c.blob.type)?.blob.type') && /(?:canvasCapture|picture) \? 'video\/webm' : 'audio\/webm'/.test(recorder))
-    : structuredMimeResolution
-      && /import \{ (?:isAndroidRecording, )?recordingBlobType \} from '@\/lib\/recordingLabel';/.test(recorder)
-      && structuredMimeAssemblies[path].test(recorder));
+    : sharedMimeResolution && (path === 'src/hooks/useSweeperRecorder.js'
+      || (recorder.includes("import useSweeperRecorder from '@/hooks/useSweeperRecorder'")
+        && recorder.includes('} = useSweeperRecorder({')
+        && !recorder.includes('new MediaRecorder('))));
 }
 const diagnostics = read('src/lib/androidSaveDiagnostics.js');
 const saveButtons = read('src/components/EvidenceSaveButtons.jsx');
@@ -115,13 +121,17 @@ const yesNo = read('src/components/YesNoSweeper.jsx');
 const trimOptions = read('src/lib/recordTrim.js');
 const trimPicker = read('src/components/RecordTrimPicker.jsx');
 const preparedHook = read('src/hooks/usePreparedRecording.js');
-check('Y/K/IDK picker carries explicit Brief mode and 30 seconds through preparation and saving',
+check('Y/K/IDK keeps Android Full-only selection and preserves explicit trim intent through preparation and saving',
   /id: 'brief', label: 'Brief', seconds: 30\b/.test(trimOptions)
+  && /if \(Capacitor\.getPlatform\(\) === 'android'\) return null;/.test(trimPicker)
+  && trimPicker.indexOf("if (Capacitor.getPlatform() === 'android') return null;") < trimPicker.indexOf('<div')
   && trimPicker.includes('onClick={() => onChange(opt.id)}')
+  && yesNo.includes("const [trimMode, setTrimMode] = useState('full')")
+  && yesNo.includes('<RecordTrimPicker value={trimMode} onChange={setTrimMode}')
   && yesNo.includes('TRIM_OPTIONS.find((o) => o.id === trimMode)?.seconds')
   && yesNo.includes('usePreparedRecording(videoBlob, trimSeconds, trimMode)')
   && yesNo.includes('trimMode={trimMode} trimSeconds={trimSeconds}')
-  && preparedHook.includes('{ trimMode: androidTrimMode }')
+  && preparedHook.includes('{ trimMode: androidTrimMode, forceRetry: attempt > 0 }')
   && saveButtons.includes('saveBlobToDevice(deviceBlob, filename, { trimMode, trimSeconds })')
   && deviceMediaJs.includes('trimSeconds, trimMode: diagnostics.trimMode')
   && save.includes('call.getString("trimMode")'));
@@ -195,18 +205,21 @@ check('Generic iOS and prepared-output staging keep the existing Filesystem bina
   && nativeExport.includes(': await writeMediaTempFile(blob)')
   && saveJs.includes('uri = await writeMediaTempFile(prepared)'));
 check('Hook retry changes attempt identity immediately, then prepares the retained source with unchanged trim intent',
-  preparedHook.includes('retry: () => setAttempt((value) => value + 1)')
+  /const retry = \(\) => \{\s*if \(!needed \|\| preparing\) return;\s*setRequest\(\{ source, seconds, trimMode: androidTrimMode, attempt: attempt \+ 1 \}\);\s*\};/.test(preparedHook)
+  && preparedHook.includes('request.source === source && request.seconds === seconds && request.trimMode === androidTrimMode ? request.attempt : 0')
   && preparedHook.includes('result.attempt === attempt')
   && preparedHook.includes('setResult({ source, seconds, trimMode: androidTrimMode, attempt, blob: null, error: \'\' })')
-  && preparedHook.includes('prepareRecording(source, seconds, controller.signal, { trimMode: androidTrimMode })')
+  && preparedHook.includes('prepareRecording(source, seconds, controller.signal, { trimMode: androidTrimMode, forceRetry: attempt > 0 })')
+  && preparationJs.includes('if (forceRetry) exports.delete(key)')
+  && preparedHook.includes('retry, retryCount: attempt')
   && preparedHook.includes('[source, seconds, androidTrimMode, needed, attempt]')
   && preparedHook.includes('originalBlob: source')
   && preparedHook.includes('if (!active) return')
   && preparedHook.includes("blob: null, error: error.message || 'The recording could not be prepared.'"));
 const preparationUi = read('src/components/RecordingPreparation.jsx');
 check('Visible hook Retry is an explicit non-submit button invoking the hook callback',
-  preparationUi.includes('type="button" onClick={retry} disabled={!retry}')
-  && preparationUi.includes('preparing ? <span')
+  preparationUi.includes('type="button" onClick={() => retry?.()} disabled={!retry}')
+  && /preparing \?\s*\(\s*<span/.test(preparationUi)
   && preparationUi.includes('Preparing recording on this device'));
 const deviceAttempt = saveButtons.split('const handleDevice = async')[1]?.split('const nativeLabel')[0] ?? '';
 check('Save-time Android Retry explicitly uses the retained original and the current unchanged trim intent',
@@ -307,12 +320,14 @@ check('Installed session checks AUTOMATIC support before enabling/configuring/re
 check('Unsupported depth closes the session and rejects depth_unsupported before returning', depthGuard.test(depth) && /private void stopSession\(\)\s*\{\s*streaming = false;/.test(depth) && depth.includes('session.close();') && depth.includes('session = null;'));
 check('ARCore and camera remain optional install features', /<meta-data\s+android:name="com.google.ar.core"\s+android:value="optional"/.test(manifest) && /<uses-feature\s+android:name="android.hardware.camera.ar"\s+android:required="false"/.test(manifest) && /<uses-feature\s+android:name="android.hardware.camera"\s+android:required="false"/.test(manifest));
 const sls = read('src/components/SLSCamera.jsx');
-check('Anomaly Camera keeps a persistent unsupported fallback and explicit depth routing', sls.includes('Choose Contrast Scan or Device Camera.') && sls.includes('{depthUnavailable && (') && sls.includes('setDepthAvailable(false)') && /if \(mode === 'depth'\)\s*\{[^}]+return;/s.test(sls));
+const depthRoute = sls.split("if (mode === 'depth') {")[1]?.split('const splitMic')[0] ?? '';
+check('Anomaly Camera keeps a persistent unsupported fallback and explicit depth routing', sls.includes('Choose Contrast Scan or Device Camera.') && sls.includes('{depthUnavailable && (') && sls.includes('setDepthAvailable(false)') && /if \(depthAvailable\) await startDepthCamera\(\);\s*else \{ runningRef\.current = false; setError\(DEPTH_UNSUPPORTED_MESSAGE\); \}\s*return;\s*\}/.test(depthRoute));
 check('Build 25 Anomaly Full video and Audio Recorder keep native MP4/M4A saves to Gallery/Music',
   sls.includes('usePreparedRecording(recordedBlob, trimSeconds)')
   && sls.includes('deviceBlob={displayBlob} originalBlob={preparedRecording.originalBlob}')
   && toolkit.includes('deviceBlob={recordedBlob} originalBlob={recordedBlob} iosAudioOriginalToFiles')
-  && toolkit.includes("mimeType: 'audio/webm'")
+  && toolkit.includes("['audio/webm', 'audio/mp4', 'audio/ogg'].find(type => MediaRecorder.isTypeSupported?.(type))")
+  && toolkit.includes('mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)')
   && preparationJs.includes("mimeType.startsWith('video/') || mimeType === 'audio/webm'")
   && save.includes('String extension = audioOnly ? "m4a" : "mp4"')
   && deviceMediaJs.includes("'audio/mp4': 'm4a'")
@@ -341,10 +356,10 @@ const sync = workflow.indexOf('script: npx cap sync android');
 const verify = workflow.indexOf('npm run verify:android-native-plugins');
 const compile = workflow.indexOf('./gradlew assembleRelease bundleRelease');
 check('Android workflow orders web build, Android sync, static gate, then Gradle', build >= 0 && sync > build && verify > sync && compile > verify);
-check('Current CI and native metadata identify Android Build 34 alongside iOS Build 39',
-  workflow.includes('Verify Android Version 34 and native plugin wiring before Gradle')
-  && /\bversionCode\s+34\b/.test(gradle)
-  && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 39;'));
+check('Current CI and native metadata identify Android Build 35 alongside iOS Build 43',
+  workflow.includes('Verify Android Version 35 and native plugin wiring before Gradle')
+  && /\bversionCode\s+35\b/.test(gradle)
+  && read('ios/App/App.xcodeproj/project.pbxproj').includes('CURRENT_PROJECT_VERSION = 43;'));
 check('Android workflow keeps signing and signature verification', workflow.includes('- ages-explorer-upload') && workflow.includes('jarsigner -verify -verbose -certs'));
 
 for (const { label, ok } of results) console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
