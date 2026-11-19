@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { resolveRecordingLocation } from '@/lib/evidenceContext';
 import { formatStampDate, formatStampLine, stampRecordFields } from '@/lib/recordingStamp';
+import { notifyToolSessionStart } from '@/lib/toolSessionEvents';
 
 // Retry schedule for the location, measured after each failed attempt. The
 // first attempt is immediate; the rest cover roughly five minutes, so a fix
@@ -34,6 +35,9 @@ export default function useRecordingStamp() {
     startRef.current = start;
     locationRef.current = null;
     stopResolving();
+    // This is the moment a tool's session begins, whatever its own start button
+    // is called, so the toolkit page can bring the running view into sight.
+    notifyToolSessionStart();
 
     let attempt = 0;
     const attemptLocation = () => {

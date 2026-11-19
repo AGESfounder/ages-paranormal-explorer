@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { X, Waves, Moon, Volume2, Wrench, Search, BookOpen, Shield, Cloud, Play, Pause, Mic, RefreshCw, Save, Clock, MapPin, ArrowLeft, ScanFace, Zap, Library, Type, MessageCircle, Gauge } from 'lucide-react';
 import SLSCamera from '../components/SLSCamera';
@@ -18,6 +18,7 @@ import { base44 } from '@/api/base44Client';
 import { uploadPrivateMedia } from '@/lib/privateMedia';
 import { getEffectivePlanId } from '@/lib/access';
 import { withAppleLedger } from '@/lib/appleLedger';
+import { onToolSessionStart, notifyToolSessionStart } from '@/lib/toolSessionEvents';
 import useAppResumeRefresh from '@/hooks/useAppResumeRefresh';
 import { buildEvidenceContext, primeGPS } from '@/lib/evidenceContext';
 import { useToolGpsSave } from '@/hooks/useToolGpsSave';
@@ -247,25 +248,47 @@ export default function Toolkit() {
     };
   }, []);
 
-  // Every tool lands at the top when it is opened (and when a guide detail
-  // expands): the opened panel itself is brought to the top of the tool list,
-  // for every tool without exception. The jump is instant and re-asserted on the
-  // next frame, because a camera tool lays out its own view as it mounts and a
-  // smooth animation gets cut short mid-flight — which is what left Anomaly
-  // Camera and SIEG below the fold while the rest landed at the top.
-  useEffect(() => {
+  // Bring the opened tool's panel to the top of the tool list. Shared by
+  // opening a tool, a guide detail expanding, and a tool starting its own
+  // session, so every route to a new screen lands in the same place.
+  const scrollPanelToTop = useCallback(() => {
     const scroller = scrollRef.current;
-    if (!scroller || (!activeTool && !adGateTool && !guideDetail)) return;
-    const jump = () => {
-      const panel = panelRef.current;
-      if (!panel) return;
-      const top = panel.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-      scroller.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
-    };
-    jump();
-    const raf = requestAnimationFrame(jump);
+    const panel = panelRef.current;
+    if (!scroller || !panel) return;
+    const top = panel.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    scroller.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+  }, []);
+
+  // Every tool lands at the top when it is opened (and when a guide detail
+  // expands). The jump is instant and re-asserted on the next frame, because a
+  // camera tool lays out its own view as it mounts and a smooth animation gets
+  // cut short mid-flight — which is what left Anomaly Camera and SIEG below the
+  // fold while the rest landed at the top.
+  useEffect(() => {
+    if (!activeTool && !adGateTool && !guideDetail) return;
+    scrollPanelToTop();
+    const raf = requestAnimationFrame(scrollPanelToTop);
     return () => cancelAnimationFrame(raf);
-  }, [activeTool, adGateTool, guideDetail]);
+  }, [activeTool, adGateTool, guideDetail, scrollPanelToTop]);
+
+  // Pressing a tool's own Start — SIEG's 3-minute option, Start on a sweeper,
+  // Activate on the camera — swaps its setup view for the running one, which
+  // leaves the user scrolled past the screen they just asked for. Re-assert the
+  // jump as the running view lays out: the camera tools hand over after a
+  // permission prompt, so a single frame is not enough.
+  useEffect(() => {
+    let timers = [];
+    const unsubscribe = onToolSessionStart(() => {
+      timers.forEach(clearTimeout);
+      scrollPanelToTop();
+      requestAnimationFrame(scrollPanelToTop);
+      timers = [setTimeout(scrollPanelToTop, 250), setTimeout(scrollPanelToTop, 800)];
+    });
+    return () => {
+      unsubscribe();
+      timers.forEach(clearTimeout);
+    };
+  }, [scrollPanelToTop]);
 
   // Weather is now fetched only when the user explicitly presses the
   // "Get My Location" button — no auto-fire on tool open (saves credits).
@@ -286,6 +309,9 @@ export default function Toolkit() {
     try {
       setMediaError('');
       setJournalSaveError('');
+      // The recorder lives in this page rather than in its own component, so it
+      // announces its start the same way the tool components do.
+      notifyToolSessionStart();
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const isIos = Capacitor.getPlatform() === 'ios';
       let mediaRecorder;
