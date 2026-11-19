@@ -185,9 +185,8 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, SIEG_W, SIEG_H);
 
-  // ── Header: first line is the title, session, conditions and the countdown
-  // (with "remaining" immediately to its left). The line directly below the
-  // countdown carries only the date, location and live time stamps.
+  // ── Header: remaining sits immediately left of the countdown. The live
+  // clock sits below it, on the same baseline as the centered date + location.
   // Keep the camera pane and recording surface at their original sizes.
   ctx.fillStyle = C.panel;
   ctx.fillRect(0, 0, SIEG_W, HEADER_H);
@@ -196,8 +195,7 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillStyle = C.accent;
   ctx.font = 'bold 24px monospace';
   ctx.fillText('SIEG', 10, 25);
-  const titleRight = 10 + ctx.measureText('SIEG').width + 12;
-
+  const condX = 24 + ctx.measureText('SIEG').width;
   const countdown = s.calibrating ? '—:—' : formatClock(s.remaining);
   const countdownWidth = ctx.measureText(countdown).width;
   const rightX = SIEG_W - 10;
@@ -207,17 +205,9 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.font = '12px sans-serif';
   const labelRight = rightX - countdownWidth - 8;
   const labelLeft = labelRight - ctx.measureText(countdownLabel).width;
-
-  ctx.fillStyle = C.name;
-  ctx.font = '13px sans-serif';
-  const sessionLabel = fitStampText(ctx, s.sessionName || '', 150);
-  ctx.fillText(sessionLabel, titleRight, 24);
-  const condX = titleRight + ctx.measureText(sessionLabel).width + 14;
-
   ctx.fillStyle = C.text;
   ctx.font = '15px sans-serif';
   ctx.fillText(fitStampText(ctx, s.conditions || '—', labelLeft - condX - 14), condX, 24);
-
   ctx.textAlign = 'right';
   ctx.fillStyle = C.stamp;
   ctx.font = '12px sans-serif';
@@ -225,26 +215,30 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.font = 'bold 24px monospace';
   ctx.fillText(countdown, rightX, 25);
 
-  // ── Stamp line: date (left), location (center), live time (right) ──
+  // The line directly under the countdown carries the session name, the date and
+  // location stamps, and the live clock together.
   const stampY = 46;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = C.name;
+  ctx.font = '13px sans-serif';
+  const sessionLabel = fitStampText(ctx, s.sessionName || '', 150);
+  ctx.fillText(sessionLabel, 11, stampY);
+  const sessionRight = 11 + ctx.measureText(sessionLabel).width + 14;
+
   ctx.fillStyle = C.stamp;
   ctx.font = 'bold 13px monospace';
   const wallClock = formatWallClock(now);
-  ctx.fillText(wallClock, rightX, stampY);
   const clockLeft = rightX - ctx.measureText(wallClock).width;
+  ctx.textAlign = 'right';
+  ctx.fillText(wallClock, rightX, stampY);
 
-  ctx.textAlign = 'left';
-  const dateText = s.stampDate || '';
-  ctx.fillText(fitStampText(ctx, dateText, 140), 11, stampY);
-  const dateRight = 11 + ctx.measureText(dateText).width + 12;
-
-  const locationText = s.location || '';
-  const locLeft = dateRight;
-  const locRight = clockLeft - 14;
+  const stamp = [s.stampDate, s.location].filter(Boolean).join(' · ');
+  const stampLeft = sessionRight;
+  const stampRight = clockLeft - 14;
   ctx.textAlign = 'center';
   ctx.fillText(
-    fitStampText(ctx, locationText, Math.max(0, locRight - locLeft)),
-    (locLeft + locRight) / 2,
+    fitStampText(ctx, stamp, Math.max(0, stampRight - stampLeft)),
+    (stampLeft + stampRight) / 2,
     stampY,
   );
   ctx.textAlign = 'left';
