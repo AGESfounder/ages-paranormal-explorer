@@ -72,6 +72,7 @@ export function drawDepthFrame(ctx, canvas, frame, { figureCount, stampLine, loc
   ctx.fillText(`FIGURES: ${figureCount}${moving ? ` · ${moving} MOVING` : ''}`, 8, 30);
   if (!figureCount) ctx.fillText('SCANNING FOR A FIGURE', 8, 44);
   ctx.textAlign = 'right';
+  ctx.font = 'bold 10px monospace';
   ctx.fillText(stampLine || new Date().toLocaleTimeString(), w - 8, 16);
   if (location) {
     ctx.fillStyle = RECORDING_STAMP_COLOR;

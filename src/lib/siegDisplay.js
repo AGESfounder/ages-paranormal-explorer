@@ -215,21 +215,32 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.font = 'bold 24px monospace';
   ctx.fillText(countdown, rightX, 25);
 
+  // The line directly under the countdown carries the session name, the date and
+  // location stamps, and the live clock together.
+  const stampY = 46;
   ctx.textAlign = 'left';
   ctx.fillStyle = C.name;
   ctx.font = '13px sans-serif';
-  ctx.fillText(fitStampText(ctx, s.sessionName || '', SIEG_W - 24), 11, 40);
+  const sessionLabel = fitStampText(ctx, s.sessionName || '', 150);
+  ctx.fillText(sessionLabel, 11, stampY);
+  const sessionRight = 11 + ctx.measureText(sessionLabel).width + 14;
 
   ctx.fillStyle = C.stamp;
   ctx.font = 'bold 13px monospace';
   const wallClock = formatWallClock(now);
   const clockLeft = rightX - ctx.measureText(wallClock).width;
   ctx.textAlign = 'right';
-  ctx.fillText(wallClock, rightX, 56);
-  ctx.textAlign = 'center';
+  ctx.fillText(wallClock, rightX, stampY);
+
   const stamp = [s.stampDate, s.location].filter(Boolean).join(' · ');
-  const stampWidth = Math.max(0, 2 * (clockLeft - 14 - SIEG_W / 2));
-  ctx.fillText(fitStampText(ctx, stamp, stampWidth), SIEG_W / 2, 56);
+  const stampLeft = sessionRight;
+  const stampRight = clockLeft - 14;
+  ctx.textAlign = 'center';
+  ctx.fillText(
+    fitStampText(ctx, stamp, Math.max(0, stampRight - stampLeft)),
+    (stampLeft + stampRight) / 2,
+    stampY,
+  );
   ctx.textAlign = 'left';
 
   // ── Camera pane. The full frame is fitted inside the pane (no crop) so the

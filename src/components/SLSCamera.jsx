@@ -522,6 +522,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     ctx.fillText('ANOMALY CAM · FIGURE SCAN', 8, 16);
     ctx.fillText(`FIGURES: ${figures.length}`, 8, 30);
     ctx.textAlign = 'right';
+    ctx.font = 'bold 10px monospace';
     ctx.fillText(stampLine(), w - 8, 16);
     const burnedLocation = stampLocation();
     if (burnedLocation) {
