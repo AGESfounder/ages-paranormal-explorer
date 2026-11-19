@@ -10,6 +10,7 @@ import useSweeperRecorder from '@/hooks/useSweeperRecorder';
 import { mediaExtension } from '@/lib/deviceMedia';
 import { toast } from '@/components/ui/use-toast';
 import { ACOUSTIC_BANDS, createBaselineTracker, measureLevels, eventThresholdDb, dominantBand } from '@/lib/acousticAnalysis';
+import { micAudioConstraints } from '@/lib/micCapture';
 import { audioAcquire, audioRelease } from '@/lib/hauntedAudio';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
@@ -145,9 +146,7 @@ export default function AcousticAnomalySweeper({ gateSave, refundSave }) {
   // ── Microphone → analyser. Nothing is ever routed to the speakers: this tool
   // is listen-only, so there is no playback and no path to feedback. ──
   const startListening = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
-    });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: micAudioConstraints() });
     micStreamRef.current = stream;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (ctx.state === 'suspended') await ctx.resume();

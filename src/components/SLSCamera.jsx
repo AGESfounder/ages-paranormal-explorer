@@ -17,6 +17,7 @@ import { depthSupport, startDepthStream, stopDepthStream, onDepthFrame, onDepthE
 import useDepthDetection from '@/hooks/useDepthDetection';
 import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
+import { micAudioConstraints, isAndroidPlatform } from '@/lib/micCapture';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import useInlineCameraPlayback from '@/hooks/useInlineCameraPlayback';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
@@ -69,7 +70,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
   const depthHintTimerRef = useRef(null);
   const depthTimeoutRef = useRef(null);
   const depthFrameRef = useRef(null);
-  const depthAudioRef = useRef(null);
+  const micStreamRef = useRef(null);
   const depthDiagRef = useRef(null);
   // Whether the investigator has picked a method themselves, so opening the tool on
   // the depth scan can never override a choice they just made.
@@ -108,8 +109,8 @@ export default function SLSCamera({ gateSave, refundSave }) {
     } else {
       streamRef.current?.getTracks().forEach(t => t.stop());
       streamRef.current = null;
-      depthAudioRef.current?.getTracks().forEach(t => t.stop());
-      depthAudioRef.current = null;
+      micStreamRef.current?.getTracks().forEach(t => t.stop());
+      micStreamRef.current = null;
     }
     setActive(false);
     setRecording(false);
@@ -181,19 +182,33 @@ export default function SLSCamera({ gateSave, refundSave }) {
   // Device Camera mode: records a standard video from the device camera with no
   // figure detection or overlay. The raw camera stream (video + audio) is
   // recorded directly — no canvas, no processing loop.
+  // Android records the microphone as its own audio-only stream instead of bundling it
+  // into the camera request, exactly as the Depth Scan already does: a camera-bound
+  // audio source can carry the phone's own processing. Apple keeps its single
+  // combined request, untouched.
+  const openSplitMic = async () => {
+    if (!isAndroidPlatform()) return null;
+    const mic = await navigator.mediaDevices.getUserMedia({ audio: micAudioConstraints() });
+    micStreamRef.current = mic;
+    return mic;
+  };
+
   const startDeviceCamera = async () => {
     try {
+      const splitMic = isAndroidPlatform();
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+        ...(splitMic ? {} : { audio: micAudioConstraints() }),
       });
       if (!runningRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
       if (!runningRef.current) return;
+      const mic = await openSplitMic();
+      if (!runningRef.current) { mic?.getTracks().forEach(t => t.stop()); return; }
       setActive(true);
-      startSessionRecorder(stream, () => {
+      startSessionRecorder(mic ? new MediaStream([...stream.getVideoTracks(), ...mic.getAudioTracks()]) : stream, () => {
         streamRef.current = null;
       });
       setRecordDuration(0);
@@ -231,15 +246,18 @@ export default function SLSCamera({ gateSave, refundSave }) {
         else { runningRef.current = false; setError(DEPTH_UNSUPPORTED_MESSAGE); }
         return;
       }
+      const splitMic = isAndroidPlatform();
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+        ...(splitMic ? {} : { audio: micAudioConstraints() }),
       });
       if (!runningRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
       if (!runningRef.current) return;
+      const mic = await openSplitMic();
+      if (!runningRef.current) { mic?.getTracks().forEach(t => t.stop()); return; }
 
       if (isTorchActive(sensitivityRef.current)) {
         const ok = await enableTorch(stream);
@@ -255,7 +273,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
       const canvasCapture = !!canvasRef.current && typeof canvasRef.current.captureStream === 'function';
       const recordStream = canvasCapture ? canvasRef.current.captureStream(30) : new MediaStream();
       if (!canvasCapture) stream.getVideoTracks().forEach((t) => recordStream.addTrack(t));
-      const audioTrack = stream.getAudioTracks()[0];
+      const audioTrack = mic?.getAudioTracks()[0] || stream.getAudioTracks()[0];
       if (audioTrack) recordStream.addTrack(audioTrack);
       startSessionRecorder(recordStream, () => {
         stream.getTracks().forEach(t => t.stop());
@@ -301,11 +319,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
     // camera starts, so audio setup cannot interrupt an already-running sensor.
     let audioTrack = null;
     try {
-      const audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
-      });
+      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: micAudioConstraints() });
       if (!runningRef.current) { audioStream.getTracks().forEach(t => t.stop()); return; }
-      depthAudioRef.current = audioStream;
+      micStreamRef.current = audioStream;
       audioTrack = audioStream.getAudioTracks()[0] || null;
     } catch { /* record the picture without sound */ }
     if (!runningRef.current) return;
@@ -376,9 +392,9 @@ export default function SLSCamera({ gateSave, refundSave }) {
       const recordStream = canvas.captureStream(30);
       if (audioTrack) recordStream.addTrack(audioTrack);
       startSessionRecorder(recordStream, () => {
-        if (depthAudioRef.current) {
-          depthAudioRef.current.getTracks().forEach(t => t.stop());
-          depthAudioRef.current = null;
+        if (micStreamRef.current) {
+          micStreamRef.current.getTracks().forEach(t => t.stop());
+          micStreamRef.current = null;
         }
       });
     } else {

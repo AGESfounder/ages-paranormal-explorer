@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import sessionCanvasRecorder from '@/lib/sessionCanvasRecorder';
+import { micAudioConstraints } from '@/lib/micCapture';
 
 // All six standalone tools use SIEG's plain-mic/canvas capture and full-file
 // preparation path. Painting and frame delivery share the same animation tick.
@@ -50,9 +51,7 @@ export default function useSweeperRecorder(options) {
     try {
       let micStream = config.current.micStreamRef?.current;
       if (!micStream) {
-        ownedMic = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
-        });
+        ownedMic = await navigator.mediaDevices.getUserMedia({ audio: micAudioConstraints() });
         micStream = ownedMic;
       }
       if (!mounted.current || generation !== current.generation) {

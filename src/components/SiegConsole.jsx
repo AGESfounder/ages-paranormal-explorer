@@ -13,6 +13,7 @@ import SiegReview from '@/components/sieg/SiegReview';
 import SiegEventLog from '@/components/sieg/SiegEventLog';
 import SiegViewport from '@/components/sieg/SiegViewport';
 import useSiegCameraPlayback from '@/components/sieg/useSiegCameraPlayback';
+import { micAudioConstraints } from '@/lib/micCapture';
 import SiegCameraControls from '@/components/sieg/SiegCameraControls';
 import { SIEG_LANES, SIEG_W, SIEG_H, drawSiegFrame, moonPhase, formatClock, formatWallClock } from '@/lib/siegDisplay';
 import { SIEG_CALIBRATION_MS } from '@/lib/siegSessions';
@@ -876,9 +877,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
     const motionOk = await requestMotionPermission();
 
     try {
-      const mic = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
-      });
+      const mic = await navigator.mediaDevices.getUserMedia({ audio: micAudioConstraints() });
       micStreamRef.current = mic;
     } catch (e) {
       const name = e?.name || '';

@@ -44,6 +44,7 @@ import { getDevicePosition } from '@/lib/deviceCapabilities';
 import { useLocationTrackingGate } from '@/hooks/useLocationTrackingGate';
 import { toast } from '@/components/ui/use-toast';
 import { Capacitor } from '@capacitor/core';
+import { micAudioConstraints, isAndroidPlatform } from '@/lib/micCapture';
 import { mediaExtension } from '@/lib/deviceMedia';
 
 // Two-column grid order (fills left→right, row by row):
@@ -312,7 +313,9 @@ export default function Toolkit() {
       // The recorder lives in this page rather than in its own component, so it
       // announces its start the same way the tool components do.
       notifyToolSessionStart();
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Android takes the plain microphone, as every other recording tool does;
+      // Apple keeps its existing request untouched.
+      stream = await navigator.mediaDevices.getUserMedia({ audio: isAndroidPlatform() ? micAudioConstraints() : true });
       const isIos = Capacitor.getPlatform() === 'ios';
       let mediaRecorder;
       if (isIos) {
@@ -324,7 +327,10 @@ export default function Toolkit() {
           mediaRecorder = new MediaRecorder(stream);
         }
       } else {
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        // WebM first, unchanged where the device records it; probe the format
+        // rather than throw on a device that cannot.
+        const mimeType = ['audio/webm', 'audio/mp4', 'audio/ogg'].find(type => MediaRecorder.isTypeSupported?.(type));
+        mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       }
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -334,7 +340,7 @@ export default function Toolkit() {
       };
 
       mediaRecorder.onstop = () => {
-        const mimeType = isIos ? (mediaRecorder.mimeType || chunksRef.current.find(chunk => chunk.type)?.type || '') : 'audio/webm';
+        const mimeType = isIos ? (mediaRecorder.mimeType || chunksRef.current.find(chunk => chunk.type)?.type || '') : (mediaRecorder.mimeType || 'audio/webm');
         const blob = new Blob(chunksRef.current, { type: mimeType });
         setRecordedBlob(blob);
         stream.getTracks().forEach(t => t.stop());
