@@ -3,6 +3,8 @@
 // Formatting lives here so all eight recorders burn the same thing, and so the
 // saved record can be built from the exact same values the frames carry.
 
+export const RECORDING_STAMP_COLOR = '#ffffff';
+
 const pad = (n) => String(n).padStart(2, '0');
 
 // "11/19/2026"

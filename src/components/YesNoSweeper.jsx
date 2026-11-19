@@ -23,7 +23,7 @@ import { toast } from '@/components/ui/use-toast';
 import RecordTrimPicker from './RecordTrimPicker';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
-import { fitStampText } from '@/lib/recordingStamp';
+import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
@@ -302,12 +302,12 @@ export default function YesNoSweeper({ gateSave, refundSave }) {
     ctx.font = '11px monospace';
     ctx.textAlign = 'right';
     ctx.fillText('REC ' + formatDuration(sessionDurRef.current), w - 14, 26);
-    ctx.fillStyle = '#cbd5e1';
+    ctx.fillStyle = RECORDING_STAMP_COLOR;
     ctx.font = '10px monospace';
     ctx.fillText(stampLine(), w - 14, 40);
     const burnedLocation = stampLocation();
     if (burnedLocation) {
-      ctx.fillStyle = '#94a3b8';
+      ctx.fillStyle = RECORDING_STAMP_COLOR;
       ctx.fillText(fitStampText(ctx, burnedLocation, w - 28), w - 14, 54);
     }
 

@@ -15,7 +15,7 @@ import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
-import { fitStampText } from '@/lib/recordingStamp';
+import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 
 
 // Quiet window the sensor baseline is measured over, before the session — and
@@ -289,12 +289,12 @@ export default function PhoneREMDevice({ gateSave, refundSave }) {
     ctx.font = '10px monospace';
     ctx.textAlign = 'right';
     ctx.fillText('REC ' + formatDuration(dur), w - 15, 29);
-    ctx.fillStyle = '#cbd5e1';
+    ctx.fillStyle = RECORDING_STAMP_COLOR;
     ctx.font = '10px monospace';
     ctx.fillText(stampLine(), w - 15, 43);
     const burnedLocation = stampLocation();
     if (burnedLocation) {
-      ctx.fillStyle = '#94a3b8';
+      ctx.fillStyle = RECORDING_STAMP_COLOR;
       ctx.fillText(fitStampText(ctx, burnedLocation, w - 30), w - 15, 57);
     }
 

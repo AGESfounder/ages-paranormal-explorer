@@ -20,7 +20,7 @@ import { toast } from '@/components/ui/use-toast';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import useInlineCameraPlayback from '@/hooks/useInlineCameraPlayback';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
-import { fitStampText } from '@/lib/recordingStamp';
+import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
@@ -512,12 +512,12 @@ export default function SLSCamera({ gateSave, refundSave }) {
       ctx.strokeStyle = 'rgba(0, 180, 255, 0.8)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x, y, bw, bh);
-      ctx.fillStyle = 'rgba(0, 180, 255, 0.9)';
+      ctx.fillStyle = RECORDING_STAMP_COLOR;
       ctx.font = 'bold 11px monospace';
       ctx.fillText('ANOMALY DETECTED', x, y - 8);
     });
 
-    ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';
+    ctx.fillStyle = RECORDING_STAMP_COLOR;
     ctx.font = '10px monospace';
     ctx.fillText('ANOMALY CAM · FIGURE SCAN', 8, 16);
     ctx.fillText(`FIGURES: ${figures.length}`, 8, 30);
@@ -525,7 +525,7 @@ export default function SLSCamera({ gateSave, refundSave }) {
     ctx.fillText(stampLine(), w - 8, 16);
     const burnedLocation = stampLocation();
     if (burnedLocation) {
-      ctx.fillStyle = 'rgba(0, 255, 100, 0.55)';
+      ctx.fillStyle = RECORDING_STAMP_COLOR;
       ctx.fillText(fitStampText(ctx, burnedLocation, w - 90), w - 8, 30);
     }
     ctx.textAlign = 'left';

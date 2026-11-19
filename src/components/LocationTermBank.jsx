@@ -28,7 +28,7 @@ import usePreparedRecording from '@/hooks/usePreparedRecording';
 import RecordingPreparation from '@/components/RecordingPreparation';
 import RecordingPreview from '@/components/RecordingPreview';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
-import { fitStampText } from '@/lib/recordingStamp';
+import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 
 const ROTATION_MS = 3000;         // each word stays 3 seconds
@@ -488,12 +488,12 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     ctx.font = '11px monospace';
     ctx.textAlign = 'right';
     ctx.fillText('REC ' + formatDuration(sessionDurRef.current), w - 14, 26);
-    ctx.fillStyle = '#cbd5e1';
+    ctx.fillStyle = RECORDING_STAMP_COLOR;
     ctx.font = '10px monospace';
     ctx.fillText(stampLine(), w - 14, 40);
     const burnedLocation = stampLocation();
     if (burnedLocation) {
-      ctx.fillStyle = '#94a3b8';
+      ctx.fillStyle = RECORDING_STAMP_COLOR;
       ctx.fillText(fitStampText(ctx, burnedLocation, w - 28), w - 14, 54);
     }
 
@@ -530,6 +530,7 @@ Keep each term short. Return a JSON object with "location" (nearest city, state/
     ctx.font = '11px monospace';
     ctx.fillText('CAPTURED: ' + capturedRef.current.length, 14, h - 14);
     ctx.textAlign = 'right';
+    ctx.fillStyle = RECORDING_STAMP_COLOR;
     ctx.fillText((locationLabel || '').slice(0, 30), w - 14, h - 14);
   };
 

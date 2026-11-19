@@ -1295,7 +1295,7 @@ export default function SiegConsole({ gateSave, refundSave }) {
       <div className="flex items-center justify-between">
         <p className="text-[10px] font-mono text-muted-foreground">
           {clockText && <span className="text-foreground/80 mr-2">{clockText}</span>}
-          {phase === 'live' ? `${formatClock(remaining)} remaining` : 'Calibrating…'}
+          {phase === 'live' ? `remaining ${formatClock(remaining)}` : 'Calibrating…'}
         </p>
         <button
           onClick={() => finishSession('manual')}

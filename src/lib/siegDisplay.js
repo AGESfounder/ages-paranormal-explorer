@@ -16,7 +16,7 @@
 // the white band the tools' additive-colour idea implies.
 
 import { drawSiegAnomalyScan } from '@/components/sieg/anomalyScanDisplay';
-import { fitStampText } from '@/lib/recordingStamp';
+import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 import { drawFigureSkeleton } from '@/lib/figureSkeleton';
 import { figureIsMoving } from '@/lib/figureMotion';
 
@@ -53,7 +53,7 @@ const C = {
   name: '#a9bccf',
   muted: '#7588a3',
   accent: '#2dd4bf',
-  stamp: '#60a5fa',
+  stamp: RECORDING_STAMP_COLOR,
   rec: '#ef4444',
 };
 
@@ -143,7 +143,7 @@ export function drawSiegCameraOverlay(ctx, s, fit) {
       const xs = Object.values(b.joints).map((j) => j[0]);
       const ys = Object.values(b.joints).map((j) => j[1]);
       if (!xs.length) return;
-      ctx.fillStyle = '#eafeff';
+      ctx.fillStyle = RECORDING_STAMP_COLOR;
       ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'left';
       ctx.fillText(
@@ -185,8 +185,9 @@ export function drawSiegFrame(ctx, canvas, s) {
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, SIEG_W, SIEG_H);
 
-  // ── Header: separate rows for conditions/countdown, session/live clock,
-  // and the centered date + location. The camera pane keeps its original size.
+  // ── Header: remaining sits immediately left of the countdown. The live
+  // clock sits below it, on the same baseline as the centered date + location.
+  // Keep the camera pane and recording surface at their original sizes.
   ctx.fillStyle = C.panel;
   ctx.fillRect(0, 0, SIEG_W, HEADER_H);
   ctx.textAlign = 'left';
@@ -197,34 +198,38 @@ export function drawSiegFrame(ctx, canvas, s) {
   const condX = 24 + ctx.measureText('SIEG').width;
   const countdown = s.calibrating ? '—:—' : formatClock(s.remaining);
   const countdownWidth = ctx.measureText(countdown).width;
+  const rightX = SIEG_W - 10;
+  const countdownLabel = s.calibrating
+    ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s`
+    : 'remaining';
+  ctx.font = '12px sans-serif';
+  const labelRight = rightX - countdownWidth - 8;
+  const labelLeft = labelRight - ctx.measureText(countdownLabel).width;
   ctx.fillStyle = C.text;
   ctx.font = '15px sans-serif';
-  ctx.fillText(fitStampText(ctx, s.conditions || '—', SIEG_W - countdownWidth - 26 - condX), condX, 24);
+  ctx.fillText(fitStampText(ctx, s.conditions || '—', labelLeft - condX - 14), condX, 24);
   ctx.textAlign = 'right';
-  ctx.fillStyle = s.calibrating ? C.muted : C.text;
+  ctx.fillStyle = C.stamp;
+  ctx.font = '12px sans-serif';
+  ctx.fillText(countdownLabel, labelRight, 25);
   ctx.font = 'bold 24px monospace';
-  ctx.fillText(countdown, SIEG_W - 10, 25);
+  ctx.fillText(countdown, rightX, 25);
 
-  const wallClock = formatWallClock(now);
-  ctx.font = 'bold 15px monospace';
-  const wallClockWidth = ctx.measureText(wallClock).width;
-  ctx.textAlign = 'center';
-  ctx.fillStyle = C.text;
-  ctx.fillText(wallClock, SIEG_W / 2, 40);
   ctx.textAlign = 'left';
   ctx.fillStyle = C.name;
   ctx.font = '13px sans-serif';
-  ctx.fillText(fitStampText(ctx, s.sessionName || '', SIEG_W / 2 - wallClockWidth / 2 - 24), 11, 40);
-  ctx.textAlign = 'right';
-  ctx.fillStyle = C.muted;
-  ctx.font = '9px sans-serif';
-  ctx.fillText(s.calibrating ? `baseline ${Math.max(0, Math.ceil((s.calibratingMsLeft || 0) / 1000))}s` : 'remaining', SIEG_W - 10, 40);
+  ctx.fillText(fitStampText(ctx, s.sessionName || '', SIEG_W - 24), 11, 40);
 
-  ctx.textAlign = 'center';
   ctx.fillStyle = C.stamp;
   ctx.font = 'bold 13px monospace';
+  const wallClock = formatWallClock(now);
+  const clockLeft = rightX - ctx.measureText(wallClock).width;
+  ctx.textAlign = 'right';
+  ctx.fillText(wallClock, rightX, 56);
+  ctx.textAlign = 'center';
   const stamp = [s.stampDate, s.location].filter(Boolean).join(' · ');
-  ctx.fillText(fitStampText(ctx, stamp, SIEG_W - 24), SIEG_W / 2, 56);
+  const stampWidth = Math.max(0, 2 * (clockLeft - 14 - SIEG_W / 2));
+  ctx.fillText(fitStampText(ctx, stamp, stampWidth), SIEG_W / 2, 56);
   ctx.textAlign = 'left';
 
   // ── Camera pane. The full frame is fitted inside the pane (no crop) so the

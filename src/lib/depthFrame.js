@@ -1,7 +1,7 @@
 import { drawFigureSkeleton, hasSkeleton } from '@/lib/figureSkeleton';
 import { liveDepthFigures } from '@/lib/depthFreshness';
 import { figureIsMoving, movingFigureCount } from '@/lib/figureMotion';
-import { fitStampText } from '@/lib/recordingStamp';
+import { fitStampText, RECORDING_STAMP_COLOR } from '@/lib/recordingStamp';
 
 // Draws a native depth frame and the figures confirmed in it onto the Anomaly
 // Camera's canvas, in the same house style as the contrast view (grid, header,
@@ -54,18 +54,18 @@ export function drawDepthFrame(ctx, canvas, frame, { figureCount, stampLine, loc
     }
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(0, 180, 255, 0.9)';
+    ctx.fillStyle = RECORDING_STAMP_COLOR;
     ctx.fillText('FIGURE DETECTED', boxX, labelY);
     // A body seen moving is the stronger confirmation, and it says so on the frame
     // itself — the one that gets recorded, not only in the live view.
     if (figureMoving) {
-      ctx.fillStyle = '#eafeff';
+      ctx.fillStyle = RECORDING_STAMP_COLOR;
       ctx.fillText('MOVEMENT CONFIRMED', boxX, labelY + 13);
     }
   });
 
   const moving = movingFigureCount(live, now);
-  ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';
+  ctx.fillStyle = RECORDING_STAMP_COLOR;
   ctx.font = '10px monospace';
   ctx.textAlign = 'left';
   ctx.fillText('ANOMALY CAM · DEPTH SCAN', 8, 16);
@@ -74,7 +74,7 @@ export function drawDepthFrame(ctx, canvas, frame, { figureCount, stampLine, loc
   ctx.textAlign = 'right';
   ctx.fillText(stampLine || new Date().toLocaleTimeString(), w - 8, 16);
   if (location) {
-    ctx.fillStyle = 'rgba(0, 255, 100, 0.55)';
+    ctx.fillStyle = RECORDING_STAMP_COLOR;
     ctx.fillText(fitStampText(ctx, location, w - 90), w - 8, 30);
   }
 }
