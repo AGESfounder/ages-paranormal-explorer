@@ -19,7 +19,7 @@ import DepthSensitivityControl from './DepthSensitivityControl';
 import { toast } from '@/components/ui/use-toast';
 import AnomalyCameraSource from '@/components/anomaly/AnomalyCameraSource';
 import useRecordingStamp from '@/hooks/useRecordingStamp';
-import { fitStampText } from '@/lib/recordingStamp';
+import { drawAnomalyRecordingStamp } from '@/lib/anomalyRecordingStamp';
 import RecordTrimPicker from './RecordTrimPicker';
 import { TRIM_OPTIONS } from '@/lib/recordTrim';
 import usePreparedRecording from '@/hooks/usePreparedRecording';
@@ -502,18 +502,12 @@ export default function SLSCamera({ gateSave, refundSave }) {
       ctx.fillText('ANOMALY DETECTED', x, y - 8);
     });
 
-    ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';
-    ctx.font = '10px monospace';
-    ctx.fillText('ANOMALY CAM · FIGURE SCAN', 8, 16);
-    ctx.fillText(`FIGURES: ${figures.length}`, 8, 30);
-    ctx.textAlign = 'right';
-    ctx.fillText(stampLine(), w - 8, 16);
-    const burnedLocation = stampLocation();
-    if (burnedLocation) {
-      ctx.fillStyle = 'rgba(0, 255, 100, 0.55)';
-      ctx.fillText(fitStampText(ctx, burnedLocation, w - 90), w - 8, 30);
-    }
-    ctx.textAlign = 'left';
+    drawAnomalyRecordingStamp(ctx, w, {
+      title: 'ANOMALY CAM · FIGURE SCAN',
+      figureText: `FIGURES: ${figures.length}`,
+      stampLine: stampLine(),
+      location: stampLocation(),
+    });
 
     frameTrackRef.current?.requestFrame?.();
     animFrameRef.current = requestAnimationFrame(processFrame);

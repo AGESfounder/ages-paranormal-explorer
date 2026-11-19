@@ -1,7 +1,7 @@
 import { drawFigureSkeleton, hasSkeleton } from '@/lib/figureSkeleton';
 import { liveDepthFigures } from '@/lib/depthFreshness';
 import { figureIsMoving, movingFigureCount } from '@/lib/figureMotion';
-import { fitStampText } from '@/lib/recordingStamp';
+import { drawAnomalyRecordingStamp } from '@/lib/anomalyRecordingStamp';
 
 // Draws a native depth frame and the figures confirmed in it onto the Anomaly
 // Camera's canvas, in the same house style as the contrast view (grid, header,
@@ -65,16 +65,14 @@ export function drawDepthFrame(ctx, canvas, frame, { figureCount, stampLine, loc
   });
 
   const moving = movingFigureCount(live, now);
+  drawAnomalyRecordingStamp(ctx, w, {
+    title: 'ANOMALY CAM · DEPTH SCAN',
+    figureText: `FIGURES: ${figureCount}${moving ? ` · ${moving} MOVING` : ''}`,
+    stampLine: stampLine || new Date().toLocaleTimeString(),
+    location,
+  });
   ctx.fillStyle = 'rgba(0, 255, 100, 0.7)';
   ctx.font = '10px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText('ANOMALY CAM · DEPTH SCAN', 8, 16);
-  ctx.fillText(`FIGURES: ${figureCount}${moving ? ` · ${moving} MOVING` : ''}`, 8, 30);
-  if (!figureCount) ctx.fillText('SCANNING FOR A FIGURE', 8, 44);
-  ctx.textAlign = 'right';
-  ctx.fillText(stampLine || new Date().toLocaleTimeString(), w - 8, 16);
-  if (location) {
-    ctx.fillStyle = 'rgba(0, 255, 100, 0.55)';
-    ctx.fillText(fitStampText(ctx, location, w - 90), w - 8, 30);
-  }
+  if (!figureCount) ctx.fillText('SCANNING FOR A FIGURE', 8, 56);
 }
