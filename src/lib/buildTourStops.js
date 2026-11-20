@@ -1,12 +1,30 @@
 import { base44 } from '@/api/base44Client';
 import { callJson } from '@/lib/llmJson';
 import { BRAND_RULE_STOP, ADDRESS_RULE, CONCLUSION_PHRASE_RULE } from '@/lib/stopContent';
-import prepareTourStops from '@/lib/prepareTourStops';
+import prepareTourStops, { stopIdentity } from '@/lib/prepareTourStops';
 import auditThinTour from '@/lib/auditThinTour';
 import saveTourStopBatch from '@/lib/saveTourStopBatch';
 import finalizeTourBuild from '@/lib/finalizeTourBuild';
 
 const builds = new Map();
+
+// On an area tour one stop is one property, so stops that share a street address
+// are dropped. That can gut a build when the model proposes several separate
+// buildings of one historic village (Old Trail Town in Cody is six stops at one
+// address). The retry is told which addresses are already used, so it looks for
+// other properties instead of returning the same cluster again.
+const sharedAddresses = rawStops => {
+  const seen = new Map();
+  const shared = [];
+  for (const stop of rawStops) {
+    const key = stopIdentity(stop?.address);
+    if (!key) continue;
+    if (!seen.has(key)) { seen.set(key, String(stop.address || '').trim()); continue; }
+    const label = seen.get(key);
+    if (!shared.includes(label)) shared.push(label);
+  }
+  return shared;
+};
 
 async function performBuild(tour) {
   const { data } = await base44.functions.invoke('tourBuildLease', { tourId: tour.id, action: 'acquire' });
@@ -25,6 +43,11 @@ stop_number, name, latitude, longitude, address (complete real street address), 
 Find coordinates from real mapped sources; do not fabricate room coordinates or pad the count with duplicates.
 ${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`;
     const limits = { min: tour.tour_category === 'cold_spot' ? 1 : 7, max: tour.tour_category === 'cold_spot' ? 4 : 10, allowShort: true };
+    // A shortfall is usually stops at one address being dropped, so the retry is
+    // told which addresses are spent and must hunt other properties instead.
+    const addressNote = used => singleSite || !used.length ? ''
+      : `\nA previous attempt for this tour was rejected: more than one of its stops shared a street address (${used.join('; ')}). Every stop must be at a DIFFERENT street address — at most one stop per property. Do not reuse those addresses; find other documented haunted properties in ${tour.city}.`;
+    let collapsed = [];
     // Retry the way the normal generation path does — web, then no-web, then a web
     // retry — stopping as soon as the floor is met and keeping the first usable
     // answer as a fallback, so a thin first pass is retried instead of saved.
@@ -35,7 +58,7 @@ ${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`;
       let candidate = null;
       let candidateRaw = null;
       try {
-        const result = await callJson(prompt, { useWeb });
+        const result = await callJson(prompt + addressNote(collapsed), { useWeb });
         if (!Array.isArray(result?.stops)) throw new Error('No usable stops were returned. Nothing new was saved.');
         candidate = prepareTourStops(result.stops, tour, limits);
         candidateRaw = result.stops;
@@ -45,6 +68,7 @@ ${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`;
         continue;
       }
       if (!candidate.length) continue;
+      collapsed = singleSite ? [] : sharedAddresses(candidateRaw);
       if (!records.length || candidate.length >= limits.min) { records = candidate; rawStops = candidateRaw; }
       if (candidate.length >= limits.min) break;
       console.warn(`Build attempt returned only ${candidate.length} stops (min ${limits.min}), retrying...`);
@@ -58,7 +82,7 @@ ${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`;
     if (records.length < limits.min) {
       let audit = { recovered: [], reason: '' };
       try {
-        audit = await auditThinTour(tour, records, limits.min);
+        audit = await auditThinTour(tour, records, limits.min, collapsed);
       } catch (error) {
         console.error('Shortfall audit failed; keeping the stops it returned:', error);
       }

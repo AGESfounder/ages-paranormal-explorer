@@ -14,11 +14,16 @@ const usableStop = s => !!s
   && String(s.entry_fee || '').trim() !== ''
   && Number.isFinite(Number(s.latitude)) && Number.isFinite(Number(s.longitude));
 
-export default async function auditThinTour(tour, stops, min) {
+export default async function auditThinTour(tour, stops, min, usedAddresses = []) {
   const listed = stops.map(s => s.name).join('; ');
+  // Addresses the first pass already spent: more stops at them would just be
+  // dropped again, so the audit has to name other properties.
+  const spent = usedAddresses.length
+    ? `\nEach stop must be at a DIFFERENT street address from every other stop — at most one stop per property. These addresses are already used: ${usedAddresses.join('; ')}.`
+    : '';
   const result = await callJson(`A first pass proposed only ${stops.length} stop(s) for "${tour.title}" in ${tour.city}, ${tour.state} — fewer than the ${min} a complete tour needs. Before that short list is accepted, prove nothing else qualifies.
 
-Stops already proposed: ${listed}.
+Stops already proposed: ${listed}.${spent}
 
 List EVERY real, documented haunted location in and around ${tour.city} that you considered and left out. For each, name the ONE hard requirement it fails:
 - no documented haunting (an ordinary building with no reports at all)
