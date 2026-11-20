@@ -15,7 +15,7 @@ async function performBuild(tour) {
     await base44.entities.Tour.update(tour.id, { build_status: 'building' });
     const singleSite = ['landmark', 'ship', 'cold_spot'].includes(tour.tour_category);
     const range = tour.tour_category === 'cold_spot' ? '1-4' : '8-10';
-    const result = await callJson(`Build ${range} investigation stops for "${tour.title}" in ${tour.city}, ${tour.state}.
+    const prompt = `Build ${range} investigation stops for "${tour.title}" in ${tour.city}, ${tour.state}.
 Category: ${tour.tour_category}. Description: ${tour.description || ''}.
 ${singleSite ? 'Every stop must be a distinct room, area, or structure at this ONE property/vessel. Rooms in one building legitimately share the building coordinates; set same_structure true. Separate structures need their actual individual coordinates.' : 'Each stop must be a DIFFERENT physical haunted location. No repeated properties under different names. Look up each actual physical address independently, not a tour company meeting point.'}
 ${tour.tour_category === 'road_trip' ? 'This is a driving route with most stops at least 5 miles apart.' : 'Use a connected walking cluster, no more than 0.33 miles per link (up to 1 mile on a large property). Area walking routes must total at most 2.5 miles. Put any genuinely remote driving stops after the walk.'}
@@ -23,11 +23,33 @@ Only include real documented locations that can legally be visited after 7 PM, a
 Return ONLY JSON {"stops": [...]} with these fields for EVERY stop:
 stop_number, name, latitude, longitude, address (complete real street address), same_structure (boolean), access_area (interior/exterior), historical_info (2-3 factual sentences), paranormal_info (2-3 sentences distinguishing reported folklore), investigation_suggestions (3-5 strings), estimated_investigation_time, construction_date, famous_people, narration_text (4-6 vivid sentences about THIS stop), travel_method (walking/driving), hours_of_operation (required), entry_fee (required; Free only when known).
 Find coordinates from real mapped sources; do not fabricate room coordinates or pad the count with duplicates.
-${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`, { useWeb: true });
-    if (!Array.isArray(result?.stops)) throw new Error('No usable stops were returned. Nothing new was saved.');
-    const limits = { min: tour.tour_category === 'cold_spot' ? 1 : 5, max: tour.tour_category === 'cold_spot' ? 4 : 10, allowShort: true };
-    let records = prepareTourStops(result.stops, tour, limits);
-    if (!records.length) throw new Error('No usable stops were returned. Nothing new was saved.');
+${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`;
+    const limits = { min: tour.tour_category === 'cold_spot' ? 1 : 7, max: tour.tour_category === 'cold_spot' ? 4 : 10, allowShort: true };
+    // Retry the way the normal generation path does — web, then no-web, then a web
+    // retry — stopping as soon as the floor is met and keeping the first usable
+    // answer as a fallback, so a thin first pass is retried instead of saved.
+    let records = [];
+    let rawStops = [];
+    let lastError = null;
+    for (const useWeb of [true, false, true]) {
+      let candidate = null;
+      let candidateRaw = null;
+      try {
+        const result = await callJson(prompt, { useWeb });
+        if (!Array.isArray(result?.stops)) throw new Error('No usable stops were returned. Nothing new was saved.');
+        candidate = prepareTourStops(result.stops, tour, limits);
+        candidateRaw = result.stops;
+      } catch (error) {
+        lastError = error;
+        console.error(`Build attempt (web: ${useWeb}) failed:`, error);
+        continue;
+      }
+      if (!candidate.length) continue;
+      if (!records.length || candidate.length >= limits.min) { records = candidate; rawStops = candidateRaw; }
+      if (candidate.length >= limits.min) break;
+      console.warn(`Build attempt returned only ${candidate.length} stops (min ${limits.min}), retrying...`);
+    }
+    if (!records.length) throw lastError || new Error('No usable stops were returned. Nothing new was saved.');
     // The audit runs ONLY on a shortfall, so a healthy area never pays for a
     // second call. It either recovers the stops the first pass skipped, or it
     // earns the tour its Special Circumstance label by naming what it rejected.
@@ -40,7 +62,7 @@ ${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`, { useWeb: true });
       } catch (error) {
         console.error('Shortfall audit failed; keeping the stops it returned:', error);
       }
-      if (audit.recovered.length) records = prepareTourStops([...result.stops, ...audit.recovered], tour, limits);
+      if (audit.recovered.length) records = prepareTourStops([...rawStops, ...audit.recovered], tour, limits);
       if (records.length < limits.min) {
         shortfall = audit.reason || `Only ${records.length} documented stops exist in ${tour.city}.`;
       }
