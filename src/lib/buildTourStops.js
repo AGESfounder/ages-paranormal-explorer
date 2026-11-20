@@ -8,6 +8,13 @@ import finalizeTourBuild from '@/lib/finalizeTourBuild';
 
 const builds = new Map();
 
+// Smallest area tour that may be saved at all. A short build is usually a model
+// that clustered its stops on one property, and three stops read as a broken
+// tour to a visitor, so below this nothing is written: the tour is flagged for
+// review instead. Between this and the full floor a tour may still ship, but
+// only carrying the Special Circumstance label the shortfall audit earned.
+const SHORT_TOUR_FLOOR = 5;
+
 // On an area tour one stop is one property, so stops that share a street address
 // are dropped. That can gut a build when the model proposes several separate
 // buildings of one historic village (Old Trail Town in Cody is six stops at one
@@ -32,10 +39,13 @@ async function performBuild(tour) {
   try {
     await base44.entities.Tour.update(tour.id, { build_status: 'building' });
     const singleSite = ['landmark', 'ship', 'cold_spot'].includes(tour.tour_category);
-    const range = tour.tour_category === 'cold_spot' ? '1-4' : '8-10';
+    // On an area tour one street address is one stop, so a model that spends its
+    // whole list on a single historic village loses most of it. Ask for extra
+    // candidate properties up front so a full tour survives that filtering.
+    const range = tour.tour_category === 'cold_spot' ? '1-4' : singleSite ? '8-10' : '12-14';
     const prompt = `Build ${range} investigation stops for "${tour.title}" in ${tour.city}, ${tour.state}.
 Category: ${tour.tour_category}. Description: ${tour.description || ''}.
-${singleSite ? 'Every stop must be a distinct room, area, or structure at this ONE property/vessel. Rooms in one building legitimately share the building coordinates; set same_structure true. Separate structures need their actual individual coordinates.' : 'Each stop must be a DIFFERENT physical haunted location. No repeated properties under different names. Look up each actual physical address independently, not a tour company meeting point.'}
+${singleSite ? 'Every stop must be a distinct room, area, or structure at this ONE property/vessel. Rooms in one building legitimately share the building coordinates; set same_structure true. Separate structures need their actual individual coordinates.' : 'Each stop must be a DIFFERENT physical haunted location. No repeated properties under different names. Look up each actual physical address independently, not a tour company meeting point. Every stop needs its OWN street address: stops that share an address are dropped, so list extra separate properties instead of several buildings of one.'}
 ${tour.tour_category === 'road_trip' ? 'This is a driving route with most stops at least 5 miles apart.' : 'Use a connected walking cluster, no more than 0.33 miles per link (up to 1 mile on a large property). Area walking routes must total at most 2.5 miles. Put any genuinely remote driving stops after the walk.'}
 Only include real documented locations that can legally be visited after 7 PM, at least from outside; accurately state restrictions. Never invent access or claim closed grounds are open.
 Return ONLY JSON {"stops": [...]} with these fields for EVERY stop:
@@ -82,13 +92,19 @@ ${BRAND_RULE_STOP}${ADDRESS_RULE}${CONCLUSION_PHRASE_RULE}`;
     if (records.length < limits.min) {
       let audit = { recovered: [], reason: '' };
       try {
-        audit = await auditThinTour(tour, records, limits.min, collapsed);
+        audit = await auditThinTour(tour, records, limits.min, sharedAddresses(rawStops));
       } catch (error) {
         console.error('Shortfall audit failed; keeping the stops it returned:', error);
       }
       if (audit.recovered.length) records = prepareTourStops([...rawStops, ...audit.recovered], tour, limits);
       if (records.length < limits.min) {
         shortfall = audit.reason || `Only ${records.length} documented stops exist in ${tour.city}.`;
+      }
+      // A stub never ships: below the hard floor nothing is written and the tour
+      // is flagged for review, so a collapsed build cannot reach a visitor.
+      const floor = Math.min(limits.min, SHORT_TOUR_FLOOR);
+      if (records.length < floor) {
+        throw new Error(`Only ${records.length} documented ${records.length === 1 ? 'property' : 'properties'} could be found in ${tour.city}, under the ${floor}-stop minimum. Nothing new was saved; the tour needs review.`);
       }
     }
     await saveTourStopBatch(tour.id, records);
