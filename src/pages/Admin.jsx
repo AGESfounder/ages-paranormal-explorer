@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminUsersTab from '@/components/admin/AdminUsersTab';
 import TesterResetToggle from '@/components/admin/TesterResetToggle';
 import ContentCompareTab from '@/components/admin/ContentCompareTab';
+import EmptyTourBuilder from '@/components/admin/EmptyTourBuilder';
 
 export default function Admin() {
   const [user, setUser] = useState(null);
@@ -128,6 +129,7 @@ export default function Admin() {
           <ContentCompareTab />
         ) : (
           <>
+          <EmptyTourBuilder />
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Search tours..." value={tourSearch} onChange={e => setTourSearch(e.target.value)} className="pl-9 bg-card/50 border-border/40 text-sm" />
