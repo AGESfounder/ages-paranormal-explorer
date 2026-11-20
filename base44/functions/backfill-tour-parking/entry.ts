@@ -132,31 +132,54 @@ export default async function (req) {
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(Math.max(Number(body.limit) || 9, 1), 15);
 
-    const tourPage = await base44.asServiceRole.entities.Tour.filter(
-      { tour_category: 'area' }, { sort: 'created_date', limit: 300 },
-    );
-    const tours = (tourPage.items || []).filter((t) => t.verified !== true);
-
-    // Read every stop of these tours in a few bulk queries rather than one per tour.
-    const stopsByTour = new Map();
-    for (let i = 0; i < tours.length; i += 25) {
-      const chunk = tours.slice(i, i + 25).map((t) => t.id);
-      const page = await base44.asServiceRole.entities.TourStop.filter({ tour_id: { $in: chunk } }, { limit: 400 });
-      for (const stop of page.items || []) {
-        if (!stopsByTour.has(stop.tour_id)) stopsByTour.set(stop.tour_id, []);
-        stopsByTour.get(stop.tour_id).push(stop);
-      }
+    // Which tours already have a lot: read the parking stops once, paged. A
+    // multi-tour $in query cannot answer this — a page stops at 200 rows, so it
+    // truncated silently and left tours further down the chunk looking empty,
+    // which is why an earlier pass reported nothing pending.
+    const withParking = new Set();
+    let parkingCursor = null;
+    for (let i = 0; i < 50; i++) {
+      const page = await base44.asServiceRole.entities.TourStop.filter(
+        { stop_type: 'parking' },
+        { limit: 200, ...(parkingCursor ? { cursor: parkingCursor } : {}) },
+      );
+      for (const stop of page.items || []) withParking.add(stop.tour_id);
+      if (!page.has_more) break;
+      parkingCursor = page.next_cursor;
     }
 
+    // Every unverified area tour still without a lot, oldest first.
+    let scanned = 0;
     const candidates = [];
-    for (const tour of tours) {
-      const stops = stopsByTour.get(tour.id) || [];
-      if (stops.length === 0) continue;
-      if (stops.some((s) => s.stop_type === 'parking')) continue;
-      candidates.push({ tour, stops });
+    let tourCursor = null;
+    for (let i = 0; i < 20; i++) {
+      const page = await base44.asServiceRole.entities.Tour.filter(
+        { tour_category: 'area' },
+        { sort: 'created_date', limit: 200, ...(tourCursor ? { cursor: tourCursor } : {}) },
+      );
+      for (const tour of page.items || []) {
+        if (tour.verified === true) continue;
+        scanned += 1;
+        if (withParking.has(tour.id)) continue;
+        candidates.push(tour);
+      }
+      if (!page.has_more) break;
+      tourCursor = page.next_cursor;
     }
 
-    const batch = candidates.slice(0, limit);
+    // Only the tours this call will actually work on need their stops read.
+    const batch = [];
+    let skipped = 0;
+    for (const tour of candidates) {
+      if (batch.length >= limit) break;
+      const stopPage = await base44.asServiceRole.entities.TourStop.filter({ tour_id: tour.id }, { limit: 100 });
+      const stops = stopPage.items || [];
+      if (stops.length === 0 || stops.some((s) => s.stop_type === 'parking')) {
+        skipped += 1;
+        continue;
+      }
+      batch.push({ tour, stops });
+    }
     const results = [];
     for (let i = 0; i < batch.length; i += 3) {
       const settled = await Promise.allSettled(
@@ -174,13 +197,16 @@ export default async function (req) {
     }
 
     return Response.json({
-      areaToursScanned: tours.length,
+      areaToursScanned: scanned,
       pending: candidates.length,
       processed: batch.length,
-      remaining: candidates.length - batch.length,
+      remaining: Math.max(0, candidates.length - batch.length - skipped),
       created: results.filter((r) => r.outcome === 'created').length,
       unresolved: results.filter((r) => r.outcome === 'unresolved').length,
       errors: results.filter((r) => r.outcome === 'error').length,
+      // Tours with no stops at all cannot be anchored to a lot; they need stops
+      // built, not parking.
+      skippedNoStops: skipped,
       results,
     });
   } catch (error) {
