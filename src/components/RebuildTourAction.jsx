@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import buildTourStops from '@/lib/buildTourStops';
+import readTourSnapshot from '@/lib/readTourSnapshot';
 import { toast } from '@/components/ui/use-toast';
 
 // Rebuilds a tour that already has stops by clearing its investigation stops and
@@ -28,7 +29,11 @@ export default function RebuildTourAction({ tour, onRebuilt }) {
     } catch (error) {
       const message = error?.response?.data?.error || error?.message || 'The rebuild could not be completed.';
       setSummary(message);
-      onRebuilt?.({ tour: { ...tour, build_status: 'needs_review' }, stops: [] });
+      // A build that fails after its stops were saved still leaves them on the
+      // tour, so show what is actually stored instead of an empty list.
+      const snapshot = await readTourSnapshot(tour.id).catch(() => null);
+      if (snapshot?.tour) onRebuilt?.({ tour: snapshot.tour, stops: snapshot.stops });
+      else onRebuilt?.({ tour: { ...tour, build_status: 'needs_review' }, stops: [] });
       toast({ title: 'Rebuild failed', description: message, variant: 'destructive' });
     }
     setRunning(false);
