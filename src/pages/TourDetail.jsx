@@ -50,6 +50,7 @@ import tourRouteGeometry from '@/lib/tourRouteGeometry';
 import readTourSnapshot from '@/lib/readTourSnapshot';
 import TourBuildPrompt from '@/components/TourBuildPrompt';
 import RepairTourAction from '@/components/RepairTourAction';
+import RebuildTourAction from '@/components/RebuildTourAction';
 import TourAddressCorrection from '@/components/TourAddressCorrection';
 import { applyAddressCorrections } from '@/lib/correctTourAddresses';
 import reorderCorrectedStops, { orderViolatesRules } from '@/lib/reorderCorrectedStops';
@@ -817,13 +818,22 @@ export default function TourDetail() {
             <Map className="w-4 h-4 text-primary" /> {visibleTourStops.length} Investigation Stops
           </h3>
           {tourStops.length > 0 && !tour.verified && !generatingStops && user?.role === 'admin' && (
-            <RepairTourAction
-              tour={tour}
-              onRepaired={(result) => {
-                if (result?.tour) setTour(prev => (prev ? { ...prev, ...result.tour } : prev));
-                if (result?.stops) setStops(result.stops);
-              }}
-            />
+            <>
+              <RepairTourAction
+                tour={tour}
+                onRepaired={(result) => {
+                  if (result?.tour) setTour(prev => (prev ? { ...prev, ...result.tour } : prev));
+                  if (result?.stops) setStops(result.stops);
+                }}
+              />
+              <RebuildTourAction
+                tour={tour}
+                onRebuilt={(result) => {
+                  if (result?.tour) setTour(prev => (prev ? { ...prev, ...result.tour } : prev));
+                  if (result?.stops) setStops(result.stops);
+                }}
+              />
+            </>
           )}
           {stopsError ? (
             <div className="flex flex-col items-center py-8 gap-3">
