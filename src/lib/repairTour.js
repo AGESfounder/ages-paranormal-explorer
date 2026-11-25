@@ -1,6 +1,7 @@
 import { base44 } from '@/api/base44Client';
 import dedupeTourStops from '@/lib/dedupeTourStops';
 import finalizeTourStops from '@/lib/finalizeTourStops';
+import verifyTourCoordinates from '@/lib/verifyTourCoordinates';
 
 const repairs = new Set();
 
@@ -18,7 +19,13 @@ export default async function repairTour(tour) {
     const lease = await base44.functions.invoke('tourBuildLease', { tourId: tour.id, action: 'repair' });
     nonce = lease.data.nonce;
     await base44.entities.Tour.update(tour.id, { build_status: 'building' });
-    await base44.functions.invoke('fix-collapsed-coords', { tourId: tour.id, verifyAll: true, buildNonce: nonce });
+    // Same paged verification a build runs, and the same rule: a page that
+    // cannot be confirmed never stops the tour from being finalized.
+    try {
+      await verifyTourCoordinates(tour, nonce);
+    } catch (error) {
+      console.error('Repair could not confirm every coordinate; finishing the rest:', error);
+    }
     const { removed } = await dedupeTourStops(tour.id);
     const result = await finalizeTourStops(tour);
     return { ...result, removed };

@@ -456,6 +456,12 @@ export default async function (req) {
     const verifyAll = body.verifyAll || false;
     const addressOnly = body.mode === 'confirmed_addresses';
     const offset = body.offset ?? 0;
+    // Verification runs a few stops per call (src/lib/verifyTourCoordinates.js):
+    // a whole tour in one call outruns the function's time limit. stopIds names
+    // the stops this call owns, and only the last page settles parking — the
+    // loop is still half-built on the pages before it.
+    const stopIds = Array.isArray(body.stopIds) ? body.stopIds.filter((id) => typeof id === 'string').slice(0, 12) : null;
+    const skipParking = body.skipParking === true;
     if (typeof tourId !== 'string' || !/^[a-zA-Z0-9_-]{8,80}$/.test(tourId)) return Response.json({ error: 'tourId required' }, { status: 400 });
     if (addressOnly && (!Number.isInteger(offset) || offset < 0 || offset > 90 || offset % 10 !== 0)) {
       return Response.json({ error: 'Invalid address-check page.' }, { status: 400 });
@@ -563,7 +569,7 @@ export default async function (req) {
         console.error('Overpass query failed:', e.message);
       }
 
-      for (const stop of stops) {
+      for (const stop of stops.filter(s => !stopIds || stopIds.includes(s.id))) {
         // Skip stops the user has manually verified via marker drag —
         // their coordinates are correct and should not be overwritten.
         if (stop.user_verified) {
@@ -599,7 +605,7 @@ export default async function (req) {
       // area with a pink "Needs Placement" marker so a visitor can drag it
       // to the correct spot. For small properties, trust existing coords
       // within the verify radius (0.5 miles) — only search for outliers.
-      const unmatched = stops.filter((s) => !matched.has(s.id));
+      const unmatched = stops.filter((s) => !matched.has(s.id) && (!stopIds || stopIds.includes(s.id)));
       if (unmatched.length > 0) {
         let needsPlacementIdx = 0;
         // Use the verified property center for needs_placement stops, NOT
@@ -847,7 +853,8 @@ Return a JSON object with:
         collapsedStopIds.has(s.id) ||
         s.latitude == null || s.longitude == null ||
         s.geocoded === false
-      )).filter(s => !s.user_verified);
+      )).filter(s => !s.user_verified)
+        .filter(s => !stopIds || stopIds.includes(s.id));
 
       if (needsFix.length > 0) {
         if (tour.tour_category === 'road_trip') {
@@ -882,8 +889,11 @@ Return a JSON object with:
           // these stops, skip address geocoding (Steps 1 & 1b) and go directly
           // to OSM name search / LLM web search, which searches by STOP NAME
           // and finds the correct distinct location for each stop.
+          // Counted over EVERY stop, not just this call's page: two stops that
+          // share an address must both stay off address geocoding even when the
+          // pages split them.
           const addressCounts = {};
-          for (const s of needsFix) {
+          for (const s of stops) {
             if (s.address) {
               const key = normalizeAddr(s.address);
               addressCounts[key] = (addressCounts[key] || 0) + 1;
@@ -1277,7 +1287,7 @@ Return a JSON object with:
         .filter(s => s.stop_type !== 'parking' && s.stop_type !== 'shuttle' &&
           s.latitude != null && s.longitude != null && !s.needs_placement);
       const parkingStop = allStops.find(s => s.stop_type === 'parking');
-      const plan = await planParking({
+      const plan = skipParking ? { parking: null, update: null } : await planParking({
         tour,
         walkingLimit: getWalkingLimit(tour, largeProp),
         parkingStop,
